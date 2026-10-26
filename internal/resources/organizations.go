@@ -6,7 +6,7 @@ import (
 	"github.com/damhau/awxnext/internal/api"
 )
 
-func init() {
+func registerOrganizations() {
 	api.Register(&Resource{
 		Name:        "organizations",
 		Type:        "organization",

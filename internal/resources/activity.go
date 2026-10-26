@@ -6,7 +6,7 @@ import (
 	"github.com/damhau/awxnext/internal/api"
 )
 
-func init() {
+func registerActivity() {
 	api.Register(&Resource{
 		Name:         "activity_stream",
 		Type:         "activity_stream",

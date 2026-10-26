@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/damhau/awxnext/internal/api"
@@ -43,7 +44,7 @@ func Install(app *api.App) *Auth {
 	app.Handle("GET", "/api/v2/me/", a.me)
 	app.HandlePublic("GET", "/api/v2/auth/", a.authBackends)
 	a.oidc.Routes()
-	registerTokens()
+	tokensOnce.Do(registerTokens)
 	return a
 }
 
@@ -142,14 +143,29 @@ func (a *Auth) authenticate(r *http.Request, w http.ResponseWriter) (*rbac.Princ
 	return nil, nil
 }
 
+// verified caches successful password checks so Basic auth does not pay
+// the bcrypt cost on every request. Keyed by the stored hash, so a password
+// change invalidates entries.
+var verified sync.Map // sha256(hash|password) -> expiry time.Time
+
+const verifiedTTL = time.Minute
+
 func (a *Auth) checkPassword(ctx context.Context, username, password string) (int64, error) {
 	var uid int64
 	var hash string
 	var active bool
 	err := a.app.DB.QueryRow(ctx, "SELECT id, password, is_active FROM users WHERE username = $1", username).Scan(&uid, &hash, &active)
-	if err != nil || !active || hash == "" || !CheckPassword(hash, password) {
+	if err != nil || !active || hash == "" {
 		return 0, api.Detail(401, "Invalid username/password.")
 	}
+	key := hashToken(hash + "|" + password)
+	if exp, ok := verified.Load(key); ok && time.Now().Before(exp.(time.Time)) {
+		return uid, nil
+	}
+	if !CheckPassword(hash, password) {
+		return 0, api.Detail(401, "Invalid username/password.")
+	}
+	verified.Store(key, time.Now().Add(verifiedTTL))
 	return uid, nil
 }
 
@@ -272,6 +288,8 @@ func (a *Auth) authBackends(c *api.Ctx, w http.ResponseWriter, r *http.Request) 
 	}
 	api.WriteJSON(w, 200, out)
 }
+
+var tokensOnce sync.Once
 
 func registerTokens() {
 	tokenVisible := func(c *api.Ctx, arg api.ArgFunc) string {

@@ -42,7 +42,7 @@ func canManageUser(c *Ctx, target Obj) (bool, error) {
 	return ok, err
 }
 
-func init() {
+func registerUsers() {
 	api.Register(&Resource{
 		Name:         "users",
 		Type:         "user",

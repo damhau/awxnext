@@ -165,7 +165,7 @@ func contentObjectName(c *Ctx, ct string, id int64) string {
 	return name
 }
 
-func init() {
+func registerRoles() {
 	roles := api.Register(&Resource{
 		Name:         "roles",
 		Type:         "role",

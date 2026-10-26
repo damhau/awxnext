@@ -110,6 +110,8 @@ CREATE TABLE auth_tokens (
     id bigserial PRIMARY KEY,
     created timestamptz NOT NULL DEFAULT now(),
     modified timestamptz NOT NULL DEFAULT now(),
+    created_by_id bigint,
+    modified_by_id bigint,
     user_id bigint NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     token_hash text NOT NULL UNIQUE,
     description text NOT NULL DEFAULT '',

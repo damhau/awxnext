@@ -290,6 +290,11 @@ func Serialize(c *Ctx, res *Resource, objs []Obj) ([]Obj, error) {
 			res.Serialize(c, out[i])
 		}
 	}
+	if res.Summary != nil {
+		if err := res.Summary(c, out); err != nil {
+			return nil, err
+		}
+	}
 	return out, nil
 }
 
@@ -442,9 +447,6 @@ func addSummaries(c *Ctx, res *Resource, raws, out []Obj, ids []int64) error {
 			summaries[i]["user_capabilities"] = caps
 		}
 		out[i]["summary_fields"] = summaries[i]
-	}
-	if res.Summary != nil {
-		return res.Summary(c, out)
 	}
 	return nil
 }
