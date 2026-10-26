@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -18,6 +19,7 @@ import (
 	"github.com/damhau/awxnext/internal/auth"
 	"github.com/damhau/awxnext/internal/config"
 	"github.com/damhau/awxnext/internal/crypto"
+	"github.com/damhau/awxnext/internal/importer"
 	"github.com/damhau/awxnext/internal/kms"
 	"github.com/damhau/awxnext/internal/server"
 	"github.com/damhau/awxnext/internal/tracing"
@@ -34,6 +36,7 @@ Commands:
   keys export       print all data keys unwrapped (escrow; store offline!)
   keys import FILE  restore escrowed data keys, wrapped with the configured master key
   keys rewrap       re-wrap data keys from the AWXNEXT_OLD_* master key to the current one
+  import-awx        import the configuration of an AWX installation from its database
   agent             run a remote execution node agent (dials back to the control plane)
   shim              run one job inside a container group pod (started by the control plane)
   install-shim DEST copy this binary to DEST (job pod init container)
@@ -61,6 +64,8 @@ func main() {
 		err = createSuperuser(ctx, cfg, os.Args[2:])
 	case "keys":
 		err = keys(ctx, cfg, os.Args[2:])
+	case "import-awx":
+		err = importAWX(ctx, cfg, os.Args[2:])
 	case "agent":
 		err = runAgent(ctx, os.Args[2:])
 	case "shim":
@@ -248,4 +253,29 @@ func runShim(ctx context.Context, args []string) error {
 		return errors.New("--url and AWXNEXT_SHIM_TOKEN are required")
 	}
 	return agent.RunShim(ctx, cfg, *url)
+}
+
+func importAWX(ctx context.Context, cfg *config.Config, args []string) error {
+	fs := flag.NewFlagSet("import-awx", flag.ExitOnError)
+	src := fs.String("source", os.Getenv("AWX_DATABASE_URL"), "AWX database URL, e.g. postgres://awx:pass@host/awx (AWX_DATABASE_URL)")
+	key := fs.String("secret-key", os.Getenv("AWX_SECRET_KEY"), "AWX SECRET_KEY used to decrypt credentials (AWX_SECRET_KEY)")
+	dry := fs.Bool("dry-run", false, "import in a transaction that is rolled back, and report")
+	fs.Parse(args)
+	if *src == "" || *key == "" {
+		return errors.New("--source and --secret-key are required")
+	}
+	app, err := server.Setup(ctx, cfg)
+	if err != nil {
+		return err
+	}
+	rep, err := importer.Run(ctx, app, importer.Options{SourceURL: *src, SecretKey: *key, DryRun: *dry,
+		Log: func(f string, a ...any) { slog.Info(fmt.Sprintf(f, a...)) }})
+	if rep != nil {
+		out, _ := json.MarshalIndent(rep, "", "  ")
+		fmt.Println(string(out))
+	}
+	if err == nil && *dry {
+		fmt.Println("dry run: nothing was written")
+	}
+	return err
 }
