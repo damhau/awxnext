@@ -43,7 +43,7 @@ export function TemplateList() {
   const [starred, setStarred] = useStored<string[]>('starred-templates', [])
   const [views, setViews] = useStored<View[]>('template-views', [])
   const [selected, setSelected] = useState<Set<number | string>>(new Set())
-  const [dialog, setDialog] = useState<null | 'move' | 'labels' | 'grant' | 'save' | 'access'>(null)
+  const [dialog, setDialog] = useState<null | 'move' | 'labels' | 'grant' | 'save' | 'access' | 'folder-new' | 'folder-edit'>(null)
   const confirm = useConfirm()
   const toast = useToast()
   const invalidate = useInvalidate()
@@ -224,6 +224,9 @@ export function TemplateList() {
         <div className="group">
           <div className="group-head">
             <span>Folders</span>
+            <button aria-label="New folder" title="New folder" onClick={() => setDialog('folder-new')}>
+              +
+            </button>
           </div>
           {flatten(roots).map((n) => (
             <FolderLink key={n.folder.id} n={n} active={n.folder.id === folderId} onClick={() => ls.set({ folder: String(n.folder.id), show: null, page: null })} />
@@ -247,9 +250,31 @@ export function TemplateList() {
             </div>
             <div className="actions">
               {folder && (
-                <button className="btn" onClick={() => setDialog('access')}>
-                  Folder access
-                </button>
+                <>
+                  <button className="btn" onClick={() => setDialog('access')}>
+                    Folder access
+                  </button>
+                  <Menu label="Folder actions">
+                    <button onClick={() => setDialog('folder-new')}>New subfolder…</button>
+                    <button onClick={() => setDialog('folder-edit')}>Rename or move…</button>
+                    <hr />
+                    <button
+                      className="danger"
+                      onClick={async () => {
+                        if (!(await confirm({ title: `Delete folder ${folder.path}?`, body: 'Only empty folders can be deleted: move or delete what is inside first.', confirm: 'Delete folder', danger: true }))) return
+                        try {
+                          await api.del(`folders/${folder.folder.id}/`)
+                          invalidate('folders')
+                          ls.set({ folder: folder.folder.parent ? String(folder.folder.parent) : null, page: null })
+                        } catch (e) {
+                          toast((e as Error).message, 'error')
+                        }
+                      }}
+                    >
+                      Delete folder
+                    </button>
+                  </Menu>
+                </>
               )}
               <Menu label="New template" className="btn primary" trigger={<>New template <Icon name="chevron" size={12} /></>}>
                 <Link to={`/templates/new/job${folder ? `?folder=${folder.folder.id}` : ''}`}>Job template</Link>
@@ -364,6 +389,19 @@ export function TemplateList() {
           <AccessTab resource="folders" id={folder.folder.id} name={folder.path} />
         </Dialog>
       )}
+      {(dialog === 'folder-new' || dialog === 'folder-edit') && (
+        <FolderDialog
+          roots={roots}
+          editing={dialog === 'folder-edit' ? folder : undefined}
+          parent={dialog === 'folder-new' ? folder : undefined}
+          onClose={() => setDialog(null)}
+          onSaved={(id) => {
+            setDialog(null)
+            invalidate('folders')
+            ls.set({ folder: String(id), show: null, page: null })
+          }}
+        />
+      )}
       {dialog === 'save' && (
         <SaveViewDialog
           onClose={() => setDialog(null)}
@@ -426,6 +464,77 @@ function FolderLink({ n, active, onClick }: { n: FolderNode; active: boolean; on
       <span className="ellipsis grow">{n.folder.name}</span>
       <span className="n">{n.total}</span>
     </button>
+  )
+}
+
+function FolderDialog({
+  roots,
+  editing,
+  parent,
+  onClose,
+  onSaved,
+}: {
+  roots: FolderNode[]
+  editing?: FolderNode
+  parent?: FolderNode
+  onClose: () => void
+  onSaved: (id: number) => void
+}) {
+  const { org, orgs } = useOrg()
+  const [name, setName] = useState(editing?.folder.name ?? '')
+  const [description, setDescription] = useState(editing?.folder.description ?? '')
+  const [parentId, setParentId] = useState<string>(String(editing ? editing.folder.parent ?? '' : parent?.folder.id ?? ''))
+  const [orgId, setOrgId] = useState<string>(String(editing?.folder.organization ?? parent?.folder.organization ?? org?.id ?? orgs[0]?.id ?? ''))
+  const [error, setError] = useState<unknown>(null)
+  const own = editing ? new Set(subtreeIds(editing)) : new Set<number>()
+  const parents = flatten(roots).filter((n) => !own.has(n.folder.id) && String(n.folder.organization) === orgId)
+  const save = async () => {
+    setError(null)
+    const body = { name: name.trim(), description, parent: parentId ? Number(parentId) : null, organization: Number(orgId) }
+    try {
+      const r = editing ? await api.patch<{ id: number }>(`folders/${editing.folder.id}/`, body) : await api.post<{ id: number }>('folders/', body)
+      onSaved(r.id)
+    } catch (e) {
+      setError(e)
+    }
+  }
+  return (
+    <Dialog
+      title={editing ? `Edit folder ${editing.folder.name}` : 'New folder'}
+      onClose={onClose}
+      footer={
+        <>
+          <button className="btn" onClick={onClose}>
+            Cancel
+          </button>
+          <button className="btn primary" disabled={!name.trim() || !orgId} onClick={save}>
+            {editing ? 'Save' : 'Create folder'}
+          </button>
+        </>
+      }
+    >
+      {error ? <div className="form-error">{(error as Error).message}</div> : null}
+      <div className="field">
+        <label htmlFor="fn">Name</label>
+        <input id="fn" className="input" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
+      </div>
+      <div className="field">
+        <label htmlFor="fd">
+          Description <span className="opt">· optional</span>
+        </label>
+        <input id="fd" className="input" value={description} onChange={(e) => setDescription(e.target.value)} />
+      </div>
+      {!editing && orgs.length > 1 && (
+        <SelectField label="Organization" value={orgId} onChange={(v) => { setOrgId(v); setParentId('') }} options={orgs.map((o): [string, string] => [String(o.id), o.name])} />
+      )}
+      <SelectField
+        label="Inside"
+        value={parentId}
+        onChange={setParentId}
+        options={[['', 'Top level'], ...parents.map((n): [string, string] => [String(n.folder.id), `${'   '.repeat(n.depth)}${n.path}`])]}
+        help="Roles granted on a folder apply to everything in it and in its subfolders."
+      />
+    </Dialog>
   )
 }
 

@@ -1,7 +1,11 @@
 import { Route } from 'react-router'
 import { PageHead } from '../../components/ui'
-import { JobDetail } from './JobDetail'
-import { JobsTable } from './JobsTable'
+import { lazyModule } from '../../lib/lazy'
+
+const m_JobDetail = lazyModule(() => import('./JobDetail'))
+const JobDetail = m_JobDetail('JobDetail')
+const m_JobsTable = lazyModule(() => import('./JobsTable'))
+const JobsTable = m_JobsTable('JobsTable')
 
 function JobList() {
   return (

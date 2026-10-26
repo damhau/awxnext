@@ -1,8 +1,12 @@
 // Routes for schedules, approvals and workflow editing.
 import { Route } from 'react-router'
 import './automation.css'
-import { ApprovalsPage } from './ApprovalsPage'
-import { SchedulesPage } from './SchedulesPage'
+import { lazyModule } from '../../lib/lazy'
+
+const m_ApprovalsPage = lazyModule(() => import('./ApprovalsPage'))
+const ApprovalsPage = m_ApprovalsPage('ApprovalsPage')
+const m_SchedulesPage = lazyModule(() => import('./SchedulesPage'))
+const SchedulesPage = m_SchedulesPage('SchedulesPage')
 
 export function automationRoutes() {
   return (

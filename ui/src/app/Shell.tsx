@@ -1,11 +1,11 @@
 import { useQueryClient } from '@tanstack/react-query'
-import { useEffect, useRef, useState } from 'react'
+import { Suspense, useEffect, useRef, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router'
 import { useList } from '../api/hooks'
 import { useLive } from '../api/live'
 import { Icon, type IconName } from '../components/icons'
 import { Menu } from '../components/overlay'
-import { Avatar } from '../components/ui'
+import { Avatar, Loading } from '../components/ui'
 import { userName } from '../lib/format'
 import { useHotkeys } from '../lib/hotkeys'
 import { useStored } from '../lib/storage'
@@ -226,7 +226,9 @@ export function Shell() {
       <div className="body">
         <Nav />
         <main className="main" id="main">
-          <Outlet />
+          <Suspense fallback={<div className="page"><Loading /></div>}>
+            <Outlet />
+          </Suspense>
         </main>
       </div>
       {palette && <Palette onClose={() => setPalette(false)} />}

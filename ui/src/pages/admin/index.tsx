@@ -1,16 +1,42 @@
 // Routes for organizations, teams, users, instances, notifications, GitOps,
 // management jobs, activity stream and settings.
 import { Route } from 'react-router'
-import { Activity } from './activity'
+
 import './admin.css'
-import { GitOpsDetail, GitOpsList, GitOpsNew } from './gitops'
-import { GroupDetail, GroupNew, InstanceDetail, InstanceList } from './instances'
-import { ManagementDetail, ManagementList } from './management'
-import { NotificationDetail, NotificationList, NotificationNew } from './notifications'
-import { OrganizationDetail, OrganizationList, OrganizationNew } from './organizations'
-import { Settings } from './settings'
-import { TeamDetail, TeamList, TeamNew } from './teams'
-import { UserDetail, UserList, UserNew } from './users'
+import { lazyModule } from '../../lib/lazy'
+
+const m_activity = lazyModule(() => import('./activity'))
+const Activity = m_activity('Activity')
+const m_gitops = lazyModule(() => import('./gitops'))
+const GitOpsDetail = m_gitops('GitOpsDetail')
+const GitOpsList = m_gitops('GitOpsList')
+const GitOpsNew = m_gitops('GitOpsNew')
+const m_instances = lazyModule(() => import('./instances'))
+const GroupDetail = m_instances('GroupDetail')
+const GroupNew = m_instances('GroupNew')
+const InstanceDetail = m_instances('InstanceDetail')
+const InstanceList = m_instances('InstanceList')
+const m_management = lazyModule(() => import('./management'))
+const ManagementDetail = m_management('ManagementDetail')
+const ManagementList = m_management('ManagementList')
+const m_notifications = lazyModule(() => import('./notifications'))
+const NotificationDetail = m_notifications('NotificationDetail')
+const NotificationList = m_notifications('NotificationList')
+const NotificationNew = m_notifications('NotificationNew')
+const m_organizations = lazyModule(() => import('./organizations'))
+const OrganizationDetail = m_organizations('OrganizationDetail')
+const OrganizationList = m_organizations('OrganizationList')
+const OrganizationNew = m_organizations('OrganizationNew')
+const m_settings = lazyModule(() => import('./settings'))
+const Settings = m_settings('Settings')
+const m_teams = lazyModule(() => import('./teams'))
+const TeamDetail = m_teams('TeamDetail')
+const TeamList = m_teams('TeamList')
+const TeamNew = m_teams('TeamNew')
+const m_users = lazyModule(() => import('./users'))
+const UserDetail = m_users('UserDetail')
+const UserList = m_users('UserList')
+const UserNew = m_users('UserNew')
 
 export function adminRoutes() {
   return (
