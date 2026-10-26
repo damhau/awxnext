@@ -926,8 +926,23 @@ func Update(c *Ctx, res *Resource, old Obj, data Obj) (Obj, error) {
 	return Apply(c, res, old, vals)
 }
 
+// checkManaged rejects changes to objects owned by an external source.
+func checkManaged(c *Ctx, res *Resource, obj Obj) error {
+	if !res.Managed {
+		return nil
+	}
+	owner, _ := obj["managed_by"].(string)
+	if owner == "" || c.Extra["managed_by"] == owner {
+		return nil
+	}
+	return Detail(409, fmt.Sprintf("This %s is managed by %s. Change it at the source.", strings.ToLower(res.Verbose), owner))
+}
+
 // Apply writes already-validated changes, enforcing change permission.
 func Apply(c *Ctx, res *Resource, old Obj, vals Obj) (Obj, error) {
+	if err := checkManaged(c, res, old); err != nil {
+		return nil, err
+	}
 	merged := Obj{}
 	for k, v := range old {
 		merged[k] = v
@@ -1062,6 +1077,9 @@ func activityValue(f *Field, v any) any {
 
 // Delete removes an object after permission checks.
 func Delete(c *Ctx, res *Resource, obj Obj) error {
+	if err := checkManaged(c, res, obj); err != nil {
+		return err
+	}
 	if res.CanDelete != nil {
 		if err := res.CanDelete(c, obj); err != nil {
 			return err

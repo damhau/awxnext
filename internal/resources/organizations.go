@@ -88,6 +88,7 @@ func registerOrganizations() {
 		Ordering:    "name",
 		ContentType: "team",
 		Versioned:   true,
+		Managed:     true,
 		OrgColumn:   "organization_id",
 		Fields: []*Field{
 			{Name: "organization", Type: api.TFK, Ref: "organizations", Required: true},

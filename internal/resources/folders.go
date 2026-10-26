@@ -22,6 +22,7 @@ func registerFolders() {
 		Ordering:     "name",
 		ContentType:  "folder",
 		Versioned:    true,
+		Managed:      true,
 		OrgColumn:    "organization_id",
 		FolderColumn: "id",
 		Fields: []*Field{

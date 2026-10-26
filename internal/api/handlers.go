@@ -52,6 +52,9 @@ func (a *App) Router() chi.Router {
 		writeJSON(w, 200, root)
 	}))
 
+	r.Get("/api/v2/openapi.json", a.wrapPublic(a.handleOpenAPI))
+	r.Get("/api/v2/schema/", a.wrapPublic(a.handleOpenAPI))
+
 	for _, rt := range a.Routes {
 		h := a.wrap(rt.Handler)
 		if rt.Public {
@@ -131,7 +134,7 @@ func (a *App) recoverer(next http.Handler) http.Handler {
 // trailingSlash makes API paths without a trailing slash behave like AWX (which requires one).
 func trailingSlash(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasPrefix(r.URL.Path, "/api") && !strings.HasSuffix(r.URL.Path, "/") {
+		if strings.HasPrefix(r.URL.Path, "/api") && !strings.HasSuffix(r.URL.Path, "/") && !strings.HasSuffix(r.URL.Path, ".json") {
 			r.URL.Path += "/"
 			if r.URL.RawPath != "" {
 				r.URL.RawPath += "/"

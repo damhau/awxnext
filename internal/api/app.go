@@ -105,6 +105,10 @@ func Register(r *Resource) *Resource {
 		}
 	}
 	r.Fields = append(fields, r.Fields...)
+	if r.Managed {
+		r.Fields = append(r.Fields, &Field{Name: "managed_by", Type: TString, ReadOnly: true,
+			Help: "External source that owns this object (e.g. a Git repository). Managed objects cannot be edited through the API."})
+	}
 	r.fieldMap = map[string]*Field{}
 	for _, f := range r.Fields {
 		if f.Label == "" {

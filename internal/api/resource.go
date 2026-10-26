@@ -190,6 +190,9 @@ type Resource struct {
 	Copyable bool
 	// Versioned records a snapshot on every change and exposes /history/.
 	Versioned bool
+	// Managed adds a read-only managed_by field; objects with a non-empty
+	// managed_by can only be changed by that source (see Ctx.Extra["managed_by"]).
+	Managed bool
 	// VersionExtra adds relation state (credentials, labels, ...) to snapshots.
 	VersionExtra func(c *Ctx, obj Obj) (Obj, error)
 	// RevertExtra restores relation state captured by VersionExtra.
