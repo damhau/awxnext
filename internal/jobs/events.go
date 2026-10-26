@@ -41,6 +41,7 @@ type Output struct {
 	jobCreated time.Time
 	hostIDs    map[string]int64
 	publish    func(Event)
+	onFlush    func(maxCounter int)
 
 	mu      sync.Mutex
 	buf     []Event
@@ -59,8 +60,9 @@ const (
 )
 
 // NewOutput starts a writer. hostIDs maps inventory host names to ids for linking events.
-func NewOutput(db *pgxpool.Pool, jobID int64, jobCreated time.Time, hostIDs map[string]int64, publish func(Event)) *Output {
-	o := &Output{db: db, jobID: jobID, jobCreated: jobCreated, hostIDs: hostIDs, publish: publish,
+// onFlush is called with the highest stored counter after each batch is written.
+func NewOutput(db *pgxpool.Pool, jobID int64, jobCreated time.Time, hostIDs map[string]int64, publish func(Event), onFlush func(int)) *Output {
+	o := &Output{db: db, jobID: jobID, jobCreated: jobCreated, hostIDs: hostIDs, publish: publish, onFlush: onFlush,
 		flushed: make(chan struct{}, 1), done: make(chan struct{}), stopped: make(chan struct{})}
 	go o.loop()
 	return o
@@ -164,6 +166,13 @@ func (o *Output) flush() {
 	total := o.total
 	o.mu.Unlock()
 	o.db.Exec(ctx, "UPDATE unified_jobs SET emitted_events = $2 WHERE id = $1", o.jobID, total)
+	if o.onFlush != nil {
+		maxCounter := 0
+		for _, e := range batch {
+			maxCounter = max(maxCounter, e.Counter)
+		}
+		o.onFlush(maxCounter)
+	}
 }
 
 // Close flushes remaining events and marks event processing finished.

@@ -178,6 +178,11 @@ func registerJobResource(js jobSpec) *Resource {
 			}
 			return nil
 		},
+		AfterDelete: func(c *Ctx, obj Obj) error {
+			// job_events is partitioned and has no foreign key to cascade.
+			_, err := c.DB().Exec(c, "DELETE FROM job_events WHERE job_id = $1", obj["id"])
+			return err
+		},
 		Serialize: func(c *Ctx, o Obj) {
 			if !c.User.Superuser {
 				o["job_env"] = Obj{}
@@ -202,7 +207,8 @@ func registerJobResource(js jobSpec) *Resource {
 	res.SubLists = []*SubList{
 		{
 			Name: js.eventsName, Target: js.eventsRes, ReadOnly: true, SkipView: true,
-			Filter: func(arg ArgFunc, pid int64) string { return "t.job_id = " + arg(pid) },
+			Filter:     func(arg ArgFunc, pid int64) string { return "t.job_id = " + arg(pid) },
+			BeforeList: func(c *Ctx, pid int64) error { return jobs.RestoreEvents(c, c.App.DB, pid) },
 		},
 		{
 			Name: "notifications", Target: "notifications", ReadOnly: true, SkipView: true,
@@ -304,6 +310,10 @@ func handleStdout(c *Ctx, w http.ResponseWriter, r *http.Request, obj Obj) {
 		if strings.Contains(r.Header.Get("Accept"), "text/plain") {
 			format = "txt"
 		}
+	}
+	if err := jobs.RestoreEvents(c, c.App.DB, id); err != nil {
+		api.WriteError(w, err)
+		return
 	}
 	startLine, _ := strconv.Atoi(q.Get("start_line"))
 	endLine, _ := strconv.Atoi(q.Get("end_line"))

@@ -200,8 +200,10 @@ func (m *Manager) listenOnce(ctx context.Context) error {
 			if id, err := strconv.ParseInt(n.Payload, 10, 64); err == nil {
 				m.cancelLocal(id)
 			}
-		case chStatus, chEvents:
+		case chStatus:
 			m.Hub.fromNotification(n.Channel, n.Payload, m.Node)
+		case chEvents:
+			m.relayEvents(ctx, n.Payload)
 		}
 	}
 }
@@ -377,7 +379,11 @@ func (m *Manager) run(parent context.Context, id int64) {
 		m.finish(context.Background(), row, Result{Status: "error", Explanation: "No runner for job type " + row.Str("type")})
 		return
 	}
-	out := NewOutput(m.DB(), id, row.Time("created"), m.hostIDs(ctx, row), func(e Event) { m.Hub.publishEvent(row, e) })
+	out := NewOutput(m.DB(), id, row.Time("created"), m.hostIDs(ctx, row), func(e Event) { m.Hub.publishEvent(row, e) },
+		func(maxCounter int) {
+			// Viewers connected to other nodes fetch stored events when notified.
+			m.Notify(context.Background(), chEvents, fmt.Sprintf("%s|%s|%d|%d", m.Node, row.Str("type"), id, maxCounter))
+		})
 	var res Result
 	func() {
 		defer func() {
@@ -567,7 +573,7 @@ func (m *Manager) reap(ctx context.Context) {
 	}
 }
 
-// maintain creates upcoming daily partitions for job events.
+// maintain creates upcoming daily partitions for job events and archives old ones.
 func (m *Manager) maintain(ctx context.Context) {
 	now := time.Now().UTC()
 	for d := 0; d < 3; d++ {
@@ -579,5 +585,8 @@ func (m *Manager) maintain(ctx context.Context) {
 			// Rows for this day already landed in the default partition; keep using it.
 			slog.Debug("event partition", "name", name, "err", err)
 		}
+	}
+	if err := m.ArchiveEvents(ctx, m.App.Settings.Int(ctx, "JOB_EVENTS_HOT_DAYS")); err != nil && ctx.Err() == nil {
+		slog.Error("archiving job events", "err", err)
 	}
 }

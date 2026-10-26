@@ -122,6 +122,8 @@ type SubList struct {
 	SkipView bool
 	// AttachPerm is the permission required on the parent to (dis)associate. Defaults to "change".
 	AttachPerm string
+	// BeforeList runs before the sublist is read (e.g. to restore archived job events).
+	BeforeList func(c *Ctx, parentID int64) error
 }
 
 // Action is a custom endpoint under /<resource>/<id>/<name>/.

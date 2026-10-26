@@ -20,6 +20,7 @@ import (
 	"github.com/damhau/awxnext/internal/runners/ansible"
 	"github.com/damhau/awxnext/internal/runners/gitsync"
 	"github.com/damhau/awxnext/internal/settings"
+	"github.com/damhau/awxnext/internal/ws"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -65,6 +66,12 @@ func Setup(ctx context.Context, cfg *config.Config) (*api.App, error) {
 func Handler(app *api.App) http.Handler {
 	auth.Install(app)
 	resources.Install(app)
+	ws.Install(app, func() *jobs.Hub {
+		if resources.Jobs == nil {
+			return nil
+		}
+		return resources.Jobs.Hub
+	})
 	return app.Router()
 }
 

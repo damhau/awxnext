@@ -1,7 +1,9 @@
 package jobs
 
 import (
+	"context"
 	"encoding/json"
+	"strconv"
 	"strings"
 	"sync"
 )
@@ -11,6 +13,8 @@ import (
 type Hub struct {
 	mu   sync.RWMutex
 	subs map[string]map[chan []byte]bool
+	// relayed tracks the last event counter relayed per group from other nodes.
+	relayed sync.Map
 }
 
 func NewHub() *Hub { return &Hub{subs: map[string]map[chan []byte]bool{}} }
@@ -33,6 +37,18 @@ func (h *Hub) Unsubscribe(ch chan []byte) {
 		delete(set, ch)
 		if len(set) == 0 {
 			delete(h.subs, g)
+		}
+	}
+}
+
+// UnsubscribeGroup removes ch from one group.
+func (h *Hub) UnsubscribeGroup(group string, ch chan []byte) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if set := h.subs[group]; set != nil {
+		delete(set, ch)
+		if len(set) == 0 {
+			delete(h.subs, group)
 		}
 	}
 }
@@ -72,26 +88,73 @@ func itoa(n int64) string {
 	return string(b)
 }
 
-// publishEvent sends an event to local subscribers. Events are not relayed
-// across nodes through NOTIFY (payload limits); remote viewers poll the API.
+// publishEvent sends an event to local subscribers. Subscribers on other
+// nodes receive it through relayEvents once the event is stored.
 func (h *Hub) publishEvent(row Row, e Event) {
-	group := eventGroup(row.Str("type"), row.ID())
+	h.sendEvent(row.Str("type"), row.ID(), e)
+}
+
+func (h *Hub) sendEvent(jobType string, jobID int64, e Event) {
+	group := eventGroup(jobType, jobID)
 	if !h.hasSubscribers(group) {
 		return
 	}
+	prefix, _, _ := strings.Cut(group, "-")
 	msg := map[string]any{
-		"group_name": group, "type": row.Str("type") + "_event", "event": e.Event, "counter": e.Counter,
+		"group_name": prefix, "type": jobType + "_event", "event": e.Event, "counter": e.Counter,
 		"uuid": e.UUID, "parent_uuid": e.ParentUUID, "stdout": e.Stdout, "start_line": e.StartLine, "end_line": e.EndLine,
-		"host_name": e.HostName, "failed": e.Failed, "changed": e.Changed, "task": e.Task, "play": e.Play, "role": e.Role,
-		"created": e.Created, "event_data": e.EventData,
+		"host_name": e.HostName, "host": e.HostID, "failed": e.Failed, "changed": e.Changed, "task": e.Task, "play": e.Play, "role": e.Role,
+		"playbook": e.Playbook, "verbosity": e.Verbosity, "created": e.Created, "event_data": e.EventData,
 	}
-	if row.Str("type") == "job" {
-		msg["job"] = row.ID()
+	if jobType == "job" {
+		msg["job"] = jobID
 	} else {
-		msg[row.Str("type")] = row.ID()
+		msg[jobType] = jobID
 	}
 	b, _ := json.Marshal(msg)
 	h.Publish(group, b)
+}
+
+// relayEvents forwards events stored by another node to local subscribers.
+func (m *Manager) relayEvents(ctx context.Context, payload string) {
+	parts := strings.Split(payload, "|")
+	if len(parts) != 4 || parts[0] == m.Node {
+		return
+	}
+	jobType := parts[1]
+	jobID, err1 := strconv.ParseInt(parts[2], 10, 64)
+	maxCounter, err2 := strconv.Atoi(parts[3])
+	if err1 != nil || err2 != nil {
+		return
+	}
+	group := eventGroup(jobType, jobID)
+	if !m.Hub.hasSubscribers(group) {
+		m.Hub.relayed.Delete(group)
+		return
+	}
+	last := 0
+	if v, ok := m.Hub.relayed.Load(group); ok {
+		last = v.(int)
+	}
+	if maxCounter <= last {
+		return
+	}
+	rows, err := m.DB().Query(ctx, `SELECT counter, event, uuid, parent_uuid, created, stdout, start_line, end_line, verbosity,
+		host_name, host_id, playbook, play, role, task, failed, changed, event_data
+		FROM job_events WHERE job_id = $1 AND counter > $2 AND counter <= $3 ORDER BY counter`, jobID, last, maxCounter)
+	if err != nil {
+		return
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var e Event
+		if err := rows.Scan(&e.Counter, &e.Event, &e.UUID, &e.ParentUUID, &e.Created, &e.Stdout, &e.StartLine, &e.EndLine, &e.Verbosity,
+			&e.HostName, &e.HostID, &e.Playbook, &e.Play, &e.Role, &e.Task, &e.Failed, &e.Changed, &e.EventData); err != nil {
+			return
+		}
+		m.Hub.sendEvent(jobType, jobID, e)
+	}
+	m.Hub.relayed.Store(group, maxCounter)
 }
 
 // fromNotification relays status messages published by other nodes.

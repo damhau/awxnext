@@ -1,10 +1,12 @@
 package api
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/url"
 	"sort"
@@ -115,6 +117,15 @@ func (t *timedWriter) Flush() {
 }
 
 func (t *timedWriter) Unwrap() http.ResponseWriter { return t.ResponseWriter }
+
+// Hijack supports websocket upgrades through the wrapper.
+func (t *timedWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	hj, ok := t.ResponseWriter.(http.Hijacker)
+	if !ok {
+		return nil, nil, errors.New("response writer does not support hijacking")
+	}
+	return hj.Hijack()
+}
 
 func (a *App) recoverer(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -523,6 +534,12 @@ func (a *App) handleSubList(c *Ctx, w http.ResponseWriter, r *http.Request, res 
 	pid, _ := ID(parent["id"])
 	switch r.Method {
 	case "GET":
+		if s.BeforeList != nil {
+			if err := s.BeforeList(c, pid); err != nil {
+				writeError(w, err)
+				return
+			}
+		}
 		WriteList(c, w, r, target, ListParams{SkipView: s.SkipView, Extra: []func(ArgFunc) string{func(arg ArgFunc) string { return s.Filter(arg, pid) }}})
 		return
 	case "OPTIONS":
