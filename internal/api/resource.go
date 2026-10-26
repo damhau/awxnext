@@ -194,9 +194,11 @@ type Resource struct {
 	Relations map[string]Relation
 
 	// ReadOnly disables POST/PUT/PATCH/DELETE.
-	ReadOnly   bool
-	NoCreate   bool
-	NoDelete   bool
+	ReadOnly bool
+	NoCreate bool
+	NoDelete bool
+	// NoUpdate rejects PUT/PATCH on objects (e.g. jobs).
+	NoUpdate   bool
 	NoActivity bool
 	// Copyable enables /copy/.
 	Copyable bool

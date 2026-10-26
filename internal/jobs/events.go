@@ -180,6 +180,14 @@ func (o *Output) Close() error {
 	return err
 }
 
+// Position returns the last assigned event counter and output line, so a
+// second execution streamed into the same job can continue after them.
+func (o *Output) Position() (counter, line int) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return o.counter, o.line
+}
+
 // Counter returns the last assigned event counter.
 func (o *Output) Counter() int {
 	o.mu.Lock()

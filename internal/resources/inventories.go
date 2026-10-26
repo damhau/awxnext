@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"sort"
+	"strings"
 
 	"github.com/damhau/awxnext/internal/api"
 	"github.com/damhau/awxnext/internal/vars"
@@ -354,8 +355,17 @@ func registerInventories() {
 				return fmt.Sprintf("t.id IN (SELECT host_id FROM group_hosts WHERE group_id = %s)", arg(pid))
 			},
 			CreateDefaults: func(c *Ctx, parent Obj) Obj { return Obj{"inventory": parent["inventory"]} },
-			CanAttach:      sameInventory("hosts"),
-			AttachPerm:     "none",
+			// Like AWX, posting the name of an existing host without variables attaches it.
+			FindExisting: func(c *Ctx, parent Obj, data Obj) (int64, bool, error) {
+				if v := strings.TrimSpace(str(data["variables"])); v != "" && v != "{}" && v != "---" {
+					return 0, false, nil
+				}
+				var id int64
+				err := c.DB().QueryRow(c, "SELECT id FROM hosts WHERE inventory_id = $1 AND name = $2", parent["inventory"], str(data["name"])).Scan(&id)
+				return id, err == nil, nil
+			},
+			CanAttach:  sameInventory("hosts"),
+			AttachPerm: "none",
 			Associate: func(c *Ctx, gid, hid int64) error {
 				_, err := c.DB().Exec(c, "INSERT INTO group_hosts (group_id, host_id) VALUES ($1, $2) ON CONFLICT DO NOTHING", gid, hid)
 				return err

@@ -196,15 +196,15 @@ func (a *App) BuildOpenAPI() Obj {
 			"get": Obj{"operationId": res.Name + "_read", "tags": tag,
 				"responses": withErrors(map[string]Obj{"200": jsonResp("OK", ref(sn))})},
 		}
-		if !res.ReadOnly {
+		if !res.ReadOnly && !res.NoUpdate {
 			detail["put"] = Obj{"operationId": res.Name + "_update", "tags": tag, "requestBody": jsonBody(ref(sn + "Write")),
 				"responses": withErrors(map[string]Obj{"200": jsonResp("OK", ref(sn))})}
 			detail["patch"] = Obj{"operationId": res.Name + "_partial_update", "tags": tag, "requestBody": jsonBody(ref(sn + "Write")),
 				"responses": withErrors(map[string]Obj{"200": jsonResp("OK", ref(sn))})}
-			if !res.NoDelete {
-				detail["delete"] = Obj{"operationId": res.Name + "_delete", "tags": tag,
-					"responses": withErrors(map[string]Obj{"204": jsonResp("Deleted", nil)})}
-			}
+		}
+		if !res.ReadOnly && !res.NoDelete {
+			detail["delete"] = Obj{"operationId": res.Name + "_delete", "tags": tag,
+				"responses": withErrors(map[string]Obj{"204": jsonResp("Deleted", nil)})}
 		}
 		base := "/api/v2/" + res.Name + "/{id}/"
 		paths[base] = detail

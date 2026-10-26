@@ -132,6 +132,8 @@ func (r *Run) Execute(ctx context.Context, app *api.App, out *jobs.Output) (*Out
 		Transmit(stdin, r.Kwargs, r.Dir, r.Mounts...)
 		stdin.Close()
 	}()
+	// Events of a later execution in the same job continue the numbering.
+	baseCounter, baseLine := out.Position()
 	done := make(chan error, 1)
 	go func() {
 		done <- Process(stdout, oc.Artifacts, func(m StreamMessage) {
@@ -144,6 +146,13 @@ func (r *Run) Execute(ctx context.Context, app *api.App, out *jobs.Output) (*Out
 			}
 			if m.Event != nil {
 				ev := MapEvent(m.Event)
+				if ev.Counter > 0 {
+					ev.Counter += baseCounter
+				}
+				if ev.StartLine > 0 || ev.EndLine > 0 {
+					ev.StartLine += baseLine
+					ev.EndLine += baseLine
+				}
 				if ev.Event == "playbook_on_stats" {
 					oc.Stats = ev.EventData
 				}

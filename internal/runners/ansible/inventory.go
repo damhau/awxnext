@@ -150,6 +150,11 @@ func runInventoryUpdate(ctx context.Context, rc *jobs.RunContext) jobs.Result {
 			return fail(fmt.Sprintf("Inventory source path %q not found in project.", row.Str("source_path")))
 		}
 		run.Mounts = append(run.Mounts, Mount{Prefix: "project", Path: dir})
+		req, err := InstallRequirements(ctx, app, rc.Out, row, row.Int("project_id"), dir)
+		if err != nil {
+			return fail("Project requirements: " + err.Error())
+		}
+		req.Mount(run)
 		invPath = run.Path(path.Join("project", sp))
 	case "constructed":
 		rows, err := app.DB.Query(ctx, "SELECT input_inventory_id FROM inventory_input_inventories WHERE inventory_id = $1 ORDER BY position, input_inventory_id", invID)

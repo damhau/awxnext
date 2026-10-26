@@ -12,6 +12,7 @@ func init() {
 	registerUnified()
 	registerProjects()
 	registerInventorySources()
+	registerAdHocCommands()
 	registerJobTemplates()
 	registerRoles()
 	registerActivity()

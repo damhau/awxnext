@@ -91,8 +91,11 @@ func fmtTime(v any) any {
 
 // jobFields are the fields shared by all unified jobs.
 func jobFields(templateField, templateRef string) []*Field {
-	return []*Field{
-		{Name: templateField, Column: "unified_job_template_id", Type: api.TFK, Ref: templateRef, ReadOnly: true, Nullable: true},
+	var fields []*Field
+	if templateField != "" {
+		fields = append(fields, &Field{Name: templateField, Column: "unified_job_template_id", Type: api.TFK, Ref: templateRef, ReadOnly: true, Nullable: true})
+	}
+	return append(fields, []*Field{
 		{Name: "unified_job_template", Type: api.TFK, Ref: "unified_job_templates", ReadOnly: true, Nullable: true},
 		{Name: "launch_type", Type: api.TChoice, ReadOnly: true, Choices: launchTypeChoices},
 		{Name: "status", Type: api.TChoice, ReadOnly: true, Choices: jobStatusChoices},
@@ -117,7 +120,7 @@ func jobFields(templateField, templateRef string) []*Field {
 		{Name: "cancel_flag", Type: api.TBool, ReadOnly: true, Hidden: true},
 		{Name: "emitted_events", Type: api.TInt, ReadOnly: true, Hidden: true},
 		{Name: "task_impact", Type: api.TInt, ReadOnly: true, Hidden: true},
-	}
+	}...)
 }
 
 var finalStatus = map[string]bool{"successful": true, "failed": true, "error": true, "canceled": true}
@@ -148,6 +151,7 @@ func registerJobResource(js jobSpec) *Resource {
 		Verbose:       js.verbose,
 		Ordering:      "-id",
 		NoCreate:      true,
+		NoUpdate:      true,
 		Fields:        fields,
 		View: func(c *Ctx, arg ArgFunc) string {
 			if c.User.Superuser || c.User.Auditor {

@@ -39,6 +39,7 @@ func Register() {
 		},
 	})
 	registerInventoryUpdate()
+	registerAdHoc()
 }
 
 // LoadStartArgs decrypts a job's start_args.
@@ -141,6 +142,13 @@ func runJob(ctx context.Context, rc *jobs.RunContext) jobs.Result {
 		return fail(fmt.Sprintf("Playbook %q not found in project.", playbook))
 	}
 	run.Mounts = append(run.Mounts, Mount{Prefix: "project", Path: projectDir})
+	if rev != "" {
+		req, err := InstallRequirements(ctx, app, rc.Out, row, row.Int("project_id"), projectDir)
+		if err != nil {
+			return fail("Project requirements: " + err.Error())
+		}
+		req.Mount(run)
+	}
 
 	// Inventory as an executable script (works in any execution environment).
 	if err := writeInventory(ctx, app, run, row.Int("inventory_id")); err != nil {

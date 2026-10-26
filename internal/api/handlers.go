@@ -355,6 +355,7 @@ func (a *App) handleCreate(c *Ctx, w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
+	c.Extra["body"] = data
 	obj, err := Create(c, res, data, nil)
 	if err != nil {
 		writeError(w, err)
@@ -388,7 +389,7 @@ func (a *App) handleUpdate(c *Ctx, w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	if res.ReadOnly {
+	if res.ReadOnly || res.NoUpdate {
 		writeError(w, Detail(405, fmt.Sprintf("Method %q not allowed.", r.Method)))
 		return
 	}
@@ -589,6 +590,7 @@ func (a *App) handleSubList(c *Ctx, w http.ResponseWriter, r *http.Request, res 
 		// Creating through the parent counts as permission on the parent.
 		data[s.ParentField] = pid
 	}
+	c.Extra["body"] = data
 	obj, err := Create(c, target, data, preset)
 	if err != nil {
 		writeError(w, err)
@@ -733,7 +735,7 @@ func (a *App) handleOptions(c *Ctx, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	isList := chi.URLParam(r, "id") == ""
-	writable := !res.ReadOnly && !(isList && res.NoCreate)
+	writable := !res.ReadOnly && !(isList && res.NoCreate) && !(!isList && res.NoUpdate)
 	writeJSON(w, 200, metadata(c, res, isList, writable))
 }
 
