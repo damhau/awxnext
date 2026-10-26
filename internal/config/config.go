@@ -23,6 +23,8 @@ type Config struct {
 	ContainerRuntime string
 	// DefaultEEImage is used when no execution environment is selected.
 	DefaultEEImage string
+	// RunnerCommand is the ansible-runner binary used when ContainerRuntime is "none".
+	RunnerCommand string
 	// UIDir serves a built UI from disk when set; otherwise the embedded UI is used.
 	UIDir string
 	// Capacity is the forks capacity of this node for local execution.
@@ -42,6 +44,7 @@ func Load() *Config {
 		JobsRoot:         env("AWXNEXT_JOBS_ROOT", "/var/lib/awxnext/jobs"),
 		ContainerRuntime: env("AWXNEXT_CONTAINER_RUNTIME", "podman"),
 		DefaultEEImage:   env("AWXNEXT_DEFAULT_EE_IMAGE", "quay.io/ansible/awx-ee:latest"),
+		RunnerCommand:    env("AWXNEXT_RUNNER_CMD", "ansible-runner"),
 		UIDir:            env("AWXNEXT_UI_DIR", ""),
 		Capacity:         envInt("AWXNEXT_CAPACITY", 100),
 		DevMode:          env("AWXNEXT_DEV", "") != "",

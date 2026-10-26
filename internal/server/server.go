@@ -17,6 +17,7 @@ import (
 	"github.com/damhau/awxnext/internal/jobs"
 	"github.com/damhau/awxnext/internal/kms"
 	"github.com/damhau/awxnext/internal/resources"
+	"github.com/damhau/awxnext/internal/runners/ansible"
 	"github.com/damhau/awxnext/internal/runners/gitsync"
 	"github.com/damhau/awxnext/internal/settings"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -70,6 +71,7 @@ func Handler(app *api.App) http.Handler {
 // StartJobs registers runners and starts dispatching and running jobs on this node.
 func StartJobs(ctx context.Context, app *api.App) *jobs.Manager {
 	gitsync.Register()
+	ansible.Register()
 	m := jobs.New(app)
 	resources.Jobs = m
 	m.Start(ctx)

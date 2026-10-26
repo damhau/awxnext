@@ -11,6 +11,7 @@ func init() {
 	registerInventories()
 	registerUnified()
 	registerProjects()
+	registerJobTemplates()
 	registerRoles()
 	registerActivity()
 }

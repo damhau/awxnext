@@ -62,12 +62,18 @@ func TestMain(m *testing.M) {
 		panic(err)
 	}
 	cfg.ProjectsRoot, _ = os.MkdirTemp("", "awxnext-projects-")
+	cfg.JobsRoot, _ = os.MkdirTemp("", "awxnext-jobs-")
+	cfg.ContainerRuntime = "none"
+	if _, err := os.Stat("/opt/ansible-venv/bin/ansible-runner"); err == nil {
+		os.Setenv("PATH", "/opt/ansible-venv/bin:"+os.Getenv("PATH"))
+	}
 	jobsCtx, stopJobs := context.WithCancel(ctx)
 	jobManager = server.StartJobs(jobsCtx, app)
 	srv = httptest.NewServer(server.Handler(app))
 	code := m.Run()
 	stopJobs()
 	os.RemoveAll(cfg.ProjectsRoot)
+	os.RemoveAll(cfg.JobsRoot)
 	srv.Close()
 	app.DB.Close()
 	admin.Exec(ctx, "DROP DATABASE "+name+" WITH (FORCE)")

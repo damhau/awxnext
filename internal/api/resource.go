@@ -110,6 +110,9 @@ type SubList struct {
 	CanAttach func(c *Ctx, parent Obj, childID int64) error
 	// NoCreate disables creation of new objects through the sublist.
 	NoCreate bool
+	// FindExisting maps a creation request to an existing object to associate
+	// instead (e.g. labels by name).
+	FindExisting func(c *Ctx, parent Obj, data Obj) (int64, bool, error)
 	// CreateDefaults supplies field values for objects created through the sublist
 	// (e.g. a host created under a group inherits the group's inventory).
 	CreateDefaults func(c *Ctx, parent Obj) Obj

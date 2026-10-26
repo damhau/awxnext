@@ -559,6 +559,19 @@ func (a *App) handleSubList(c *Ctx, w http.ResponseWriter, r *http.Request, res 
 		w.WriteHeader(204)
 		return
 	}
+	if s.FindExisting != nil && s.Associate != nil {
+		if existing, ok, err := s.FindExisting(c, parent, data); err != nil {
+			writeError(w, err)
+			return
+		} else if ok {
+			if err := a.attach(c, res, parent, s, target, existing, false); err != nil {
+				writeError(w, err)
+				return
+			}
+			w.WriteHeader(204)
+			return
+		}
+	}
 	if s.NoCreate {
 		writeError(w, FieldError("id", "This field is required."))
 		return
