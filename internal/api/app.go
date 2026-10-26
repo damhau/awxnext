@@ -114,6 +114,9 @@ func Register(r *Resource) *Resource {
 		if f.Label == "" {
 			f.Label = title(f.Name)
 		}
+		if f.Virtual {
+			f.NoFilter = true
+		}
 		r.fieldMap[f.Name] = f
 	}
 	if r.Verbose == "" {

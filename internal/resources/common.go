@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/damhau/awxnext/internal/api"
+	"github.com/damhau/awxnext/internal/rbac"
 )
 
 type (
@@ -233,3 +234,5 @@ func boolv(v any) bool {
 	b, _ := v.(bool)
 	return b
 }
+
+func rbacArg(a ArgFunc) rbac.ArgFunc { return rbac.ArgFunc(a) }

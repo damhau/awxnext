@@ -54,7 +54,7 @@ func snapshot(c *Ctx, res *Resource, obj Obj) (Obj, error) {
 	data := Obj{}
 	for _, f := range res.Fields {
 		v := obj[f.Name]
-		if f.Name == "password" {
+		if f.Name == "password" || f.Virtual {
 			continue
 		}
 		data[f.Name] = renderStored(f, v)
@@ -173,7 +173,11 @@ func (a *App) handleVersion(c *Ctx, w http.ResponseWriter, r *http.Request) {
 	}
 	// Secrets are never returned, even in their encrypted form.
 	for _, f := range res.Fields {
-		if f.Type == TSecret {
+		if f.Redact != nil {
+			if v, ok := snap[f.Name]; ok {
+				snap[f.Name] = f.Redact(v)
+			}
+		} else if f.Type == TSecret {
 			if s, _ := snap[f.Name].(string); s != "" {
 				snap[f.Name] = "$encrypted$"
 			}

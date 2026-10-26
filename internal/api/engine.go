@@ -14,13 +14,16 @@ import (
 )
 
 func selectCols(res *Resource) string {
-	cols := make([]string, len(res.Fields))
-	for i, f := range res.Fields {
+	cols := make([]string, 0, len(res.Fields))
+	for _, f := range res.Fields {
+		if f.Virtual {
+			continue
+		}
 		expr := "t." + quoteIdent(f.column())
 		if f.Type == TFloat {
 			expr += "::float8"
 		}
-		cols[i] = expr
+		cols = append(cols, expr)
 	}
 	return strings.Join(cols, ", ")
 }
@@ -34,8 +37,13 @@ func scanObjs(res *Resource, rows pgx.Rows) ([]Obj, error) {
 			return nil, err
 		}
 		obj := make(Obj, len(res.Fields))
-		for i, f := range res.Fields {
+		i := 0
+		for _, f := range res.Fields {
+			if f.Virtual {
+				continue
+			}
 			obj[f.Name] = normalize(vals[i])
+			i++
 		}
 		out = append(out, obj)
 	}
@@ -284,7 +292,7 @@ func Serialize(c *Ctx, res *Resource, objs []Obj) ([]Obj, error) {
 		}
 		o := Obj{"id": id, "type": typ, "url": res.URL(id)}
 		for _, f := range res.Fields {
-			if f.Hidden || f.WriteOnly || f.Name == "id" || f.Name == "type" {
+			if f.Hidden || f.WriteOnly || f.Virtual || f.Name == "id" || f.Name == "type" {
 				continue
 			}
 			o[f.Name] = renderValue(f, raw[f.Name])
@@ -785,7 +793,7 @@ func Insert(c *Ctx, res *Resource, vals Obj) (Obj, error) {
 		var cols, phs []string
 		for _, f := range res.Fields {
 			v, ok := vals[f.Name]
-			if !ok || f.Name == "id" {
+			if !ok || f.Name == "id" || f.Virtual {
 				continue
 			}
 			dv, err := c.dbValue(f, v)
@@ -833,7 +841,7 @@ func Insert(c *Ctx, res *Resource, vals Obj) (Obj, error) {
 		}
 		changes := Obj{}
 		for _, f := range res.Fields {
-			if v, ok := vals[f.Name]; ok {
+			if v, ok := vals[f.Name]; ok && !f.Virtual {
 				changes[f.Name] = activityValue(f, v)
 			}
 		}
@@ -999,7 +1007,7 @@ func Apply(c *Ctx, res *Resource, old Obj, vals Obj) (Obj, error) {
 		changes := Obj{}
 		for _, f := range res.Fields {
 			v, ok := vals[f.Name]
-			if !ok {
+			if !ok || f.Virtual {
 				continue
 			}
 			if equalValues(old[f.Name], v) {
@@ -1064,6 +1072,9 @@ func equalValues(a, b any) bool {
 }
 
 func activityValue(f *Field, v any) any {
+	if f.Redact != nil {
+		return f.Redact(v)
+	}
 	if f.Type == TSecret || f.Name == "password" {
 		if s, _ := v.(string); s != "" {
 			return crypto.Placeholder

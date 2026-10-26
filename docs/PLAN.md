@@ -121,3 +121,16 @@ deploy/               compose + helm
 - **Bulk actions**: multi-select relabel, move to folder, grant permissions, enable/disable schedules, delete; inline editing for simple fields.
 - **Settings**: searchable sections showing non-default values instead of huge flat forms.
 - Dark mode, keyboard shortcuts, responsive layout.
+
+## Visual direction (approved mockups)
+
+Reference: the "AWX Next UX mockups" canvas (templates browser, job output, operator launch, history/diff, ⌘K palette).
+
+- Dense, utilitarian ops-console look: IBM Plex Sans for UI, IBM Plex Mono for identifiers, paths, versions, vars and logs.
+- Neutral ground (`#F3F4F1` chrome, white content, `#DCDFDA` hairlines), near-black top bar (`#1B1D1C`), one accent (cobalt `#2346B8`). 3px radii, no gradients, no decorative shadows (only on overlays), no emoji, inline stroke icons.
+- Status is encoded by shape and lightness as well as hue: successful = dark green circle/square, failed = orange diamond, running = blue dot with halo, canceled = short gray bar, skipped = light gray, not run = outline.
+- Job output is a dark terminal pane with collapsible tasks, line numbers, failed-only filter, search, "first failure"; above it a host × task grid and a plain-language "why it failed" summary.
+- Templates: folder tree + saved views + starred; token query bar (`folder:` `inventory:` `status:`); last-12-runs strip; bulk action bar; keyboard hints.
+- Operator launch: catalog, dynamic dropdowns (e.g. git tags), conditional fields, inline validation, "what will happen" preview, resolved variables with their source.
+- History: version list, field-level and YAML line diffs, revert, "runs around this change", "used by", source of truth.
+- ⌘K palette: actions first, then templates, jobs, hosts, inventories, with matched text emphasized.

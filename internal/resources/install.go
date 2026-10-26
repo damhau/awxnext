@@ -21,6 +21,9 @@ func Bootstrap(ctx context.Context, app *api.App) error {
 	if err := rbac.SyncManaged(ctx, app.DB); err != nil {
 		return err
 	}
+	if err := SeedCredentialTypes(ctx, app); err != nil {
+		return err
+	}
 	if !app.Settings.IsSet(ctx, "INSTALL_UUID") {
 		var uuid string
 		if err := app.DB.QueryRow(ctx, "SELECT gen_random_uuid()::text").Scan(&uuid); err != nil {

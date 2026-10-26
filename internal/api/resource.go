@@ -76,6 +76,10 @@ type Field struct {
 	Hidden bool
 	// Validate is called with the coerced value on write.
 	Validate func(c *Ctx, v any, data Obj) error
+	// Virtual fields are accepted on write and passed to hooks but not stored.
+	Virtual bool
+	// Redact masks the value in the activity stream and history views.
+	Redact func(v any) any
 }
 
 func (f *Field) column() string {
