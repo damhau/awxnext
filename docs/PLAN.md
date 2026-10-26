@@ -12,7 +12,29 @@ A re-implementation of AWX with near feature parity, a faster control plane and 
 | Execution | `ansible-runner` inside Execution Environment containers (pods on k8s, podman/docker on VMs) |
 | Remote nodes | Own lightweight Go agent dialing back to control plane (mTLS, streaming) — not Receptor |
 | Deployment | k8s-first (Helm), docker-compose for dev / small installs |
-| UI | React + TypeScript + Vite, TanStack Query/Router, Tailwind, React Flow for workflows |
+| UI | Built from scratch: React + TypeScript + Vite, TanStack Query/Router, Tailwind, React Flow for workflows |
+| Data access | Metadata-driven generic resource engine + pgx (no ORM); sqlc optional for hand-written queries |
+| Execution environments | Unchanged from AWX: stock `awx-ee` / `ansible-builder` images; ansible-runner transmit/worker/process protocol implemented in Go |
+| Job events | Daily partitions, retention by dropping partitions |
+| HA | All replicas serve API; scheduler/dispatcher leader via Postgres advisory lock |
+| Secrets at rest | AES-256-GCM, key id prefix for future rotation |
+| Compatibility | Reports AWX 24.6.x version; parity measured by `awx.awx` collection integration tests + awxkit |
+| License | Apache-2.0 |
+
+### OIDC
+
+- Group claim configurable (default `groups`); mapping rules such as `{group, superuser}` or `{group, organization, team, role: member|admin}`.
+- Mapping is authoritative: memberships granted by rules are revoked at next login when the group disappears from the token.
+- The API also accepts bearer JWTs issued by the OIDC provider (machine clients / client-credentials), validated via JWKS.
+- A local admin account remains for bootstrap and break-glass.
+
+### Not carried over from AWX
+
+OAuth2 applications (deprecated in AWX 24; personal tokens remain), custom virtualenvs, Insights projects, isolated nodes.
+
+### Migration from AWX
+
+Importer reading the AWX database directly, plus the AWX `SECRET_KEY` to re-encrypt credentials.
 
 ## v1 scope cuts
 
@@ -65,3 +87,15 @@ internal/...          domain packages (inventory, credentials, projects, jobs, �
 ui/                   React app
 deploy/               compose + helm
 ```
+
+## UI goals (pain points of the current AWX UI to fix)
+
+- **Job output**: virtualized, instant on 100k+ lines, live tail without jank, collapse by play/task, per-host filtering, search, download.
+- **Navigation**: command palette (⌘K) to jump to any template/inventory/host/job; deep links for everything; back button that works.
+- **Lists**: fast server-side filtering with a real query bar (`status:failed org:Ops`), saved views, column chooser, bulk actions (delete, copy, assign roles, launch).
+- **Launch flow**: one-screen launch with prompts + survey, remembers last values, "relaunch with changes", "relaunch on failed hosts".
+- **Workflows**: proper graph editor (zoom, auto-layout, drag to connect, inline node config), live run view on the same graph.
+- **Dashboards**: what is running right now across the cluster, failure hot-spots, capacity per instance group.
+- **Access management**: "who can do what on this object" and "what can this user do" views; role assignment from any object.
+- **Editing**: YAML/JSON editors with validation for variables, survey designer with preview, inline diff of template changes from the activity stream.
+- Dark mode, keyboard shortcuts, responsive layout.
