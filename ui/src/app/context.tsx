@@ -1,0 +1,82 @@
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
+import { api, ApiError, getAll, onUnauthorized, type Page } from '../api/client'
+import type { Me, Ref } from '../api/types'
+import { live } from '../api/live'
+import { useStored } from '../lib/storage'
+import { Login } from '../pages/Login'
+
+interface Session {
+  me: Me
+  logout: () => Promise<void>
+}
+
+const SessionCtx = createContext<Session | null>(null)
+
+export function useSession(): Session {
+  const s = useContext(SessionCtx)
+  if (!s) throw new Error('no session')
+  return s
+}
+
+export function useMe(): Me {
+  return useSession().me
+}
+
+/** Renders the login page until /api/v2/me/ succeeds, and again when the session expires. */
+export function SessionGate({ children }: { children: ReactNode }) {
+  const qc = useQueryClient()
+  const [expired, setExpired] = useState(false)
+  const me = useQuery({
+    queryKey: ['me'],
+    queryFn: () => api.get<Page<Me>>('me/').then((r) => r.results[0]),
+    retry: (n, e) => !(e instanceof ApiError && (e.status === 401 || e.status === 403)) && n < 2,
+    staleTime: 5 * 60_000,
+  })
+  useEffect(() => onUnauthorized(() => setExpired(true)), [])
+  const logout = async () => {
+    await api.post('/api/logout/').catch(() => {})
+    live.stop()
+    qc.clear()
+    window.location.assign('/')
+  }
+  if (me.isPending) return <div className="login" aria-busy="true" />
+  const unauth = expired || (me.error instanceof ApiError && (me.error.status === 401 || me.error.status === 403)) || !me.data
+  if (unauth) {
+    return (
+      <Login
+        expired={expired && !!me.data}
+        onDone={async () => {
+          setExpired(false)
+          await qc.invalidateQueries()
+        }}
+      />
+    )
+  }
+  return <SessionCtx.Provider value={{ me: me.data, logout }}>{children}</SessionCtx.Provider>
+}
+
+interface OrgState {
+  orgs: Ref[]
+  org: Ref | null
+  setOrg: (id: number | null) => void
+  /** Params narrowing a list to the current organization. */
+  scope: Record<string, number>
+}
+
+const OrgCtx = createContext<OrgState>({ orgs: [], org: null, setOrg: () => {}, scope: {} })
+
+export function OrgProvider({ children }: { children: ReactNode }) {
+  const [orgId, setOrgId] = useStored<number | null>('org', null)
+  const orgs = useQuery({ queryKey: ['organizations', 'all'], queryFn: () => getAll<Ref>('organizations/', { order_by: 'name' }), staleTime: 60_000 })
+  const list = orgs.data ?? []
+  const org = list.find((o) => o.id === orgId) ?? null
+  useEffect(() => {
+    // A single organization is selected implicitly.
+    if (!orgs.data) return
+    if (orgId !== null && !orgs.data.some((o) => o.id === orgId)) setOrgId(null)
+  }, [orgs.data, orgId, setOrgId])
+  return <OrgCtx.Provider value={{ orgs: list, org, setOrg: setOrgId, scope: org ? { organization: org.id } : {} }}>{children}</OrgCtx.Provider>
+}
+
+export const useOrg = () => useContext(OrgCtx)

@@ -69,6 +69,10 @@ func (h *handler) serve(c *api.Ctx, w http.ResponseWriter, r *http.Request) {
 	if u, err := url.Parse(h.app.Cfg.BaseURL); err == nil && u.Host != "" {
 		opts.OriginPatterns = []string{u.Host}
 	}
+	if h.app.Cfg.DevMode {
+		// UI dev servers on other ports; session clients still prove access with the CSRF token.
+		opts.OriginPatterns = append(opts.OriginPatterns, "localhost:*", "127.0.0.1:*")
+	}
 	ws, err := websocket.Accept(w, r, opts)
 	if err != nil {
 		return

@@ -349,3 +349,30 @@ func TestJobSlicing(t *testing.T) {
 	}
 	waitJob(t, a, fmt.Sprintf("workflow_jobs/%d/", int64(rl.Body["workflow_job"].(float64))))
 }
+
+// A restart must not fail workflow jobs: they have no process, the dispatcher
+// keeps driving them. Jobs with a process on this node are failed.
+func TestRestartKeepsWorkflowJobs(t *testing.T) {
+	a := adminClient(t)
+	org := newOrg(t, a)
+	wf := must(t, a.post("workflow_job_templates/", map[string]any{"name": uniq("wf"), "organization": org}), 201).id()
+	ctx := t.Context()
+	var wfJob, job int64
+	if err := app.DB.QueryRow(ctx, `INSERT INTO unified_jobs (type, name, status, unified_job_template_id, controller_node, started)
+		VALUES ('workflow_job', 'orphan wf', 'running', $1, 'test-node', now()) RETURNING id`, wf).Scan(&wfJob); err != nil {
+		t.Fatal(err)
+	}
+	if err := app.DB.QueryRow(ctx, `INSERT INTO unified_jobs (type, name, status, controller_node, started)
+		VALUES ('project_update', 'orphan update', 'running', 'test-node', now()) RETURNING id`).Scan(&job); err != nil {
+		t.Fatal(err)
+	}
+	jobManager.FailOrphans(ctx)
+	if s := a.get(fmt.Sprintf("unified_jobs/?id=%d", job)).results()[0]["status"]; s != "failed" {
+		t.Fatalf("orphaned update: %v", s)
+	}
+	// The dispatcher may already have completed the empty workflow; it must not have been failed.
+	if s := a.get(fmt.Sprintf("unified_jobs/?id=%d", wfJob)).results()[0]; s["status"] == "failed" {
+		t.Fatalf("workflow job failed: %v", s["job_explanation"])
+	}
+	app.DB.Exec(ctx, "UPDATE unified_jobs SET status = 'canceled', finished = now() WHERE id = $1", wfJob)
+}

@@ -205,6 +205,10 @@ func ID(v any) (int64, bool) {
 		return int64(x), true
 	case int32:
 		return int64(x), true
+	case *int64:
+		if x != nil {
+			return *x, true
+		}
 	case float64:
 		if x == float64(int64(x)) {
 			return int64(x), true

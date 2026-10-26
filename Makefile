@@ -1,7 +1,15 @@
-.PHONY: build test vet dev-db run
+.PHONY: build ui ui-dev test vet dev-db run
 
 build:
 	go build -o bin/awxnext ./cmd/awxnext
+
+# Build the web UI into ui/dist (embedded by the next `make build`).
+ui:
+	cd ui && npm ci && npm run build
+
+# UI dev server with hot reload, proxying the API to AWXNEXT_URL (default :8052).
+ui-dev:
+	cd ui && npm run dev
 
 vet:
 	go vet ./...

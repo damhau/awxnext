@@ -781,8 +781,12 @@ func Create(c *Ctx, res *Resource, data Obj, preset Obj) (Obj, error) {
 
 // Insert creates an object from already-validated values, enforcing add permission.
 func Insert(c *Ctx, res *Resource, vals Obj) (Obj, error) {
-	if err := checkFolder(c, res, vals); err != nil {
-		return nil, err
+	// The organization may be derived in BeforeSave (job templates take it
+	// from their project); the folder is checked again after it.
+	if of := res.orgField(); of == nil || vals[of.Name] != nil {
+		if err := checkFolder(c, res, vals); err != nil {
+			return nil, err
+		}
 	}
 	if res.CanAdd != nil {
 		if err := res.CanAdd(c, vals); err != nil {
@@ -803,6 +807,9 @@ func Insert(c *Ctx, res *Resource, vals Obj) (Obj, error) {
 			if err := res.BeforeSave(c, nil, vals); err != nil {
 				return err
 			}
+		}
+		if err := checkFolder(c, res, vals); err != nil {
+			return err
 		}
 		q := &query{}
 		var cols, phs []string

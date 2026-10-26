@@ -142,7 +142,7 @@ func poke(ch chan struct{}) {
 
 // Start runs the listener, dispatcher election, worker and heartbeat until ctx ends.
 func (m *Manager) Start(ctx context.Context) {
-	m.failOrphans(ctx)
+	m.FailOrphans(ctx)
 	go m.listen(ctx)
 	go m.leaderLoop(ctx)
 	go m.workerLoop(ctx)
@@ -591,9 +591,24 @@ func (m *Manager) heartbeat(ctx context.Context) {
 	}
 }
 
-// failOrphans fails jobs this node was running before it restarted.
-func (m *Manager) failOrphans(ctx context.Context) {
-	rows, err := m.DB().Query(ctx, `SELECT id FROM unified_jobs WHERE controller_node = $1 AND status IN ('waiting', 'running')`, m.Node)
+// processless lists job types without a process (workflows): a restart or a
+// lost node does not interrupt them, the dispatcher keeps driving them.
+func processless() []string {
+	specsMu.RLock()
+	defer specsMu.RUnlock()
+	out := []string{}
+	for t, s := range specs {
+		if s.InDispatcher {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+// FailOrphans fails jobs this node was running before it restarted.
+func (m *Manager) FailOrphans(ctx context.Context) {
+	rows, err := m.DB().Query(ctx, `SELECT id FROM unified_jobs WHERE controller_node = $1 AND status IN ('waiting', 'running')
+		AND type <> ALL($2)`, m.Node, processless())
 	if err != nil {
 		return
 	}
@@ -614,7 +629,7 @@ func (m *Manager) failOrphans(ctx context.Context) {
 // reap fails jobs whose controlling node stopped sending heartbeats.
 func (m *Manager) reap(ctx context.Context) {
 	rows, err := m.DB().Query(ctx, `SELECT j.id FROM unified_jobs j JOIN instances i ON i.hostname = j.controller_node
-		WHERE j.status IN ('waiting', 'running') AND i.last_seen < now() - interval '2 minutes'`)
+		WHERE j.status IN ('waiting', 'running') AND i.last_seen < now() - interval '2 minutes' AND j.type <> ALL($1)`, processless())
 	if err != nil {
 		return
 	}

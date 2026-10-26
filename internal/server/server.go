@@ -125,7 +125,9 @@ func Handler(app *api.App) http.Handler {
 		}
 		return resources.Jobs.Hub
 	})
-	return app.Router()
+	r := app.Router()
+	r.NotFound(uiHandler(app.Cfg.UIDir).ServeHTTP)
+	return r
 }
 
 // StartJobs registers runners and starts dispatching and running jobs on this node.
