@@ -558,6 +558,8 @@ type ScriptOptions struct {
 	HostVars  bool // include _meta.hostvars
 	All       bool // include disabled hosts
 	TowerVars bool // add remote_tower_enabled / remote_tower_id to hostvars
+	// SliceNumber/SliceCount restrict the hosts to one slice of a sliced job (1-based).
+	SliceNumber, SliceCount int
 }
 
 // InventoryScript renders an inventory in Ansible's JSON inventory format.
@@ -597,9 +599,20 @@ func InventoryScript(ctx context.Context, app *api.App, invID int64, opt ScriptO
 			continue
 		}
 		hostList = append(hostList, h)
-		hostByID[h.id] = h
 	}
 	rows.Close()
+	if opt.SliceCount > 1 && opt.SliceNumber >= 1 {
+		var slice []host
+		for i, h := range hostList {
+			if i%opt.SliceCount == opt.SliceNumber-1 {
+				slice = append(slice, h)
+			}
+		}
+		hostList = slice
+	}
+	for _, h := range hostList {
+		hostByID[h.id] = h
+	}
 
 	out := map[string]any{}
 	grouped := map[int64]bool{}

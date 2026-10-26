@@ -81,10 +81,11 @@ func StartJobs(ctx context.Context, app *api.App) *jobs.Manager {
 	gitsync.Register()
 	ansible.Register()
 	system.Register()
+	resources.RegisterJobTypes()
 	m := jobs.New(app)
-	m.TickHooks = append(m.TickHooks, resources.ScheduleTick)
-	m.StartedHooks = append(m.StartedHooks, resources.JobStartedNotifications)
-	m.FinishedHooks = append(m.FinishedHooks, resources.JobFinishedNotifications)
+	m.TickHooks = append(m.TickHooks, resources.ScheduleTick, resources.WorkflowTick)
+	m.StartedHooks = append(m.StartedHooks, resources.JobStartedNotifications, resources.WebhookStatusStarted)
+	m.FinishedHooks = append(m.FinishedHooks, resources.JobFinishedNotifications, resources.WebhookStatusFinished)
 	resources.Jobs = m
 	m.Start(ctx)
 	return m

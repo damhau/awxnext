@@ -206,14 +206,16 @@ func registerJobResource(js jobSpec) *Resource {
 	})
 	res.SubLists = []*SubList{
 		{
-			Name: js.eventsName, Target: js.eventsRes, ReadOnly: true, SkipView: true,
-			Filter:     func(arg ArgFunc, pid int64) string { return "t.job_id = " + arg(pid) },
-			BeforeList: func(c *Ctx, pid int64) error { return jobs.RestoreEvents(c, c.App.DB, pid) },
-		},
-		{
 			Name: "notifications", Target: "notifications", ReadOnly: true, SkipView: true,
 			Filter: func(arg ArgFunc, pid int64) string { return "t.unified_job_id = " + arg(pid) },
 		},
+	}
+	if js.eventsName != "" {
+		res.SubLists = append(res.SubLists, &SubList{
+			Name: js.eventsName, Target: js.eventsRes, ReadOnly: true, SkipView: true,
+			Filter:     func(arg ArgFunc, pid int64) string { return "t.job_id = " + arg(pid) },
+			BeforeList: func(c *Ctx, pid int64) error { return jobs.RestoreEvents(c, c.App.DB, pid) },
+		})
 	}
 	res.Actions = []*api.Action{
 		{Name: "cancel", Methods: []string{"GET", "POST"}, Handler: func(c *Ctx, w http.ResponseWriter, r *http.Request, obj Obj) {

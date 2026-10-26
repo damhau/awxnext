@@ -151,7 +151,7 @@ func runJob(ctx context.Context, rc *jobs.RunContext) jobs.Result {
 	}
 
 	// Inventory as an executable script (works in any execution environment).
-	if err := writeInventory(ctx, app, run, row.Int("inventory_id")); err != nil {
+	if err := writeInventory(ctx, app, run, row.Int("inventory_id"), int(row.Int("job_slice_number")), int(row.Int("job_slice_count"))); err != nil {
 		return fail("Inventory: " + err.Error())
 	}
 
@@ -315,11 +315,12 @@ func checkoutProject(ctx context.Context, app *api.App, row jobs.Row) (string, s
 	return dir, sha, nil
 }
 
-func writeInventory(ctx context.Context, app *api.App, run *Run, inv int64) error {
+func writeInventory(ctx context.Context, app *api.App, run *Run, inv int64, sliceNumber, sliceCount int) error {
 	if inv == 0 {
 		return errors.New("Job has no inventory.")
 	}
-	script, err := resources.InventoryScript(ctx, app, inv, resources.ScriptOptions{HostVars: true, TowerVars: true})
+	script, err := resources.InventoryScript(ctx, app, inv, resources.ScriptOptions{HostVars: true, TowerVars: true,
+		SliceNumber: sliceNumber, SliceCount: sliceCount})
 	if err != nil {
 		return err
 	}

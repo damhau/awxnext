@@ -433,6 +433,17 @@ func (m *Manager) hostIDs(ctx context.Context, row Row) map[string]int64 {
 	return out
 }
 
+// Complete records the final status of a job that is not run by a node
+// (workflow jobs, approvals): template status, hooks and websocket updates.
+func (m *Manager) Complete(ctx context.Context, id int64, res Result) error {
+	row, err := LoadRow(ctx, m.DB(), id)
+	if err != nil {
+		return err
+	}
+	m.finish(ctx, row, res)
+	return nil
+}
+
 // finish records the final status of a job and updates its template.
 func (m *Manager) finish(ctx context.Context, row Row, res Result) {
 	id := row.ID()
@@ -478,8 +489,14 @@ func (m *Manager) publishStatus(ctx context.Context, row Row, status string) {
 		"status":                  status,
 		"finished":                row["finished"],
 	}
+	// Jobs spawned by a workflow also update viewers of that workflow.
+	var wfJob, wfNode int64
+	if err := m.DB().QueryRow(ctx, "SELECT workflow_job_id, id FROM workflow_job_nodes WHERE job_id = $1", row.ID()).Scan(&wfJob, &wfNode); err == nil {
+		msg["workflow_job_id"], msg["workflow_node_id"] = wfJob, wfNode
+	}
 	b, _ := json.Marshal(msg)
 	m.Hub.Publish("jobs-status_changed", b)
+	m.Hub.publishWorkflow(b)
 	m.Notify(ctx, chStatus, m.Node+"|"+string(b))
 }
 
@@ -506,6 +523,12 @@ func (m *Manager) Cancel(ctx context.Context, id int64) error {
 		if tag.RowsAffected() > 0 {
 			if ujt := row.Int("unified_job_template_id"); ujt != 0 {
 				m.DB().Exec(ctx, `UPDATE unified_job_templates SET last_job_id = $2, last_job_failed = true, status = 'canceled' WHERE id = $1`, ujt, id)
+			}
+			if final, err := LoadRow(ctx, m.DB(), id); err == nil {
+				row = final
+			}
+			for _, h := range m.FinishedHooks {
+				h(ctx, m, row)
 			}
 			m.publishStatus(ctx, row, "canceled")
 			m.Notify(ctx, chDispatch, "")

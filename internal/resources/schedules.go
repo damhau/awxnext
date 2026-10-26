@@ -385,7 +385,7 @@ func registerSchedules() {
 			Filter: func(arg ArgFunc, pid int64) string { return "t.schedule_id = " + arg(pid) },
 		},
 	}
-	for _, name := range []string{"job_templates", "projects", "inventory_sources", "system_job_templates"} {
+	for _, name := range []string{"job_templates", "projects", "inventory_sources", "system_job_templates", "workflow_job_templates"} {
 		r := api.Lookup(name)
 		r.SubLists = append(r.SubLists, &SubList{Name: "schedules", Target: "schedules", ParentField: "unified_job_template",
 			Filter: func(arg ArgFunc, pid int64) string { return "t.unified_job_template_id = " + arg(pid) }})
@@ -431,6 +431,30 @@ func registerSchedules() {
 			trusted["credentials"] = list
 		}
 		id, _, err := LaunchJobTemplate(c, jt, body, "scheduled", &LaunchOverrides{Trusted: trusted, ExtraJob: map[string]any{"schedule_id": sid}})
+		return id, err
+	}
+	scheduleLaunchers["workflow_job_template"] = func(c *Ctx, wf Obj, s Obj) (int64, error) {
+		trusted := Obj{}
+		for _, f := range []string{"inventory", "limit", "scm_branch", "job_tags", "skip_tags"} {
+			if v := s[f]; v != nil {
+				trusted[f] = v
+			}
+		}
+		body := Obj{}
+		if extra, ok := s["extra_data"].(map[string]any); ok && len(extra) > 0 {
+			plain := map[string]any{}
+			for k, v := range extra {
+				if str, ok := v.(string); ok && crypto.IsEncrypted(str) {
+					if p, err := c.App.Crypto.Decrypt(str); err == nil {
+						v = p
+					}
+				}
+				plain[k] = v
+			}
+			body["extra_vars"] = plain
+		}
+		sid, _ := api.ID(s["id"])
+		id, _, err := LaunchWorkflowJobTemplate(c, wf, body, "scheduled", &LaunchOverrides{Trusted: trusted, ExtraJob: map[string]any{"schedule_id": sid}})
 		return id, err
 	}
 	scheduleLaunchers["project"] = func(c *Ctx, p Obj, s Obj) (int64, error) {

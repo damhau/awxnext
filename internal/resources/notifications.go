@@ -447,6 +447,75 @@ func notificationContext(c *Ctx, row jobs.Row) (map[string]any, map[string]any) 
 	return map[string]any{"job": job, "job_friendly_name": friendlyNames[typ], "url": url, "job_metadata": string(metaJSON)}, meta
 }
 
+var approvalMessages = map[string]string{
+	"running":   `The approval node "{{ approval_node_name }}" needs review. This node can be viewed at: {{ workflow_url }}`,
+	"approved":  `The approval node "{{ approval_node_name }}" was approved. {{ workflow_url }}`,
+	"denied":    `The approval node "{{ approval_node_name }}" was denied. {{ workflow_url }}`,
+	"timed_out": `The approval node "{{ approval_node_name }}" has timed out. {{ workflow_url }}`,
+}
+
+// notifyApproval sends "approvals" notifications of the workflow (and its
+// organization) for an approval reaching status running, approved, denied or timed_out.
+func notifyApproval(c *Ctx, approvalID int64, status string) {
+	var wfJob, wfjt, org int64
+	var name string
+	if err := c.App.DB.QueryRow(c, `SELECT w.id, coalesce(w.unified_job_template_id, 0), coalesce(w.organization_id, 0), a.name
+		FROM unified_jobs a JOIN workflow_job_nodes n ON n.job_id = a.id JOIN unified_jobs w ON w.id = n.workflow_job_id WHERE a.id = $1`, approvalID).
+		Scan(&wfJob, &wfjt, &org, &name); err != nil {
+		return
+	}
+	rows, err := c.App.DB.Query(c, `SELECT DISTINCT notification_template_id FROM notification_template_links WHERE event = 'approvals' AND
+		((content_type = 'workflowjobtemplate' AND object_id = $1) OR (content_type = 'organization' AND object_id = $2)) ORDER BY 1`, wfjt, org)
+	if err != nil {
+		return
+	}
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		rows.Scan(&id)
+		ids = append(ids, id)
+	}
+	rows.Close()
+	workflowURL := JobUIURL(c.App, wfJob)
+	tctx := map[string]any{"approval_status": status, "approval_node_name": name, "workflow_url": workflowURL,
+		"job": map[string]any{"id": approvalID, "name": name, "status": status, "type": "workflow_approval"}, "job_friendly_name": "Workflow Approval",
+		"url": workflowURL}
+	for _, ntID := range ids {
+		var messages map[string]any
+		c.App.DB.QueryRow(c, "SELECT messages FROM notification_templates WHERE id = $1", ntID).Scan(&messages)
+		subjectT, bodyT := approvalMessages[status], ""
+		if wa, ok := messages["workflow_approval"].(map[string]any); ok {
+			if msg, ok := wa[status].(map[string]any); ok {
+				if s := str(msg["message"]); s != "" {
+					subjectT = s
+				}
+				bodyT = str(msg["body"])
+			}
+		}
+		subject, err := tmpl.Render(subjectT, tctx)
+		if err != nil {
+			subject = "Unable to render message: " + err.Error()
+		}
+		var body any = map[string]any{"body": subject, "approval_status": status, "approval_node_name": name, "workflow_url": workflowURL, "id": approvalID}
+		if strings.TrimSpace(bodyT) != "" {
+			var parsed any
+			rendered, err := tmpl.Render(bodyT, tctx)
+			if err == nil {
+				err = json.Unmarshal([]byte(rendered), &parsed)
+			}
+			if err == nil {
+				body = parsed
+			}
+		}
+		id := approvalID
+		nid, err := createNotification(c, c.App.DB, ntID, &id, subject, body)
+		if err != nil {
+			continue
+		}
+		go deliver(context.Background(), c.App, nid)
+	}
+}
+
 // notifyJob sends the job's notifications for an event (started, success, error).
 func notifyJob(ctx context.Context, m *jobs.Manager, row jobs.Row, event string) {
 	c := &api.Ctx{Context: ctx, App: m.App, User: rbac.System(), Extra: map[string]any{}}

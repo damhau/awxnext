@@ -157,6 +157,26 @@ func (m *Manager) relayEvents(ctx context.Context, payload string) {
 	m.Hub.relayed.Store(group, maxCounter)
 }
 
+// publishWorkflow forwards a status message of a workflow-spawned job to the
+// workflow's "workflow_events" group.
+func (h *Hub) publishWorkflow(status []byte) {
+	var m map[string]any
+	if json.Unmarshal(status, &m) != nil {
+		return
+	}
+	wf, ok := m["workflow_job_id"].(float64)
+	if !ok {
+		return
+	}
+	group := "workflow_events-" + itoa(int64(wf))
+	if !h.hasSubscribers(group) {
+		return
+	}
+	m["group_name"] = "workflow_events"
+	b, _ := json.Marshal(m)
+	h.Publish(group, b)
+}
+
 // fromNotification relays status messages published by other nodes.
 func (h *Hub) fromNotification(channel, payload, self string) {
 	node, body, ok := strings.Cut(payload, "|")
@@ -165,5 +185,6 @@ func (h *Hub) fromNotification(channel, payload, self string) {
 	}
 	if channel == chStatus {
 		h.Publish("jobs-status_changed", []byte(body))
+		h.publishWorkflow([]byte(body))
 	}
 }

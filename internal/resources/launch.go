@@ -114,20 +114,8 @@ func handleLaunch(c *Ctx, w http.ResponseWriter, r *http.Request, jt Obj) {
 		api.WriteError(w, err)
 		return
 	}
-	job, err := api.Get(c, api.Lookup("jobs"), jobID)
-	if err != nil {
-		api.WriteError(w, err)
-		return
-	}
-	out, err := api.SerializeOne(c, api.Lookup("jobs"), job)
-	if err != nil {
-		api.WriteError(w, err)
-		return
-	}
-	out["job"] = jobID
-	out["ignored_fields"] = ignored
 	_ = id
-	api.WriteJSON(w, 201, out)
+	writeLaunched(c, w, jobID, Obj{"ignored_fields": ignored})
 }
 
 func normalizeObj(o Obj) Obj {
@@ -441,20 +429,18 @@ func LaunchJobTemplate(c *Ctx, jt Obj, body Obj, launchType string, ov *LaunchOv
 		values["created_by_id"] = c.User.UserID
 		values["modified_by_id"] = c.User.UserID
 	}
-	var jobID int64
-	err = c.WithTx(func(c *Ctx) error {
-		var err error
-		jobID, err = jobs.Create(c, c.DB(), values)
+	createJob := func(c *Ctx, values map[string]any) (int64, error) {
+		jobID, err := jobs.Create(c, c.DB(), values)
 		if err != nil {
-			return err
+			return 0, err
 		}
 		for _, cid := range creds {
 			if _, err := c.DB().Exec(c, "INSERT INTO unified_job_credentials (unified_job_id, credential_id) VALUES ($1, $2)", jobID, cid); err != nil {
-				return err
+				return 0, err
 			}
 		}
 		if _, err := c.DB().Exec(c, "INSERT INTO unified_job_labels (unified_job_id, label_id) SELECT $1, label_id FROM unified_job_template_labels WHERE unified_job_template_id = $2", jobID, id); err != nil {
-			return err
+			return 0, err
 		}
 		if v, ok := accepted["labels"].([]any); ok {
 			for _, l := range v {
@@ -469,6 +455,27 @@ func LaunchJobTemplate(c *Ctx, jt Obj, body Obj, launchType string, ov *LaunchOv
 					c.DB().Exec(c, "INSERT INTO instance_group_links (content_type, object_id, instance_group_id, position) VALUES ('unifiedjob', $1, $2, $3) ON CONFLICT DO NOTHING", jobID, gid, i)
 				}
 			}
+		}
+		return jobID, nil
+	}
+	// A sliced template launches a workflow job running one job per slice of the inventory.
+	slices := 1
+	if ov == nil || ov.ExtraJob["job_slice_number"] == nil {
+		slices = sliceCount(c, values["job_slice_count"], inv)
+	}
+	var jobID int64
+	err = c.WithTx(func(c *Ctx) error {
+		var err error
+		if slices > 1 {
+			jobID, err = createSlices(c, jt, values, slices, createJob)
+		} else {
+			if n, _ := api.ID(values["job_slice_number"]); n == 0 {
+				values["job_slice_count"] = 1
+			}
+			jobID, err = createJob(c, values)
+		}
+		if err != nil {
+			return err
 		}
 		jobs.Wake(c, c.DB())
 		return nil
@@ -558,17 +565,11 @@ func handleRelaunch(c *Ctx, w http.ResponseWriter, r *http.Request, job Obj) {
 	}
 	jtNoSurvey["survey_enabled"] = false
 	jtNoSurvey["extra_vars"] = ""
-	newID, _, err := LaunchJobTemplate(c, jtNoSurvey, launchBody, "relaunch", &LaunchOverrides{Trusted: trusted, Credentials: creds})
+	newID, _, err := LaunchJobTemplate(c, jtNoSurvey, launchBody, "relaunch", &LaunchOverrides{Trusted: trusted, Credentials: creds,
+		ExtraJob: map[string]any{"job_slice_number": job["job_slice_number"], "job_slice_count": job["job_slice_count"]}})
 	if err != nil {
 		api.WriteError(w, err)
 		return
 	}
-	nj, _ := api.Get(c, api.Lookup("jobs"), newID)
-	out, err := api.SerializeOne(c, api.Lookup("jobs"), nj)
-	if err != nil {
-		api.WriteError(w, err)
-		return
-	}
-	out["job"] = newID
-	api.WriteJSON(w, 201, out)
+	writeLaunched(c, w, newID, nil)
 }

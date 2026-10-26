@@ -15,8 +15,10 @@ func init() {
 	registerAdHocCommands()
 	registerJobTemplates()
 	registerSystemJobs()
+	registerWorkflows()
 	registerSchedules()
 	registerNotifications()
+	registerWebhooks()
 	registerRoles()
 	registerActivity()
 }

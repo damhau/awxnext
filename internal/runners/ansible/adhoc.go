@@ -32,7 +32,7 @@ func runAdHoc(ctx context.Context, rc *jobs.RunContext) jobs.Result {
 	defer run.Cleanup()
 	update := map[string]any{"start_args": ""}
 
-	if err := writeInventory(ctx, app, run, row.Int("inventory_id")); err != nil {
+	if err := writeInventory(ctx, app, run, row.Int("inventory_id"), 0, 0); err != nil {
 		return fail("Inventory: " + err.Error())
 	}
 	sa := LoadStartArgs(app, row)

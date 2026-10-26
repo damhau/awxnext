@@ -15,6 +15,8 @@ func Install(app *api.App) {
 	app.HandlePublic("GET", "/api/v2/ping/", ping)
 	app.Handle("GET", "/api/v2/config/", configView)
 	installScheduleRoutes(app)
+	installWebhookRoutes(app)
+	installCallbackRoutes(app)
 }
 
 // Bootstrap seeds data required at startup: managed roles, install uuid, this instance.

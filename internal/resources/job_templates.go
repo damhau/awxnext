@@ -26,7 +26,7 @@ func askFieldDefs() []*Field {
 	return out
 }
 
-var webhookServices = labelled("", "", "github", "GitHub", "gitlab", "GitLab", "bitbucket_dc", "BitBucket DataCenter")
+var webhookServices = labelled("", "", "github", "GitHub", "gitlab", "GitLab", "bitbucket_dc", "BitBucket DataCenter", "generic", "Generic (JSONPath mapping)")
 
 // credentialSlot identifies the "one per" rule for template credentials:
 // one per credential type, and one per vault id for vault credentials.

@@ -44,8 +44,9 @@ func Wake(ctx context.Context, db api.DBTX) {
 	db.Exec(ctx, "SELECT pg_notify($1, '')", chDispatch)
 }
 
+// dispatchPending starts or places pending jobs. Approvals stay pending until decided.
 func (m *Manager) dispatchPending(ctx context.Context) error {
-	rows, err := m.DB().Query(ctx, "SELECT id FROM unified_jobs WHERE status = 'pending' ORDER BY created, id LIMIT 200")
+	rows, err := m.DB().Query(ctx, "SELECT id FROM unified_jobs WHERE status = 'pending' AND type <> 'workflow_approval' ORDER BY created, id LIMIT 200")
 	if err != nil {
 		return err
 	}
