@@ -91,6 +91,11 @@ func wfjtPerm(c *Ctx, wfjt any, perm string) error {
 	if !ok {
 		return api.FieldError("workflow_job_template", "This field is required.")
 	}
+	if perm == "change" {
+		if err := requireUnmanaged(c, "workflow_job_templates", id); err != nil {
+			return err
+		}
+	}
 	return api.RequirePermID(c, "workflow_job_template", "workflow_job_templates", id, perm)
 }
 

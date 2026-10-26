@@ -66,6 +66,9 @@ func childOfInventory(kindName string) (view func(c *Ctx, arg ArgFunc) string, a
 		return "t.inventory_id IN (SELECT t.id FROM inventories t WHERE " + viewOf(c, api.Lookup("inventories"), arg) + ")"
 	}
 	add = func(c *Ctx, data Obj) error {
+		if err := requireUnmanaged(c, "inventories", data["inventory"]); err != nil {
+			return err
+		}
 		if err := requireInventoryPerm(c, data["inventory"], "change"); err != nil {
 			return err
 		}
@@ -79,9 +82,17 @@ func childOfInventory(kindName string) (view func(c *Ctx, arg ArgFunc) string, a
 		if inventoryOf(old) != inventoryOf(data) {
 			return api.FieldError("inventory", "Cannot move to another inventory.")
 		}
+		if err := requireUnmanaged(c, "inventories", old["inventory"]); err != nil {
+			return err
+		}
 		return requireInventoryPerm(c, old["inventory"], "change")
 	}
-	del = func(c *Ctx, obj Obj) error { return requireInventoryPerm(c, obj["inventory"], "change") }
+	del = func(c *Ctx, obj Obj) error {
+		if err := requireUnmanaged(c, "inventories", obj["inventory"]); err != nil {
+			return err
+		}
+		return requireInventoryPerm(c, obj["inventory"], "change")
+	}
 	return
 }
 

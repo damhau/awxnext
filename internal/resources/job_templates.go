@@ -604,6 +604,10 @@ func handleSurveySpec(c *Ctx, w http.ResponseWriter, r *http.Request, obj Obj) {
 		api.WriteJSON(w, 200, redactSurvey(spec))
 		return
 	}
+	if err := api.CheckManaged(c, res, obj); err != nil {
+		api.WriteError(w, err)
+		return
+	}
 	ok, err := api.HasPerm(c, res, obj, "change")
 	if err != nil {
 		api.WriteError(w, err)

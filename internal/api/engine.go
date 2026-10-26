@@ -715,7 +715,11 @@ func Validate(c *Ctx, res *Resource, data Obj, create bool, old Obj) (Obj, error
 			if create && f.Required {
 				fe.Add(f.Name, "This field is required.")
 			}
-			continue
+			if !create || f.Default == nil || f.Virtual {
+				continue
+			}
+			// Store the declared default rather than relying on the column default.
+			v = copyDefault(f.Default)
 		}
 		if !create && f.CreateOnly {
 			if old != nil && fmt.Sprint(old[f.Name]) != fmt.Sprint(v) {
@@ -750,6 +754,17 @@ func Validate(c *Ctx, res *Resource, data Obj, create bool, old Obj) (Obj, error
 		}
 	}
 	return vals, fe.Err()
+}
+
+func copyDefault(v any) any {
+	switch v.(type) {
+	case map[string]any, []any, []string:
+		var out any
+		b, _ := json.Marshal(v)
+		json.Unmarshal(b, &out)
+		return out
+	}
+	return v
 }
 
 // Create validates data and inserts a new object. preset values bypass validation and read-only checks.
@@ -933,6 +948,10 @@ func Update(c *Ctx, res *Resource, old Obj, data Obj) (Obj, error) {
 	}
 	return Apply(c, res, old, vals)
 }
+
+// CheckManaged rejects changes to objects owned by an external source
+// (unless the change is made by that source, see Ctx.Extra["managed_by"]).
+func CheckManaged(c *Ctx, res *Resource, obj Obj) error { return checkManaged(c, res, obj) }
 
 // checkManaged rejects changes to objects owned by an external source.
 func checkManaged(c *Ctx, res *Resource, obj Obj) error {

@@ -665,6 +665,9 @@ func (a *App) handleSubList(c *Ctx, w http.ResponseWriter, r *http.Request, res 
 }
 
 func (a *App) attach(c *Ctx, res *Resource, parent Obj, s *SubList, target *Resource, childID int64, disassociate bool) error {
+	if err := checkManaged(c, res, parent); err != nil {
+		return err
+	}
 	perm := s.AttachPerm
 	if perm == "" {
 		perm = "change"

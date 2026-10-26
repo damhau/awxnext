@@ -236,3 +236,16 @@ func boolv(v any) bool {
 }
 
 func rbacArg(a ArgFunc) rbac.ArgFunc { return rbac.ArgFunc(a) }
+
+// requireUnmanaged rejects changes to children of an object owned by an
+// external source (workflow nodes, hosts and groups, surveys).
+func requireUnmanaged(c *Ctx, resName string, id any) error {
+	res := api.Lookup(resName)
+	pid, ok := api.ID(id)
+	if res == nil || !ok {
+		return nil
+	}
+	var owner string
+	c.DB().QueryRow(c, "SELECT managed_by FROM "+res.Table+" WHERE id = $1", pid).Scan(&owner)
+	return api.CheckManaged(c, res, Obj{"managed_by": owner})
+}

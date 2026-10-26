@@ -35,7 +35,7 @@ A re-implementation of AWX with near feature parity, a faster control plane and 
 - **Version history**: every write through the engine stores a snapshot; history tab, diffs and one-click revert for every object.
 - **Folders**: optional hierarchical folders inside organizations; role assignments on a folder inherit to everything below. Exposed as an extra `folder` field (ignored by existing AWX clients).
 - **Nested teams**: teams can be members of teams; membership is resolved recursively.
-- **GitOps (later phase)**: objects carry a reserved `managed_by` field; a reconciler (opt-in per folder) syncs from Git and edits to managed objects are rejected or turned into PRs.
+- **GitOps**: objects carry a reserved `managed_by` field; GitOps sources (per organization, optionally per folder) apply YAML declarations from a git project atomically, with dry-run plans and pruning, and edits to managed objects are rejected with 409. See [gitops.md](gitops.md).
 - **Execution is push-based**: an init container drops a static Go shim into the job pod; it runs `ansible-runner worker` and streams output back over a reconnecting connection — no kubelet log tailing (fixes the "killed after ~5 min" problem). The same shim serves remote nodes. Stock EE images keep working.
 - **Native git sync**: project checkouts done in Go/git on the control plane, cached per revision and shared by jobs; `requirements.yml` installs cached by content hash; only the dependency install needs an EE. UI shows EE contents (collections, ansible.cfg).
 - **API ergonomics**: accurate OpenAPI generated from resource metadata; a simple query language (`status:failed org:Ops`) alongside Django lookups; generic webhooks with JSONPath payload mapping (plus GitHub/GitLab).

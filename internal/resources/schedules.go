@@ -225,6 +225,7 @@ func registerSchedules() {
 		Table:    "schedules",
 		Verbose:  "Schedule",
 		Ordering: "id",
+		Managed:  true,
 		Fields: []*Field{
 			{Name: "unified_job_template", Type: api.TFK, Ref: "unified_job_templates", Required: true, CreateOnly: true},
 			{Name: "enabled", Type: api.TBool, Default: true, Help: "Enables processing of this schedule."},

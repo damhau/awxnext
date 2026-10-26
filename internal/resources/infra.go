@@ -352,6 +352,7 @@ func registerInfrastructure() {
 		Table:    "labels",
 		Verbose:  "Label",
 		Ordering: "name",
+		Managed:  true,
 		NoName:   true,
 		Fields: []*Field{
 			{Name: "name", Type: api.TString, Required: true, MaxLength: 512},

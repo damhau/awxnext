@@ -18,6 +18,7 @@ import (
 	"github.com/damhau/awxnext/internal/config"
 	"github.com/damhau/awxnext/internal/crypto"
 	"github.com/damhau/awxnext/internal/db"
+	"github.com/damhau/awxnext/internal/gitops"
 	"github.com/damhau/awxnext/internal/jobs"
 	"github.com/damhau/awxnext/internal/kms"
 	"github.com/damhau/awxnext/internal/metrics"
@@ -136,7 +137,7 @@ func StartJobs(ctx context.Context, app *api.App) *jobs.Manager {
 	m := jobs.New(app)
 	m.TickHooks = append(m.TickHooks, resources.ScheduleTick, resources.WorkflowTick)
 	m.StartedHooks = append(m.StartedHooks, resources.JobStartedNotifications, resources.WebhookStatusStarted)
-	m.FinishedHooks = append(m.FinishedHooks, resources.JobFinishedNotifications, resources.WebhookStatusFinished)
+	m.FinishedHooks = append(m.FinishedHooks, resources.JobFinishedNotifications, resources.WebhookStatusFinished, gitops.ProjectUpdated)
 	resources.Jobs = m
 	m.Start(ctx)
 	if agent.Default != nil {
