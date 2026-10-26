@@ -1,0 +1,32 @@
+# Small install / local development: PostgreSQL + AWX Next.
+#   docker compose up -d
+#   docker compose exec awxnext awxnext createsuperuser --username admin --password <password>
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: awxnext
+      POSTGRES_USER: awxnext
+      POSTGRES_PASSWORD: awxnext
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U awxnext"]
+      interval: 5s
+      retries: 10
+
+  awxnext:
+    build: ../..
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      AWXNEXT_DATABASE_URL: postgres://awxnext:awxnext@postgres:5432/awxnext?sslmode=disable
+      # Change this! Losing it makes stored credentials unreadable (see 'awxnext keys export').
+      AWXNEXT_SECRET_KEY: ${AWXNEXT_SECRET_KEY:-change-me}
+      AWXNEXT_BASE_URL: ${AWXNEXT_BASE_URL:-http://localhost:8052}
+    ports:
+      - "8052:8052"
+
+volumes:
+  pgdata:
