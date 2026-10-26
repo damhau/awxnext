@@ -143,10 +143,10 @@ func (c *client) do(method, path string, body any) resp {
 	return r
 }
 
-func (c *client) get(path string) resp           { c.t.Helper(); return c.do("GET", path, nil) }
-func (c *client) post(path string, b any) resp   { c.t.Helper(); return c.do("POST", path, b) }
-func (c *client) patch(path string, b any) resp  { c.t.Helper(); return c.do("PATCH", path, b) }
-func (c *client) delete(path string) resp        { c.t.Helper(); return c.do("DELETE", path, nil) }
+func (c *client) get(path string) resp          { c.t.Helper(); return c.do("GET", path, nil) }
+func (c *client) post(path string, b any) resp  { c.t.Helper(); return c.do("POST", path, b) }
+func (c *client) patch(path string, b any) resp { c.t.Helper(); return c.do("PATCH", path, b) }
+func (c *client) delete(path string) resp       { c.t.Helper(); return c.do("DELETE", path, nil) }
 
 // must asserts the status and returns the response.
 func must(t *testing.T, r resp, status int) resp {

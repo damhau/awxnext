@@ -14,6 +14,7 @@ func registerOrganizations() {
 		Verbose:     "Organization",
 		Ordering:    "name",
 		ContentType: "organization",
+		Versioned:   true,
 		OrgColumn:   "id",
 		Fields: []*Field{
 			{Name: "max_hosts", Type: api.TInt, Default: 0, Help: "Maximum number of hosts allowed to be managed by this organization."},
@@ -86,6 +87,7 @@ func registerOrganizations() {
 		Verbose:     "Team",
 		Ordering:    "name",
 		ContentType: "team",
+		Versioned:   true,
 		OrgColumn:   "organization_id",
 		Fields: []*Field{
 			{Name: "organization", Type: api.TFK, Ref: "organizations", Required: true},

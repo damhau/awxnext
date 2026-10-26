@@ -29,12 +29,12 @@ func (a *App) Router() chi.Router {
 
 	r.Get("/api/", a.wrapPublic(func(c *Ctx, w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, Obj{
-			"description":            "AWX REST API",
-			"current_version":        "/api/v2/",
-			"available_versions":     Obj{"v2": "/api/v2/"},
-			"oauth2":                 "/api/o/",
-			"custom_logo":            "",
-			"custom_login_info":      "",
+			"description":             "AWX REST API",
+			"current_version":         "/api/v2/",
+			"available_versions":      Obj{"v2": "/api/v2/"},
+			"oauth2":                  "/api/o/",
+			"custom_logo":             "",
+			"custom_login_info":       "",
 			"login_redirect_override": "",
 		})
 	}))
@@ -69,6 +69,7 @@ func (a *App) Router() chi.Router {
 	r.Delete("/api/v2/{res}/{id}/", a.wrap(a.handleDelete))
 	r.Options("/api/v2/{res}/{id}/", a.wrap(a.handleOptions))
 	r.HandleFunc("/api/v2/{res}/{id}/{sub}/", a.wrap(a.handleSub))
+	a.historyRoutes(r)
 	return r
 }
 
@@ -487,6 +488,11 @@ func (a *App) handleSub(c *Ctx, w http.ResponseWriter, r *http.Request) {
 			objectRoleHandlers[name](c, w, r, res, obj)
 			return
 		}
+	case "history":
+		if res.Versioned && r.Method == "GET" {
+			a.handleHistory(c, w, r, res, obj)
+			return
+		}
 	case "copy":
 		if res.Copyable {
 			a.handleCopy(c, w, r, res, obj)
@@ -620,7 +626,10 @@ func (a *App) attach(c *Ctx, res *Resource, parent Obj, s *SubList, target *Reso
 		} else if err := s.Associate(c, pid, childID); err != nil {
 			return translateDBError(target, err)
 		}
-		return Activity(c, op, res, parent, Obj{}, target, child, res.Type+"."+s.Name)
+		if err := Activity(c, op, res, parent, Obj{}, target, child, res.Type+"."+s.Name); err != nil {
+			return err
+		}
+		return RecordVersion(c, res, pid, "update", Obj{s.Name: Obj{op: childID}})
 	})
 }
 

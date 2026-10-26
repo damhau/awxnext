@@ -322,6 +322,9 @@ func Serialize(c *Ctx, res *Resource, objs []Obj) ([]Obj, error) {
 		if res.Copyable {
 			rel["copy"] = base + "copy/"
 		}
+		if res.Versioned {
+			rel["history"] = base + "history/"
+		}
 		if res.Related != nil {
 			res.Related(c, raw, rel)
 		}
@@ -828,16 +831,18 @@ func Insert(c *Ctx, res *Resource, vals Obj) (Obj, error) {
 				return err
 			}
 		}
-		if !res.NoActivity {
-			changes := Obj{}
-			for _, f := range res.Fields {
-				if v, ok := vals[f.Name]; ok {
-					changes[f.Name] = activityValue(f, v)
-				}
+		changes := Obj{}
+		for _, f := range res.Fields {
+			if v, ok := vals[f.Name]; ok {
+				changes[f.Name] = activityValue(f, v)
 			}
-			return Activity(c, "create", res, obj, changes, nil, nil, "")
 		}
-		return nil
+		if !res.NoActivity {
+			if err := Activity(c, "create", res, obj, changes, nil, nil, ""); err != nil {
+				return err
+			}
+		}
+		return recordVersion(c, res, obj, "create", changes)
 	})
 	return obj, err
 }
@@ -1014,8 +1019,13 @@ func Apply(c *Ctx, res *Resource, old Obj, vals Obj) (Obj, error) {
 				return err
 			}
 		}
-		if len(changes) > 0 && !res.NoActivity {
-			return Activity(c, "update", res, obj, changes, nil, nil, "")
+		if len(changes) > 0 {
+			if !res.NoActivity {
+				if err := Activity(c, "update", res, obj, changes, nil, nil, ""); err != nil {
+					return err
+				}
+			}
+			return recordVersion(c, res, obj, "update", changes)
 		}
 		return nil
 	})
@@ -1076,6 +1086,9 @@ func Delete(c *Ctx, res *Resource, obj Obj) error {
 			if err := Activity(c, "delete", res, obj, Obj{}, nil, nil, ""); err != nil {
 				return err
 			}
+		}
+		if err := recordVersion(c, res, obj, "delete", Obj{}); err != nil {
+			return err
 		}
 		if _, err := c.DB().Exec(c, "DELETE FROM "+res.Table+" WHERE id = $1", id); err != nil {
 			return translateDBError(res, err)

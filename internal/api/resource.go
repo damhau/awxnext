@@ -159,11 +159,11 @@ type Resource struct {
 	CanDelete func(c *Ctx, obj Obj) error
 
 	// Hooks.
-	BeforeSave  func(c *Ctx, old Obj, data Obj) error
-	AfterCreate func(c *Ctx, obj Obj) error
-	AfterUpdate func(c *Ctx, old, obj Obj) error
+	BeforeSave   func(c *Ctx, old Obj, data Obj) error
+	AfterCreate  func(c *Ctx, obj Obj) error
+	AfterUpdate  func(c *Ctx, old, obj Obj) error
 	BeforeDelete func(c *Ctx, obj Obj) error
-	AfterDelete func(c *Ctx, obj Obj) error
+	AfterDelete  func(c *Ctx, obj Obj) error
 
 	// Related adds custom related links.
 	Related func(c *Ctx, obj Obj, rel map[string]any)
@@ -188,6 +188,12 @@ type Resource struct {
 	NoActivity bool
 	// Copyable enables /copy/.
 	Copyable bool
+	// Versioned records a snapshot on every change and exposes /history/.
+	Versioned bool
+	// VersionExtra adds relation state (credentials, labels, ...) to snapshots.
+	VersionExtra func(c *Ctx, obj Obj) (Obj, error)
+	// RevertExtra restores relation state captured by VersionExtra.
+	RevertExtra func(c *Ctx, obj Obj, snapshot Obj) error
 	// AfterCopy copies relations (credentials, labels, ...) from src to the new object.
 	AfterCopy func(c *Ctx, src, dst Obj) error
 

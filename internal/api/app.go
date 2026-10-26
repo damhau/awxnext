@@ -34,8 +34,8 @@ type DBTX interface {
 
 // App holds shared server state.
 type App struct {
-	DB     *pgxpool.Pool
-	Cfg    *config.Config
+	DB       *pgxpool.Pool
+	Cfg      *config.Config
 	Crypto   *crypto.Box
 	Settings *settings.Store
 	// Notify is called after commits that change job state (wired to the dispatcher/websocket hub).
