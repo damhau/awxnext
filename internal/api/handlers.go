@@ -696,7 +696,9 @@ func (a *App) attach(c *Ctx, res *Resource, parent Obj, s *SubList, target *Reso
 		}
 		return err
 	}
-	if s.CanAttach != nil {
+	// CanAttach validates adding (types, cycles, use permission on the child);
+	// removing only needs change permission on the parent, checked above.
+	if s.CanAttach != nil && !disassociate {
 		if err := s.CanAttach(c, parent, childID); err != nil {
 			return err
 		}

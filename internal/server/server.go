@@ -139,7 +139,7 @@ func StartJobs(ctx context.Context, app *api.App) *jobs.Manager {
 	m := jobs.New(app)
 	m.TickHooks = append(m.TickHooks, resources.ScheduleTick, resources.WorkflowTick)
 	m.StartedHooks = append(m.StartedHooks, resources.JobStartedNotifications, resources.WebhookStatusStarted)
-	m.FinishedHooks = append(m.FinishedHooks, resources.JobFinishedNotifications, resources.WebhookStatusFinished, gitops.ProjectUpdated)
+	m.FinishedHooks = append(m.FinishedHooks, resources.JobFinishedNotifications, resources.WebhookStatusFinished, resources.WorkflowJobFinished, gitops.ProjectUpdated)
 	resources.Jobs = m
 	m.Start(ctx)
 	if agent.Default != nil {

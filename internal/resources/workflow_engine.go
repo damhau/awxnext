@@ -563,3 +563,27 @@ func launchNode(c *Ctx, wf jobs.Row, n *wfNode, node Obj, extra map[string]any) 
 	}
 	return 0, fmt.Errorf("unsupported node type %q", n.ujtType)
 }
+
+// WorkflowJobFinished cancels approvals still pending when their workflow
+// job ends by any path (canceled, reaped, failed), so nobody is asked to
+// approve a step that can no longer run.
+func WorkflowJobFinished(ctx context.Context, m *jobs.Manager, job jobs.Row) {
+	if job.Str("type") != "workflow_job" {
+		return
+	}
+	rows, err := m.DB().Query(ctx, `SELECT j.id FROM workflow_job_nodes n JOIN unified_jobs j ON j.id = n.job_id
+		WHERE n.workflow_job_id = $1 AND j.type = 'workflow_approval' AND j.status IN ('new', 'pending', 'waiting')`, job.ID())
+	if err != nil {
+		return
+	}
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		rows.Scan(&id)
+		ids = append(ids, id)
+	}
+	rows.Close()
+	for _, id := range ids {
+		m.Cancel(ctx, id)
+	}
+}

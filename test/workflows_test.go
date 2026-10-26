@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/damhau/awxnext/internal/jobs"
 )
 
 const showPlaybook = `- hosts: all
@@ -375,4 +377,43 @@ func TestRestartKeepsWorkflowJobs(t *testing.T) {
 		t.Fatalf("workflow job failed: %v", s["job_explanation"])
 	}
 	app.DB.Exec(ctx, "UPDATE unified_jobs SET status = 'canceled', finished = now() WHERE id = $1", wfJob)
+}
+
+// Ending a workflow job by any path cancels its pending approvals, and
+// links between nodes can be removed and re-added with another kind.
+func TestWorkflowApprovalCleanupAndUnlink(t *testing.T) {
+	a := adminClient(t)
+	org := newOrg(t, a)
+	wf := must(t, a.post("workflow_job_templates/", map[string]any{"name": uniq("wf"), "organization": org}), 201).id()
+	n1 := must(t, a.post(fmt.Sprintf("workflow_job_templates/%d/workflow_nodes/", wf), map[string]any{}), 201).id()
+	must(t, a.post(fmt.Sprintf("workflow_job_template_nodes/%d/create_approval_template/", n1), map[string]any{"name": "gate"}), 201)
+	n2 := must(t, a.post(fmt.Sprintf("workflow_job_templates/%d/workflow_nodes/", wf), map[string]any{}), 201).id()
+	must(t, a.post(fmt.Sprintf("workflow_job_template_nodes/%d/create_approval_template/", n2), map[string]any{"name": "second"}), 201)
+	must(t, a.post(fmt.Sprintf("workflow_job_template_nodes/%d/success_nodes/", n1), map[string]any{"id": n2}), 204)
+	must(t, a.post(fmt.Sprintf("workflow_job_template_nodes/%d/success_nodes/", n1), map[string]any{"id": n2, "disassociate": true}), 204)
+	if n := a.get(fmt.Sprintf("workflow_job_template_nodes/%d/success_nodes/", n1)).count(); n != 0 {
+		t.Fatalf("link not removed: %d", n)
+	}
+	must(t, a.post(fmt.Sprintf("workflow_job_template_nodes/%d/failure_nodes/", n1), map[string]any{"id": n2}), 204)
+
+	wj := int64(must(t, a.post(fmt.Sprintf("workflow_job_templates/%d/launch/", wf), nil), 201).Body["workflow_job"].(float64))
+	var approval int64
+	deadline := time.Now().Add(20 * time.Second)
+	for approval == 0 && time.Now().Before(deadline) {
+		for _, n := range a.get(fmt.Sprintf("workflow_jobs/%d/workflow_nodes/", wj)).results() {
+			if id, ok := n["job"].(float64); ok {
+				approval = int64(id)
+			}
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	if approval == 0 {
+		t.Fatal("approval never started")
+	}
+	if err := jobManager.Complete(t.Context(), wj, jobs.Result{Status: "failed", Explanation: "test"}); err != nil {
+		t.Fatal(err)
+	}
+	if s := waitJob(t, a, fmt.Sprintf("workflow_approvals/%d/", approval)).Body["status"]; s != "canceled" {
+		t.Fatalf("approval after workflow ended: %v", s)
+	}
 }
