@@ -187,9 +187,13 @@ func toStr(v any) string {
 	return fmt.Sprint(v)
 }
 
-// FormatTime renders timestamps like AWX (UTC, microseconds, Z suffix).
+// FormatTime renders a timestamp like Django REST framework: microseconds only when non-zero.
 func FormatTime(t time.Time) string {
-	return t.UTC().Format("2006-01-02T15:04:05.000000Z")
+	t = t.UTC()
+	if t.Nanosecond()/1000 == 0 {
+		return t.Format("2006-01-02T15:04:05Z")
+	}
+	return t.Format("2006-01-02T15:04:05.000000Z")
 }
 
 // ID extracts an int64 id from a decoded value.

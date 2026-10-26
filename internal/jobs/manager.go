@@ -110,7 +110,11 @@ type Manager struct {
 	wakeWork     chan struct{}
 	// TickHooks run on every dispatcher tick on the leader (schedules, workflows).
 	TickHooks []func(ctx context.Context, m *Manager)
-	leader    bool
+	// StartedHooks run when a job starts running on this node; FinishedHooks
+	// after it reached a final status (notifications, workflows).
+	StartedHooks  []func(ctx context.Context, m *Manager, job Row)
+	FinishedHooks []func(ctx context.Context, m *Manager, job Row)
+	leader        bool
 }
 
 func New(app *api.App) *Manager {
@@ -374,6 +378,9 @@ func (m *Manager) run(parent context.Context, id int64) {
 	if ujt := row.Int("unified_job_template_id"); ujt != 0 {
 		m.DB().Exec(ctx, "UPDATE unified_job_templates SET current_job_id = $2, status = 'running' WHERE id = $1", ujt, id)
 	}
+	for _, h := range m.StartedHooks {
+		h(ctx, m, row)
+	}
 	sp := spec(row.Str("type"))
 	if sp == nil || sp.Runner == nil {
 		m.finish(context.Background(), row, Result{Status: "error", Explanation: "No runner for job type " + row.Str("type")})
@@ -454,6 +461,9 @@ func (m *Manager) finish(ctx context.Context, row Row, res Result) {
 	}
 	if sp := spec(row.Str("type")); sp != nil && sp.Finished != nil {
 		sp.Finished(ctx, m, final)
+	}
+	for _, h := range m.FinishedHooks {
+		h(ctx, m, final)
 	}
 	m.publishStatus(ctx, final, res.Status)
 	m.Notify(ctx, chDispatch, "")

@@ -116,7 +116,7 @@ func jobFields(templateField, templateRef string) []*Field {
 		{Name: "work_unit_id", Type: api.TString, ReadOnly: true, Nullable: true},
 		{Name: "organization", Type: api.TFK, Ref: "organizations", ReadOnly: true, Nullable: true},
 		{Name: "instance_group", Type: api.TFK, Ref: "instance_groups", ReadOnly: true, Nullable: true},
-		{Name: "launched_by", Type: api.TJSON, ReadOnly: true, Hidden: true},
+		{Name: "launched_by", Type: api.TJSON, ReadOnly: true, NoFilter: true},
 		{Name: "cancel_flag", Type: api.TBool, ReadOnly: true, Hidden: true},
 		{Name: "emitted_events", Type: api.TInt, ReadOnly: true, Hidden: true},
 		{Name: "task_impact", Type: api.TInt, ReadOnly: true, Hidden: true},

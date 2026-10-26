@@ -19,6 +19,7 @@ import (
 	"github.com/damhau/awxnext/internal/resources"
 	"github.com/damhau/awxnext/internal/runners/ansible"
 	"github.com/damhau/awxnext/internal/runners/gitsync"
+	"github.com/damhau/awxnext/internal/runners/system"
 	"github.com/damhau/awxnext/internal/settings"
 	"github.com/damhau/awxnext/internal/ws"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -79,7 +80,11 @@ func Handler(app *api.App) http.Handler {
 func StartJobs(ctx context.Context, app *api.App) *jobs.Manager {
 	gitsync.Register()
 	ansible.Register()
+	system.Register()
 	m := jobs.New(app)
+	m.TickHooks = append(m.TickHooks, resources.ScheduleTick)
+	m.StartedHooks = append(m.StartedHooks, resources.JobStartedNotifications)
+	m.FinishedHooks = append(m.FinishedHooks, resources.JobFinishedNotifications)
 	resources.Jobs = m
 	m.Start(ctx)
 	return m

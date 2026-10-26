@@ -14,6 +14,9 @@ func init() {
 	registerInventorySources()
 	registerAdHocCommands()
 	registerJobTemplates()
+	registerSystemJobs()
+	registerSchedules()
+	registerNotifications()
 	registerRoles()
 	registerActivity()
 }

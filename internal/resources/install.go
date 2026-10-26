@@ -14,6 +14,7 @@ func Install(app *api.App) {
 	installSettings(app)
 	app.HandlePublic("GET", "/api/v2/ping/", ping)
 	app.Handle("GET", "/api/v2/config/", configView)
+	installScheduleRoutes(app)
 }
 
 // Bootstrap seeds data required at startup: managed roles, install uuid, this instance.
@@ -41,6 +42,9 @@ func Bootstrap(ctx context.Context, app *api.App) error {
 		return err
 	}
 	if err := SeedInfrastructure(ctx, app); err != nil {
+		return err
+	}
+	if err := SeedSystemJobTemplates(ctx, app); err != nil {
 		return err
 	}
 	// Legacy object roles for objects created outside the API (migrations, imports).
