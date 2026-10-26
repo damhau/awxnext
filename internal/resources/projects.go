@@ -79,6 +79,12 @@ func registerProjects() {
 		Versioned:     true,
 		Managed:       true,
 		Copyable:      true,
+		Capabilities: func(c *Ctx, obj Obj, p map[string]bool) map[string]bool {
+			su := c.User.Superuser
+			edit := su || p["change_project"]
+			update := (su || p["update_project"]) && str(obj["scm_type"]) != ""
+			return map[string]bool{"edit": edit, "delete": su || p["delete_project"], "copy": edit, "start": update, "schedule": update}
+		},
 		Fields: append([]*Field{
 			{Name: "organization", Type: api.TFK, Ref: "organizations", Required: true, Help: "The organization used to determine access to this template."},
 			{Name: "scm_type", Type: api.TChoice, Default: "", Choices: labelled("", "Manual", "git", "Git"), Label: "Source Control Type", Help: "Specifies the source control system used to store the project."},

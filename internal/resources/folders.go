@@ -119,11 +119,12 @@ func registerFolders() {
 				sf := o["summary_fields"].(Obj)
 				sf["path"] = path
 				sf["related_field_counts"] = Obj{
-					"folders":       countQuery(c, "SELECT count(*) FROM folders WHERE parent_id = $1", id),
-					"inventories":   countQuery(c, "SELECT count(*) FROM inventories WHERE folder_id = $1", id),
-					"credentials":   countQuery(c, "SELECT count(*) FROM credentials WHERE folder_id = $1", id),
-					"job_templates": countQuery(c, "SELECT count(*) FROM unified_job_templates WHERE folder_id = $1 AND type = 'job_template'", id),
-					"projects":      countQuery(c, "SELECT count(*) FROM unified_job_templates WHERE folder_id = $1 AND type = 'project'", id),
+					"folders":                countQuery(c, "SELECT count(*) FROM folders WHERE parent_id = $1", id),
+					"inventories":            countQuery(c, "SELECT count(*) FROM inventories WHERE folder_id = $1", id),
+					"credentials":            countQuery(c, "SELECT count(*) FROM credentials WHERE folder_id = $1", id),
+					"job_templates":          countQuery(c, "SELECT count(*) FROM unified_job_templates WHERE folder_id = $1 AND type = 'job_template'", id),
+					"workflow_job_templates": countQuery(c, "SELECT count(*) FROM unified_job_templates WHERE folder_id = $1 AND type = 'workflow_job_template'", id),
+					"projects":               countQuery(c, "SELECT count(*) FROM unified_job_templates WHERE folder_id = $1 AND type = 'project'", id),
 				}
 			}
 			return nil

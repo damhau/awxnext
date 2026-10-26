@@ -203,7 +203,15 @@ func (a *App) newCtx(r *http.Request, p *Principal) *Ctx {
 	if p == nil {
 		p = &Principal{}
 	}
-	return &Ctx{Context: r.Context(), App: a, User: p, Req: r, Extra: map[string]any{}}
+	c := &Ctx{Context: r.Context(), App: a, User: p, Req: r, Extra: map[string]any{}}
+	// Clients may describe a change; it is stored with the version it creates.
+	if comment := strings.TrimSpace(r.Header.Get("X-Change-Comment")); comment != "" {
+		if len(comment) > 1000 {
+			comment = comment[:1000]
+		}
+		c.Extra["version_comment"] = comment
+	}
+	return c
 }
 
 func (a *App) wrap(h func(c *Ctx, w http.ResponseWriter, r *http.Request)) http.HandlerFunc {
@@ -810,9 +818,13 @@ func metadata(c *Ctx, res *Resource, isList, writable bool) Obj {
 			continue
 		}
 		m := Obj{"type": f.Type.metadataType(), "label": f.Label, "help_text": f.Help, "filterable": !f.NoFilter && f.Type != TSecret}
-		if len(f.Choices) > 0 {
-			ch := make([][]any, len(f.Choices))
-			for i, x := range f.Choices {
+		choices := f.Choices
+		if f.ChoicesFunc != nil {
+			choices = f.ChoicesFunc(c)
+		}
+		if len(choices) > 0 {
+			ch := make([][]any, len(choices))
+			for i, x := range choices {
 				ch[i] = []any{x.Value, x.Label}
 			}
 			m["choices"] = ch

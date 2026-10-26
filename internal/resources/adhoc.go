@@ -61,7 +61,15 @@ func registerAdHocCommands() {
 			{Name: "inventory", Type: api.TFK, Ref: "inventories", Required: true, Nullable: true, CreateOnly: true},
 			{Name: "limit", Type: api.TText, Default: "", CreateOnly: true},
 			{Name: "credential", Type: api.TFK, Ref: "credentials", Nullable: true, CreateOnly: true},
-			{Name: "module_name", Type: api.TString, Default: "command", CreateOnly: true, Validate: func(c *Ctx, v any, data Obj) error {
+			{Name: "module_name", Type: api.TString, Default: "command", CreateOnly: true, ChoicesFunc: func(c *Ctx) []api.Choice {
+				var allowed []string
+				c.App.Settings.Decode(c, "AD_HOC_COMMANDS", &allowed)
+				out := make([]api.Choice, len(allowed))
+				for i, m := range allowed {
+					out[i] = api.Choice{Value: m, Label: m}
+				}
+				return out
+			}, Validate: func(c *Ctx, v any, data Obj) error {
 				var allowed []string
 				c.App.Settings.Decode(c, "AD_HOC_COMMANDS", &allowed)
 				if !contains(allowed, str(v)) {

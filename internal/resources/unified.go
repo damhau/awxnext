@@ -39,8 +39,60 @@ func ujtFields() []*Field {
 	}
 }
 
-// ujtSummary adds last_job / current_job / recent_jobs summaries like AWX.
+// ujtSummary adds last_job / current_job / recent_jobs summaries like AWX,
+// plus what lists of mixed templates show: inventory, playbook, survey and
+// workflow size (summary_fields.template).
 func ujtSummary(c *Ctx, objs []Obj) error {
+	ids := make([]int64, 0, len(objs))
+	for _, o := range objs {
+		id, _ := api.ID(o["id"])
+		ids = append(ids, id)
+	}
+	extra := map[int64]Obj{}
+	inv := map[int64]Obj{}
+	rows, err := c.DB().Query(c, `SELECT u.id, u.playbook, u.survey_enabled, i.id, i.name,
+		(SELECT count(*) FROM workflow_job_template_nodes n WHERE n.workflow_job_template_id = u.id)
+		FROM unified_job_templates u LEFT JOIN inventories i ON i.id = u.inventory_id WHERE u.id = ANY($1)`, ids)
+	if err != nil {
+		return err
+	}
+	for rows.Next() {
+		var id int64
+		var playbook *string
+		var survey *bool
+		var invID *int64
+		var invName *string
+		var nodes int64
+		if err := rows.Scan(&id, &playbook, &survey, &invID, &invName, &nodes); err != nil {
+			rows.Close()
+			return err
+		}
+		e := Obj{"workflow_nodes": nodes}
+		if playbook != nil {
+			e["playbook"] = *playbook
+		}
+		if survey != nil {
+			e["survey_enabled"] = *survey
+		}
+		extra[id] = e
+		if invID != nil {
+			inv[id] = Obj{"id": *invID, "name": *invName}
+		}
+	}
+	rows.Close()
+	for _, o := range objs {
+		id, _ := api.ID(o["id"])
+		sf := o["summary_fields"].(Obj)
+		switch o["type"] {
+		case "job_template":
+			sf["template"] = Obj{"playbook": extra[id]["playbook"], "survey_enabled": extra[id]["survey_enabled"] == true}
+		case "workflow_job_template":
+			sf["template"] = Obj{"workflow_nodes": extra[id]["workflow_nodes"], "survey_enabled": extra[id]["survey_enabled"] == true}
+		}
+		if i, ok := inv[id]; ok {
+			sf["inventory"] = i
+		}
+	}
 	for _, o := range objs {
 		id, _ := api.ID(o["id"])
 		sf := o["summary_fields"].(Obj)
@@ -153,6 +205,8 @@ func registerJobResource(js jobSpec) *Resource {
 		NoCreate:      true,
 		NoUpdate:      true,
 		Fields:        fields,
+		// Like AWX: references to a job show how it ended.
+		SummaryFields: []string{"id", "name", "description", "status", "failed", "elapsed", "type", "finished"},
 		View: func(c *Ctx, arg ArgFunc) string {
 			if c.User.Superuser || c.User.Auditor {
 				return "TRUE"
@@ -494,7 +548,16 @@ func registerUnified() {
 			{Name: "type", Type: api.TChoice, ReadOnly: true, Choices: choices("job_template", "project", "inventory_source", "workflow_job_template", "system_job_template", "workflow_approval_template")},
 			{Name: "organization", Type: api.TFK, Ref: "organizations", ReadOnly: true, Nullable: true},
 			{Name: "folder", Type: api.TFK, Ref: "folders", ReadOnly: true, Nullable: true},
+			// Filter-only columns of job templates (e.g. inventory__name__istartswith=prod).
+			{Name: "inventory", Type: api.TFK, Ref: "inventories", ReadOnly: true, Nullable: true, Hidden: true},
+			{Name: "project", Type: api.TFK, Ref: "projects", ReadOnly: true, Nullable: true, Hidden: true},
+			{Name: "playbook", Type: api.TString, ReadOnly: true, Hidden: true},
 		}, ujtFields()...),
+		Relations: map[string]api.Relation{
+			"labels": {Target: "labels", Join: func(a, b string) string {
+				return fmt.Sprintf("EXISTS (SELECT 1 FROM unified_job_template_labels x WHERE x.unified_job_template_id = %s.id AND x.label_id = %s.id)", a, b)
+			}},
+		},
 		SummaryFields: []string{"id", "name", "description", "type"},
 		View:          ujtView,
 		Summary:       ujtSummary,

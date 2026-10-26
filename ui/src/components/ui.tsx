@@ -34,7 +34,7 @@ export function RunBars({ jobs, slots = 12 }: { jobs: RecentJob[] | undefined; s
   return (
     <div className="runbars" role="img" aria-label={label} title={label}>
       {Array.from({ length: pad }, (_, i) => (
-        <span key={'p' + i} className="empty" />
+        <span key={'p' + i} className="slot" />
       ))}
       {list.map((j) => (
         <Link key={j.id} to={`/jobs/${j.type}/${j.id}`} title={`#${j.id} ${statusLabel(j.status)} · ${ago(j.finished)}`}>

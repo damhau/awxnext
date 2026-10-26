@@ -76,8 +76,13 @@ export function url(path: string): string {
   return '/api/v2/' + path
 }
 
-export async function request<T>(method: string, path: string, body?: unknown, opts: { quiet401?: boolean; signal?: AbortSignal } = {}): Promise<T> {
-  const headers: Record<string, string> = { Accept: 'application/json' }
+export async function request<T>(
+  method: string,
+  path: string,
+  body?: unknown,
+  opts: { quiet401?: boolean; signal?: AbortSignal; headers?: Record<string, string> } = {},
+): Promise<T> {
+  const headers: Record<string, string> = { Accept: 'application/json', ...(opts.headers ?? {}) }
   if (body !== undefined) headers['Content-Type'] = 'application/json'
   if (method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS') {
     const t = cookie('csrftoken')
@@ -109,9 +114,9 @@ export async function request<T>(method: string, path: string, body?: unknown, o
 
 export const api = {
   get: <T>(path: string, params?: Params, signal?: AbortSignal) => request<T>('GET', path + qs(params), undefined, { signal }),
-  post: <T>(path: string, body?: unknown) => request<T>('POST', path, body ?? {}),
+  post: <T>(path: string, body?: unknown, headers?: Record<string, string>) => request<T>('POST', path, body ?? {}, { headers }),
   put: <T>(path: string, body: unknown) => request<T>('PUT', path, body),
-  patch: <T>(path: string, body: unknown) => request<T>('PATCH', path, body),
+  patch: <T>(path: string, body: unknown, headers?: Record<string, string>) => request<T>('PATCH', path, body, { headers }),
   del: (path: string) => request<void>('DELETE', path),
   options: <T>(path: string) => request<T>('OPTIONS', path),
   text: async (path: string): Promise<string> => {

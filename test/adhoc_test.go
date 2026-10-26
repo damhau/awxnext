@@ -102,3 +102,19 @@ func TestAdHocCommands(t *testing.T) {
 	must(t, user.delete(fmt.Sprintf("ad_hoc_commands/%d/", uc.id())), 403)
 	must(t, a.delete(fmt.Sprintf("ad_hoc_commands/%d/", uc.id())), 204)
 }
+
+func TestAdHocModuleChoices(t *testing.T) {
+	a := adminClient(t)
+	r := must(t, a.do("OPTIONS", "ad_hoc_commands/", nil), 200)
+	post := r.Body["actions"].(map[string]any)["POST"].(map[string]any)
+	choices, _ := post["module_name"].(map[string]any)["choices"].([]any)
+	found := false
+	for _, c := range choices {
+		if c.([]any)[0] == "ping" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("module_name choices: %v", choices)
+	}
+}

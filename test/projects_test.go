@@ -219,3 +219,19 @@ func TestProjectAccessAndManual(t *testing.T) {
 	}
 	must(t, a.post(fmt.Sprintf("projects/%d/update/", m.id()), nil), 405)
 }
+
+func TestProjectCapabilities(t *testing.T) {
+	a := adminClient(t)
+	org := newOrg(t, a)
+	manual := must(t, a.post("projects/", map[string]any{"name": uniq("manual"), "organization": org}), 201).Body
+	caps := manual["summary_fields"].(map[string]any)["user_capabilities"].(map[string]any)
+	if caps["start"] != false || caps["edit"] != true {
+		t.Fatalf("manual project capabilities: %v", caps)
+	}
+	allowFileURLs(t, a)
+	repo := gitRepo(t, map[string]string{"site.yml": helloPlaybook})
+	git := must(t, a.post("projects/", map[string]any{"name": uniq("git"), "organization": org, "scm_type": "git", "scm_url": "file://" + repo}), 201).Body
+	if c := git["summary_fields"].(map[string]any)["user_capabilities"].(map[string]any); c["start"] != true || c["schedule"] != true {
+		t.Fatalf("git project capabilities: %v", c)
+	}
+}

@@ -71,6 +71,36 @@ func checkTemplateCredential(c *Ctx, existing []int64, cred int64) error {
 	return nil
 }
 
+// templateLabels returns the label ids of a template, sorted.
+func templateLabels(c *Ctx, ujt int64) []int64 {
+	out := []int64{}
+	rows, err := c.DB().Query(c, "SELECT label_id FROM unified_job_template_labels WHERE unified_job_template_id = $1 ORDER BY label_id", ujt)
+	if err != nil {
+		return out
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id int64
+		rows.Scan(&id)
+		out = append(out, id)
+	}
+	return out
+}
+
+// restoreLabels makes a template's labels match a snapshot.
+func restoreLabels(c *Ctx, ujt int64, snap Obj) {
+	labels, ok := snap["labels"].([]any)
+	if !ok {
+		return
+	}
+	c.DB().Exec(c, "DELETE FROM unified_job_template_labels WHERE unified_job_template_id = $1", ujt)
+	for _, l := range labels {
+		if lid, ok := api.ID(l); ok {
+			c.DB().Exec(c, "INSERT INTO unified_job_template_labels (unified_job_template_id, label_id) SELECT $1, id FROM labels WHERE id = $2 ON CONFLICT DO NOTHING", ujt, lid)
+		}
+	}
+}
+
 func templateCredentials(c *Ctx, ujt int64) []int64 {
 	rows, err := c.DB().Query(c, "SELECT credential_id FROM unified_job_template_credentials WHERE unified_job_template_id = $1 ORDER BY credential_id", ujt)
 	if err != nil {
@@ -311,10 +341,11 @@ func registerJobTemplates() {
 			if creds == nil {
 				creds = []int64{}
 			}
-			return Obj{"credentials": creds, "survey_spec": redactSurvey(spec)}, nil
+			return Obj{"credentials": creds, "labels": templateLabels(c, id), "survey_spec": redactSurvey(spec)}, nil
 		},
 		RevertExtra: func(c *Ctx, obj Obj, snap Obj) error {
 			id, _ := api.ID(obj["id"])
+			restoreLabels(c, id, snap)
 			if creds, ok := snap["credentials"].([]any); ok {
 				c.DB().Exec(c, "DELETE FROM unified_job_template_credentials WHERE unified_job_template_id = $1", id)
 				for _, cr := range creds {

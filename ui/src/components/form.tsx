@@ -280,6 +280,7 @@ export function Lookup({
   display = (r: Ref) => r.name,
   meta,
   full,
+  order,
 }: {
   label: ReactNode
   resource: string
@@ -293,11 +294,13 @@ export function Lookup({
   display?: (r: Ref) => string
   meta?: (r: Ref) => ReactNode
   full?: boolean
+  /** order_by for the options (default name). */
+  order?: string
 }) {
   const id = useId()
   return (
     <Field label={label} error={error} help={help} optional={optional} htmlFor={id} full={full}>
-      <Picker id={id} resource={resource} params={params} placeholder={placeholder} display={display} meta={meta} values={value ? [value] : []} single onChange={(v) => onChange(v[0] ?? null)} />
+      <Picker id={id} resource={resource} params={params} placeholder={placeholder} display={display} meta={meta} order={order} values={value ? [value] : []} single onChange={(v) => onChange(v[0] ?? null)} />
     </Field>
   )
 }
@@ -314,6 +317,7 @@ export function MultiLookup({
   display = (r: Ref) => r.name,
   meta,
   full,
+  order,
 }: {
   label: ReactNode
   resource: string
@@ -326,11 +330,12 @@ export function MultiLookup({
   display?: (r: Ref) => string
   meta?: (r: Ref) => ReactNode
   full?: boolean
+  order?: string
 }) {
   const id = useId()
   return (
     <Field label={label} error={error} help={help} optional={optional} htmlFor={id} full={full}>
-      <Picker id={id} resource={resource} params={params} placeholder="Add…" display={display} meta={meta} values={values} onChange={onChange} />
+      <Picker id={id} resource={resource} params={params} placeholder="Add…" display={display} meta={meta} order={order} values={values} onChange={onChange} />
     </Field>
   )
 }
@@ -345,6 +350,7 @@ function Picker({
   values,
   single,
   onChange,
+  order = 'name',
 }: {
   id: string
   resource: string
@@ -355,6 +361,7 @@ function Picker({
   values: Ref[]
   single?: boolean
   onChange: (v: Ref[]) => void
+  order?: string
 }) {
   const [q, setQ] = useState('')
   const [open, setOpen] = useState(false)
@@ -369,7 +376,7 @@ function Picker({
     setLoading(true)
     const t = window.setTimeout(() => {
       api
-        .get<Page<Ref>>(resource, { ...(params ?? {}), search: q || undefined, page_size: 20, order_by: 'name' }, ctl.signal)
+        .get<Page<Ref>>(resource, { ...(params ?? {}), search: q || undefined, page_size: 20, order_by: order }, ctl.signal)
         .then((r) => {
           setItems(r.results)
           setHi(0)

@@ -141,6 +141,17 @@ func registerWorkflows() {
 		Managed:       true,
 		Copyable:      true,
 		Fields:        append(fields, ujt...),
+		VersionExtra: func(c *Ctx, obj Obj) (Obj, error) {
+			id, _ := api.ID(obj["id"])
+			var spec any
+			c.DB().QueryRow(c, "SELECT survey_spec FROM unified_job_templates WHERE id = $1", id).Scan(&spec)
+			return Obj{"labels": templateLabels(c, id), "survey_spec": redactSurvey(spec)}, nil
+		},
+		RevertExtra: func(c *Ctx, obj Obj, snap Obj) error {
+			id, _ := api.ID(obj["id"])
+			restoreLabels(c, id, snap)
+			return nil
+		},
 		CanAdd: func(c *Ctx, data Obj) error {
 			if c.User.Superuser {
 				return nil

@@ -1,0 +1,2 @@
+/* Tables inside panels: the panel already draws the frame. */
+.flush .table-wrap { border: none; border-radius: 0; }

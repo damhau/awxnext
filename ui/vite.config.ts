@@ -8,6 +8,8 @@ export default defineConfig({
   plugins: [react()],
   build: { outDir: 'dist', emptyOutDir: true, sourcemap: false, chunkSizeWarningLimit: 900 },
   server: {
+    // Let OPTIONS requests reach the API (Vite answers them itself when CORS is on).
+    cors: false,
     proxy: {
       '/api': target,
       '/sso': target,

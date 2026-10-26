@@ -1,7 +1,10 @@
 package test
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"testing"
 )
 
@@ -55,5 +58,24 @@ func TestVersionHistory(t *testing.T) {
 	app.DB.QueryRow(t.Context(), "SELECT count(*) FROM object_versions WHERE resource = 'organizations' AND object_id = $1", id).Scan(&n)
 	if n != 6 {
 		t.Fatalf("expected 6 versions after delete, got %d", n)
+	}
+}
+
+func TestVersionComment(t *testing.T) {
+	a := adminClient(t)
+	id := must(t, a.post("organizations/", map[string]any{"name": uniq("cmt")}), 201).id()
+	body, _ := json.Marshal(map[string]any{"description": "faster"})
+	req, _ := http.NewRequest("PATCH", fmt.Sprintf("%s/api/v2/organizations/%d/", srv.URL, id), bytes.NewReader(body))
+	req.SetBasicAuth("admin", "admin")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Change-Comment", "  Retries because the JVM takes 40s to warm.  ")
+	res, err := http.DefaultClient.Do(req)
+	if err != nil || res.StatusCode != 200 {
+		t.Fatalf("patch: %v %v", err, res.Status)
+	}
+	res.Body.Close()
+	latest := a.get(fmt.Sprintf("organizations/%d/history/", id)).results()[0]
+	if latest["comment"] != "Retries because the JVM takes 40s to warm." {
+		t.Fatalf("comment %q", latest["comment"])
 	}
 }

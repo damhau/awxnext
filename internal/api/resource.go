@@ -68,8 +68,10 @@ type Field struct {
 	Default    any
 	MaxLength  int
 	Choices    []Choice
-	Label      string
-	Help       string
+	// ChoicesFunc lists choices that depend on settings (shown in OPTIONS).
+	ChoicesFunc func(c *Ctx) []Choice
+	Label       string
+	Help        string
 	// NoFilter disables filtering and ordering on the field.
 	NoFilter bool
 	// Hidden fields are filterable/writable but not serialized.
