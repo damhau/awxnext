@@ -44,6 +44,8 @@ func init() {
 		{Key: "DEFAULT_PROJECT_UPDATE_TIMEOUT", Category: "jobs", Type: "integer", Default: 0},
 		{Key: "ANSIBLE_FACT_CACHE_TIMEOUT", Category: "jobs", Type: "integer", Default: 0},
 		{Key: "MAX_FORKS", Category: "jobs", Type: "integer", Default: 200},
+		{Key: "PROJECT_ALLOW_FILE_URLS", Category: "jobs", Type: "boolean", Default: false, Help: "Allow git projects to use file:// URLs or local paths on the control plane. Only enable for trusted single-tenant installs."},
+		{Key: "JOB_EVENTS_HOT_DAYS", Category: "jobs", Type: "integer", Default: 14, Help: "Days job events stay in the database before they are served from the compressed archive."},
 		{Key: "AWX_COLLECTIONS_ENABLED_ON_PROJECT_SYNC", Category: "jobs", Type: "boolean", Default: true},
 
 		// authentication

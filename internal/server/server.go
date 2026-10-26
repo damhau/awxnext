@@ -14,8 +14,10 @@ import (
 	"github.com/damhau/awxnext/internal/config"
 	"github.com/damhau/awxnext/internal/crypto"
 	"github.com/damhau/awxnext/internal/db"
+	"github.com/damhau/awxnext/internal/jobs"
 	"github.com/damhau/awxnext/internal/kms"
 	"github.com/damhau/awxnext/internal/resources"
+	"github.com/damhau/awxnext/internal/runners/gitsync"
 	"github.com/damhau/awxnext/internal/settings"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -63,6 +65,15 @@ func Handler(app *api.App) http.Handler {
 	auth.Install(app)
 	resources.Install(app)
 	return app.Router()
+}
+
+// StartJobs registers runners and starts dispatching and running jobs on this node.
+func StartJobs(ctx context.Context, app *api.App) *jobs.Manager {
+	gitsync.Register()
+	m := jobs.New(app)
+	resources.Jobs = m
+	m.Start(ctx)
+	return m
 }
 
 // OpenKeyless connects and migrates without opening the keyring (used by key

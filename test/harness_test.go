@@ -21,14 +21,16 @@ import (
 	"github.com/damhau/awxnext/internal/api"
 	"github.com/damhau/awxnext/internal/auth"
 	"github.com/damhau/awxnext/internal/config"
+	"github.com/damhau/awxnext/internal/jobs"
 	"github.com/damhau/awxnext/internal/server"
 	"github.com/jackc/pgx/v5"
 )
 
 var (
-	srv    *httptest.Server
-	app    *api.App
-	dbSkip string
+	srv        *httptest.Server
+	app        *api.App
+	jobManager *jobs.Manager
+	dbSkip     string
 )
 
 func TestMain(m *testing.M) {
@@ -51,7 +53,6 @@ func TestMain(m *testing.M) {
 	cfg.DatabaseURL = fmt.Sprintf("postgres://%s@%s:%d/%s?sslmode=disable", pcfg.User, pcfg.Host, pcfg.Port, name)
 	cfg.SecretKey = "test-secret"
 	cfg.NodeName = "test-node"
-	cfg.ProjectsRoot = os.TempDir()
 	app, err = server.Setup(ctx, cfg)
 	if err != nil {
 		panic(err)
@@ -60,8 +61,13 @@ func TestMain(m *testing.M) {
 	if _, err := app.DB.Exec(ctx, "INSERT INTO users (username, password, is_superuser) VALUES ('admin', $1, true)", hash); err != nil {
 		panic(err)
 	}
+	cfg.ProjectsRoot, _ = os.MkdirTemp("", "awxnext-projects-")
+	jobsCtx, stopJobs := context.WithCancel(ctx)
+	jobManager = server.StartJobs(jobsCtx, app)
 	srv = httptest.NewServer(server.Handler(app))
 	code := m.Run()
+	stopJobs()
+	os.RemoveAll(cfg.ProjectsRoot)
 	srv.Close()
 	app.DB.Close()
 	admin.Exec(ctx, "DROP DATABASE "+name+" WITH (FORCE)")
