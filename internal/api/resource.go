@@ -147,6 +147,8 @@ type Resource struct {
 	// RBAC: ContentType is the RBAC content type; OrgColumn the column holding the organization id.
 	ContentType string
 	OrgColumn   string
+	// FolderColumn holds the folder id; assignments on that folder and its ancestors apply.
+	FolderColumn string
 	// View returns a SQL predicate restricting visible rows (alias t). Overrides the default.
 	View func(c *Ctx, arg ArgFunc) string
 	// CanAdd validates permission to create the object.

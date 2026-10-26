@@ -79,13 +79,58 @@ func viewPredicate(c *Ctx, res *Resource, arg ArgFunc) string {
 		return res.View(c, arg)
 	}
 	if res.ContentType != "" {
-		org := ""
-		if res.OrgColumn != "" {
-			org = "t." + res.OrgColumn
-		}
-		return c.User.Predicate(rbac.ArgFunc(arg), res.ContentType, "view_"+res.ContentType, "t.id", org)
+		return c.User.Predicate(rbac.ArgFunc(arg), res.ContentType, "view_"+res.ContentType, res.Scope("t"))
 	}
 	return "TRUE"
+}
+
+// Scope locates rows of res (under alias) for RBAC predicates.
+func (res *Resource) Scope(alias string) rbac.Scope {
+	s := rbac.Scope{ID: alias + ".id"}
+	if res.OrgColumn != "" {
+		s.Org = alias + "." + res.OrgColumn
+	}
+	if res.FolderColumn != "" {
+		s.Folder = alias + "." + res.FolderColumn
+	}
+	return s
+}
+
+// folderField returns the field holding the folder id, if any.
+func (res *Resource) folderField() *Field {
+	if res.FolderColumn == "" || res.FolderColumn == "id" {
+		return nil
+	}
+	for _, f := range res.Fields {
+		if f.column() == res.FolderColumn {
+			return f
+		}
+	}
+	return nil
+}
+
+// ObjScope extracts the organization and folder ids of an object.
+func (res *Resource) ObjScope(obj Obj) (org, folder *int64) {
+	if res.OrgColumn == "id" || res.FolderColumn == "id" {
+		id, _ := ID(obj["id"])
+		if res.OrgColumn == "id" {
+			org = &id
+		}
+		if res.FolderColumn == "id" {
+			folder = &id
+		}
+	}
+	if f := res.orgField(); f != nil && res.OrgColumn != "id" {
+		if o, ok := ID(obj[f.Name]); ok {
+			org = &o
+		}
+	}
+	if f := res.folderField(); f != nil {
+		if o, ok := ID(obj[f.Name]); ok {
+			folder = &o
+		}
+	}
+	return org, folder
 }
 
 // Get loads a raw object by id without access checks.
@@ -144,13 +189,8 @@ func HasPerm(c *Ctx, res *Resource, obj Obj, perm string) (bool, error) {
 		return false, nil
 	}
 	id, _ := ID(obj["id"])
-	var org *int64
-	if f := res.orgField(); f != nil {
-		if o, ok := ID(obj[f.Name]); ok {
-			org = &o
-		}
-	}
-	return c.User.Has(c, c.App.DB, res.ContentType, perm+"_"+res.ContentType, id, org)
+	org, folder := res.ObjScope(obj)
+	return c.User.Has(c, c.App.DB, res.ContentType, perm+"_"+res.ContentType, id, org, folder)
 }
 
 // HasPermID checks a permission on an object referenced by id.
@@ -427,7 +467,7 @@ func addSummaries(c *Ctx, res *Resource, raws, out []Obj, ids []int64) error {
 	var perms map[int64]map[string]bool
 	if res.ContentType != "" && !c.User.Superuser {
 		var err error
-		perms, err = c.User.PermsFor(c, c.App.DB, res.Table, res.ContentType, res.OrgColumn, ids)
+		perms, err = c.User.PermsFor(c, c.App.DB, res.Table, res.ContentType, res.OrgColumn, res.FolderColumn, ids)
 		if err != nil {
 			return err
 		}
@@ -715,20 +755,15 @@ func Create(c *Ctx, res *Resource, data Obj, preset Obj) (Obj, error) {
 
 // Insert creates an object from already-validated values, enforcing add permission.
 func Insert(c *Ctx, res *Resource, vals Obj) (Obj, error) {
+	if err := checkFolder(c, res, vals); err != nil {
+		return nil, err
+	}
 	if res.CanAdd != nil {
 		if err := res.CanAdd(c, vals); err != nil {
 			return nil, err
 		}
 	} else if !c.User.Superuser {
-		f := res.orgField()
-		if f == nil || res.ContentType == "" {
-			return nil, ErrForbidden
-		}
-		org, ok := ID(vals[f.Name])
-		if !ok {
-			return nil, ErrForbidden
-		}
-		ok, err := c.User.HasOrg(c, c.App.DB, "add_"+res.ContentType, org)
+		ok, err := CanAddIn(c, res, vals)
 		if err != nil {
 			return nil, err
 		}
@@ -807,6 +842,60 @@ func Insert(c *Ctx, res *Resource, vals Obj) (Obj, error) {
 	return obj, err
 }
 
+// CanAddIn reports whether the principal may create an object of res with the
+// given organization/folder placement: add_<type> on the folder (or an ancestor)
+// or on the organization.
+func CanAddIn(c *Ctx, res *Resource, vals Obj) (bool, error) {
+	if c.User.Superuser {
+		return true, nil
+	}
+	if res.ContentType == "" {
+		return false, nil
+	}
+	perm := "add_" + res.ContentType
+	var org int64
+	if f := res.orgField(); f != nil {
+		o, ok := ID(vals[f.Name])
+		if !ok {
+			return false, nil
+		}
+		org = o
+	} else {
+		return false, nil
+	}
+	if f := res.folderField(); f != nil {
+		if folder, ok := ID(vals[f.Name]); ok {
+			return c.User.HasFolder(c, c.App.DB, perm, folder, org)
+		}
+	}
+	return c.User.HasOrg(c, c.App.DB, perm, org)
+}
+
+// checkFolder ensures an object's folder belongs to the object's organization.
+func checkFolder(c *Ctx, res *Resource, vals Obj) error {
+	ff := res.folderField()
+	of := res.orgField()
+	if ff == nil || of == nil {
+		return nil
+	}
+	folder, ok := ID(vals[ff.Name])
+	if !ok {
+		return nil
+	}
+	org, ok := ID(vals[of.Name])
+	if !ok {
+		return FieldError(ff.Name, "An organization is required to place an object in a folder.")
+	}
+	var forg int64
+	if err := c.DB().QueryRow(c, "SELECT organization_id FROM folders WHERE id = $1", folder).Scan(&forg); err != nil {
+		return FieldError(ff.Name, fmt.Sprintf("Invalid pk \"%d\" - object does not exist.", folder))
+	}
+	if forg != org {
+		return FieldError(ff.Name, "Folder must belong to the same organization.")
+	}
+	return nil
+}
+
 // grantCreator gives a non-superuser creator the admin role on the new object (DAB "creator defaults").
 func grantCreator(c *Ctx, res *Resource, id int64) error {
 	if c.User.Superuser || c.User.Anonymous() {
@@ -853,11 +942,18 @@ func Apply(c *Ctx, res *Resource, old Obj, vals Obj) (Obj, error) {
 		if !ok {
 			return nil, ErrForbidden
 		}
-		// Moving to another organization requires add permission there.
-		if f := res.orgField(); f != nil && !c.User.Superuser {
-			if nv, ok := vals[f.Name]; ok && fmt.Sprint(nv) != fmt.Sprint(old[f.Name]) {
-				org, _ := ID(nv)
-				ok, err := c.User.HasOrg(c, c.App.DB, "add_"+res.ContentType, org)
+		// Moving to another organization or folder requires add permission at the destination.
+		if !c.User.Superuser && res.ContentType != "" {
+			moved := false
+			for _, f := range []*Field{res.orgField(), res.folderField()} {
+				if f != nil && res.OrgColumn != "id" {
+					if nv, ok := vals[f.Name]; ok && fmt.Sprint(nv) != fmt.Sprint(old[f.Name]) {
+						moved = true
+					}
+				}
+			}
+			if moved {
+				ok, err := CanAddIn(c, res, merged)
 				if err != nil {
 					return nil, err
 				}
@@ -866,6 +962,9 @@ func Apply(c *Ctx, res *Resource, old Obj, vals Obj) (Obj, error) {
 				}
 			}
 		}
+	}
+	if err := checkFolder(c, res, merged); err != nil {
+		return nil, err
 	}
 	id, _ := ID(old["id"])
 	var obj Obj

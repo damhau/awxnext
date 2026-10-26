@@ -19,18 +19,18 @@ func resourceForCT(ct string) *Resource {
 	return nil
 }
 
-// objectOrg returns the organization id of an RBAC object, if it has one.
-func objectOrg(c *Ctx, ct string, objectID int64) (*int64, error) {
+// objectScope returns the organization and folder of an RBAC object.
+func objectScope(c *Ctx, ct string, objectID int64) (org, folder *int64, err error) {
 	res := resourceForCT(ct)
-	if res == nil || res.OrgColumn == "" {
-		return nil, nil
+	if res == nil {
+		return nil, nil, nil
 	}
-	var org *int64
-	err := c.DB().QueryRow(c, fmt.Sprintf("SELECT %s FROM %s WHERE id = $1", res.OrgColumn, res.Table), objectID).Scan(&org)
+	obj, err := api.Get(c, res, objectID)
 	if err != nil {
-		return nil, api.ErrNotFound
+		return nil, nil, api.ErrNotFound
 	}
-	return org, nil
+	org, folder = res.ObjScope(obj)
+	return org, folder, nil
 }
 
 // canGrant: the requester must hold every permission of the role definition on the object.
@@ -45,12 +45,12 @@ func canGrant(c *Ctx, rdID int64, ct string, objectID int64) error {
 	if ct == "" {
 		return api.ErrForbidden
 	}
-	org, err := objectOrg(c, ct, objectID)
+	org, folder, err := objectScope(c, ct, objectID)
 	if err != nil {
 		return err
 	}
 	for _, p := range perms {
-		ok, err := c.User.Has(c, c.App.DB, ct, p, objectID, org)
+		ok, err := c.User.Has(c, c.App.DB, ct, p, objectID, org, folder)
 		if err != nil {
 			return err
 		}
@@ -86,8 +86,8 @@ func assignObjectRole(c *Ctx, roleID, userID, teamID int64, remove bool) error {
 	if err != nil {
 		return err
 	}
-	if teamID != 0 && (r.CT == "team" && (r.Field == "member_role" || r.Field == "admin_role")) {
-		return api.BadRequest("Teams cannot be members of other teams.")
+	if teamID != 0 && r.CT == "team" && r.ObjectID == teamID {
+		return api.BadRequest("A team cannot be granted a role on itself.")
 	}
 	if err := canGrant(c, r.RDID, r.CT, r.ObjectID); err != nil {
 		return err
@@ -110,11 +110,7 @@ func roleVisible(c *Ctx, arg ArgFunc) string {
 			continue
 		}
 		seen[res.ContentType] = true
-		org := ""
-		if res.OrgColumn != "" {
-			org = "t." + res.OrgColumn
-		}
-		pred := c.User.Predicate(rbac.ArgFunc(arg), res.ContentType, "view_"+res.ContentType, "t.id", org)
+		pred := c.User.Predicate(rbac.ArgFunc(arg), res.ContentType, "view_"+res.ContentType, res.Scope("t"))
 		parts = append(parts, fmt.Sprintf("(t.content_type = %s AND t.object_id IN (SELECT t.id FROM %s t WHERE %s))", arg(res.ContentType), res.Table, pred))
 	}
 	if len(parts) == 0 {
@@ -271,17 +267,10 @@ func registerRoles() {
 	})
 	api.SetObjectRoleHandler("access_list", func(c *Ctx, w http.ResponseWriter, r *http.Request, res *Resource, obj Obj) {
 		id, _ := api.ID(obj["id"])
-		org := "NULL"
-		if res.OrgColumn != "" {
-			org = fmt.Sprintf("(SELECT %s FROM %s WHERE id = %d)", res.OrgColumn, res.Table, id)
-		}
 		api.WriteList(c, w, r, users, api.ListParams{Extra: []func(ArgFunc) string{func(arg ArgFunc) string {
-			return fmt.Sprintf(`t.is_superuser OR EXISTS (SELECT 1 FROM role_assignments ra
-				WHERE ((ra.content_type = %[1]s AND ra.object_id = %[2]s) OR (ra.content_type = 'organization' AND ra.object_id = %[3]s))
-				AND (ra.user_id = t.id OR ra.team_id IN (
-					SELECT m.object_id FROM role_assignments m JOIN role_definitions md ON md.id = m.role_definition_id
-					WHERE m.user_id = t.id AND m.content_type = 'team' AND 'member_team' = ANY(md.permissions))))`,
-				arg(res.ContentType), arg(id), org)
+			return fmt.Sprintf(`t.is_superuser OR EXISTS (SELECT 1 FROM %s o JOIN role_assignments ra ON (%s)
+				WHERE o.id = %s AND (ra.user_id = t.id OR ra.team_id IN (SELECT user_teams(t.id))))`,
+				res.Table, rbac.ScopeSQL(rbac.ArgFunc(arg), res.ContentType, res.Scope("o")), arg(id))
 		}}})
 	})
 

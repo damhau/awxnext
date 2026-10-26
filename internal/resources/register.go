@@ -5,6 +5,7 @@ package resources
 func init() {
 	registerUsers()
 	registerOrganizations()
+	registerFolders()
 	registerRoles()
 	registerActivity()
 }

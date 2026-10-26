@@ -18,10 +18,14 @@ var typePerms = map[string][]string{
 	"notificationtemplate": {"view", "change", "delete"},
 	"executionenvironment": {"view", "change", "delete"},
 	"instancegroup":        {"view", "change", "delete", "use"},
+	"folder":               {"view", "change", "delete"},
 }
 
+// Types that can live in a folder.
+var folderChildTypes = []string{"credential", "project", "inventory", "jobtemplate", "workflowjobtemplate", "notificationtemplate"}
+
 // Types that can be created inside an organization (add_<type> is granted on the org).
-var orgChildTypes = []string{"team", "credential", "project", "inventory", "workflowjobtemplate", "notificationtemplate", "executionenvironment"}
+var orgChildTypes = []string{"team", "credential", "project", "inventory", "workflowjobtemplate", "notificationtemplate", "executionenvironment", "folder"}
 
 func perms(ct string, actions ...string) []string {
 	out := make([]string, 0, len(actions))
@@ -81,7 +85,7 @@ func buildManaged() []ManagedRole {
 	}
 	r := []ManagedRole{
 		{"Organization Admin", "Has all permissions to a single organization and all objects inside of it", "organization", concat(orgAdmin), "admin_role"},
-		{"Organization Member", "Is a member of the organization", "organization", []string{"view_organization", "member_organization", "view_team", "view_executionenvironment"}, "member_role"},
+		{"Organization Member", "Is a member of the organization", "organization", []string{"view_organization", "member_organization", "view_team", "view_executionenvironment", "view_folder"}, "member_role"},
 		{"Organization Audit", "Has permission to view all objects inside of a single organization", "organization", concat([]string{"audit_organization"}, viewAll()), "auditor_role"},
 		{"Organization Read", "May view settings for the organization", "organization", []string{"view_organization"}, "read_role"},
 		{"Organization Execute", "May run any executable resources in the organization", "organization", concat([]string{"view_organization"}, perms("jobtemplate", "view", "execute"), perms("workflowjobtemplate", "view", "execute")), "execute_role"},
@@ -125,11 +129,35 @@ func buildManaged() []ManagedRole {
 		{"NotificationTemplate Admin", "Has all permissions to a single notification template", "notificationtemplate", all("notificationtemplate"), "admin_role"},
 		{"ExecutionEnvironment Admin", "Has all permissions to a single execution environment", "executionenvironment", all("executionenvironment"), "admin_role"},
 
+		{"Folder Admin", "Has all permissions to a folder, its subfolders and every object inside", "folder", folderAdmin(), "admin_role"},
+		{"Folder Execute", "May run any job or workflow template in the folder", "folder", concat([]string{"view_folder"}, perms("jobtemplate", "view", "execute"), perms("workflowjobtemplate", "view", "execute")), "execute_role"},
+		{"Folder Use", "May use inventories, projects and credentials in the folder", "folder", concat([]string{"view_folder"}, perms("inventory", "view", "use"), perms("project", "view", "use"), perms("credential", "view", "use")), "use_role"},
+		{"Folder Auditor", "May view every object in the folder", "folder", folderViewAll(), "auditor_role"},
+		{"Folder Read", "May view the folder", "folder", []string{"view_folder"}, "read_role"},
+
 		{"InstanceGroup Admin", "Has all permissions to a single instance group", "instancegroup", all("instancegroup"), "admin_role"},
 		{"InstanceGroup Use", "Can use the instance group in a job template", "instancegroup", perms("instancegroup", "view", "use"), "use_role"},
 		{"InstanceGroup Read", "May view settings for the instance group", "instancegroup", perms("instancegroup", "view"), "read_role"},
 	}
 	return r
+}
+
+func folderAdmin() []string {
+	out := all("folder")
+	out = append(out, "add_folder")
+	for _, ct := range folderChildTypes {
+		out = append(out, all(ct)...)
+		out = append(out, "add_"+ct)
+	}
+	return concat(out)
+}
+
+func folderViewAll() []string {
+	out := []string{"view_folder"}
+	for _, ct := range folderChildTypes {
+		out = append(out, "view_"+ct)
+	}
+	return out
 }
 
 // LegacyRoles returns the legacy role fields available on a content type, in display order.
