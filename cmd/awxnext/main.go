@@ -16,6 +16,8 @@ import (
 	"github.com/damhau/awxnext/internal/api"
 	"github.com/damhau/awxnext/internal/auth"
 	"github.com/damhau/awxnext/internal/config"
+	"github.com/damhau/awxnext/internal/crypto"
+	"github.com/damhau/awxnext/internal/kms"
 	"github.com/damhau/awxnext/internal/server"
 )
 
@@ -26,6 +28,10 @@ Commands:
   serve             run the API server and dispatcher
   migrate           apply database migrations
   createsuperuser   create (or update) a superuser
+  keys rotate       create a new active data encryption key
+  keys export       print all data keys unwrapped (escrow; store offline!)
+  keys import FILE  restore escrowed data keys, wrapped with the configured master key
+  keys rewrap       re-wrap data keys from the AWXNEXT_OLD_* master key to the current one
   version           print the version
 `)
 	os.Exit(2)
@@ -48,6 +54,8 @@ func main() {
 		_, err = server.Setup(ctx, cfg)
 	case "createsuperuser":
 		err = createSuperuser(ctx, cfg, os.Args[2:])
+	case "keys":
+		err = keys(ctx, cfg, os.Args[2:])
 	case "version":
 		fmt.Println(api.ProductVersion)
 	default:
@@ -108,4 +116,69 @@ func createSuperuser(ctx context.Context, cfg *config.Config, args []string) err
 		fmt.Printf("superuser %q ready\n", *username)
 	}
 	return err
+}
+
+func keys(ctx context.Context, cfg *config.Config, args []string) error {
+	if len(args) == 0 {
+		usage()
+	}
+	switch args[0] {
+	case "rotate":
+		app, err := server.Setup(ctx, cfg)
+		if err != nil {
+			return err
+		}
+		id, err := app.Crypto.Rotate(ctx)
+		if err == nil {
+			fmt.Printf("new active data key %s\n", id)
+		}
+		return err
+	case "export":
+		app, err := server.Setup(ctx, cfg)
+		if err != nil {
+			return err
+		}
+		out, err := app.Crypto.Export(ctx)
+		if err == nil {
+			fmt.Println(string(out))
+		}
+		return err
+	case "import":
+		if len(args) < 2 {
+			return errors.New("usage: awxnext keys import FILE")
+		}
+		bundle, err := os.ReadFile(args[1])
+		if err != nil {
+			return err
+		}
+		pool, kek, err := server.OpenKeyless(ctx, cfg)
+		if err != nil {
+			return err
+		}
+		n, err := crypto.Import(ctx, pool, kek, bundle)
+		if err == nil {
+			fmt.Printf("imported %d data keys\n", n)
+		}
+		return err
+	case "rewrap":
+		pool, newKEK, err := server.OpenKeyless(ctx, cfg)
+		if err != nil {
+			return err
+		}
+		oldKEK, err := kms.FromEnv("AWXNEXT_OLD_", "")
+		if err != nil {
+			return fmt.Errorf("old master key (AWXNEXT_OLD_*): %w", err)
+		}
+		box, err := crypto.Open(ctx, pool, oldKEK)
+		if err != nil {
+			return err
+		}
+		if err := box.Rewrap(ctx, newKEK); err != nil {
+			return err
+		}
+		fmt.Printf("data keys re-wrapped with %s\n", newKEK.ID())
+		return nil
+	}
+	usage()
+	return nil
 }

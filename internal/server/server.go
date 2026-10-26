@@ -7,23 +7,26 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"os"
 
 	"github.com/damhau/awxnext/internal/api"
 	"github.com/damhau/awxnext/internal/auth"
 	"github.com/damhau/awxnext/internal/config"
 	"github.com/damhau/awxnext/internal/crypto"
 	"github.com/damhau/awxnext/internal/db"
+	"github.com/damhau/awxnext/internal/kms"
 	"github.com/damhau/awxnext/internal/resources"
 	"github.com/damhau/awxnext/internal/settings"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 const devSecretKey = "awxnext-insecure-development-key"
 
 // Setup connects to the database, applies migrations and bootstraps the app.
 func Setup(ctx context.Context, cfg *config.Config) (*api.App, error) {
-	if cfg.SecretKey == "" {
+	if cfg.SecretKey == "" && (os.Getenv("AWXNEXT_KMS") == "" || os.Getenv("AWXNEXT_KMS") == "local") {
 		if !cfg.DevMode {
-			return nil, errors.New("AWXNEXT_SECRET_KEY is required (set AWXNEXT_DEV=1 for an insecure development key)")
+			return nil, errors.New("AWXNEXT_SECRET_KEY (or AWXNEXT_KMS) is required (set AWXNEXT_DEV=1 for an insecure development key)")
 		}
 		slog.Warn("using insecure development secret key")
 		cfg.SecretKey = devSecretKey
@@ -40,9 +43,13 @@ func Setup(ctx context.Context, cfg *config.Config) (*api.App, error) {
 	if err := db.Migrate(ctx, pool); err != nil {
 		return nil, err
 	}
-	box, err := crypto.New(cfg.SecretKey)
+	kek, err := kms.FromEnv("AWXNEXT_", cfg.SecretKey)
 	if err != nil {
 		return nil, err
+	}
+	box, err := crypto.Open(ctx, pool, kek)
+	if err != nil {
+		return nil, fmt.Errorf("keyring: %w", err)
 	}
 	app := &api.App{DB: pool, Cfg: cfg, Crypto: box, Settings: settings.NewStore(pool)}
 	if err := resources.Bootstrap(ctx, app); err != nil {
@@ -56,4 +63,18 @@ func Handler(app *api.App) http.Handler {
 	auth.Install(app)
 	resources.Install(app)
 	return app.Router()
+}
+
+// OpenKeyless connects and migrates without opening the keyring (used by key
+// management commands), returning the configured master key.
+func OpenKeyless(ctx context.Context, cfg *config.Config) (*pgxpool.Pool, crypto.KEK, error) {
+	pool, err := db.Connect(ctx, cfg.DatabaseURL)
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := db.Migrate(ctx, pool); err != nil {
+		return nil, nil, err
+	}
+	kek, err := kms.FromEnv("AWXNEXT_", cfg.SecretKey)
+	return pool, kek, err
 }
