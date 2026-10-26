@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/damhau/awxnext/internal/config"
@@ -212,4 +213,42 @@ func ID(v any) (int64, bool) {
 		return n, err == nil
 	}
 	return 0, false
+}
+
+// JSONText marshals v to a JSON string.
+func JSONText(v any) string {
+	b, _ := json.Marshal(v)
+	return string(b)
+}
+
+// SQLLiteral renders a value as a SQL literal for statements that cannot use
+// bind parameters (e.g. SQL stored and executed later). Strings are quoted with
+// standard_conforming_strings semantics.
+func SQLLiteral(v any) string {
+	switch x := v.(type) {
+	case nil:
+		return "NULL"
+	case bool:
+		if x {
+			return "TRUE"
+		}
+		return "FALSE"
+	case int:
+		return strconv.Itoa(x)
+	case int64:
+		return strconv.FormatInt(x, 10)
+	case float64:
+		return strconv.FormatFloat(x, 'g', -1, 64)
+	case time.Time:
+		return "'" + x.UTC().Format(time.RFC3339Nano) + "'::timestamptz"
+	case []any:
+		parts := make([]string, len(x))
+		for i, e := range x {
+			parts[i] = SQLLiteral(e)
+		}
+		return "ARRAY[" + strings.Join(parts, ", ") + "]"
+	case string:
+		return "'" + strings.ReplaceAll(x, "'", "''") + "'"
+	}
+	return SQLLiteral(fmt.Sprint(v))
 }

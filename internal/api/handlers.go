@@ -522,7 +522,7 @@ func (a *App) handleSubList(c *Ctx, w http.ResponseWriter, r *http.Request, res 
 	pid, _ := ID(parent["id"])
 	switch r.Method {
 	case "GET":
-		WriteList(c, w, r, target, ListParams{Extra: []func(ArgFunc) string{func(arg ArgFunc) string { return s.Filter(arg, pid) }}})
+		WriteList(c, w, r, target, ListParams{SkipView: s.SkipView, Extra: []func(ArgFunc) string{func(arg ArgFunc) string { return s.Filter(arg, pid) }}})
 		return
 	case "OPTIONS":
 		writeJSON(w, 200, metadata(c, target, true, !s.ReadOnly && (!s.NoCreate || s.Associate != nil)))
@@ -562,6 +562,13 @@ func (a *App) handleSubList(c *Ctx, w http.ResponseWriter, r *http.Request, res 
 	if s.NoCreate {
 		writeError(w, FieldError("id", "This field is required."))
 		return
+	}
+	if s.CreateDefaults != nil {
+		for k, v := range s.CreateDefaults(c, parent) {
+			if _, given := data[k]; !given {
+				data[k] = v
+			}
+		}
 	}
 	var preset Obj
 	if s.ParentField != "" {

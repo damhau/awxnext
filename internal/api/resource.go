@@ -110,8 +110,13 @@ type SubList struct {
 	CanAttach func(c *Ctx, parent Obj, childID int64) error
 	// NoCreate disables creation of new objects through the sublist.
 	NoCreate bool
+	// CreateDefaults supplies field values for objects created through the sublist
+	// (e.g. a host created under a group inherits the group's inventory).
+	CreateDefaults func(c *Ctx, parent Obj) Obj
 	// ReadOnly disables all writes through the sublist.
 	ReadOnly bool
+	// SkipView lists targets without their own visibility filter (access follows the parent).
+	SkipView bool
 	// AttachPerm is the permission required on the parent to (dis)associate. Defaults to "change".
 	AttachPerm string
 }

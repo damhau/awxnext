@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -13,11 +14,33 @@ type query struct {
 	args  []any
 	where []string
 	alias int
+	// ext, when set, receives arguments instead of args (filters embedded in another query).
+	ext ArgFunc
 }
 
 func (q *query) arg(v any) string {
+	if q.ext != nil {
+		return q.ext(v)
+	}
 	q.args = append(q.args, v)
 	return "$" + strconv.Itoa(len(q.args))
+}
+
+var filterAliases atomic.Int64
+
+// FilterSQL builds a predicate on res (alias t) for one AWX-style filter
+// expression such as "groups__name__icontains" = "web".
+func FilterSQL(res *Resource, arg ArgFunc, key, value string) (string, error) {
+	n := filterAliases.Add(1)
+	// Distinct alias ranges keep nested subqueries unambiguous within one statement.
+	q := &query{ext: arg, alias: int(1000 + (n%100000)*20)}
+	parts := strings.Split(key, "__")
+	lookup := "exact"
+	if len(parts) > 1 && lookups[parts[len(parts)-1]] {
+		lookup = parts[len(parts)-1]
+		parts = parts[:len(parts)-1]
+	}
+	return q.path(res, "t", parts, lookup, value)
 }
 
 func (q *query) nextAlias() string {
@@ -129,6 +152,11 @@ func (q *query) path(res *Resource, alias string, parts []string, lookup, raw st
 		col := alias + "." + quoteIdent(f.column())
 		if len(parts) == 1 {
 			return q.leaf(col, f, lookup, raw)
+		}
+		if f.Type == TJSON {
+			// JSON path lookup: field__a__b=value compares the text at {a,b}.
+			path := strings.Join(parts[1:], ",")
+			return q.leaf("("+col+" #>> "+q.arg("{"+path+"}")+"::text[])", &Field{Name: name, Type: TString}, lookup, raw)
 		}
 		if f.Type != TFK {
 			return "", filterErr("'%s' is not a relation", name)

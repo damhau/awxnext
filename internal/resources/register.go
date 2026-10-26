@@ -8,6 +8,7 @@ func init() {
 	registerFolders()
 	registerCredentials()
 	registerInfrastructure()
+	registerInventories()
 	registerRoles()
 	registerActivity()
 }
