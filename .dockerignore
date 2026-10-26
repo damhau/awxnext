@@ -1,0 +1,8 @@
+.git
+.claude
+.idea
+.vscode
+bin/
+ui/node_modules/
+ui/dist/
+**/*.tsbuildinfo

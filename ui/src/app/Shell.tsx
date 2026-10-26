@@ -3,6 +3,7 @@ import { Suspense, useEffect, useRef, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router'
 import { useList } from '../api/hooks'
 import { useLive } from '../api/live'
+import { ErrorBoundary } from '../components/ErrorBoundary'
 import { Icon, type IconName } from '../components/icons'
 import { Menu } from '../components/overlay'
 import { Avatar, Loading } from '../components/ui'
@@ -226,9 +227,11 @@ export function Shell() {
       <div className="body">
         <Nav />
         <main className="main" id="main">
-          <Suspense fallback={<div className="page"><Loading /></div>}>
-            <Outlet />
-          </Suspense>
+          <ErrorBoundary resetKey={loc.pathname}>
+            <Suspense fallback={<div className="page"><Loading /></div>}>
+              <Outlet />
+            </Suspense>
+          </ErrorBoundary>
         </main>
       </div>
       {palette && <Palette onClose={() => setPalette(false)} />}

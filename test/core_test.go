@@ -1,10 +1,12 @@
 package test
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestRootAndPing(t *testing.T) {
@@ -268,5 +270,36 @@ func TestSettings(t *testing.T) {
 	r = must(t, a.get("settings/oidc/"), 200)
 	if r.Body["OIDC_GROUPS_CLAIM"] != "groups" {
 		t.Fatalf("reset failed: %s", r.Raw)
+	}
+}
+
+// Descending order puts empty values first, like AWX (PostgreSQL's default):
+// in a "latest start first" job list, jobs not started yet come before the
+// rest, and a job comes above the project sync it waited for.
+func TestOrderingDescendingNullsFirst(t *testing.T) {
+	a := adminClient(t)
+	ctx := context.Background()
+	var ids []int64
+	insert := func(status string, started any) int64 {
+		var id int64
+		if err := app.DB.QueryRow(ctx, `INSERT INTO unified_jobs (type, name, status, started)
+			VALUES ('project_update', 'ordering test', $1, $2) RETURNING id`, status, started).Scan(&id); err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, id)
+		return id
+	}
+	t.Cleanup(func() { app.DB.Exec(context.Background(), "DELETE FROM unified_jobs WHERE id = ANY($1)", ids) })
+	now := time.Now()
+	job := insert("successful", now)                    // created first, started last
+	sync := insert("successful", now.Add(-time.Minute)) // created after it, ran before it
+	queued := insert("canceled", nil)                   // never started
+	r := must(t, a.get(fmt.Sprintf("unified_jobs/?id__in=%d,%d,%d&order_by=-started,-id", job, sync, queued)), 200)
+	var got []int64
+	for _, j := range r.results() {
+		got = append(got, int64(j["id"].(float64)))
+	}
+	if want := []int64{queued, job, sync}; fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Fatalf("order %v, want %v", got, want)
 	}
 }

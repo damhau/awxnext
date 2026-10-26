@@ -1,6 +1,11 @@
-# Small install / local development: PostgreSQL + AWX Next.
-#   docker compose up -d
-#   docker compose exec awxnext awxnext createsuperuser --username admin --password <password>
+# Small install / local testing: PostgreSQL + AWX Next (all-in-one image,
+# jobs run inside the awxnext container with ansible-runner).
+#
+#   AWXNEXT_ADMIN_PASSWORD=<password> docker compose up -d --build
+#   open http://localhost:8052 (user admin)
+#
+# Demo content (organizations, templates, a workflow, some finished jobs):
+#   docker compose exec awxnext seed-demo --jobs
 services:
   postgres:
     image: postgres:16
@@ -16,7 +21,9 @@ services:
       retries: 10
 
   awxnext:
-    build: ../..
+    build:
+      context: ../..
+      target: all-in-one
     depends_on:
       postgres:
         condition: service_healthy
@@ -25,8 +32,16 @@ services:
       # Change this! Losing it makes stored credentials unreadable (see 'awxnext keys export').
       AWXNEXT_SECRET_KEY: ${AWXNEXT_SECRET_KEY:-change-me}
       AWXNEXT_BASE_URL: ${AWXNEXT_BASE_URL:-http://localhost:8052}
+      # Creates (or resets) the admin user at each start when set.
+      AWXNEXT_ADMIN_PASSWORD: ${AWXNEXT_ADMIN_PASSWORD:-}
+    volumes:
+      - awxdata:/var/lib/awxnext
     ports:
       - "8052:8052"
+    # Lets jobs target the machine running Docker as host.docker.internal.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
 volumes:
   pgdata:
+  awxdata:

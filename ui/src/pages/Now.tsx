@@ -4,15 +4,15 @@ import { useList } from '../api/hooks'
 import type { Base, Job } from '../api/types'
 import { useOrg } from '../app/context'
 import { Ago, Elapsed, Empty, Panel, Status, StatusDot, Upcoming } from '../components/ui'
-import { jobPath, statusKind, templatePath, typeLabel } from '../lib/format'
+import { jobPath, jobsNewestFirst, statusKind, templatePath, typeLabel } from '../lib/format'
 
 export function Now() {
   const { scope } = useOrg()
   const since = useMemo(() => new Date(Date.now() - 24 * 3600_000).toISOString(), [])
-  const active = useList<Job>('unified_jobs/', { status__in: 'pending,waiting,running', order_by: '-id', page_size: 8, not__type: 'workflow_approval', ...scope })
+  const active = useList<Job>('unified_jobs/', { status__in: 'pending,waiting,running', order_by: jobsNewestFirst, page_size: 8, not__type: 'workflow_approval', ...scope })
   const groups = useList<Base>('instance_groups/', { order_by: 'name', page_size: 20 })
   const day = useList<Job>('unified_jobs/', { finished__gt: since, order_by: '-finished', page_size: 200, type__in: 'job,workflow_job', ...scope })
-  const recent = useList<Job>('unified_jobs/', { order_by: '-id', page_size: 12, not__type: 'workflow_approval', ...scope })
+  const recent = useList<Job>('unified_jobs/', { order_by: jobsNewestFirst, page_size: 12, not__type: 'workflow_approval', ...scope })
   const approvals = useList<Base>('workflow_approvals/', { status: 'pending', order_by: '-id', page_size: 5 })
   const upcoming = useList<Base>('schedules/', { enabled: true, next_run__isnull: false, order_by: 'next_run', page_size: 6 })
 

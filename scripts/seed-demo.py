@@ -1,13 +1,22 @@
 #!/usr/bin/env python3
 """Fill a development awxnext with demo content for UI work.
 
-    AWXNEXT_URL=http://localhost:8052 scripts/seed-demo.py [--jobs]
+    AWXNEXT_URL=http://localhost:8052 uv run --no-project scripts/seed-demo.py [--jobs]
+
+or, with the Docker Compose install (the script is in the image):
+
+    docker compose exec awxnext seed-demo --jobs
 
 Creates an organization with folders, teams, users, a git project (a local
 repository of small playbooks that run with ansible_connection=local),
 inventories, job templates with surveys, a workflow with an approval and
 schedules. With --jobs it also launches a handful of jobs, some failing.
 Only uses the public API; safe to run twice (existing objects are reused).
+
+Signs in as AWXNEXT_AUTH ("user:password"), or AWXNEXT_ADMIN_USER and
+AWXNEXT_ADMIN_PASSWORD, or admin:admin. The playbook repository is created
+in AWXNEXT_DEMO_REPO (default: a directory in the system temp dir); it must
+be on the machine that runs awxnext, since the project clones it by path.
 """
 import base64
 import json
@@ -20,7 +29,8 @@ import urllib.error
 import urllib.request
 
 URL = os.environ.get("AWXNEXT_URL", "http://localhost:8052").rstrip("/")
-AUTH = "Basic " + base64.b64encode(os.environ.get("AWXNEXT_AUTH", "admin:admin").encode()).decode()
+_creds = os.environ.get("AWXNEXT_AUTH") or "%s:%s" % (os.environ.get("AWXNEXT_ADMIN_USER") or "admin", os.environ.get("AWXNEXT_ADMIN_PASSWORD") or "admin")
+AUTH = "Basic " + base64.b64encode(_creds.encode()).decode()
 
 
 def call(method, path, body=None, ok=(200, 201, 202, 204)):
@@ -156,7 +166,21 @@ def wait(path, field="status", done=("successful", "failed", "error", "canceled"
     raise SystemExit(f"timeout waiting for {path}")
 
 
+def wait_for_server(timeout=90):
+    """Waits until the API answers, so the script can run right after a start."""
+    end = time.time() + timeout
+    while True:
+        try:
+            with urllib.request.urlopen(URL + "/api/v2/ping/", timeout=5):
+                return
+        except (urllib.error.URLError, OSError) as e:
+            if time.time() > end:
+                raise SystemExit(f"awxnext is not answering at {URL}: {e}")
+            time.sleep(2)
+
+
 def main():
+    wait_for_server()
     call("PATCH", "settings/jobs/", {"PROJECT_ALLOW_FILE_URLS": True})
     org = ensure("organizations", {"name": "Acme Infrastructure"}, {"name": "Acme Infrastructure", "description": "Platform, apps and network automation"})
     ensure("organizations", {"name": "Acme Retail"}, {"name": "Acme Retail", "description": "Store systems"})
@@ -192,7 +216,11 @@ def main():
     proj = ensure("projects", {"name": "acme-playbooks", "organization": oid},
                   {"name": "acme-playbooks", "organization": oid, "scm_type": "git", "scm_url": "file://" + repo,
                    "description": "Deploy, ops and patching playbooks", "folder": folders["platform"]})
-    wait(f"projects/{proj['id']}/", done=("successful", "failed", "error"))
+    synced = wait(f"projects/{proj['id']}/", done=("successful", "failed", "error"))
+    if synced["status"] != "successful":
+        update = synced.get("summary_fields", {}).get("last_job", {}).get("id")
+        raise SystemExit(f"project sync {synced['status']}; see /jobs/project_update/{update} in the UI. "
+                         "Is git installed where awxnext runs, and can it read " + repo + "?")
 
     local = "ansible_connection: local\nansible_python_interpreter: '{{ ansible_playbook_python }}'\n"
     invs = {}

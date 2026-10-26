@@ -9,7 +9,7 @@ import { Icon } from '../../components/icons'
 import { useConfirm, useToast } from '../../components/overlay'
 import { DataTable, Pager, useListState, type Column } from '../../components/table'
 import { Ago, Elapsed, Empty, Status } from '../../components/ui'
-import { active, jobApi, jobPath, typeLabel, userName } from '../../lib/format'
+import { active, jobApi, jobPath, jobsNewestFirst, typeLabel, userName } from '../../lib/format'
 import { relaunchJob } from '../../lib/jobs'
 import { compile, statusValue, type KeyTable } from '../../lib/query'
 
@@ -33,7 +33,7 @@ export const jobKeys: KeyTable = {
  * list (e.g. one template's jobs) and is not shown in the filter.
  */
 export function JobsTable({ fixed = {}, filter = true, compact = false }: { fixed?: Record<string, string | number>; filter?: boolean; compact?: boolean }) {
-  const ls = useListState({ order: '-id' })
+  const ls = useListState({ order: jobsNewestFirst })
   const nav = useNavigate()
   const { scope } = useOrg()
   const confirm = useConfirm()

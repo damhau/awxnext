@@ -113,6 +113,13 @@ export function statusLabel(s: string | null | undefined): string {
   return s.charAt(0).toUpperCase() + s.slice(1)
 }
 
+/**
+ * Order for lists of jobs from several templates: latest start first, with
+ * jobs not started yet on top. Ordering by id would show a job above the
+ * project sync it waited for, since the sync is created after the job.
+ */
+export const jobsNewestFirst = '-started,-id'
+
 export const finished = (s: string) => ['successful', 'failed', 'error', 'canceled'].includes(s)
 export const active = (s: string) => ['new', 'pending', 'waiting', 'running'].includes(s)
 

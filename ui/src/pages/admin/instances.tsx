@@ -10,7 +10,7 @@ import { Icon } from '../../components/icons'
 import { Dialog, Menu, useToast } from '../../components/overlay'
 import { DataTable } from '../../components/table'
 import { Ago, Elapsed, Empty, ErrorNote, KV, Loading, PageHead, Panel, Status, Tab } from '../../components/ui'
-import { jobPath } from '../../lib/format'
+import { jobPath, jobsNewestFirst } from '../../lib/format'
 import { OneTimeSecret, useDelete } from './common'
 
 type Instance = Base & {
@@ -277,7 +277,7 @@ export function InstanceDetail() {
   const { me } = useSession()
   const inst = useObject<Instance>(`instances/${id}/`)
   const groups = useList<Ref>(`instances/${id}/instance_groups/`, { page_size: 50 })
-  const jobs = useList<Job>('unified_jobs/', inst.data ? { execution_node: inst.data.hostname, order_by: '-id', page_size: 10 } : undefined, { enabled: !!inst.data })
+  const jobs = useList<Job>('unified_jobs/', inst.data ? { execution_node: inst.data.hostname, order_by: jobsNewestFirst, page_size: 10 } : undefined, { enabled: !!inst.data })
   const [token, setToken] = useState<string | null>(null)
   const toast = useToast()
   const invalidate = useInvalidate()
@@ -613,7 +613,7 @@ function GroupInstances({ group }: { group: Group }) {
 }
 
 function GroupJobs({ group }: { group: Group }) {
-  const jobs = useList<Job>('unified_jobs/', { instance_group: group.id, order_by: '-id', page_size: 25 })
+  const jobs = useList<Job>('unified_jobs/', { instance_group: group.id, order_by: jobsNewestFirst, page_size: 25 })
   return (
     <DataTable
       label="Jobs"

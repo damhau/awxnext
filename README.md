@@ -4,20 +4,38 @@ A re-implementation of [AWX](https://github.com/ansible/awx) with a Go control p
 an AWX-compatible `/api/v2`, and a new UI. See [docs/PLAN.md](docs/PLAN.md) for the
 design, scope and roadmap.
 
-**Status:** early development. Phase 0 (foundation) is in place: the AWX-compatible
-resource engine, authentication (local, tokens, OIDC with group mapping), RBAC with
-folders and nested teams, version history, envelope encryption and the settings API.
-Inventories, credentials, projects and job execution are next.
+**Status:** early development. The API, job execution (local, remote agents,
+Kubernetes container groups), workflows, schedules, notifications, GitOps, the AWX
+importer and the web UI are in place; see [docs/PLAN.md](docs/PLAN.md) for what's next.
 
-## Quick start
+## Try it with Docker Compose
+
+```sh
+cd deploy/compose
+AWXNEXT_ADMIN_PASSWORD=admin docker compose up -d --build
+docker compose exec awxnext seed-demo --jobs    # optional demo content
+```
+
+Open http://localhost:8052 and sign in as `admin`. The Compose install uses the
+`all-in-one` image, where jobs run inside the awxnext container with ansible-runner
+(ansible-core only: install collections with a project `requirements.yml`).
+`AWXNEXT_ADMIN_PASSWORD` creates the admin user, and resets its password on every start
+while it is set.
+
+## Run from source
+
+Needs Go, Node 22 (or 20.19+), PostgreSQL and, to run jobs, ansible-runner on the PATH.
 
 ```sh
 make dev-db                     # local PostgreSQL (or point AWXNEXT_DATABASE_URL at your own)
+make ui build                   # web UI, then the binary that embeds it
 AWXNEXT_DEV=1 ./bin/awxnext createsuperuser --username admin --password admin
-make run                        # http://localhost:8052/api/v2/
+export AWXNEXT_CONTAINER_RUNTIME=none AWXNEXT_PROJECTS_ROOT=~/.local/share/awxnext/projects AWXNEXT_JOBS_ROOT=~/.local/share/awxnext/jobs
+make run                        # http://localhost:8052
 ```
 
-Or with Docker: `docker compose -f deploy/compose/docker-compose.yml up -d`.
+`make ui-dev` serves the UI with hot reload on http://localhost:5173 against the server
+on :8052. `uv run --no-project scripts/seed-demo.py --jobs` fills it with demo content.
 
 ## Configuration
 
@@ -28,6 +46,10 @@ Or with Docker: `docker compose -f deploy/compose/docker-compose.yml up -d`.
 | `AWXNEXT_KMS` | `local` | `local`, `vault-transit` or `azure-keyvault` master key provider |
 | `AWXNEXT_BASE_URL` | `http://localhost:8052` | External URL (OIDC redirects, notifications) |
 | `AWXNEXT_LISTEN` | `:8052` | Listen address |
+| `AWXNEXT_CONTAINER_RUNTIME` | `podman` | How local jobs run: `podman` or `docker` (execution environment image), or `none` (ansible-runner on the PATH) |
+| `AWXNEXT_PROJECTS_ROOT` | `/var/lib/awxnext/projects` | Project checkouts |
+| `AWXNEXT_JOBS_ROOT` | `/var/lib/awxnext/jobs` | Job working directories |
+| `AWXNEXT_UI_DIR` | — | Serve the web UI from this directory instead of the embedded build |
 
 Vault Transit: `AWXNEXT_KMS_VAULT_ADDR`, `_KEY`, `_MOUNT`, and `_TOKEN`, `_ROLE_ID`/`_SECRET_ID`
 or `_K8S_ROLE`. Azure Key Vault: `AWXNEXT_KMS_AZURE_VAULT_URL`, `_KEY`, `_TENANT_ID`, `_CLIENT_ID`,
@@ -54,6 +76,9 @@ provider work against it. Additions: `/api/v2/folders/`, `/<resource>/<id>/histo
 
 ```sh
 make test   # vet + unit and integration tests (needs PostgreSQL, see make dev-db)
+cd ui && npx tsc --noEmit -p . && npx vitest run   # UI typecheck and unit tests
 ```
+
+Job tests run only when `ansible-runner` is on the PATH; they are skipped otherwise.
 
 Licensed under the Apache License 2.0.

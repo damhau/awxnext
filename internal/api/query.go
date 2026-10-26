@@ -355,11 +355,9 @@ func (q *query) orderBy(res *Resource, params url.Values) (string, error) {
 		if path[0] == "id" {
 			hasID = true
 		}
-		nulls := ""
-		if dir == "DESC" {
-			nulls = " NULLS LAST"
-		}
-		parts = append(parts, expr+" "+dir+nulls)
+		// PostgreSQL's default null placement, like AWX: nulls sort as the
+		// largest value, so "-started" lists jobs not started yet first.
+		parts = append(parts, expr+" "+dir)
 	}
 	if !hasID {
 		parts = append(parts, "t.id ASC")

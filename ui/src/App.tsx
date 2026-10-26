@@ -3,6 +3,7 @@ import { BrowserRouter, Link, Route, Routes } from 'react-router'
 import { ApiError } from './api/client'
 import { OrgProvider, SessionGate } from './app/context'
 import { Shell } from './app/Shell'
+import { ErrorBoundary } from './components/ErrorBoundary'
 import { ConfirmProvider, ToastProvider } from './components/overlay'
 import { Empty } from './components/ui'
 import { Now } from './pages/Now'
@@ -32,30 +33,34 @@ function NotFound() {
   )
 }
 
+// The router wraps the toast and confirm providers: toasts and dialogs
+// contain links, which only work inside it.
 export function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <ToastProvider>
-        <ConfirmProvider>
-          <BrowserRouter>
-            <SessionGate>
-              <OrgProvider>
-                <Routes>
-                  <Route element={<Shell />}>
-                    <Route index element={<Now />} />
-                    {templateRoutes()}
-                    {jobRoutes()}
-                    {automationRoutes()}
-                    {resourceRoutes()}
-                    {adminRoutes()}
-                    <Route path="*" element={<NotFound />} />
-                  </Route>
-                </Routes>
-              </OrgProvider>
-            </SessionGate>
-          </BrowserRouter>
-        </ConfirmProvider>
-      </ToastProvider>
-    </QueryClientProvider>
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <BrowserRouter>
+          <ToastProvider>
+            <ConfirmProvider>
+              <SessionGate>
+                <OrgProvider>
+                  <Routes>
+                    <Route element={<Shell />}>
+                      <Route index element={<Now />} />
+                      {templateRoutes()}
+                      {jobRoutes()}
+                      {automationRoutes()}
+                      {resourceRoutes()}
+                      {adminRoutes()}
+                      <Route path="*" element={<NotFound />} />
+                    </Route>
+                  </Routes>
+                </OrgProvider>
+              </SessionGate>
+            </ConfirmProvider>
+          </ToastProvider>
+        </BrowserRouter>
+      </QueryClientProvider>
+    </ErrorBoundary>
   )
 }

@@ -82,7 +82,9 @@ export function DataTable<T>({
 
   const allKeys = list.map(rowKey)
   const allSelected = !!selected && allKeys.length > 0 && allKeys.every((k) => selected.has(k))
-  const sortState = (f?: string) => (!f || !order ? null : order === f ? 'ascending' : order === '-' + f ? 'descending' : null)
+  // A multi-field order ("-started,-id") is shown on its first field's column.
+  const primary = order?.split(',')[0]
+  const sortState = (f?: string) => (!f || !primary ? null : primary === f ? 'ascending' : primary === '-' + f ? 'descending' : null)
 
   if (error) return <ErrorNote error={error} />
   return (
@@ -109,7 +111,7 @@ export function DataTable<T>({
                   className={`${c.className ?? ''} ${c.sort && onOrder ? 'sortable' : ''}`}
                   style={c.width ? { width: c.width } : undefined}
                   aria-sort={s ?? undefined}
-                  onClick={c.sort && onOrder ? () => onOrder(order === c.sort ? '-' + c.sort : c.sort!) : undefined}
+                  onClick={c.sort && onOrder ? () => onOrder(primary === c.sort ? '-' + c.sort : c.sort!) : undefined}
                 >
                   {c.header}
                   {s && <span aria-hidden="true"> {s === 'ascending' ? '↑' : '↓'}</span>}
