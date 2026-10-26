@@ -19,6 +19,7 @@ import (
 
 	"github.com/damhau/awxnext/internal/api"
 	"github.com/damhau/awxnext/internal/rbac"
+	"github.com/damhau/awxnext/internal/settings"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -36,6 +37,10 @@ type Auth struct {
 // Install wires authentication into the API.
 func Install(app *api.App) *Auth {
 	a := &Auth{app: app, oidc: NewOIDC(app)}
+	a.oidc.auth = a
+	if d := settings.Lookup("OIDC_MAPPING"); d != nil {
+		d.Validate = func(v any) error { _, err := ParseRules(v); return err }
+	}
 	api.SetAuthenticator(a.authenticate)
 	app.HandlePublic("GET", "/api/login/", a.loginForm)
 	app.HandlePublic("POST", "/api/login/", a.login)
@@ -154,9 +159,14 @@ func (a *Auth) checkPassword(ctx context.Context, username, password string) (in
 	var uid int64
 	var hash string
 	var active bool
-	err := a.app.DB.QueryRow(ctx, "SELECT id, password, is_active FROM users WHERE username = $1", username).Scan(&uid, &hash, &active)
+	var superuser bool
+	err := a.app.DB.QueryRow(ctx, "SELECT id, password, is_active, is_superuser FROM users WHERE username = $1", username).Scan(&uid, &hash, &active, &superuser)
 	if err != nil || !active || hash == "" {
 		return 0, api.Detail(401, "Invalid username/password.")
+	}
+	// Superusers keep local login for bootstrap and break-glass access.
+	if !superuser && a.app.Settings.Bool(ctx, "DISABLE_LOCAL_AUTH") {
+		return 0, api.Detail(401, "Local authentication is disabled; sign in with single sign-on.")
 	}
 	key := hashToken(hash + "|" + password)
 	if exp, ok := verified.Load(key); ok && time.Now().Before(exp.(time.Time)) {

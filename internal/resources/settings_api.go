@@ -1,6 +1,7 @@
 package resources
 
 import (
+	"encoding/json"
 	"net/http"
 
 	"github.com/damhau/awxnext/internal/api"
@@ -53,6 +54,10 @@ func installSettings(app *api.App) {
 			}
 			if err := validateSetting(d, v); err != nil {
 				fe.Add(k, err.Error())
+			} else if d.Validate != nil {
+				if err := d.Validate(normalize(v)); err != nil {
+					fe.Add(k, err.Error())
+				}
 			}
 		}
 		if err := fe.Err(); err != nil {
@@ -224,3 +229,11 @@ func validateSetting(d *settings.Def, v any) error {
 type errInvalid string
 
 func (e errInvalid) Error() string { return string(e) }
+
+// normalize converts json.Number values to plain JSON types.
+func normalize(v any) any {
+	b, _ := json.Marshal(v)
+	var out any
+	json.Unmarshal(b, &out)
+	return out
+}

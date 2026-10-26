@@ -25,6 +25,8 @@ type Def struct {
 	Public bool
 	// Choices for choice-type settings.
 	Choices [][]any
+	// Validate performs extra validation on write.
+	Validate func(v any) error
 }
 
 // Category is a group of settings exposed at /api/v2/settings/<slug>/.
