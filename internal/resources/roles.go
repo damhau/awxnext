@@ -402,6 +402,12 @@ func registerDAB() {
 				}
 				return base + " AND (" + roleVisible(c, arg) + ")"
 			},
+			BeforeSave: func(c *Ctx, old, data Obj) error {
+				if old == nil && !c.User.Anonymous() {
+					data["created_by"] = c.User.UserID
+				}
+				return nil
+			},
 			CanAdd: func(c *Ctx, data Obj) error {
 				rd, _ := api.ID(data["role_definition"])
 				var ct *string

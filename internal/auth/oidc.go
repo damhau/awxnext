@@ -431,7 +431,15 @@ func (o *OIDC) dryRun(c *api.Ctx, w http.ResponseWriter, r *http.Request) {
 		"auditor":      res.Auditor,
 		"grants":       res.Grants,
 		"would_create": creates,
+		"errors":       nonNilStrings(res.Errors),
 	})
+}
+
+func nonNilStrings(s []string) []string {
+	if s == nil {
+		return []string{}
+	}
+	return s
 }
 
 // normalizeJSON converts json.Number values (from the request decoder) to plain JSON types.

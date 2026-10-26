@@ -69,10 +69,11 @@ func TestScheduleRunsJob(t *testing.T) {
 	f := newJobFixture(t)
 	a := f.a
 	jt := f.template(t, "site.yml", map[string]any{"ask_limit_on_launch": true, "ask_variables_on_launch": true})
-	s := must(t, a.post(fmt.Sprintf("job_templates/%d/schedules/", jt), map[string]any{"name": "every minute",
-		"rrule": "DTSTART:20200101T000000Z RRULE:FREQ=MINUTELY;INTERVAL=1", "limit": "h2", "extra_data": map[string]any{"who": "cron"}}), 201)
+	// Hourly, so a slow run cannot reach the next occurrence before the second tick below.
+	s := must(t, a.post(fmt.Sprintf("job_templates/%d/schedules/", jt), map[string]any{"name": "every hour",
+		"rrule": "DTSTART:20200101T000000Z RRULE:FREQ=HOURLY;INTERVAL=1", "limit": "h2", "extra_data": map[string]any{"who": "cron"}}), 201)
 	next, _ := time.Parse(time.RFC3339, s.Body["next_run"].(string))
-	if !next.After(time.Now()) || next.After(time.Now().Add(61*time.Second)) {
+	if !next.After(time.Now()) || next.After(time.Now().Add(3601*time.Second)) {
 		t.Fatalf("next_run: %v", next)
 	}
 	app.DB.Exec(context.Background(), "UPDATE schedules SET next_run = now() - interval '1 second' WHERE id = $1", s.id())

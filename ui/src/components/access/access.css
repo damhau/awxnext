@@ -1,0 +1,7 @@
+.role-option {
+  display: flex; gap: 10px; align-items: flex-start; padding: 8px 10px; border: 1px solid var(--line-soft);
+  border-radius: var(--radius); cursor: pointer;
+}
+.role-option:hover { border-color: var(--line-strong); }
+.role-option:has(input:checked) { border-color: #9fb0e6; background: var(--accent-wash); }
+.role-option input { margin-top: 3px; }

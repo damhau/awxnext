@@ -83,3 +83,29 @@ func TestLabels(t *testing.T) {
 	must(t, member.delete(fmt.Sprintf("labels/%d/", l)), 403)
 	must(t, a.delete(fmt.Sprintf("labels/%d/", l)), 204)
 }
+
+// Ordered relations list in their saved order, and grants record who made them.
+func TestOrderedSublistAndGrantCreator(t *testing.T) {
+	a := adminClient(t)
+	org := newOrg(t, a)
+	zeta := must(t, a.post("instance_groups/", map[string]any{"name": "zeta-" + uniq("ig")}), 201).id()
+	alpha := must(t, a.post("instance_groups/", map[string]any{"name": "alpha-" + uniq("ig")}), 201).id()
+	must(t, a.post(fmt.Sprintf("organizations/%d/instance_groups/", org), map[string]any{"id": zeta}), 204)
+	must(t, a.post(fmt.Sprintf("organizations/%d/instance_groups/", org), map[string]any{"id": alpha}), 204)
+	r := a.get(fmt.Sprintf("organizations/%d/instance_groups/", org)).results()
+	if len(r) != 2 || int64(r[0]["id"].(float64)) != zeta {
+		t.Fatalf("instance groups not in saved order: %v", []any{r[0]["name"], r[1]["name"]})
+	}
+	if by := a.get(fmt.Sprintf("organizations/%d/instance_groups/?order_by=name", org)).results(); int64(by[0]["id"].(float64)) != alpha {
+		t.Fatal("explicit order_by ignored")
+	}
+	_, uid := newUser(t, a)
+	var rd float64
+	for _, d := range a.get("role_definitions/?name=Organization+Member").results() {
+		rd = d["id"].(float64)
+	}
+	g := must(t, a.post("role_user_assignments/", map[string]any{"role_definition": rd, "user": uid, "object_id": org}), 201)
+	if g.Body["created_by"] == nil {
+		t.Fatalf("grant creator missing: %s", g.Raw)
+	}
+}

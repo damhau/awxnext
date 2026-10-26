@@ -157,6 +157,10 @@ func orderedLinkSub(name, target, table, childCol, ct string) *SubList {
 		Filter: func(arg ArgFunc, pid int64) string {
 			return fmt.Sprintf("t.id IN (SELECT %s FROM %s WHERE content_type = %s AND object_id = %s)", childCol, table, arg(ct), arg(pid))
 		},
+		// Listed in their saved order (instance group preference, Galaxy credential order).
+		Order: func(pid int64) string {
+			return fmt.Sprintf("(SELECT position FROM %s WHERE content_type = '%s' AND object_id = %d AND %s = t.id)", table, ct, pid, childCol)
+		},
 		NoCreate: true,
 		Associate: func(c *Ctx, pid, cid int64) error {
 			_, err := c.DB().Exec(c, fmt.Sprintf(`INSERT INTO %s (content_type, object_id, %s, position)

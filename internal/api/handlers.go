@@ -584,7 +584,11 @@ func (a *App) handleSubList(c *Ctx, w http.ResponseWriter, r *http.Request, res 
 				return
 			}
 		}
-		WriteList(c, w, r, target, ListParams{SkipView: s.SkipView, Extra: []func(ArgFunc) string{func(arg ArgFunc) string { return s.Filter(arg, pid) }}})
+		lp := ListParams{SkipView: s.SkipView, Extra: []func(ArgFunc) string{func(arg ArgFunc) string { return s.Filter(arg, pid) }}}
+		if s.Order != nil {
+			lp.DefaultOrder = s.Order(pid)
+		}
+		WriteList(c, w, r, target, lp)
 		return
 	case "OPTIONS":
 		writeJSON(w, 200, metadata(c, target, true, !s.ReadOnly && (!s.NoCreate || s.Associate != nil)))

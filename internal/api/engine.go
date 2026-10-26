@@ -240,6 +240,9 @@ type ListParams struct {
 	Page     int
 	PageSize int
 	NoCount  bool
+	// DefaultOrder is an ORDER BY expression (alias t, no parameters) used
+	// when the request does not ask for an order.
+	DefaultOrder string
 }
 
 // List returns a page of raw objects and the total count.
@@ -260,6 +263,9 @@ func List(c *Ctx, res *Resource, lp ListParams) ([]Obj, int64, error) {
 	order, err := q.orderBy(res, lp.Params)
 	if err != nil {
 		return nil, 0, err
+	}
+	if lp.DefaultOrder != "" && lp.Params.Get("order_by") == "" && lp.Params.Get("order") == "" {
+		order = " ORDER BY " + lp.DefaultOrder + ", t.id"
 	}
 	var count int64
 	if !lp.NoCount {

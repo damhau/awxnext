@@ -103,6 +103,8 @@ type SubList struct {
 	Target string
 	// Filter returns a SQL predicate on alias t restricting Target rows to those related to parent.
 	Filter func(arg ArgFunc, parentID int64) string
+	// Order returns the default ORDER BY expression (alias t) for an ordered relation.
+	Order func(parentID int64) string
 	// ParentField: POSTing a new object to the sublist sets this field to the parent id.
 	ParentField string
 	// Associate/Disassociate enable POST {"id": N} and {"id": N, "disassociate": true}.

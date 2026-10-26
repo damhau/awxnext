@@ -1,0 +1,40 @@
+/* Admin area additions; everything else comes from styles.css. */
+
+/* GitOps plan */
+.plan { display: flex; flex-direction: column; }
+.plan-kind { border-top: 1px solid var(--line-soft); }
+.plan-kind:first-child { border-top: none; }
+.plan-kind-head {
+  padding: 8px 14px 4px; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted-2);
+}
+.plan-row { display: flex; align-items: baseline; gap: 10px; padding: 5px 14px; }
+.plan-row.unchanged { color: var(--muted); }
+.plan-row.error { background: var(--fail-soft); }
+.plan-row.delete { background: #fcf3ee; }
+.plan-mark { width: 14px; flex: 0 0 14px; font-weight: 600; text-align: center; }
+
+/* Activity stream */
+.activity { list-style: none; margin: 0; padding: 0; }
+.activity-day {
+  padding: 10px 14px 6px; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted-2);
+  background: var(--surface-2); border-bottom: 1px solid var(--line-soft);
+}
+.activity-row { border-bottom: 1px solid var(--line-soft); }
+.activity-row:last-child { border-bottom: none; }
+.activity-main {
+  display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 14px; border: none; background: none; cursor: pointer; text-align: left;
+}
+.activity-main:hover { background: #fbfbfa; }
+.activity-row.open .activity-main { background: var(--accent-wash); }
+.activity-detail { padding: 4px 14px 14px 48px; }
+.activity-detail .changes { border: 1px solid var(--line-soft); border-radius: var(--radius); }
+
+/* Settings */
+.settings-actions { position: sticky; bottom: 0; background: var(--surface); padding: 12px 0; border-top: 1px solid var(--line-soft); }
+table.mapping td { vertical-align: top; }
+table.mapping .input, table.mapping .select { height: 30px; }
+
+/* Numeric cells: tabular figures in mono, header stays in the UI face. */
+table.data td.num { font-family: var(--mono); font-size: 12px; }
+input[type='range'] { accent-color: var(--accent); }
+.settings-form .help { overflow-wrap: anywhere; }
