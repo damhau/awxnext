@@ -3,7 +3,7 @@ import { Link } from 'react-router'
 import { api } from '../../api/client'
 import { useInvalidate, useList } from '../../api/hooks'
 import type { Base, Ref } from '../../api/types'
-import { useOrg } from '../../app/context'
+import { useOrg, usePreselectOrg } from '../../app/context'
 import { FormError, Lookup, SelectField, TextInput, useForm } from '../../components/form'
 import { Dialog, Menu, useToast } from '../../components/overlay'
 import { DataTable, Pager, useListState, type Column } from '../../components/table'
@@ -155,6 +155,7 @@ function EEDialog({ ee, onClose }: { ee?: EE; onClose: () => void }) {
     credential: refOf(ee?.summary_fields.credential, ee?.credential),
     organization: ee ? refOf(ee.summary_fields.organization, ee.organization) : (org as Ref | null),
   })
+  usePreselectOrg(f.values.organization, (o) => f.set('organization', o), !ee)
   const [error, setError] = useState<unknown>(null)
   const [busy, setBusy] = useState(false)
   const invalidate = useInvalidate()

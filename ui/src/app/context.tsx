@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { api, ApiError, getAll, onUnauthorized, type Page } from '../api/client'
 import type { Me, Ref } from '../api/types'
 import { live } from '../api/live'
@@ -80,3 +80,20 @@ export function OrgProvider({ children }: { children: ReactNode }) {
 }
 
 export const useOrg = () => useContext(OrgCtx)
+
+/**
+ * Fills the organization field of a create form: the organization chosen in
+ * the top bar, else the first one. Waits for the list to load, and runs only
+ * once, so clearing the field afterwards sticks.
+ */
+export function usePreselectOrg(value: Ref | null | undefined, set: (o: Ref) => void, enabled = true) {
+  const { org, orgs } = useOrg()
+  const done = useRef(!enabled || !!value)
+  useEffect(() => {
+    if (done.current) return
+    const pick = org ?? orgs[0]
+    if (!pick) return
+    done.current = true
+    if (!value) set(pick)
+  }, [org, orgs, value, set])
+}

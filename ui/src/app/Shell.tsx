@@ -76,6 +76,7 @@ function useNav(): { label: string; items: NavItem[] }[] {
       label: 'Access',
       items: [
         { to: '/organizations', label: 'Organizations', icon: 'org' },
+        { to: '/folders', label: 'Folders', icon: 'folder' },
         { to: '/teams', label: 'Teams', icon: 'team' },
         { to: '/users', label: 'Users', icon: 'users' },
       ],

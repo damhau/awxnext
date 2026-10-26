@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
-import { getAll } from '../../api/client'
-import type { Folder } from '../../api/types'
-import { useOrg } from '../../app/context'
+import { getAll } from '../api/client'
+import type { Folder } from '../api/types'
+import { useOrg } from '../app/context'
 
 export interface FolderNode {
   folder: Folder
@@ -12,13 +12,33 @@ export interface FolderNode {
   path: string
 }
 
-export function useFolders() {
+/** Folders of the organization chosen in the top bar, or of every organization. */
+export function useFolders({ allOrgs = false }: { allOrgs?: boolean } = {}) {
   const { scope } = useOrg()
+  const params = allOrgs ? {} : scope
   return useQuery({
-    queryKey: ['folders/', 'all', scope],
-    queryFn: () => getAll<Folder>('folders/', { order_by: 'name', ...scope }),
+    queryKey: ['folders/', 'all', params],
+    queryFn: () => getAll<Folder>('folders/', { order_by: 'name', ...params }),
     staleTime: 30_000,
   })
+}
+
+/** Objects directly in a folder, by type (from the API's related_field_counts). */
+export function directCounts(f: Folder): { templates: number; inventories: number; projects: number; credentials: number; folders: number } {
+  const c = f.summary_fields?.related_field_counts ?? {}
+  return {
+    templates: (c.job_templates ?? 0) + (c.workflow_job_templates ?? 0),
+    inventories: c.inventories ?? 0,
+    projects: c.projects ?? 0,
+    credentials: c.credentials ?? 0,
+    folders: c.folders ?? 0,
+  }
+}
+
+/** Templates, inventories, projects and credentials in a folder and its subfolders. */
+export function totalObjects(n: FolderNode): number {
+  const d = directCounts(n.folder)
+  return d.templates + d.inventories + d.projects + d.credentials + n.children.reduce((sum, c) => sum + totalObjects(c), 0)
 }
 
 export function buildTree(folders: Folder[]): { roots: FolderNode[]; byId: Map<number, FolderNode> } {

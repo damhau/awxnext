@@ -83,7 +83,7 @@ export function objectPath(ct: string | null | undefined, id: number | string): 
     case 'executionenvironment':
       return `/execution-environments/${id}`
     case 'folder':
-      return `/templates?folder=${id}`
+      return `/folders/${id}`
     case 'instancegroup':
       return `/instance-groups/${id}`
   }

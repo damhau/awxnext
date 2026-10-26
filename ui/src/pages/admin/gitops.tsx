@@ -3,7 +3,7 @@ import { Link, Route, Routes, useNavigate, useParams } from 'react-router'
 import { api, ApiError } from '../../api/client'
 import { useInvalidate, useObject } from '../../api/hooks'
 import type { Base, Ref } from '../../api/types'
-import { useOrg } from '../../app/context'
+import { useOrg, usePreselectOrg } from '../../app/context'
 import { Check, FormError, Lookup, TextArea, TextInput, useForm } from '../../components/form'
 import { Icon } from '../../components/icons'
 import { Dialog, useToast } from '../../components/overlay'
@@ -381,6 +381,7 @@ function SourceForm({ source }: { source?: Source }) {
     adopt_existing: source?.adopt_existing ?? false,
     sync_on_project_update: source?.sync_on_project_update ?? true,
   })
+  usePreselectOrg(f.values.organization, (o) => f.set('organization', o), !source)
   const [error, setError] = useState<unknown>(null)
   const [busy, setBusy] = useState(false)
   const invalidate = useInvalidate()

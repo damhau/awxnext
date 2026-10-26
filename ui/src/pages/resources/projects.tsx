@@ -5,7 +5,7 @@ import { api } from '../../api/client'
 import { useInvalidate, useList, useObject } from '../../api/hooks'
 import { useLive } from '../../api/live'
 import type { Base, Job, Ref } from '../../api/types'
-import { useOrg } from '../../app/context'
+import { useOrg, usePreselectOrg } from '../../app/context'
 import { AccessTab } from '../../components/access/Access'
 import { Check, FormError, Lookup, Segmented, TextInput, useForm } from '../../components/form'
 import { Icon } from '../../components/icons'
@@ -15,7 +15,7 @@ import { Ago, Elapsed, Empty, ErrorNote, KV, Loading, PageHead, Panel, RunBars, 
 import { shortSha, plural } from '../../lib/format'
 import { compile, statusValue, type KeyTable } from '../../lib/query'
 import { SchedulesTab } from '../automation/SchedulesTab'
-import { applyErrors, FilterBox, ManagedNotice, NameCell, Provenance, refOf, useDelete, useOrgColumn } from './common'
+import { applyErrors, FilterBox, ManagedNotice, NameCell, Provenance, refOf, useDelete, useOrgColumn, folderColumn, folderKey } from './common'
 
 export interface Project extends Base {
   scm_type: '' | 'git'
@@ -44,6 +44,7 @@ export interface Project extends Base {
 const keys: KeyTable = {
   status: { field: 'status', map: statusValue },
   org: { field: 'organization__name', lookup: 'iexact' },
+  folder: folderKey,
   type: { field: 'scm_type', map: (v) => (v === 'manual' ? '' : v) },
   url: { field: 'scm_url', lookup: 'icontains' },
 }
@@ -123,6 +124,7 @@ export function ProjectList() {
         ),
     },
     ...orgCol,
+    ...folderColumn(list.data?.results),
     {
       key: 'act',
       header: <span className="sr-only">Actions</span>,
@@ -159,7 +161,7 @@ export function ProjectList() {
         }
       />
       <div className="page-body">
-        <FilterBox value={ls.q} onApply={ls.setQ} placeholder="name…  try  status:failed  type:manual  url:github.com/acme*" />
+        <FilterBox value={ls.q} onApply={ls.setQ} placeholder="name…  try  status:failed  type:manual  folder:checkout" />
         <DataTable
           label="Projects"
           rows={list.data?.results}
@@ -222,6 +224,7 @@ function ProjectFormInner({ p }: { p?: Project }) {
     local_path: p?.local_path ?? '',
     timeout: p?.timeout ?? 0,
   })
+  usePreselectOrg(f.values.organization, (o) => f.set('organization', o), !p)
   const [error, setError] = useState<unknown>(null)
   const [busy, setBusy] = useState(false)
   const v = f.values

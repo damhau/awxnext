@@ -4,7 +4,7 @@ import { Link, Outlet, useNavigate, useOutletContext, useParams } from 'react-ro
 import { api, getAll } from '../../api/client'
 import { useInvalidate, useList, useObject } from '../../api/hooks'
 import type { Base, Ref } from '../../api/types'
-import { useOrg } from '../../app/context'
+import { useOrg, usePreselectOrg } from '../../app/context'
 import { AccessTab } from '../../components/access/Access'
 import { Field, FormError, Lookup, TextInput, useForm } from '../../components/form'
 import { Icon } from '../../components/icons'
@@ -13,7 +13,7 @@ import { DataTable, Pager, useListState, type Column } from '../../components/ta
 import { Ago, Empty, ErrorNote, KV, Loading, PageHead, Panel, Tab } from '../../components/ui'
 import { plural } from '../../lib/format'
 import { compile, type KeyTable } from '../../lib/query'
-import { applyErrors, FilterBox, KindTag, ManagedNotice, NameCell, Provenance, refOf, SECRET, useDelete, useOrgColumn } from './common'
+import { applyErrors, FilterBox, KindTag, ManagedNotice, NameCell, Provenance, refOf, SECRET, useDelete, useOrgColumn, folderColumn, folderKey } from './common'
 
 export interface Credential extends Base {
   credential_type: number
@@ -72,6 +72,7 @@ const keys: KeyTable = {
   type: { field: 'credential_type__name', lookup: 'icontains' },
   kind: { field: 'credential_type__kind', map: (v) => Object.entries(kindNames).find(([, n]) => n === v.toLowerCase())?.[0] ?? v },
   org: { field: 'organization__name', lookup: 'iexact' },
+  folder: folderKey,
 }
 
 export function CredentialList() {
@@ -96,6 +97,7 @@ export function CredentialList() {
       ),
     },
     ...orgCol,
+    ...folderColumn(list.data?.results),
     { key: 'modified', header: 'Edited', sort: 'modified', render: (c) => <span className="small faint nowrap"><Ago at={c.modified} /></span> },
     {
       key: 'menu',
@@ -126,7 +128,7 @@ export function CredentialList() {
         }
       />
       <div className="page-body">
-        <FilterBox value={ls.q} onApply={ls.setQ} placeholder="name…  try  kind:machine  type:vault*  org:Acme*" />
+        <FilterBox value={ls.q} onApply={ls.setQ} placeholder="name…  try  kind:machine  type:vault*  folder:checkout" />
         <DataTable
           label="Credentials"
           rows={list.data?.results}
@@ -192,6 +194,7 @@ function CredentialFormInner({ cred, sources }: { cred?: Credential; sources: In
     folder: (cred?.summary_fields.folder as Ref | undefined) ?? null,
     credential_type: refOf(cred?.summary_fields.credential_type, cred?.credential_type),
   })
+  usePreselectOrg(f.values.organization, (o) => f.set('organization', o), !cred)
   const type = useCredType(f.values.credential_type?.id)
   const [inputs, setInputs] = useState<Record<string, unknown>>(cred?.inputs ?? {})
   const [links, setLinks] = useState<Record<string, Link_>>(() =>

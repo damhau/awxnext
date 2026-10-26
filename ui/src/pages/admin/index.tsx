@@ -7,6 +7,9 @@ import { lazyModule } from '../../lib/lazy'
 
 const m_activity = lazyModule(() => import('./activity'))
 const Activity = m_activity('Activity')
+const m_folders = lazyModule(() => import('./folders'))
+const FolderDetail = m_folders('FolderDetail')
+const FolderList = m_folders('FolderList')
 const m_gitops = lazyModule(() => import('./gitops'))
 const GitOpsDetail = m_gitops('GitOpsDetail')
 const GitOpsList = m_gitops('GitOpsList')
@@ -47,6 +50,8 @@ export function adminRoutes() {
       <Route path="teams" element={<TeamList />} />
       <Route path="teams/new" element={<TeamNew />} />
       <Route path="teams/:id/*" element={<TeamDetail />} />
+      <Route path="folders" element={<FolderList />} />
+      <Route path="folders/:id/*" element={<FolderDetail />} />
       <Route path="users" element={<UserList />} />
       <Route path="users/new" element={<UserNew />} />
       <Route path="users/:id/*" element={<UserDetail />} />

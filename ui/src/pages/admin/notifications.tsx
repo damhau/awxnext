@@ -3,7 +3,7 @@ import { Link, Route, Routes, useNavigate, useParams } from 'react-router'
 import { api } from '../../api/client'
 import { useInvalidate, useList, useObject } from '../../api/hooks'
 import type { Base, Ref } from '../../api/types'
-import { useOrg } from '../../app/context'
+import { useOrg, usePreselectOrg } from '../../app/context'
 import { AccessTab } from '../../components/access/Access'
 import { Check, Field, FormError, Lookup, SelectField, TextArea, TextInput, useForm } from '../../components/form'
 import { Icon } from '../../components/icons'
@@ -294,6 +294,7 @@ function NTForm({ nt }: { nt?: NT }) {
     custom: !!nt?.messages && Object.values(nt.messages).some(Boolean),
     bodies: initialBodies(nt?.messages ?? null),
   })
+  usePreselectOrg(f.values.organization, (o) => f.set('organization', o), !nt)
   const [error, setError] = useState<unknown>(null)
   const [busy, setBusy] = useState(false)
   const invalidate = useInvalidate()

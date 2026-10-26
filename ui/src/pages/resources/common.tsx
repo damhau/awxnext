@@ -9,6 +9,7 @@ import { useOrg } from '../../app/context'
 import { Icon } from '../../components/icons'
 import { useConfirm, useToast } from '../../components/overlay'
 import { userName } from '../../lib/format'
+import type { KeySpec } from '../../lib/query'
 
 /** Filter box bound to the list's ?q=; Enter applies, Escape clears. "/" focuses it. */
 export function FilterBox({ value, onApply, placeholder, hint }: { value: string; onApply: (q: string) => void; placeholder: string; hint?: ReactNode }) {
@@ -67,6 +68,25 @@ export function useOrgColumn<T extends Base>() {
       key: 'org',
       header: 'Organization',
       render: (r: T) => <span className="small">{r.summary_fields.organization?.name ?? <span className="faint">—</span>}</span>,
+    },
+  ]
+}
+
+/** Filter on the folder an object is in, by name: folder:checkout (or a path, folder:apps/checkout). */
+export const folderKey: KeySpec = { field: 'folder__name', lookup: 'iexact', map: (v) => v.split('/').pop() ?? v, help: 'checkout' }
+
+/** Folder column, shown only when some row of the page is in a folder. */
+export function folderColumn<T extends Base>(rows: T[] | undefined) {
+  if (!rows?.some((r) => r.summary_fields.folder)) return []
+  return [
+    {
+      key: 'folder',
+      header: 'Folder',
+      className: 'small',
+      render: (r: T) => {
+        const f = r.summary_fields.folder
+        return f ? <Link to={`/folders/${f.id}`}>{f.name}</Link> : <span className="faint">—</span>
+      },
     },
   ]
 }

@@ -4,10 +4,10 @@ import { Link, useNavigate, useSearchParams } from 'react-router'
 import { api, ApiError, getAll } from '../../api/client'
 import { useInvalidate, useObject } from '../../api/hooks'
 import type { Ref, Template } from '../../api/types'
-import { useOrg } from '../../app/context'
+import { useOrg, usePreselectOrg } from '../../app/context'
 import { Check, FormError, Lookup, MultiLookup, SelectField, TextArea, TextInput, VarsEditor, varsError, varsText } from '../../components/form'
 import { PageHead, Panel } from '../../components/ui'
-import { buildTree, flatten, useFolders } from './folders'
+import { buildTree, flatten, useFolders } from '../../lib/folders'
 import { resOf, type Kind } from './TemplateDetail'
 
 /** A field with an "Ask at launch" toggle beside its label. */
@@ -87,6 +87,8 @@ export function TemplateForm({ kind, tpl }: { kind: Kind; tpl?: Template }) {
     setV((p) => ({ ...p, [k]: val }))
     if (errors[k]) setErrors((e) => ({ ...e, [k]: '' }))
   }
+  // Job templates take their organization from the project; workflows pick one.
+  usePreselectOrg(v.organization, (o) => set('organization', o), kind === 'workflow' && !tpl)
   const ask = (k: string) => !!v.ask[`ask_${k}_on_launch`]
   const setAsk = (k: string, on: boolean) => setV((p) => ({ ...p, ask: { ...p.ask, [`ask_${k}_on_launch`]: on } }))
 

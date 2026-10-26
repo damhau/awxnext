@@ -5,7 +5,7 @@ import { api, getAll, type Page } from '../../api/client'
 import { useInvalidate, useList, useObject } from '../../api/hooks'
 import { useLive } from '../../api/live'
 import type { Base, Ref } from '../../api/types'
-import { useOrg } from '../../app/context'
+import { useOrg, usePreselectOrg } from '../../app/context'
 import { AccessTab } from '../../components/access/Access'
 import { FormError, Lookup, MultiLookup, SelectField, TextInput, VarsEditor, useForm } from '../../components/form'
 import { Icon } from '../../components/icons'
@@ -14,7 +14,7 @@ import { DataTable, Pager, useListState, type Column } from '../../components/ta
 import { Ago, Empty, ErrorNote, KV, Loading, PageHead, Panel, Status, Tab } from '../../components/ui'
 import { plural } from '../../lib/format'
 import { compile, type KeyTable } from '../../lib/query'
-import { applyErrors, Count, FilterBox, KindTag, ManagedNotice, NameCell, Provenance, refOf, useDelete, useOrgColumn } from './common'
+import { applyErrors, Count, FilterBox, KindTag, ManagedNotice, NameCell, Provenance, refOf, useDelete, useOrgColumn, folderColumn, folderKey } from './common'
 
 export interface Inventory extends Base {
   kind: '' | 'smart' | 'constructed'
@@ -36,6 +36,7 @@ const kindLabel = (k: string) => (k === 'smart' ? 'smart' : k === 'constructed' 
 const keys: KeyTable = {
   kind: { field: 'kind', map: (v) => (v === 'inventory' || v === 'regular' ? '' : v) },
   org: { field: 'organization__name', lookup: 'iexact' },
+  folder: folderKey,
   name: { field: 'name', lookup: 'icontains' },
 }
 
@@ -74,6 +75,7 @@ export function InventoryList() {
         ),
     },
     ...orgCol,
+    ...folderColumn(list.data?.results),
     { key: 'modified', header: 'Edited', sort: 'modified', render: (r) => <span className="small faint nowrap"><Ago at={r.modified} /></span> },
     {
       key: 'menu',
@@ -101,7 +103,7 @@ export function InventoryList() {
         actions={<NewInventoryMenu />}
       />
       <div className="page-body">
-        <FilterBox value={ls.q} onApply={ls.setQ} placeholder="name…  try  kind:smart  org:Acme*" />
+        <FilterBox value={ls.q} onApply={ls.setQ} placeholder="name…  try  kind:smart  org:Acme*  folder:checkout" />
         <DataTable
           label="Inventories"
           rows={list.data?.results}
@@ -206,6 +208,7 @@ function InventoryFormInner({ kind, inv, extra, inputs }: { kind: Inventory['kin
     verbosity: extra?.verbosity ?? 1,
     inputs: inputs as Ref[],
   })
+  usePreselectOrg(f.values.organization, (o) => f.set('organization', o), !inv)
   const [error, setError] = useState<unknown>(null)
   const [busy, setBusy] = useState(false)
   const v = f.values

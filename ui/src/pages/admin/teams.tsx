@@ -4,7 +4,7 @@ import { Link, Route, Routes, useNavigate, useParams, useSearchParams } from 're
 import { api, getAll } from '../../api/client'
 import { useInvalidate, useObject } from '../../api/hooks'
 import type { Base, Ref } from '../../api/types'
-import { useOrg } from '../../app/context'
+import { useOrg, usePreselectOrg } from '../../app/context'
 import { AccessTab, PrincipalRoles, useRoleDefinitions, type Assignment } from '../../components/access/Access'
 import { FormError, Lookup, MultiLookup, TextArea, TextInput, useForm } from '../../components/form'
 import { Icon } from '../../components/icons'
@@ -74,6 +74,7 @@ function TeamForm({ team }: { team?: Team }) {
     description: team?.description ?? '',
     organization: team?.summary_fields.organization ?? (presetOrg ? null : org),
   })
+  usePreselectOrg(f.values.organization, (o) => f.set('organization', o), !team && !presetOrg)
   const organization = f.values.organization ?? (orgObj.data && !team ? orgObj.data : null)
   const [error, setError] = useState<unknown>(null)
   const [busy, setBusy] = useState(false)
