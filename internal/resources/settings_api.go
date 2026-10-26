@@ -1,0 +1,226 @@
+package resources
+
+import (
+	"net/http"
+
+	"github.com/damhau/awxnext/internal/api"
+	"github.com/damhau/awxnext/internal/crypto"
+	"github.com/damhau/awxnext/internal/settings"
+	"github.com/go-chi/chi/v5"
+)
+
+func installSettings(app *api.App) {
+	app.Handle("GET", "/api/v2/settings/", func(c *Ctx, w http.ResponseWriter, r *http.Request) {
+		var results []Obj
+		for _, cat := range settings.Categories {
+			results = append(results, Obj{"url": "/api/v2/settings/" + cat.Slug + "/", "slug": cat.Slug, "name": cat.Name})
+		}
+		api.WriteJSON(w, 200, Obj{"count": len(results), "next": nil, "previous": nil, "results": results})
+	})
+	app.Handle("GET", "/api/v2/settings/{cat}/", func(c *Ctx, w http.ResponseWriter, r *http.Request) {
+		defs, err := settingsCategory(c, chi.URLParam(r, "cat"), false)
+		if err != nil {
+			api.WriteError(w, err)
+			return
+		}
+		api.WriteJSON(w, 200, settingsValues(c, chi.URLParam(r, "cat"), defs))
+	})
+	update := func(c *Ctx, w http.ResponseWriter, r *http.Request) {
+		cat := chi.URLParam(r, "cat")
+		defs, err := settingsCategory(c, cat, true)
+		if err != nil {
+			api.WriteError(w, err)
+			return
+		}
+		allowed := map[string]*settings.Def{}
+		for _, d := range defs {
+			allowed[d.Key] = d
+		}
+		data, err := api.ReadBody(r)
+		if err != nil {
+			api.WriteError(w, err)
+			return
+		}
+		fe := api.FieldErrors{}
+		for k, v := range data {
+			d, ok := allowed[k]
+			if !ok {
+				continue
+			}
+			if d.ReadOnly {
+				fe.Add(k, "This setting is read-only.")
+				continue
+			}
+			if err := validateSetting(d, v); err != nil {
+				fe.Add(k, err.Error())
+			}
+		}
+		if err := fe.Err(); err != nil {
+			api.WriteError(w, err)
+			return
+		}
+		changes := Obj{}
+		for k, v := range data {
+			d, ok := allowed[k]
+			if !ok {
+				continue
+			}
+			if d.Secret {
+				s, _ := v.(string)
+				if s == crypto.Placeholder {
+					continue
+				}
+				enc, err := c.App.Crypto.Encrypt(s)
+				if err != nil {
+					api.WriteError(w, err)
+					return
+				}
+				v = enc
+				changes[k] = crypto.Placeholder
+			} else {
+				changes[k] = v
+			}
+			if err := c.App.Settings.Set(c, k, v); err != nil {
+				api.WriteError(w, err)
+				return
+			}
+		}
+		if len(changes) > 0 {
+			c.DB().Exec(c, `INSERT INTO activity_stream (actor_id, operation, object1, changes, summary) VALUES ($1, 'update', 'setting', $2, '{}')`, c.User.UserID, changes)
+		}
+		api.WriteJSON(w, 200, settingsValues(c, cat, defs))
+	}
+	app.Handle("PUT", "/api/v2/settings/{cat}/", update)
+	app.Handle("PATCH", "/api/v2/settings/{cat}/", update)
+	app.Handle("DELETE", "/api/v2/settings/{cat}/", func(c *Ctx, w http.ResponseWriter, r *http.Request) {
+		defs, err := settingsCategory(c, chi.URLParam(r, "cat"), true)
+		if err != nil {
+			api.WriteError(w, err)
+			return
+		}
+		for _, d := range defs {
+			if !d.ReadOnly {
+				c.App.Settings.Reset(c, d.Key)
+			}
+		}
+		w.WriteHeader(204)
+	})
+	app.Handle("OPTIONS", "/api/v2/settings/{cat}/", func(c *Ctx, w http.ResponseWriter, r *http.Request) {
+		defs, err := settingsCategory(c, chi.URLParam(r, "cat"), false)
+		if err != nil {
+			api.WriteError(w, err)
+			return
+		}
+		get, put := Obj{}, Obj{}
+		for _, d := range defs {
+			m := Obj{"type": d.Type, "label": d.Label, "help_text": d.Help, "category": d.Category, "category_slug": d.Category, "defined_in_file": false, "default": d.Default}
+			if d.Choices != nil {
+				m["choices"] = d.Choices
+			}
+			get[d.Key] = m
+			if !d.ReadOnly {
+				pm := Obj{}
+				for k, v := range m {
+					pm[k] = v
+				}
+				pm["required"] = false
+				put[d.Key] = pm
+			}
+		}
+		actions := Obj{"GET": get}
+		if c.User.Superuser {
+			actions["PUT"] = put
+		}
+		api.WriteJSON(w, 200, Obj{"name": "Setting Detail", "description": "", "renders": []string{"application/json"}, "parses": []string{"application/json"}, "actions": actions})
+	})
+}
+
+func settingsCategory(c *Ctx, slug string, write bool) ([]*settings.Def, error) {
+	found := false
+	for _, cat := range settings.Categories {
+		if cat.Slug == slug {
+			found = true
+		}
+	}
+	if !found {
+		return nil, api.ErrNotFound
+	}
+	defs := settings.InCategory(slug)
+	if write {
+		if !c.User.Superuser {
+			return nil, api.ErrForbidden
+		}
+		return defs, nil
+	}
+	if c.User.Superuser || c.User.Auditor {
+		return defs, nil
+	}
+	var public []*settings.Def
+	for _, d := range defs {
+		if d.Public {
+			public = append(public, d)
+		}
+	}
+	if len(public) == 0 {
+		return nil, api.ErrForbidden
+	}
+	return public, nil
+}
+
+func settingsValues(c *Ctx, slug string, defs []*settings.Def) Obj {
+	out := Obj{}
+	for _, d := range defs {
+		if slug == "changed" && !c.App.Settings.IsSet(c, d.Key) {
+			continue
+		}
+		v := c.App.Settings.Get(c, d.Key)
+		if d.Secret {
+			if s, _ := v.(string); s != "" {
+				v = crypto.Placeholder
+			}
+		}
+		out[d.Key] = v
+	}
+	return out
+}
+
+func validateSetting(d *settings.Def, v any) error {
+	bad := func() error { return errInvalid("Invalid value for a " + d.Type + " setting.") }
+	if v == nil {
+		return nil
+	}
+	switch d.Type {
+	case "boolean":
+		if _, ok := v.(bool); !ok {
+			return bad()
+		}
+	case "integer":
+		if _, ok := api.ID(v); !ok {
+			return bad()
+		}
+	case "string":
+		if _, ok := v.(string); !ok {
+			return bad()
+		}
+	case "list":
+		if _, ok := v.([]any); !ok {
+			return bad()
+		}
+	case "nested object":
+		if _, ok := v.(map[string]any); !ok {
+			return bad()
+		}
+	case "choice":
+		for _, ch := range d.Choices {
+			if ch[0] == v {
+				return nil
+			}
+		}
+		return bad()
+	}
+	return nil
+}
+
+type errInvalid string
+
+func (e errInvalid) Error() string { return string(e) }
