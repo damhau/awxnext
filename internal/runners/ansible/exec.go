@@ -3,7 +3,6 @@ package ansible
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,8 +13,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/damhau/awxnext/internal/agent"
 	"github.com/damhau/awxnext/internal/api"
 	"github.com/damhau/awxnext/internal/jobs"
+	"github.com/damhau/awxnext/internal/resources"
+	"github.com/damhau/awxnext/internal/runnercmd"
+	"github.com/damhau/awxnext/internal/tracing"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 // Run describes one ansible-runner execution.
@@ -40,6 +44,67 @@ type Run struct {
 	Timeout time.Duration
 	runtime string
 	base    string
+	// agentNode is the remote execution node running the worker; pod a container group job pod.
+	agentNode string
+	pod       *agent.PodRequest
+}
+
+// NewRunFor prepares a run placed where the dispatcher put the job: locally,
+// on a remote execution node (agent) or in a container group (job pod).
+func NewRunFor(ctx context.Context, app *api.App, ident string, row jobs.Row) (*Run, error) {
+	r, err := NewRun(app, ident)
+	if err != nil {
+		return nil, err
+	}
+	if ig := row.Int("instance_group_id"); ig != 0 {
+		var container bool
+		var podSpec string
+		var credID *int64
+		app.DB.QueryRow(ctx, "SELECT is_container_group, pod_spec_override, credential_id FROM instance_groups WHERE id = $1", ig).Scan(&container, &podSpec, &credID)
+		if container {
+			req := &agent.PodRequest{JobID: row.ID(), PodSpec: podSpec, ServiceURL: app.Cfg.ServiceURL, ShimImage: app.Cfg.ShimImage}
+			app.DB.QueryRow(ctx, "SELECT value #>> '{}' FROM settings WHERE key = 'INSTALL_UUID'").Scan(&req.InstallID)
+			if credID != nil {
+				cred, err := resources.ResolveCredential(ctx, app, *credID)
+				if err != nil {
+					return nil, err
+				}
+				in := func(k string) string { v, _ := cred.Inputs[k].(string); return v }
+				verify, ok := cred.Inputs["verify_ssl"].(bool)
+				req.Credential = &agent.KubeCredential{Host: in("host"), BearerToken: in("bearer_token"), CACert: in("ssl_ca_cert"), VerifySSL: verify || !ok}
+			}
+			r.useRemote("kubernetes", "/runner")
+			r.pod = req
+			return r, nil
+		}
+	}
+	node := row.Str("execution_node")
+	if node == "" || node == app.Cfg.NodeName {
+		return r, nil
+	}
+	var nodeType, runtime, workDir string
+	if err := app.DB.QueryRow(ctx, "SELECT node_type, agent_runtime, agent_work_dir FROM instances WHERE hostname = $1", node).Scan(&nodeType, &runtime, &workDir); err != nil {
+		return nil, fmt.Errorf("execution node %s no longer exists", node)
+	}
+	if nodeType != "execution" {
+		return r, nil
+	}
+	root := "/runner"
+	if runtime == "none" || runtime == "" {
+		runtime = "none"
+		root = strings.TrimRight(workDir, "/") + "/" + ident
+	}
+	r.useRemote(runtime, root)
+	r.agentNode = node
+	return r, nil
+}
+
+func (r *Run) useRemote(runtime, root string) {
+	if r.WorkDir != "" {
+		os.RemoveAll(r.WorkDir)
+		r.WorkDir = ""
+	}
+	r.runtime, r.Root = runtime, root
 }
 
 // NewRun prepares directories for a run under the jobs root.
@@ -98,45 +163,117 @@ type Outcome struct {
 	Args      []string
 }
 
+// worker is a running `ansible-runner worker` (local process, agent or job pod).
+type worker interface {
+	Stdin() io.WriteCloser
+	Stdout() io.Reader
+	Wait() (string, error)
+	Kill()
+}
+
+type localWorker struct {
+	cmd     *exec.Cmd
+	spec    runnercmd.Spec
+	stdin   io.WriteCloser
+	stdout  io.Reader
+	stderr  bytes.Buffer
+	cleanup func()
+}
+
+func (l *localWorker) Stdin() io.WriteCloser { return l.stdin }
+func (l *localWorker) Stdout() io.Reader     { return l.stdout }
+func (l *localWorker) Kill()                 { runnercmd.Kill(l.spec, l.cmd) }
+func (l *localWorker) Wait() (string, error) {
+	err := l.cmd.Wait()
+	l.cleanup()
+	return strings.TrimSpace(l.stderr.String()), err
+}
+
+func (r *Run) spec(app *api.App) runnercmd.Spec {
+	return runnercmd.Spec{Runtime: r.runtime, RunnerCommand: app.Cfg.RunnerCommand, WorkDir: r.WorkDir, Image: r.Image, Pull: r.Pull,
+		RegistryHost: r.RegistryHost, RegistryUser: r.RegistryUser, RegistryPassword: r.RegistryPassword, Name: r.containerName()}
+}
+
+// startWorker starts the worker where the run is placed.
+func (r *Run) startWorker(ctx context.Context, app *api.App) (worker, []string, error) {
+	ws := agent.WorkSpec{Ident: r.Ident, Image: r.Image, Pull: r.Pull, RegistryHost: r.RegistryHost, RegistryUser: r.RegistryUser, RegistryPassword: r.RegistryPassword}
+	switch {
+	case r.agentNode != "":
+		if agent.Default == nil {
+			return nil, nil, errors.New("remote execution is not available on this node")
+		}
+		w, err := agent.Default.StartWorker(ctx, r.agentNode, ws)
+		return w, []string{"agent:" + r.agentNode, "ansible-runner", "worker"}, err
+	case r.pod != nil:
+		if agent.Default == nil {
+			return nil, nil, errors.New("container groups are not available on this node")
+		}
+		req := *r.pod
+		req.Spec = ws
+		w, err := agent.Default.StartPod(ctx, req)
+		return w, []string{"pod", "ansible-runner", "worker"}, err
+	}
+	spec := r.spec(app)
+	args, cleanup, err := runnercmd.Command(spec)
+	if err != nil {
+		return nil, nil, err
+	}
+	cmd := exec.Command(args[0], args[1:]...)
+	cmd.Env = runnercmd.Env()
+	lw := &localWorker{cmd: cmd, spec: spec, cleanup: cleanup}
+	if lw.stdin, err = cmd.StdinPipe(); err != nil {
+		cleanup()
+		return nil, nil, err
+	}
+	if lw.stdout, err = cmd.StdoutPipe(); err != nil {
+		cleanup()
+		return nil, nil, err
+	}
+	cmd.Stderr = &limitedWriter{w: &lw.stderr, n: 64 << 10}
+	if err := cmd.Start(); err != nil {
+		cleanup()
+		return nil, nil, fmt.Errorf("starting %s: %w", args[0], err)
+	}
+	return lw, args, nil
+}
+
 // Execute transmits the private data dir to ansible-runner worker and
 // streams events into out.
-func (r *Run) Execute(ctx context.Context, app *api.App, out *jobs.Output) (*Outcome, error) {
+func (r *Run) Execute(ctx context.Context, app *api.App, out *jobs.Output) (oc *Outcome, err error) {
+	ctx, span := tracing.StartSpan(ctx, "ansible-runner worker", attribute.String("awx.runner.ident", r.Ident), attribute.String("awx.runner.runtime", r.runtime),
+		attribute.String("awx.runner.execution_node", r.agentNode))
+	defer func() {
+		if oc != nil {
+			span.SetAttributes(attribute.String("awx.runner.status", oc.Status), attribute.Int("awx.runner.rc", oc.RC))
+		}
+		tracing.EndSpan(span, err)
+	}()
 	if r.Timeout > 0 {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, r.Timeout)
 		defer cancel()
 	}
-	args, cleanup, err := r.command(app)
+	w, args, err := r.startWorker(ctx, app)
 	if err != nil {
+		switch {
+		case errors.Is(ctx.Err(), context.DeadlineExceeded):
+			return &Outcome{Status: "timeout"}, nil
+		case ctx.Err() != nil:
+			return &Outcome{Status: "canceled"}, nil
+		}
 		return nil, err
 	}
-	defer cleanup()
-	oc := &Outcome{Status: "error", Artifacts: filepath.Join(r.base, "artifacts"), Args: args}
+	oc = &Outcome{Status: "error", Artifacts: filepath.Join(r.base, "artifacts"), Args: args}
 	os.MkdirAll(oc.Artifacts, 0o700)
-	cmd := exec.Command(args[0], args[1:]...)
-	cmd.Env = r.env()
-	stdin, err := cmd.StdinPipe()
-	if err != nil {
-		return nil, err
-	}
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return nil, err
-	}
-	var stderr bytes.Buffer
-	cmd.Stderr = &limitedWriter{w: &stderr, n: 64 << 10}
-	if err := cmd.Start(); err != nil {
-		return nil, fmt.Errorf("starting %s: %w", args[0], err)
-	}
 	go func() {
-		Transmit(stdin, r.Kwargs, r.Dir, r.Mounts...)
-		stdin.Close()
+		Transmit(w.Stdin(), r.Kwargs, r.Dir, r.Mounts...)
+		w.Stdin().Close()
 	}()
 	// Events of a later execution in the same job continue the numbering.
 	baseCounter, baseLine := out.Position()
 	done := make(chan error, 1)
 	go func() {
-		done <- Process(stdout, oc.Artifacts, func(m StreamMessage) {
+		done <- Process(w.Stdout(), oc.Artifacts, func(m StreamMessage) {
 			if m.Status != "" {
 				oc.Status = m.Status
 				if m.RC != nil {
@@ -164,10 +301,10 @@ func (r *Run) Execute(ctx context.Context, app *api.App, out *jobs.Output) (*Out
 	select {
 	case perr = <-done:
 	case <-ctx.Done():
-		r.kill(cmd)
+		w.Kill()
 		<-done
 	}
-	werr := cmd.Wait()
+	diag, werr := w.Wait()
 	switch {
 	case errors.Is(ctx.Err(), context.DeadlineExceeded):
 		oc.Status = "timeout"
@@ -176,7 +313,7 @@ func (r *Run) Execute(ctx context.Context, app *api.App, out *jobs.Output) (*Out
 	case perr != nil:
 		return oc, perr
 	case oc.Status == "error" || oc.Status == "starting" || oc.Status == "running":
-		msg := strings.TrimSpace(stderr.String())
+		msg := diag
 		if werr != nil && msg == "" {
 			msg = werr.Error()
 		}
@@ -193,81 +330,7 @@ func lastLine(s string) string {
 	return lines[len(lines)-1]
 }
 
-func (r *Run) kill(cmd *exec.Cmd) {
-	if cmd.Process != nil {
-		cmd.Process.Kill()
-	}
-	if r.runtime == "podman" || r.runtime == "docker" {
-		exec.Command(r.runtime, "rm", "-f", r.containerName()).Run()
-	}
-}
-
 func (r *Run) containerName() string { return "awxnext_job_" + r.Ident }
-
-func (r *Run) env() []string {
-	env := []string{"PATH=" + os.Getenv("PATH"), "HOME=" + os.Getenv("HOME"), "LANG=C.UTF-8"}
-	for _, k := range []string{"HTTPS_PROXY", "HTTP_PROXY", "NO_PROXY", "XDG_RUNTIME_DIR", "CONTAINER_HOST", "DOCKER_HOST", "TMPDIR"} {
-		if v := os.Getenv(k); v != "" {
-			env = append(env, k+"="+v)
-		}
-	}
-	return env
-}
-
-// command builds the worker command line for the configured runtime.
-func (r *Run) command(app *api.App) ([]string, func(), error) {
-	noop := func() {}
-	switch r.runtime {
-	case "none", "process", "":
-		bin := app.Cfg.RunnerCommand
-		return []string{bin, "worker", "--private-data-dir", r.WorkDir}, noop, nil
-	case "podman", "docker":
-		if r.Image == "" {
-			return nil, noop, errors.New("no execution environment image")
-		}
-		args := []string{r.runtime}
-		var runArgs []string
-		cleanup := noop
-		if r.RegistryUser != "" {
-			dir, err := os.MkdirTemp("", "awxnext-auth-")
-			if err != nil {
-				return nil, noop, err
-			}
-			cleanup = func() { os.RemoveAll(dir) }
-			auth := base64.StdEncoding.EncodeToString([]byte(r.RegistryUser + ":" + r.RegistryPassword))
-			cfg, _ := json.Marshal(map[string]any{"auths": map[string]any{r.RegistryHost: map[string]string{"auth": auth}}})
-			if r.runtime == "docker" {
-				// docker reads registry auth from <config dir>/config.json.
-				if err := os.WriteFile(filepath.Join(dir, "config.json"), cfg, 0o600); err != nil {
-					cleanup()
-					return nil, noop, err
-				}
-				args = append(args, "--config", dir)
-			} else {
-				if err := os.WriteFile(filepath.Join(dir, "auth.json"), cfg, 0o600); err != nil {
-					cleanup()
-					return nil, noop, err
-				}
-				runArgs = append(runArgs, "--authfile", filepath.Join(dir, "auth.json"))
-			}
-		}
-		args = append(args, "run")
-		args = append(args, runArgs...)
-		pull := r.Pull
-		if pull == "" {
-			pull = "missing"
-		}
-		args = append(args, "--rm", "-i", "--pull="+pull, "--name", r.containerName(), "--env", "HOME=/runner")
-		if r.runtime == "podman" {
-			args = append(args, "--userns=keep-id")
-		}
-		args = append(args, r.Image, "ansible-runner", "worker", "--private-data-dir=/runner")
-		return args, cleanup, nil
-	case "kubernetes":
-		return nil, noop, errors.New("container groups require the job agent (not yet available on this node)")
-	}
-	return nil, noop, fmt.Errorf("unknown container runtime %q", r.runtime)
-}
 
 type limitedWriter struct {
 	w io.Writer

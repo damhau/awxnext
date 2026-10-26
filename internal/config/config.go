@@ -30,11 +30,21 @@ type Config struct {
 	// Capacity is the forks capacity of this node for local execution.
 	Capacity int
 	DevMode  bool
+	// InternalURL is how other control nodes, agents and job pods reach this node.
+	InternalURL string
+	// MetricsToken protects /metrics with a bearer token when set.
+	MetricsToken string
+	// LogFormat is "text" or "json"; LogLevel is debug, info, warn or error.
+	LogFormat, LogLevel string
+	// ShimImage is the image whose /awxnext binary is copied into job pods (container groups).
+	ShimImage string
+	// ServiceURL is how job pods reach the control plane (defaults to BaseURL).
+	ServiceURL string
 }
 
 func Load() *Config {
 	host, _ := os.Hostname()
-	return &Config{
+	c := &Config{
 		DatabaseURL:      env("AWXNEXT_DATABASE_URL", "postgres://postgres@localhost:5432/awxnext?sslmode=disable"),
 		Listen:           env("AWXNEXT_LISTEN", ":8052"),
 		SecretKey:        env("AWXNEXT_SECRET_KEY", ""),
@@ -48,7 +58,14 @@ func Load() *Config {
 		UIDir:            env("AWXNEXT_UI_DIR", ""),
 		Capacity:         envInt("AWXNEXT_CAPACITY", 100),
 		DevMode:          env("AWXNEXT_DEV", "") != "",
+		InternalURL:      strings.TrimRight(env("AWXNEXT_INTERNAL_URL", ""), "/"),
+		MetricsToken:     env("AWXNEXT_METRICS_TOKEN", ""),
+		LogFormat:        env("AWXNEXT_LOG_FORMAT", "text"),
+		LogLevel:         env("AWXNEXT_LOG_LEVEL", "info"),
+		ShimImage:        env("AWXNEXT_SHIM_IMAGE", "ghcr.io/damhau/awxnext:latest"),
 	}
+	c.ServiceURL = strings.TrimRight(env("AWXNEXT_SERVICE_URL", c.BaseURL), "/")
+	return c
 }
 
 func env(k, def string) string {

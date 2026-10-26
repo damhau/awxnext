@@ -270,6 +270,10 @@ func (a *App) BuildOpenAPI() Obj {
 		"id": Obj{"type": "integer"}, "disassociate": Obj{"type": "boolean"}}}
 	for _, rt := range a.Routes {
 		p := rt.Pattern
+		if !strings.HasPrefix(p, "/api/") {
+			// /metrics, /websocket/ and the agent endpoints are not part of the REST API.
+			continue
+		}
 		m := strings.ToLower(rt.Method)
 		item, _ := paths[p].(Obj)
 		if item == nil {

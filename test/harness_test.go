@@ -70,6 +70,7 @@ func TestMain(m *testing.M) {
 	jobsCtx, stopJobs := context.WithCancel(ctx)
 	jobManager = server.StartJobs(jobsCtx, app)
 	srv = httptest.NewServer(server.Handler(app))
+	cfg.ServiceURL, cfg.InternalURL = srv.URL, srv.URL
 	code := m.Run()
 	stopJobs()
 	os.RemoveAll(cfg.ProjectsRoot)

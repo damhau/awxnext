@@ -122,7 +122,7 @@ func fail(explanation string) jobs.Result {
 func runJob(ctx context.Context, rc *jobs.RunContext) jobs.Result {
 	row, app := rc.Job, rc.M.App
 	id := row.ID()
-	run, err := NewRun(app, fmt.Sprint(id))
+	run, err := NewRunFor(ctx, app, fmt.Sprint(id), row)
 	if err != nil {
 		return jobs.Result{Status: "error", Explanation: err.Error()}
 	}

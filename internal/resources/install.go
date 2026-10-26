@@ -17,6 +17,7 @@ func Install(app *api.App) {
 	installScheduleRoutes(app)
 	installWebhookRoutes(app)
 	installCallbackRoutes(app)
+	app.Handle("GET", "/api/v2/metrics/", handleAWXMetrics)
 }
 
 // Bootstrap seeds data required at startup: managed roles, install uuid, this instance.
@@ -36,10 +37,11 @@ func Bootstrap(ctx context.Context, app *api.App) error {
 			return err
 		}
 	}
-	_, err := app.DB.Exec(ctx, `INSERT INTO instances (hostname, node_type, node_state, capacity, managed, version, last_seen)
-		VALUES ($1, 'hybrid', 'ready', $2, true, $3, now())
-		ON CONFLICT (hostname) DO UPDATE SET last_seen = now(), version = EXCLUDED.version, capacity = EXCLUDED.capacity`,
-		app.Cfg.NodeName, app.Cfg.Capacity, api.ProductVersion)
+	_, err := app.DB.Exec(ctx, `INSERT INTO instances (hostname, node_type, node_state, capacity, managed, version, last_seen, internal_url)
+		VALUES ($1, 'hybrid', 'ready', $2, true, $3, now(), $4)
+		ON CONFLICT (hostname) DO UPDATE SET last_seen = now(), version = EXCLUDED.version, capacity = EXCLUDED.capacity,
+			internal_url = EXCLUDED.internal_url`,
+		app.Cfg.NodeName, app.Cfg.Capacity, api.ProductVersion, app.Cfg.InternalURL)
 	if err != nil {
 		return err
 	}

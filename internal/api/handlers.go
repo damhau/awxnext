@@ -14,6 +14,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/damhau/awxnext/internal/metrics"
+	"github.com/damhau/awxnext/internal/tracing"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -26,6 +28,8 @@ const (
 func (a *App) Router() chi.Router {
 	r := chi.NewRouter()
 	r.Use(a.headers)
+	r.Use(tracing.Middleware)
+	r.Use(instrument)
 	r.Use(a.recoverer)
 	r.Use(trailingSlash)
 
@@ -93,11 +97,43 @@ type timedWriter struct {
 	http.ResponseWriter
 	start       time.Time
 	wroteHeader bool
+	status      int
+}
+
+var (
+	httpRequests = metrics.Default.NewCounter("awxnext_http_requests_total", "HTTP requests by route, method and status code.", "method", "route", "code")
+	httpDuration = metrics.Default.NewHistogram("awxnext_http_request_duration_seconds", "HTTP request latency by route.", nil, "method", "route")
+)
+
+// instrument records request counts and latencies per route pattern.
+func instrument(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		next.ServeHTTP(w, r)
+		route := "unmatched"
+		if rc := chi.RouteContext(r.Context()); rc != nil && rc.RoutePattern() != "" {
+			route = rc.RoutePattern()
+			// Only known resource and sublist names become label values (bounded cardinality).
+			if res := registry[rc.URLParam("res")]; res != nil {
+				route = strings.Replace(route, "{res}", res.Name, 1)
+				if sub := rc.URLParam("sub"); sub != "" && res.knownSub(sub) {
+					route = strings.Replace(route, "{sub}", sub, 1)
+				}
+			}
+		}
+		code := 200
+		if tw, ok := w.(*timedWriter); ok && tw.status != 0 {
+			code = tw.status
+		}
+		httpRequests.With(r.Method, route, strconv.Itoa(code)).Inc()
+		httpDuration.With(r.Method, route).Observe(time.Since(start).Seconds())
+	})
 }
 
 func (t *timedWriter) WriteHeader(code int) {
 	if !t.wroteHeader {
 		t.wroteHeader = true
+		t.status = code
 		t.Header().Set("X-API-Time", fmt.Sprintf("%.3fs", time.Since(t.start).Seconds()))
 	}
 	t.ResponseWriter.WriteHeader(code)
@@ -836,4 +872,23 @@ func metadata(c *Ctx, res *Resource, isList, writable bool) Obj {
 		"related_search_fields": related,
 		"max_page_size":         maxPageSize,
 	}
+}
+
+// knownSub reports whether name is a sublist, action or built-in sub-path of res.
+func (res *Resource) knownSub(name string) bool {
+	for _, s := range res.SubLists {
+		if s.Name == name {
+			return true
+		}
+	}
+	for _, a := range res.Actions {
+		if a.Name == name {
+			return true
+		}
+	}
+	switch name {
+	case "activity_stream", "object_roles", "access_list", "history", "copy", "revert":
+		return true
+	}
+	return false
 }

@@ -13,12 +13,14 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/damhau/awxnext/internal/agent"
 	"github.com/damhau/awxnext/internal/api"
 	"github.com/damhau/awxnext/internal/auth"
 	"github.com/damhau/awxnext/internal/config"
 	"github.com/damhau/awxnext/internal/crypto"
 	"github.com/damhau/awxnext/internal/kms"
 	"github.com/damhau/awxnext/internal/server"
+	"github.com/damhau/awxnext/internal/tracing"
 )
 
 func usage() {
@@ -32,6 +34,9 @@ Commands:
   keys export       print all data keys unwrapped (escrow; store offline!)
   keys import FILE  restore escrowed data keys, wrapped with the configured master key
   keys rewrap       re-wrap data keys from the AWXNEXT_OLD_* master key to the current one
+  agent             run a remote execution node agent (dials back to the control plane)
+  shim              run one job inside a container group pod (started by the control plane)
+  install-shim DEST copy this binary to DEST (job pod init container)
   version           print the version
 `)
 	os.Exit(2)
@@ -41,8 +46,8 @@ func main() {
 	if len(os.Args) < 2 {
 		usage()
 	}
-	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo})))
 	cfg := config.Load()
+	server.ConfigureLogging(cfg)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
@@ -56,6 +61,15 @@ func main() {
 		err = createSuperuser(ctx, cfg, os.Args[2:])
 	case "keys":
 		err = keys(ctx, cfg, os.Args[2:])
+	case "agent":
+		err = runAgent(ctx, os.Args[2:])
+	case "shim":
+		err = runShim(ctx, os.Args[2:])
+	case "install-shim":
+		if len(os.Args) != 3 {
+			usage()
+		}
+		err = agent.InstallShim(os.Args[2])
 	case "version":
 		fmt.Println(api.ProductVersion)
 	default:
@@ -68,6 +82,15 @@ func main() {
 }
 
 func serve(ctx context.Context, cfg *config.Config) error {
+	stopTracing, err := tracing.Setup(ctx, api.ProductVersion, cfg.NodeName)
+	if err != nil {
+		return fmt.Errorf("tracing: %w", err)
+	}
+	defer func() {
+		flush, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		stopTracing(flush)
+	}()
 	app, err := server.Setup(ctx, cfg)
 	if err != nil {
 		return err
@@ -186,4 +209,43 @@ func keys(ctx context.Context, cfg *config.Config, args []string) error {
 	}
 	usage()
 	return nil
+}
+
+func envOr(k, def string) string {
+	if v := os.Getenv(k); v != "" {
+		return v
+	}
+	return def
+}
+
+func runAgent(ctx context.Context, args []string) error {
+	fs := flag.NewFlagSet("agent", flag.ExitOnError)
+	cfg := agent.Config{Version: api.ProductVersion}
+	fs.StringVar(&cfg.URL, "url", os.Getenv("AWXNEXT_AGENT_URL"), "control plane URL (AWXNEXT_AGENT_URL)")
+	fs.StringVar(&cfg.Token, "token", os.Getenv("AWXNEXT_AGENT_TOKEN"), "agent token from /api/v2/instances/N/agent_token/ (AWXNEXT_AGENT_TOKEN)")
+	fs.StringVar(&cfg.Runtime, "runtime", envOr("AWXNEXT_AGENT_RUNTIME", "podman"), "podman, docker or none (ansible-runner installed on the node)")
+	fs.StringVar(&cfg.RunnerCommand, "runner", envOr("AWXNEXT_RUNNER_CMD", "ansible-runner"), "ansible-runner binary for runtime none")
+	fs.StringVar(&cfg.WorkDir, "work-dir", envOr("AWXNEXT_AGENT_WORK_DIR", "/var/lib/awxnext-agent"), "directory for job files")
+	fs.IntVar(&cfg.Capacity, "capacity", 0, "forks capacity (default: computed from CPU and memory)")
+	fs.StringVar(&cfg.CACert, "ca-cert", os.Getenv("AWXNEXT_AGENT_CA_CERT"), "PEM file with the CA of the control plane certificate")
+	fs.BoolVar(&cfg.InsecureSkipVerify, "insecure", false, "skip TLS verification (testing only)")
+	fs.Parse(args)
+	if cfg.URL == "" || cfg.Token == "" {
+		return errors.New("--url and --token are required")
+	}
+	return agent.RunAgent(ctx, cfg)
+}
+
+func runShim(ctx context.Context, args []string) error {
+	fs := flag.NewFlagSet("shim", flag.ExitOnError)
+	url := fs.String("url", "", "work unit URL")
+	cfg := agent.Config{Runtime: "none", ExactWorkDir: true, Token: os.Getenv("AWXNEXT_SHIM_TOKEN")}
+	fs.StringVar(&cfg.WorkDir, "work-dir", "/runner", "private data dir")
+	fs.StringVar(&cfg.RunnerCommand, "runner", "ansible-runner", "ansible-runner binary")
+	fs.BoolVar(&cfg.InsecureSkipVerify, "insecure", os.Getenv("AWXNEXT_SHIM_INSECURE") != "", "skip TLS verification")
+	fs.Parse(args)
+	if *url == "" || cfg.Token == "" {
+		return errors.New("--url and AWXNEXT_SHIM_TOKEN are required")
+	}
+	return agent.RunShim(ctx, cfg, *url)
 }

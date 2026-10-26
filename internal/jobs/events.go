@@ -165,6 +165,7 @@ func (o *Output) flush() {
 	o.total += len(batch)
 	total := o.total
 	o.mu.Unlock()
+	eventsWritten.With().Add(float64(len(batch)))
 	o.db.Exec(ctx, "UPDATE unified_jobs SET emitted_events = $2 WHERE id = $1", o.jobID, total)
 	if o.onFlush != nil {
 		maxCounter := 0

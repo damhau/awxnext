@@ -3,12 +3,16 @@ package server
 
 import (
 	"context"
+	"crypto/subtle"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
+	"runtime"
+	"sync"
 
+	"github.com/damhau/awxnext/internal/agent"
 	"github.com/damhau/awxnext/internal/api"
 	"github.com/damhau/awxnext/internal/auth"
 	"github.com/damhau/awxnext/internal/config"
@@ -16,11 +20,13 @@ import (
 	"github.com/damhau/awxnext/internal/db"
 	"github.com/damhau/awxnext/internal/jobs"
 	"github.com/damhau/awxnext/internal/kms"
+	"github.com/damhau/awxnext/internal/metrics"
 	"github.com/damhau/awxnext/internal/resources"
 	"github.com/damhau/awxnext/internal/runners/ansible"
 	"github.com/damhau/awxnext/internal/runners/gitsync"
 	"github.com/damhau/awxnext/internal/runners/system"
 	"github.com/damhau/awxnext/internal/settings"
+	"github.com/damhau/awxnext/internal/tracing"
 	"github.com/damhau/awxnext/internal/ws"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -63,10 +69,55 @@ func Setup(ctx context.Context, cfg *config.Config) (*api.App, error) {
 	return app, nil
 }
 
+var processMetrics sync.Once
+
+// registerProcessMetrics exposes Go runtime and database pool gauges.
+func registerProcessMetrics(app *api.App) {
+	processMetrics.Do(func() {
+		reg := metrics.Default
+		reg.NewGaugeFunc("awxnext_goroutines", "Number of goroutines.", func() float64 { return float64(runtime.NumGoroutine()) })
+		reg.NewGaugeFunc("awxnext_heap_alloc_bytes", "Bytes of allocated heap objects.", func() float64 {
+			var ms runtime.MemStats
+			runtime.ReadMemStats(&ms)
+			return float64(ms.HeapAlloc)
+		})
+		reg.NewGaugeFunc("awxnext_db_pool_acquired_connections", "Database connections in use.", func() float64 { return float64(app.DB.Stat().AcquiredConns()) })
+		reg.NewGaugeFunc("awxnext_db_pool_idle_connections", "Idle database connections.", func() float64 { return float64(app.DB.Stat().IdleConns()) })
+		reg.NewGaugeFunc("awxnext_db_pool_max_connections", "Maximum database connections.", func() float64 { return float64(app.DB.Stat().MaxConns()) })
+		reg.NewGaugeFunc("awxnext_db_pool_wait_seconds_total", "Time spent waiting for a database connection.", func() float64 {
+			return app.DB.Stat().AcquireDuration().Seconds()
+		})
+	})
+}
+
+// ConfigureLogging installs the default slog handler (text or JSON).
+func ConfigureLogging(cfg *config.Config) {
+	var level slog.Level
+	if err := level.UnmarshalText([]byte(cfg.LogLevel)); err != nil {
+		level = slog.LevelInfo
+	}
+	opts := &slog.HandlerOptions{Level: level}
+	var h slog.Handler = slog.NewTextHandler(os.Stderr, opts)
+	if cfg.LogFormat == "json" {
+		h = slog.NewJSONHandler(os.Stderr, opts)
+	}
+	slog.SetDefault(slog.New(tracing.LogHandler(h)))
+}
+
 // Handler installs routes and returns the HTTP handler.
 func Handler(app *api.App) http.Handler {
+	registerProcessMetrics(app)
+	app.HandlePublic("GET", "/metrics", func(c *api.Ctx, w http.ResponseWriter, r *http.Request) {
+		if tok := app.Cfg.MetricsToken; tok != "" && subtle.ConstantTimeCompare([]byte(r.Header.Get("Authorization")), []byte("Bearer "+tok)) != 1 {
+			api.WriteError(w, api.ErrUnauthorized)
+			return
+		}
+		w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
+		metrics.Default.Write(w)
+	})
 	auth.Install(app)
 	resources.Install(app)
+	agent.Install(app)
 	ws.Install(app, func() *jobs.Hub {
 		if resources.Jobs == nil {
 			return nil
@@ -88,6 +139,9 @@ func StartJobs(ctx context.Context, app *api.App) *jobs.Manager {
 	m.FinishedHooks = append(m.FinishedHooks, resources.JobFinishedNotifications, resources.WebhookStatusFinished)
 	resources.Jobs = m
 	m.Start(ctx)
+	if agent.Default != nil {
+		agent.Default.Start(ctx)
+	}
 	return m
 }
 

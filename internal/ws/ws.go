@@ -18,6 +18,7 @@ import (
 	"github.com/damhau/awxnext/internal/api"
 	"github.com/damhau/awxnext/internal/auth"
 	"github.com/damhau/awxnext/internal/jobs"
+	"github.com/damhau/awxnext/internal/metrics"
 )
 
 // eventResources maps event group names to the job resource whose visibility gates them.
@@ -29,6 +30,8 @@ var eventResources = map[string]string{
 	"system_job_events":       "system_jobs",
 	"workflow_events":         "workflow_jobs",
 }
+
+var wsConnections = metrics.Default.NewGauge("awxnext_websocket_connections", "Open /websocket/ connections on this node.")
 
 // Install registers the websocket endpoint. hub returns the node's hub once jobs are started.
 func Install(app *api.App, hub func() *jobs.Hub) {
@@ -78,6 +81,8 @@ func (h *handler) serve(c *api.Ctx, w http.ResponseWriter, r *http.Request) {
 			cn.xrf = ck.Value
 		}
 	}
+	wsConnections.With().Add(1)
+	defer wsConnections.With().Add(-1)
 	defer hub.Unsubscribe(cn.ch)
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()

@@ -5,6 +5,7 @@ import (
 	"context"
 	"embed"
 	"fmt"
+	"github.com/damhau/awxnext/internal/tracing"
 	"io/fs"
 	"sort"
 	"strings"
@@ -24,6 +25,7 @@ func Connect(ctx context.Context, url string) (*pgxpool.Pool, error) {
 	if cfg.MaxConns < 20 {
 		cfg.MaxConns = 20
 	}
+	cfg.ConnConfig.Tracer = tracing.QueryTracer{}
 	return pgxpool.NewWithConfig(ctx, cfg)
 }
 

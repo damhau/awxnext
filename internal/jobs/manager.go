@@ -15,8 +15,11 @@ import (
 	"time"
 
 	"github.com/damhau/awxnext/internal/api"
+	"github.com/damhau/awxnext/internal/metrics"
+	"github.com/damhau/awxnext/internal/tracing"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 // Row holds the raw columns of a unified_jobs row.
@@ -281,6 +284,8 @@ func (m *Manager) dispatchLoop(ctx context.Context, lockConn *pgx.Conn) {
 
 // Tick runs one dispatcher pass (exported for tests).
 func (m *Manager) Tick(ctx context.Context) {
+	start := time.Now()
+	defer func() { tickDuration.With().Observe(time.Since(start).Seconds()) }()
 	for _, h := range m.TickHooks {
 		h(ctx, m)
 	}
@@ -358,10 +363,12 @@ func (m *Manager) run(parent context.Context, id int64) {
 	m.mu.Lock()
 	m.running[id] = cancel
 	m.mu.Unlock()
+	jobsRunning.With().Add(1)
 	defer func() {
 		m.mu.Lock()
 		delete(m.running, id)
 		m.mu.Unlock()
+		jobsRunning.With().Add(-1)
 	}()
 	// Shutting down the node does not kill jobs abruptly; they are reaped if the node never returns.
 	_ = parent
@@ -386,6 +393,17 @@ func (m *Manager) run(parent context.Context, id int64) {
 		m.finish(context.Background(), row, Result{Status: "error", Explanation: "No runner for job type " + row.Str("type")})
 		return
 	}
+	ctx, span := tracing.StartSpan(ctx, "job "+row.Str("type"), attribute.Int64("awx.job.id", id), attribute.String("awx.job.type", row.Str("type")),
+		attribute.String("awx.job.name", row.Str("name")), attribute.Int64("awx.unified_job_template.id", row.Int("unified_job_template_id")))
+	defer func() {
+		final, _ := LoadRow(context.Background(), m.DB(), id)
+		span.SetAttributes(attribute.String("awx.job.status", final.Str("status")))
+		var err error
+		if s := final.Str("status"); s != "successful" {
+			err = fmt.Errorf("job %s: %s", s, final.Str("job_explanation"))
+		}
+		tracing.EndSpan(span, err)
+	}()
 	out := NewOutput(m.DB(), id, row.Time("created"), m.hostIDs(ctx, row), func(e Event) { m.Hub.publishEvent(row, e) },
 		func(maxCounter int) {
 			// Viewers connected to other nodes fetch stored events when notified.
@@ -433,6 +451,13 @@ func (m *Manager) hostIDs(ctx context.Context, row Row) map[string]int64 {
 	return out
 }
 
+var (
+	jobsFinished  = metrics.Default.NewCounter("awxnext_jobs_finished_total", "Jobs reaching a final status, by type and status.", "type", "status")
+	jobsRunning   = metrics.Default.NewGauge("awxnext_jobs_running", "Jobs running on this node.")
+	tickDuration  = metrics.Default.NewHistogram("awxnext_dispatcher_tick_seconds", "Duration of dispatcher passes on the leader.", nil)
+	eventsWritten = metrics.Default.NewCounter("awxnext_job_events_written_total", "Job events stored.")
+)
+
 // Complete records the final status of a job that is not run by a node
 // (workflow jobs, approvals): template status, hooks and websocket updates.
 func (m *Manager) Complete(ctx context.Context, id int64, res Result) error {
@@ -462,6 +487,7 @@ func (m *Manager) finish(ctx context.Context, row Row, res Result) {
 	if _, err := m.DB().Exec(ctx, q, args...); err != nil {
 		slog.Error("finishing job", "job", id, "err", err)
 	}
+	jobsFinished.With(row.Str("type"), res.Status).Inc()
 	if ujt := row.Int("unified_job_template_id"); ujt != 0 {
 		m.DB().Exec(ctx, `UPDATE unified_job_templates SET last_job_id = $2, last_job_failed = $3, last_job_run = now(), status = $4,
 			current_job_id = CASE WHEN current_job_id = $2 THEN NULL ELSE current_job_id END WHERE id = $1`, ujt, id, failed, res.Status)

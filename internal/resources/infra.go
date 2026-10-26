@@ -3,7 +3,9 @@ package resources
 import (
 	"context"
 	"fmt"
+	"net/http"
 
+	"github.com/damhau/awxnext/internal/agent"
 	"github.com/damhau/awxnext/internal/api"
 )
 
@@ -264,6 +266,7 @@ func registerInfrastructure() {
 			{Name: "managed_by_policy", Type: api.TBool, Default: true},
 			{Name: "managed", Type: api.TBool, ReadOnly: true},
 			{Name: "listener_port", Type: api.TInt, Nullable: true},
+			{Name: "agent_runtime", Type: api.TString, ReadOnly: true, Help: "How the agent of a remote execution node runs ansible-runner (podman, docker or none)."},
 			{Name: "errors", Type: api.TText, ReadOnly: true, Help: "Any error details from the last health check."},
 			{Name: "last_seen", Type: api.TDateTime, ReadOnly: true, Nullable: true},
 			{Name: "last_health_check", Type: api.TDateTime, ReadOnly: true, Nullable: true},
@@ -318,6 +321,20 @@ func registerInfrastructure() {
 			return nil
 		},
 	})
+	inst.Actions = append(inst.Actions, &api.Action{Name: "agent_token", Methods: []string{"POST"}, Handler: func(c *Ctx, w http.ResponseWriter, r *http.Request, obj Obj) {
+		if !c.User.Superuser {
+			api.WriteError(w, api.ErrForbidden)
+			return
+		}
+		if str(obj["node_type"]) != "execution" {
+			api.WriteError(w, api.BadRequest("Agent tokens are only issued for execution nodes."))
+			return
+		}
+		tok := agent.NewToken()
+		c.DB().Exec(c, "UPDATE instances SET agent_token_hash = $2, node_state = 'installed', modified = now() WHERE id = $1", obj["id"], agent.HashToken(tok))
+		api.WriteJSON(w, 201, Obj{"token": tok, "url": c.App.Cfg.BaseURL,
+			"command": fmt.Sprintf("awxnext agent --url %s --token %s --runtime podman", c.App.Cfg.BaseURL, tok)})
+	}})
 	inst.SubLists = []*SubList{
 		{
 			Name:   "instance_groups",

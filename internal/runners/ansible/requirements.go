@@ -189,7 +189,7 @@ func InstallRequirements(ctx context.Context, app *api.App, out *jobs.Output, ro
 	}
 
 	ident := fmt.Sprintf("%d_requirements", row.ID())
-	run, err := NewRun(app, ident)
+	run, err := NewRunFor(ctx, app, ident, row)
 	if err != nil {
 		return nil, err
 	}
