@@ -29,8 +29,16 @@ func Register() {
 		Runner:       jobs.RunnerFunc(runJob),
 		Serial:       true,
 		Impact:       jobImpact,
-		Dependencies: jobDependencies,
+		Dependencies: func(ctx context.Context, m *jobs.Manager, row jobs.Row) ([]int64, error) {
+			deps, err := jobDependencies(ctx, m, row)
+			if err != nil {
+				return nil, err
+			}
+			inv, err := inventorySourceDependencies(ctx, m, row.Int("inventory_id"))
+			return append(deps, inv...), err
+		},
 	})
+	registerInventoryUpdate()
 }
 
 // LoadStartArgs decrypts a job's start_args.
