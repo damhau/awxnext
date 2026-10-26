@@ -40,6 +40,9 @@ func Bootstrap(ctx context.Context, app *api.App) error {
 	if err != nil {
 		return err
 	}
+	if err := SeedInfrastructure(ctx, app); err != nil {
+		return err
+	}
 	// Legacy object roles for objects created outside the API (migrations, imports).
 	for _, res := range api.Resources() {
 		if res.ContentType == "" || len(rbac.LegacyRoles(res.ContentType)) == 0 {
