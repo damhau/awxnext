@@ -1,0 +1,1 @@
+- when I click sync on a project it open a white empty page
