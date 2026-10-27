@@ -57,16 +57,20 @@ func uiHandler(dir string) http.Handler {
 				return
 			}
 		}
-		page := index
+		page, mod := index, modTime
 		if dir != "" {
-			// Development: pick up rebuilt assets without a restart.
+			// Development: pick up rebuilt assets without a restart, and date
+			// the page by its file so browsers do not keep a stale copy.
 			if b, err := fs.ReadFile(files, "index.html"); err == nil {
 				page = b
+			}
+			if st, err := fs.Stat(files, "index.html"); err == nil {
+				mod = st.ModTime()
 			}
 		}
 		w.Header().Set("Cache-Control", "no-cache")
 		w.Header().Set("X-Frame-Options", "DENY")
 		w.Header().Set("Content-Security-Policy", "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'")
-		http.ServeContent(w, r, "index.html", modTime, bytes.NewReader(page))
+		http.ServeContent(w, r, "index.html", mod, bytes.NewReader(page))
 	})
 }
