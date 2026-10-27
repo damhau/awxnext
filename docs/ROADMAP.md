@@ -7,7 +7,8 @@ milestone becomes a GitHub milestone and each task a GitHub issue. The task ID
 
 ## How to read it
 
-- **Labels.** A type: `bug` (wrong or misleading today), `feature`, `compat`
+- **Labels.** A type: `bug` (wrong or misleading today), `security` (a way
+  to gain access or rights a user should not have), `feature`, `compat`
   (needed by AWX clients: `awx.awx`, awxkit, Terraform) or `chore` (tests,
   docs, tooling). Plus one or more areas: `api`, `auth`, `rbac`, `settings`,
   `inventory`, `credentials`, `projects`, `jobs`, `workflows`,
@@ -22,12 +23,12 @@ milestone becomes a GitHub milestone and each task a GitHub issue. The task ID
 
 | Milestone | Goal | Tasks |
 |---|---|---|
-| [M1 Nothing misleading](#m1-nothing-misleading) | What awxnext shows or accepts does what it says | 15 |
+| [M1 Nothing misleading](#m1-nothing-misleading) | What awxnext shows or accepts does what it says | 18 |
 | [M2 AWX clients work unchanged](#m2-awx-clients-work-unchanged) | Collection, awxkit and Terraform run against awxnext, proven in CI | 13 |
 | [M3 Jobs, workflows and notifications](#m3-jobs-workflows-and-notifications) | The rest of AWX's run-time features, plus typed node outputs | 6 |
 | [M4 Inventories, credentials and projects](#m4-inventories-credentials-and-projects) | Every inventory source, credential type, lookup and project type | 10 |
 | [M5 Authentication](#m5-authentication) | Every login method AWX has, except RADIUS and TACACS+ | 6 |
-| [M6 Operations and scale](#m6-operations-and-scale) | Run awxnext in production: policies, logging, Helm, backup | 12 |
+| [M6 Operations and scale](#m6-operations-and-scale) | Run awxnext in production: policies, logging, Helm, backup, job isolation | 13 |
 | [M7 UI completeness](#m7-ui-completeness) | Every API feature reachable from the UI; the remaining UI goals | 17 |
 
 ---
@@ -36,7 +37,8 @@ milestone becomes a GitHub milestone and each task a GitHub issue. The task ID
 
 Settings that are saved but ignored, filters that are silently dropped and
 fields that are not checked are worse than missing features: users believe
-they work. **Exit:** no setting without effect, no ignored filter, the P1
+they work. **Exit:** no setting without effect, no ignored filter or launch
+field, no launch input that reaches Ansible's connection settings, the P1
 list in `parity.md` closed, and browser tests in CI.
 
 ### M1-01 Fail CI when a setting has no effect
@@ -197,6 +199,70 @@ editors, copy, and the notifications tab.
 
 **Done when:** the suite runs on every pull request, with screenshots saved
 on failure.
+
+### M1-16 Refuse Ansible connection variables from launchers
+**Labels:** security, jobs, workflows, api · **Size:** M
+
+Today, like AWX, a template that prompts for variables accepts any name at
+launch, including `ansible_ssh_common_args`, `ansible_connection`,
+`ansible_host` or `ansible_*_interpreter`. Extra variables override every
+other variable, so whoever may launch the template can run a command where
+the job connects from (for example a `ProxyCommand`), with the job's
+credentials, or point those credentials at another host. A survey question
+on an `ansible_*` variable opens the same door to whoever answers it.
+
+- Launch-time variables and survey answers whose name starts with
+  `ansible_` are refused with a 400 naming them, on every launch path: job
+  and workflow templates, schedules (`extra_data`), relaunch and ad hoc
+  commands.
+- Saving a survey question on an `ansible_*` variable is refused.
+- Variables set on the template itself, by those who may edit it, are not
+  affected.
+- New setting `ALLOW_ANSIBLE_VARS_AT_LAUNCH`, off by default, restores
+  AWX's behaviour. `parity.md` lists the difference.
+
+**Done when:** each launch path refuses `ansible_ssh_common_args` and starts
+no job, the survey editor and API refuse such a question, and turning the
+setting on gives AWX's behaviour back.
+
+### M1-17 Refuse launch fields the template does not prompt for
+**Labels:** security, jobs, workflows, api · **Size:** S
+
+Today, like AWX, a launch field the template does not prompt for is moved
+to `ignored_fields` and the job starts anyway. A `limit` sent to a template
+without "prompt on launch" for it runs on the whole inventory: a caller
+that patches one host patches all of them.
+
+- A launch that sends a field the template does not prompt for (`limit`,
+  `inventory`, `credentials`, tags, `extra_vars`…) is refused with a 400
+  listing them ("This template does not prompt for: limit"), and no job is
+  created. Same for schedules and workflow templates.
+- New setting `IGNORE_UNPROMPTED_LAUNCH_FIELDS`, off by default, restores
+  AWX's behaviour (ignore them and report `ignored_fields`).
+
+**Done when:** a launch with an unprompted `limit` returns 400 and creates
+no job, the setting restores `ignored_fields`, and the M2 client tests pass
+(with the setting on where a client relies on it).
+
+### M1-18 Keep the server's secrets out of reach of jobs on runtime `none`
+**Labels:** security, jobs, deploy · **Size:** S
+
+With `AWXNEXT_CONTAINER_RUNTIME=none` (the default of the all-in-one image)
+jobs run as the server's own user. Checked on 2026-10-27: such a process
+reads `AWXNEXT_SECRET_KEY` and `AWXNEXT_DATABASE_URL` from the server's
+`/proc/<pid>/environ`, which is enough to decrypt every credential. Any
+playbook can do it (a task on `localhost` runs beside the server), and with
+M1-16 open, so can anyone allowed to launch a template that prompts for
+variables.
+
+- The server makes itself non-dumpable at start (`PR_SET_DUMPABLE`), so its
+  environment and memory are not readable by other processes of its user.
+- The README says plainly that runtime `none` runs playbooks with the
+  server's privileges and is for one trusted team; the server logs a
+  warning at start when it is used.
+
+**Done when:** a test job on runtime `none` cannot read the server's
+environment, and the README and the start-up warning are in place.
 
 ---
 
@@ -674,6 +740,19 @@ generated from the settings definitions.
 **Done when:** a new user can install, migrate and upgrade from the docs
 alone.
 
+### M6-13 Isolate jobs from each other on the process runtime
+**Labels:** security, jobs, deploy · **Size:** L
+
+After M1-18, jobs on runtime `none` still share the server's user: a job can
+read the private data directory (keys, passwords) of another job running at
+the same time, and write to other projects' checkouts. Run each job under
+its own user or in a sandbox (user namespaces, for example bubblewrap) that
+sees only its own data directory and a read-only project, or make the
+all-in-one image use a container runtime.
+
+**Done when:** a job cannot read another running job's data directory, nor
+write to a project checkout, on the all-in-one image.
+
 ---
 
 ## M7 UI completeness
@@ -853,6 +932,9 @@ Taken on 2026-10-27:
 2. The Terraform provider tested is `ansible/aap` (M2-01).
 3. The milestone order stays as above.
 4. RADIUS and TACACS+ are dropped.
+5. Launching is safe by default: `ansible_*` variables from launchers and
+   launch fields a template does not prompt for are refused. Settings
+   restore AWX's behaviour for clients that rely on it (M1-16, M1-17).
 
 ## Moving it to GitHub
 
