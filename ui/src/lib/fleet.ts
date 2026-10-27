@@ -1,16 +1,16 @@
 import type { Job } from '../api/types'
-import { statusKind } from './format'
+import { jobCell, type CellState } from './cells'
 
-/** What a fleet cell shows: the worst result of the runs in its hour. */
-export type FleetState = 'idle' | 'ok' | 'cancel' | 'pending' | 'run' | 'fail' | 'error'
-
-const rank: Record<FleetState, number> = { idle: 0, ok: 1, cancel: 2, pending: 3, run: 4, fail: 5, error: 6 }
+/** Worse results win a cell; anything else a job can be ranks as no run. */
+const rank: Partial<Record<CellState, number>> = { ok: 1, canceled: 2, pending: 3, running: 4, failed: 5, error: 6 }
+const worse = (a: CellState, b: CellState) => (rank[a] ?? 0) - (rank[b] ?? 0)
 
 const HOUR = 3600_000
 
 export interface FleetCell {
   start: number
-  state: FleetState
+  /** The worst result of the runs in this hour. */
+  state: CellState
   runs: number
   fails: number
   /** The run a click opens: the worst one, the latest on a tie. */
@@ -36,11 +36,6 @@ export function hourBuckets(now: number, n = 24): number[] {
   return Array.from({ length: n }, (_, i) => last - (n - 1 - i) * HOUR)
 }
 
-function stateOf(status: string): FleetState {
-  const k = statusKind(status)
-  return k === 'none' ? 'idle' : k
-}
-
 /** Templates x hours: one row per template that ran, failing templates first. */
 export function fleetRows(jobs: Job[], buckets: number[]): FleetRow[] {
   const rows = new Map<string, FleetRow>()
@@ -59,24 +54,24 @@ export function fleetRows(jobs: Job[], buckets: number[]): FleetRow[] {
         type: workflow ? 'workflow_job_template' : 'job_template',
         name: j.summary_fields.unified_job_template?.name ?? j.name,
         inventory: workflow ? 'workflow' : (j.summary_fields.inventory?.name ?? ''),
-        cells: buckets.map((start) => ({ start, state: 'idle', runs: 0, fails: 0 })),
+        cells: buckets.map((start) => ({ start, state: 'empty', runs: 0, fails: 0 })),
         runs: 0,
         fails: 0,
       }
       rows.set(key, row)
     }
     const cell = row.cells[i]
-    const s = stateOf(j.status)
-    const failed = s === 'fail' || s === 'error'
+    const s = jobCell(j.status)
+    const failed = s === 'failed' || s === 'error'
     cell.runs++
     row.runs++
     if (failed) {
       cell.fails++
       row.fails++
     }
-    const cur = cell.job ? stateOf(cell.job.status) : 'idle'
+    const cur = cell.job ? jobCell(cell.job.status) : 'empty'
     const later = !cell.job || Date.parse(cell.job.started ?? cell.job.created ?? '') <= at
-    if (rank[s] > rank[cur] || (rank[s] === rank[cur] && later)) {
+    if (worse(s, cur) > 0 || (worse(s, cur) === 0 && later)) {
       cell.state = s
       cell.job = j
     }

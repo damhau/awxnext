@@ -7,7 +7,8 @@ import { useOrg, usePreselectOrg } from '../../app/context'
 import { Check, FormError, Lookup, TextArea, TextInput, useForm } from '../../components/form'
 import { Icon } from '../../components/icons'
 import { Dialog, useToast } from '../../components/overlay'
-import { Ago, Empty, ErrorNote, KV, Loading, PageHead, Panel, Tab } from '../../components/ui'
+import { Ago, Cell, Empty, ErrorNote, KV, Loading, PageHead, Panel, Tab } from '../../components/ui'
+import type { CellState } from '../../lib/cells'
 import { shortSha } from '../../lib/format'
 import { ListPage, useDelete } from './common'
 
@@ -46,11 +47,11 @@ type Source = Base & {
 }
 
 function SourceStatus({ s }: { s: Source }) {
-  const kind = !s.enabled ? 'cancel' : s.status === 'successful' ? 'ok' : s.status === 'failed' ? 'fail' : 'none'
+  const state: CellState = !s.enabled ? 'canceled' : s.status === 'successful' ? 'ok' : s.status === 'failed' ? 'failed' : 'empty'
   const label = !s.enabled ? 'Paused' : s.status === 'never synced' ? 'Never synced' : s.status === 'successful' ? 'In sync' : s.status === 'failed' ? 'Failed' : s.status
   return (
     <span className="status" title={s.last_error || undefined}>
-      <span aria-hidden="true" className={`sdot ${kind}`} />
+      <Cell state={state} />
       {label}
     </span>
   )

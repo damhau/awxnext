@@ -10,7 +10,7 @@ import { Check, Field, FormError, Lookup, SelectField, TextArea, TextInput, useF
 import { Icon } from '../../components/icons'
 import { Menu, useToast } from '../../components/overlay'
 import { DataTable } from '../../components/table'
-import { Ago, Empty, ErrorNote, KV, Loading, PageHead, Panel, Tab } from '../../components/ui'
+import { Ago, Cell, Empty, ErrorNote, KV, Loading, PageHead, Panel, Tab } from '../../components/ui'
 import { ListPage, useDelete } from './common'
 
 interface WebhookConfig {
@@ -46,7 +46,7 @@ function LastDelivery({ nt }: { nt: NT }) {
   const ok = last.status === 'successful'
   return (
     <span className="status" title={last.error || undefined}>
-      <span aria-hidden="true" className={`sdot ${ok ? 'ok' : last.status === 'pending' ? 'pending' : 'fail'}`} />
+      <Cell state={ok ? 'ok' : last.status === 'pending' ? 'pending' : 'failed'} />
       <span>
         {ok ? 'Delivered' : last.status === 'pending' ? 'Sending' : 'Failed'} <span className="faint small"><Ago at={last.created} /></span>
       </span>
@@ -249,7 +249,7 @@ function Deliveries({ id }: { id: number }) {
           header: 'Result',
           render: (d) => (
             <span className="status">
-              <span aria-hidden="true" className={`sdot ${d.status === 'successful' ? 'ok' : d.status === 'pending' ? 'pending' : 'fail'}`} />
+              <Cell state={d.status === 'successful' ? 'ok' : d.status === 'pending' ? 'pending' : 'failed'} />
               {d.status === 'successful' ? 'Delivered' : d.status === 'pending' ? 'Sending' : 'Failed'}
             </span>
           ),

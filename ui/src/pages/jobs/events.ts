@@ -171,15 +171,15 @@ export function toLines(events: JobEvent[]): Line[] {
   return lines
 }
 
-export type CellState = 'ok' | 'changed' | 'failed' | 'unreachable' | 'skipped' | 'none'
+export type TaskState = 'ok' | 'changed' | 'failed' | 'unreachable' | 'skipped' | 'none'
 
 export interface Grid {
   tasks: { key: string; name: string; play: string }[]
-  hosts: { name: string; cells: CellState[]; bad: boolean }[]
-  counts: Record<CellState, number>
+  hosts: { name: string; cells: TaskState[]; bad: boolean }[]
+  counts: Record<TaskState, number>
 }
 
-const rank: Record<CellState, number> = { none: 0, skipped: 1, ok: 2, changed: 3, failed: 4, unreachable: 5 }
+const rank: Record<TaskState, number> = { none: 0, skipped: 1, ok: 2, changed: 3, failed: 4, unreachable: 5 }
 
 /** Host × task matrix of results; tasks repeated per serial batch share a column. */
 export function toGrid(events: JobEvent[], hostOrder: string[] = []): Grid {
@@ -198,7 +198,7 @@ export function toGrid(events: JobEvent[], hostOrder: string[] = []): Grid {
       byUuid.set(e.uuid, idx)
     }
   }
-  const results = new Map<string, CellState[]>()
+  const results = new Map<string, TaskState[]>()
   const hostList: string[] = [...hostOrder]
   const ensure = (h: string) => {
     let row = results.get(h)
@@ -214,7 +214,7 @@ export function toGrid(events: JobEvent[], hostOrder: string[] = []): Grid {
     if (!e.event.startsWith('runner_on_') || !e.host_name) continue
     const idx = byUuid.get((e.event_data?.task_uuid as string) ?? e.parent_uuid)
     if (idx === undefined) continue
-    let s: CellState
+    let s: TaskState
     if (e.event === 'runner_on_unreachable') s = 'unreachable'
     else if (e.event === 'runner_on_failed') s = e.event_data?.ignore_errors ? 'ok' : 'failed'
     else if (e.event === 'runner_on_skipped') s = 'skipped'
@@ -223,9 +223,9 @@ export function toGrid(events: JobEvent[], hostOrder: string[] = []): Grid {
     const row = ensure(e.host_name)
     if (rank[s] > rank[row[idx]]) row[idx] = s
   }
-  const counts: Record<CellState, number> = { ok: 0, changed: 0, failed: 0, unreachable: 0, skipped: 0, none: 0 }
+  const counts: Record<TaskState, number> = { ok: 0, changed: 0, failed: 0, unreachable: 0, skipped: 0, none: 0 }
   const hosts = hostList.map((name) => {
-    const cells: CellState[] = results.get(name) ?? new Array<CellState>(tasks.length).fill('none')
+    const cells: TaskState[] = results.get(name) ?? new Array<TaskState>(tasks.length).fill('none')
     cells.forEach((c) => counts[c]++)
     return { name, cells, bad: cells.some((c) => c === 'failed' || c === 'unreachable') }
   })

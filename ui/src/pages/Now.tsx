@@ -5,7 +5,7 @@ import { api, type Page } from '../api/client'
 import { useList } from '../api/hooks'
 import type { Base, Job, JobEvent } from '../api/types'
 import { useOrg } from '../app/context'
-import { Ago, Elapsed, Panel, StatusDot, Upcoming, useTick } from '../components/ui'
+import { Ago, Cell, Elapsed, Panel, StatusDot, Upcoming, useTick } from '../components/ui'
 import { fleetRows, hourBuckets, type FleetCell, type FleetRow } from '../lib/fleet'
 import { jobPath, jobsNewestFirst, plural, templatePath, typeLabel } from '../lib/format'
 import { eventsPath, firstFailure, toGrid } from './jobs/events'
@@ -149,26 +149,12 @@ function Fleet({ rows, buckets, loading, truncated }: { rows: FleetRow[]; bucket
         <h2 id="fleet-h">Fleet · templates × hours</h2>
         <span className="small muted">Each cell is the worst result in that hour. Click a cell to open that run.</span>
         <div className="legend" style={{ marginLeft: 'auto' }}>
-          <span>
-            <i className="fcell ok" />
-            ok
-          </span>
-          <span>
-            <i className="fcell fail" />
-            failed
-          </span>
-          <span>
-            <i className="fcell run" />
-            running
-          </span>
-          <span>
-            <i className="fcell cancel" />
-            canceled
-          </span>
-          <span>
-            <i className="fcell idle" />
-            no run
-          </span>
+          {(['ok', 'failed', 'running', 'canceled', 'empty'] as const).map((s) => (
+            <span key={s}>
+              <Cell state={s} />
+              {s === 'empty' ? 'no run' : s}
+            </span>
+          ))}
         </div>
       </div>
       <div className="panel-body">
@@ -222,10 +208,10 @@ function Fleet({ rows, buckets, loading, truncated }: { rows: FleetRow[]; bucket
 }
 
 function FleetSquare({ row, cell }: { row: FleetRow; cell: FleetCell }) {
-  if (!cell.job) return <span className="fcell idle" aria-hidden="true" />
+  if (!cell.job) return <Cell state="empty" size="fill" />
   const what = cell.fails ? `${plural(cell.runs, 'run')}, ${cell.fails} failed` : plural(cell.runs, 'run')
   const label = `${row.name} · ${hourRange(cell.start)} · ${what}`
-  return <Link to={jobPath(cell.job)} className={`fcell ${cell.state}`} aria-label={label} title={label} />
+  return <Cell state={cell.state} size="fill" to={jobPath(cell.job)} label={label} />
 }
 
 const GRID_EVENTS = 'playbook_on_task_start,playbook_on_handler_task_start,runner_on_ok,runner_on_failed,runner_on_unreachable,runner_on_skipped'
@@ -264,7 +250,7 @@ function Attention({ job }: { job: Job }) {
           {mini.map((h) => (
             <span key={h.name} className="mini-row">
               {h.cells.map((c, i) => (
-                <i key={i} className={`cell ${c}`} />
+                <Cell key={i} state={c} size="xs" />
               ))}
             </span>
           ))}

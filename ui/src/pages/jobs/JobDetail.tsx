@@ -8,11 +8,11 @@ import type { HostSummary, Job } from '../../api/types'
 import { varsText } from '../../components/form'
 import { Icon } from '../../components/icons'
 import { Menu, useConfirm, useToast } from '../../components/overlay'
-import { Ago, Crumbs, Elapsed, Empty, ErrorNote, KV, Loading, Maybe, Panel, StatusBadge, Tab } from '../../components/ui'
+import { Ago, Cell, Crumbs, Elapsed, Empty, ErrorNote, KV, Loading, Maybe, Panel, StatusBadge, Tab } from '../../components/ui'
 import { absolute, active, jobApi, jobPath, plural, shortSha, templatePath, typeLabel, userName } from '../../lib/format'
 import { relaunchJob } from '../../lib/jobs'
 import { WorkflowJobGraph } from '../automation/workflow'
-import { firstFailure, toGrid, toLines, useJobEvents, type CellState, type Grid } from './events'
+import { firstFailure, toGrid, toLines, useJobEvents, type Grid, type TaskState } from './events'
 import { Output } from './Output'
 
 const templateKind: Record<string, string> = { job: 'job_template', workflow_job: 'workflow_job_template', project_update: 'project', inventory_update: 'inventory_source', system_job: 'system_job_template' }
@@ -245,7 +245,7 @@ function OutputTab({ type, job, summaries }: { type: string; job: Job; summaries
   )
 }
 
-const cellLabel: Record<CellState, string> = { ok: 'ok', changed: 'changed', failed: 'failed', unreachable: 'unreachable', skipped: 'skipped', none: 'not run' }
+const cellLabel: Record<TaskState, string> = { ok: 'ok', changed: 'changed', failed: 'failed', unreachable: 'unreachable', skipped: 'skipped', none: 'not run' }
 
 function HostGrid({ grid, onCell }: { grid: Grid; onCell: (host: string) => void }) {
   const [all, setAll] = useState(false)
@@ -263,23 +263,23 @@ function HostGrid({ grid, onCell }: { grid: Grid; onCell: (host: string) => void
         </span>
         <div className="legend" style={{ marginLeft: 'auto' }}>
           <span>
-            <i className="cell ok" />
+            <Cell state="ok" />
             ok {c.ok}
           </span>
           <span>
-            <i className="cell changed" />
+            <Cell state="changed" />
             changed {c.changed}
           </span>
           <span>
-            <i className="cell failed" />
+            <Cell state="failed" />
             failed {c.failed + c.unreachable}
           </span>
           <span>
-            <i className="cell skipped" />
+            <Cell state="skipped" />
             skipped {c.skipped}
           </span>
           <span>
-            <i className="cell none" />
+            <Cell state="none" />
             not run {c.none}
           </span>
         </div>
@@ -307,8 +307,8 @@ function HostGrid({ grid, onCell }: { grid: Grid; onCell: (host: string) => void
                   </button>
                 </th>
                 {h.cells.map((s, i) => (
-                  <td key={i} title={`${h.name} · ${grid.tasks[i].name}: ${cellLabel[s]}`}>
-                    <span className={`cell ${s}`} onClick={() => onCell(h.name)} />
+                  <td key={i}>
+                    <Cell state={s} size="md" onClick={() => onCell(h.name)} label={`${h.name} · ${grid.tasks[i].name}: ${cellLabel[s]}`} />
                   </td>
                 ))}
               </tr>
@@ -395,7 +395,7 @@ function HostsTab({ job, rows }: { job: Job; rows: HostSummary[] }) {
             {[...rows].sort((a, b) => Number(b.failed || b.dark > 0) - Number(a.failed || a.dark > 0) || a.host_name.localeCompare(b.host_name)).map((h) => (
               <tr key={h.id}>
                 <td className="mono">{h.host ? <Link to={`/hosts/${h.host}`}>{h.host_name}</Link> : h.host_name}</td>
-                <td>{h.dark > 0 ? <span className="status"><span className="sdot error" />Unreachable</span> : h.failed ? <span className="status"><span className="sdot fail" />Failed</span> : h.changed ? <span className="status"><span className="sdot ok" />Changed</span> : <span className="status"><span className="sdot ok" />Ok</span>}</td>
+                <td>{h.dark > 0 ? <span className="status"><Cell state="error" />Unreachable</span> : h.failed ? <span className="status"><Cell state="failed" />Failed</span> : h.changed ? <span className="status"><Cell state="changed" />Changed</span> : <span className="status"><Cell state="ok" />Ok</span>}</td>
                 <td className="end mono">{h.ok}</td>
                 <td className="end mono">{h.changed}</td>
                 <td className={`end mono ${h.failures ? 'fail-text' : ''}`}>{h.failures}</td>

@@ -132,8 +132,6 @@ code, pre, kbd, .mono, .term, .input.mono, .textarea.mono, .filter-input input {
 }
 .kbd { font-family: var(--mono); font-size: 11px; border: 1px solid #44484e; padding: 1px 6px; border-radius: 4px; color: var(--bar-muted); }
 .topbar-right { margin-left: auto; display: flex; align-items: center; gap: 14px; }
-.topbar .runbars .slot { background: var(--bar-2); }
-.topbar .runbars a:hover span { box-shadow: 0 0 0 1px var(--bar-ink); }
 .live-count { color: #c9ccd1; display: flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: 12px; }
 .live-count:hover { color: var(--bar-ink); text-decoration: none; }
 .live-dot { width: 8px; height: 8px; border-radius: var(--radius-cell); background: var(--lime); animation: pulse 1.4s ease-in-out infinite; }
@@ -217,21 +215,39 @@ code, pre, kbd, .mono, .term, .input.mono, .textarea.mono, .filter-input input {
 .link-btn { border: none; background: none; padding: 0; color: var(--accent); cursor: pointer; text-decoration: underline; text-decoration-color: var(--line-strong); text-underline-offset: 2px; }
 .link-btn:hover { text-decoration-color: currentColor; }
 
-/* ---------- status ---------- */
-/* A status is a cell: colour for the result, a diamond for failure, an ink
-   ring for running, a dashed outline for "not yet". */
-.sdot { display: inline-block; position: relative; width: 10px; height: 10px; border-radius: var(--radius-cell); flex: 0 0 auto; }
-.sdot.ok { background: var(--ok); }
-.sdot.fail, .sdot.error { background: var(--fail); }
-.sdot.error { background: var(--fail-deep); }
-.sdot.fail::after, .sdot.error::after {
-  content: ''; position: absolute; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px 0 0 -2px; background: #fff; transform: rotate(45deg);
+/* ---------- cell ---------- */
+/* One square, one result. Colour is the result; failures add a white
+   diamond, running an ink ring, "not yet" is dashed. States are data
+   attributes so they never collide with other classes. */
+.cell {
+  display: inline-block; position: relative; flex: none; width: 10px; height: 10px; padding: 0; border: 0;
+  border-radius: var(--radius-cell); background: var(--empty); vertical-align: middle;
 }
-.sdot.run { background: var(--lime); box-shadow: inset 0 0 0 2px var(--ink); animation: pulse 1.4s ease-in-out infinite; }
-.sdot.pending { border: 1px dashed var(--faint); }
-.sdot.cancel { background: var(--cancel); }
-.sdot.none { height: 2px; background: var(--line-strong); }
-@media (prefers-reduced-motion: reduce) { .sdot.run { animation: none; } }
+.cell[data-size='xs'] { width: 9px; height: 9px; }
+.cell[data-size='md'] { width: 16px; height: 16px; }
+.cell[data-size='lg'] { width: 28px; height: 28px; border-radius: 3px; }
+.cell[data-size='bar'] { width: 8px; height: 18px; }
+.cell[data-size='fill'] { display: block; width: auto; height: 22px; }
+.cell[data-state='ok'] { background: var(--ok); }
+.cell[data-state='changed'] { background: var(--changed); }
+.cell[data-state='failed'] { background: var(--fail); }
+.cell[data-state='unreachable'], .cell[data-state='error'] { background: var(--fail-deep); }
+.cell[data-state='failed']::after, .cell[data-state='unreachable']::after, .cell[data-state='error']::after {
+  content: ''; position: absolute; left: 50%; top: 50%; width: clamp(3px, 34%, 8px); aspect-ratio: 1; background: #fff;
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+.cell[data-state='skipped'] { background: var(--skip); }
+.cell[data-state='canceled'] { background: var(--cancel); }
+.cell[data-state='running'] { background: var(--lime); box-shadow: inset 0 0 0 2px var(--ink); animation: pulse 1.4s ease-in-out infinite; }
+.cell[data-state='pending'], .cell[data-state='none'] { background: transparent; border: 1px dashed var(--faint); }
+a.cell, button.cell { cursor: pointer; }
+a.cell:hover, button.cell:hover, a.cell:focus-visible, button.cell:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
+.cell.sel { outline: 2px solid var(--ink); outline-offset: 2px; }
+.topbar .cell[data-state='empty'] { background: var(--bar-2); }
+.topbar a.cell:hover, .topbar a.cell:focus-visible { outline-color: var(--bar-ink); }
+@media (prefers-reduced-motion: reduce) { .cell[data-state='running'] { animation: none; } }
+
+/* ---------- status ---------- */
 .status { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 .badge {
   display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; font-weight: 600;
@@ -248,19 +264,6 @@ code, pre, kbd, .mono, .term, .input.mono, .textarea.mono, .filter-input input {
 .chip b { font-weight: 500; }
 .chip button { border: none; background: none; padding: 0 0 0 2px; cursor: pointer; color: var(--muted-2); line-height: 1; }
 .runbars { display: flex; gap: 2px; align-items: center; height: 18px; }
-.runbars span { display: block; position: relative; width: 8px; height: 18px; border-radius: var(--radius-cell); }
-.runbars a { display: flex; height: 100%; }
-.runbars a:hover span { box-shadow: 0 0 0 1px var(--ink); }
-.runbars .ok { background: var(--ok); }
-.runbars .fail, .runbars .error { background: var(--fail); }
-.runbars .error { background: var(--fail-deep); }
-.runbars .fail::after, .runbars .error::after {
-  content: ''; position: absolute; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px 0 0 -2px; background: #fff; transform: rotate(45deg);
-}
-.runbars .cancel { background: var(--cancel); }
-.runbars .run { background: var(--lime); box-shadow: inset 0 0 0 2px var(--ink); }
-.runbars .pending { border: 1px dashed var(--faint); }
-.runbars .slot { background: var(--empty); }
 
 /* ---------- tables ---------- */
 .table-wrap { border: 1px solid var(--line); border-radius: var(--radius-lg); overflow-x: auto; background: var(--surface); }
@@ -502,21 +505,6 @@ pre.code {
 .fleet-name { display: flex; align-items: baseline; gap: 6px; min-width: 0; padding-right: 8px; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .fleet-name b { flex: 0 0 auto; max-width: 100%; font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
 .fleet-name .mono { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 11px; color: var(--muted-2); }
-.fleet-row .end { text-align: right; font-size: 12px; color: var(--ink-3); white-space: nowrap; }
-.fcell { display: block; position: relative; height: 22px; border-radius: var(--radius-cell); background: var(--empty); }
-.fcell.ok { background: var(--ok); }
-.fcell.fail { background: var(--fail); }
-.fcell.error { background: var(--fail-deep); }
-.fcell.fail::after, .fcell.error::after {
-  content: ''; position: absolute; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px 0 0 -3px; background: #fff; transform: rotate(45deg);
-}
-.fcell.run { background: var(--lime); box-shadow: inset 0 0 0 2px var(--ink); animation: pulse 1.4s ease-in-out infinite; }
-.fcell.pending { background: transparent; border: 1px dashed var(--faint); }
-.fcell.cancel { background: var(--cancel); }
-a.fcell:hover, a.fcell:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
-.legend .fcell { width: 10px; height: 10px; }
-.legend .fcell::after { width: 4px; height: 4px; margin: -2px 0 0 -2px; }
-@media (prefers-reduced-motion: reduce) { .fcell.run { animation: none; } }
 /* Needs attention: one failed run per card. */
 .attention { display: flex; gap: 14px; align-items: center; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--radius); color: var(--ink); min-width: 0; }
 .attention:hover { border-color: var(--ink); text-decoration: none; }
@@ -524,10 +512,6 @@ a.fcell:hover, a.fcell:focus-visible { outline: 2px solid var(--ink); outline-of
 .attention-text b { font-weight: 600; }
 .mini { display: flex; flex-direction: column; gap: 2px; flex: 0 0 auto; }
 .mini-row { display: flex; gap: 2px; }
-.mini .cell { width: 9px; height: 9px; cursor: inherit; }
-.mini .cell:hover { box-shadow: none; }
-.mini .cell::after { width: 3px; height: 3px; margin: -1.5px 0 0 -1.5px; }
-.mini .cell.none { border-color: var(--faint); }
 
 /* ---------- grid (hosts x tasks) ---------- */
 .hostgrid { border-collapse: separate; border-spacing: 3px; font-size: 12px; }
@@ -536,24 +520,8 @@ a.fcell:hover, a.fcell:focus-visible { outline: 2px solid var(--ink); outline-of
 .hostgrid th.task { height: 96px; width: 22px; vertical-align: bottom; padding: 0; }
 .hostgrid th.task div { writing-mode: vertical-rl; transform: rotate(180deg); font-weight: 400; color: var(--ink-3); white-space: nowrap; font-size: 11px; max-height: 96px; overflow: hidden; text-overflow: ellipsis; }
 .hostgrid td { padding: 0; }
-.cell { display: block; position: relative; width: 20px; height: 20px; border-radius: var(--radius-cell); cursor: pointer; }
-.cell:hover { box-shadow: 0 0 0 2px var(--surface), 0 0 0 3px var(--ink); }
-.cell.ok { background: var(--ok); }
-.cell.changed { background: var(--changed); }
-.cell.failed { background: var(--fail); }
-.cell.unreachable { background: var(--fail-deep); }
-.cell.failed::after, .cell.unreachable::after {
-  content: ''; position: absolute; left: 50%; top: 50%; width: 7px; height: 7px; margin: -3.5px 0 0 -3.5px; background: #fff; transform: rotate(45deg);
-}
-.cell.skipped { background: var(--skip); }
-.cell.none { border: 1px dashed var(--cancel); }
-.cell.run { background: var(--lime); box-shadow: inset 0 0 0 2px var(--ink); }
 .legend { display: flex; gap: 14px; font-size: 12px; color: var(--ink-3); flex-wrap: wrap; }
 .legend span { display: flex; align-items: center; gap: 5px; }
-.legend i { display: inline-block; width: 10px; height: 10px; border-radius: var(--radius-cell); }
-.legend .cell { cursor: default; }
-.legend .cell:hover { box-shadow: none; }
-.legend .cell::after { width: 4px; height: 4px; margin: -2px 0 0 -2px; }
 
 /* ---------- diff ---------- */
 .diff { font-family: var(--mono); font-size: 12px; line-height: 20px; border: 1px solid var(--line-soft); border-radius: 2px; overflow-x: auto; }

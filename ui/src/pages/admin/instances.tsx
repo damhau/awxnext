@@ -9,7 +9,8 @@ import { Field, FormError, Lookup, MultiLookup, TextInput, useForm, varsError } 
 import { Icon } from '../../components/icons'
 import { Dialog, Menu, useToast } from '../../components/overlay'
 import { DataTable } from '../../components/table'
-import { Ago, Elapsed, Empty, ErrorNote, KV, Loading, PageHead, Panel, Status, Tab } from '../../components/ui'
+import { Ago, Cell, Elapsed, Empty, ErrorNote, KV, Loading, PageHead, Panel, Status, Tab } from '../../components/ui'
+import type { CellState } from '../../lib/cells'
 import { jobPath, jobsNewestFirst } from '../../lib/format'
 import { OneTimeSecret, useDelete } from './common'
 
@@ -51,14 +52,14 @@ type Group = Base & {
   percent_capacity_remaining: number
 }
 
-const stateTone: Record<string, string> = { ready: 'ok', installed: 'pending', provisioning: 'pending', unavailable: 'fail', deprovisioning: 'cancel', 'provision-fail': 'fail', 'deprovision-fail': 'fail' }
+const stateTone: Record<string, CellState> = { ready: 'ok', installed: 'pending', provisioning: 'pending', unavailable: 'failed', deprovisioning: 'canceled', 'provision-fail': 'failed', 'deprovision-fail': 'failed' }
 
 function NodeState({ i }: { i: Instance }) {
-  const tone = !i.enabled ? 'cancel' : (stateTone[i.node_state] ?? 'none')
+  const tone: CellState = !i.enabled ? 'canceled' : (stateTone[i.node_state] ?? 'empty')
   const label = !i.enabled ? 'Disabled' : i.node_state === 'installed' ? 'Waiting for agent' : i.node_state.charAt(0).toUpperCase() + i.node_state.slice(1)
   return (
     <span className="status">
-      <span aria-hidden="true" className={`sdot ${tone}`} />
+      <Cell state={tone} />
       {label}
     </span>
   )

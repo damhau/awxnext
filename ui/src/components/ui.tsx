@@ -1,10 +1,35 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useState, type ButtonHTMLAttributes, type ReactNode } from 'react'
 import { Link, NavLink } from 'react-router'
 import type { RecentJob } from '../api/types'
+import { jobCell, type CellSize, type CellState } from '../lib/cells'
 import { absolute, ago, avatarColor, duration, elapsed, initials, statusKind, statusLabel, upcoming } from '../lib/format'
 
+type CellProps = {
+  state: CellState
+  size?: CellSize
+  /** Required when the cell is a link or a button. */
+  label?: string
+  to?: string
+  selected?: boolean
+  className?: string
+} & Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'className'>
+
+/**
+ * One square, one result: the unit every matrix, run strip and status in the
+ * UI is drawn with. Colour is the result; failures add a white diamond and
+ * running an ink ring, so a row of cells still reads in greyscale. With `to`
+ * it is a link, with `onClick` a button; otherwise it decorates text that
+ * already says the same, unless it has a label.
+ */
+export function Cell({ state, size = 'sm', label, to, selected, className, onClick, ...rest }: CellProps) {
+  const props = { className: `cell${selected ? ' sel' : ''}${className ? ` ${className}` : ''}`, 'data-state': state, 'data-size': size, title: label }
+  if (to) return <Link to={to} aria-label={label} {...props} />
+  if (onClick) return <button type="button" aria-label={label} aria-pressed={selected} onClick={onClick} {...rest} {...props} />
+  return label ? <span role="img" aria-label={label} {...props} /> : <span aria-hidden="true" {...props} />
+}
+
 export function StatusDot({ status }: { status: string | null | undefined }) {
-  return <span aria-hidden="true" className={`sdot ${statusKind(status)}`} />
+  return <Cell state={jobCell(status)} />
 }
 
 export function Status({ status, children }: { status: string | null | undefined; children?: ReactNode }) {
@@ -25,21 +50,19 @@ export function StatusBadge({ status }: { status: string | null | undefined }) {
   )
 }
 
-/** Bars for the most recent runs, oldest first. Height and colour both encode status. */
+/** The most recent runs as cells, oldest on the left; empty slots fill up to `slots`. */
 export function RunBars({ jobs, slots = 12 }: { jobs: RecentJob[] | undefined; slots?: number }) {
   const list = [...(jobs ?? [])].slice(0, slots).reverse()
   const failed = list.filter((j) => statusKind(j.status) === 'fail' || statusKind(j.status) === 'error').length
   const label = list.length ? `Last ${list.length} runs: ${list.length - failed} not failed, ${failed} failed` : 'No runs yet'
   const pad = Math.max(0, Math.min(slots, 12) - list.length)
   return (
-    <div className="runbars" role="img" aria-label={label} title={label}>
+    <div className="runbars" role="group" aria-label={label}>
       {Array.from({ length: pad }, (_, i) => (
-        <span key={'p' + i} className="slot" />
+        <Cell key={'p' + i} state="empty" size="bar" />
       ))}
       {list.map((j) => (
-        <Link key={j.id} to={`/jobs/${j.type}/${j.id}`} title={`#${j.id} ${statusLabel(j.status)} · ${ago(j.finished)}`}>
-          <span className={statusKind(j.status)} />
-        </Link>
+        <Cell key={j.id} state={jobCell(j.status)} size="bar" to={`/jobs/${j.type}/${j.id}`} label={`#${j.id} ${statusLabel(j.status)} · ${ago(j.finished)}`} />
       ))}
     </div>
   )

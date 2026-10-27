@@ -32,7 +32,7 @@ describe('fleetRows', () => {
   it('keeps the worst result of an hour and links to it', () => {
     const rows = fleetRows([job(1, 7, 'successful', '2026-10-27T09:05:00Z'), job(2, 7, 'failed', '2026-10-27T09:10:00Z'), job(3, 7, 'successful', '2026-10-27T09:50:00Z')], b)
     const cell = rows[0].cells[22]
-    expect(cell.state).toBe('fail')
+    expect(cell.state).toBe('failed')
     expect(cell.job?.id).toBe(2)
     expect([cell.runs, cell.fails]).toEqual([3, 1])
   })
@@ -56,6 +56,6 @@ describe('fleetRows', () => {
     expect(rows.map((r) => r.name)).toEqual(['tpl-2', 'tpl-1', 'tpl-4'])
     expect(rows[0].cells[23].state).toBe('error')
     expect(rows[2]).toMatchObject({ type: 'workflow_job_template', inventory: 'workflow' })
-    expect(rows[2].cells[23].state).toBe('run')
+    expect(rows[2].cells[23].state).toBe('running')
   })
 })
