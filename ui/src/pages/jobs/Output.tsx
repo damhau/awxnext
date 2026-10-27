@@ -186,12 +186,18 @@ export function Output({
               {visible.slice(start, end).map((l, k) => {
                 const i = start + k
                 const isTask = l.kind === 'task'
-                const cls = ['term-line', l.kind === 'fatal' ? 'fatal' : '', hitSet.has(i) ? 'hit' : '', i === current ? 'current' : '', isTask ? 'task' : ''].join(' ')
+                const bad = l.taskState === 'failed' || l.taskState === 'unreachable'
+                const cls = ['term-line', l.kind === 'fatal' ? 'fatal' : '', hitSet.has(i) ? 'hit' : '', i === current ? 'current' : '', isTask ? 'task' : '', bad ? 'bad' : ''].join(' ')
                 return (
                   <div key={l.n + ':' + i} className={cls} style={{ height: ROW }} onClick={isTask ? () => toggleTask(l.task) : undefined}>
                     <span className="ln">{l.n}</span>
                     <span className="tx">
                       {isTask && <span aria-hidden="true">{collapsed.has(l.task) ? '▸ ' : '▾ '}</span>}
+                      {isTask && l.taskNo && (
+                        <span className="tnum" data-state={l.taskState} title={`Task ${l.taskNo} in the hosts × tasks grid`}>
+                          {l.taskNo}
+                        </span>
+                      )}
                       {l.kind === 'play' || isTask ? (
                         <span style={{ color: l.kind === 'play' ? '#fff' : '#e9ebe7', fontWeight: l.kind === 'play' ? 500 : 400 }}>{l.plain}</span>
                       ) : (

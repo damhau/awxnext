@@ -513,13 +513,56 @@ pre.code {
 .mini { display: flex; flex-direction: column; gap: 2px; flex: 0 0 auto; }
 .mini-row { display: flex; gap: 2px; }
 
-/* ---------- grid (hosts x tasks) ---------- */
-.hostgrid { border-collapse: separate; border-spacing: 3px; font-size: 12px; }
-.hostgrid th.host { text-align: left; font-family: var(--mono); font-weight: 400; padding-right: 12px; white-space: nowrap; color: var(--ink-2); }
-.hostgrid th.host.bad { color: var(--fail-ink); }
-.hostgrid th.task { height: 96px; width: 22px; vertical-align: bottom; padding: 0; }
-.hostgrid th.task div { writing-mode: vertical-rl; transform: rotate(180deg); font-weight: 400; color: var(--ink-3); white-space: nowrap; font-size: 11px; max-height: 96px; overflow: hidden; text-overflow: ellipsis; }
-.hostgrid td { padding: 0; }
+/* ---------- job matrix (hosts x tasks) ---------- */
+/* Columns are task numbers; the numbered list under the matrix names them. */
+.matrix-counts > span { white-space: nowrap; }
+.matrix-body { display: flex; gap: 28px; flex-wrap: wrap; align-items: flex-start; }
+.matrix-main { flex: 1 1 520px; min-width: 0; }
+.matrix-scroll { overflow-x: auto; padding: 4px; margin: -4px; }
+.matrix { display: grid; gap: 6px; align-items: center; width: max-content; }
+.matrix[data-size='md'] { gap: 4px; }
+.matrix[data-size='sm'] { gap: 3px; }
+.matrix-row { display: contents; }
+.matrix-host { padding-right: 10px; font-size: 12.5px; white-space: nowrap; }
+.matrix-host a { color: var(--ink); }
+.matrix-host.bad, .matrix-host.bad a { color: var(--fail-ink); }
+.matrix-host.sel { font-weight: 600; }
+.matrix-no { font-family: var(--mono); font-size: 11.5px; text-align: center; color: var(--muted-2); }
+.matrix[data-size='sm'] .matrix-no { font-size: 9.5px; }
+.matrix-no.bad { color: var(--fail-ink); font-weight: 600; }
+.matrix-no.sel { color: var(--ink); font-weight: 700; }
+.matrix-tasks { margin: 18px 0 0; padding-left: 28px; columns: 2; column-gap: 32px; font-size: 12px; line-height: 1.75; color: var(--ink-3); max-width: 640px; }
+.matrix-tasks li { break-inside: avoid; }
+.matrix-tasks .link-btn { color: inherit; text-decoration: none; text-align: left; font: inherit; }
+.matrix-tasks .link-btn:hover { text-decoration: underline; }
+.matrix-tasks li.bad { color: var(--fail-ink); }
+.matrix-tasks li.sel { font-weight: 700; color: var(--ink); }
+.matrix-tasks li.bad.sel { color: var(--fail-ink); }
+.cell-detail { flex: 0 1 380px; min-width: 300px; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: var(--surface); }
+.empty-detail { padding: 16px; }
+.cd-head { display: flex; gap: 12px; align-items: center; padding: 14px 16px; border-bottom: 1px solid var(--line); }
+.cd-task { font-weight: 600; font-size: 14px; }
+.cd-peers { padding: 10px 16px; color: var(--ink-3); }
+.cd-peers b { color: var(--ink); margin-right: 6px; }
+.cd-peers b.fail-text { color: var(--fail-ink); }
+.cd-out {
+  margin: 0; padding: 14px 16px; min-height: 120px; max-height: 320px; overflow: auto; background: var(--term); color: var(--term-ink);
+  font-family: var(--mono); font-size: 11.5px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; font-variant-ligatures: none;
+}
+.cd-note { padding: 10px 16px 0; }
+.cd-note p { margin: 0 0 4px; }
+.cd-links { display: flex; gap: 14px; flex-wrap: wrap; padding: 10px 16px 12px; font-weight: 600; }
+/* Task headers in the output carry their matrix number, coloured by the task's worst result. */
+.tnum {
+  display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 16px; padding: 0 4px; margin-right: 8px;
+  border-radius: 3px; font-size: 11px; font-weight: 600; color: #fff; background: #3a3e44; vertical-align: 1px;
+}
+.tnum[data-state='ok'] { background: var(--ok); }
+.tnum[data-state='changed'] { background: var(--changed); color: var(--ink); }
+.tnum[data-state='failed'], .tnum[data-state='unreachable'] { background: var(--fail); }
+.tnum[data-state='skipped'] { background: var(--skip); color: var(--ink); }
+.term-line.task.bad { background: #2a1a15; }
+
 .legend { display: flex; gap: 14px; font-size: 12px; color: var(--ink-3); flex-wrap: wrap; }
 .legend span { display: flex; align-items: center; gap: 5px; }
 

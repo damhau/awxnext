@@ -12,7 +12,8 @@ import { Ago, Cell, Crumbs, Elapsed, Empty, ErrorNote, KV, Loading, Maybe, Panel
 import { absolute, active, jobApi, jobPath, plural, shortSha, templatePath, typeLabel, userName } from '../../lib/format'
 import { relaunchJob } from '../../lib/jobs'
 import { WorkflowJobGraph } from '../automation/workflow'
-import { firstFailure, toGrid, toLines, useJobEvents, type Grid, type TaskState } from './events'
+import { firstFailure, toGrid, toLines, useJobEvents } from './events'
+import { Matrix } from './Matrix'
 import { Output } from './Output'
 
 const templateKind: Record<string, string> = { job: 'job_template', workflow_job: 'workflow_job_template', project_update: 'project', inventory_update: 'inventory_source', system_job: 'system_job_template' }
@@ -69,11 +70,13 @@ function JobView({ type, job }: { type: string; job: Job }) {
 
   return (
     <div className="page ground">
-      <section style={{ background: 'var(--surface)', borderBottom: '1px solid var(--line)', padding: '14px 24px 0' }}>
+      <section style={{ borderBottom: '1px solid var(--line)', padding: '18px 24px 0' }}>
         <Crumbs items={[{ label: 'Jobs', to: '/jobs' }, { label: `#${job.id}` }]} />
         <div className="row wrap" style={{ gap: 12, marginTop: 6 }}>
           <h1>{job.name}</h1>
-          <StatusBadge status={job.status} />
+          <StatusBadge status={job.status}>
+            {job.status === 'failed' && failedHosts.length > 0 && summaries.data ? `Failed on ${failedHosts.length} of ${plural(summaries.data.count, 'host')}` : undefined}
+          </StatusBadge>
           <span className="small muted">{typeLabel(type)}</span>
           <div style={{ marginLeft: 'auto' }} className="row wrap">
             {running && (
@@ -113,7 +116,7 @@ function JobView({ type, job }: { type: string; job: Job }) {
         <dl className="facts" style={{ marginTop: 10 }}>
           <div>
             <dt>Started</dt>
-            <dd title={absolute(job.started)}>{job.started ? new Date(job.started).toLocaleTimeString() : 'not yet'}</dd>
+            <dd>{job.started ? absolute(job.started) : 'not yet'}</dd>
           </div>
           <div>
             <dt>Duration</dt>
@@ -212,15 +215,17 @@ function OutputTab({ type, job, summaries }: { type: string; job: Job; summaries
   const [host, setHost] = useState('')
   const [focus, setFocus] = useState<{ n: number; at: number } | null>(null)
   const showGrid = (type === 'job' || type === 'ad_hoc_command') && grid.tasks.length > 0 && grid.hosts.length > 0
-  const failedJob = ['failed', 'error'].includes(job.status)
+  // Until the events are in, a failed job has no task to blame yet.
+  const failedJob = ['failed', 'error'].includes(job.status) && !loading
   return (
     <>
       {(showGrid || failedJob) && (
         <div className="page-body" style={{ paddingBottom: 0 }}>
-          <div className="split">
-            {showGrid && <HostGrid grid={grid} onCell={(h) => setHost(h)} />}
-            {failedJob && <FailurePanel job={job} failure={failure} onJump={(n) => setFocus({ n, at: Date.now() })} />}
-          </div>
+          {showGrid ? (
+            <Matrix grid={grid} job={job} failure={failure} onHost={setHost} onJump={(n) => setFocus({ n, at: Date.now() })} />
+          ) : (
+            <FailurePanel job={job} failure={failure} onJump={(n) => setFocus({ n, at: Date.now() })} />
+          )}
         </div>
       )}
       <div className="page-body">
@@ -242,86 +247,6 @@ function OutputTab({ type, job, summaries }: { type: string; job: Job; summaries
         )}
       </div>
     </>
-  )
-}
-
-const cellLabel: Record<TaskState, string> = { ok: 'ok', changed: 'changed', failed: 'failed', unreachable: 'unreachable', skipped: 'skipped', none: 'not run' }
-
-function HostGrid({ grid, onCell }: { grid: Grid; onCell: (host: string) => void }) {
-  const [all, setAll] = useState(false)
-  const LIMIT = 24
-  const ordered = [...grid.hosts.filter((h) => h.bad), ...grid.hosts.filter((h) => !h.bad)]
-  const shown = all ? ordered : ordered.slice(0, Math.max(LIMIT, grid.hosts.filter((h) => h.bad).length))
-  const hidden = ordered.length - shown.length
-  const c = grid.counts
-  return (
-    <section aria-label="Host by task results" className="panel wide" style={{ flex: '3 1 620px' }}>
-      <div className="panel-head">
-        <h2>Hosts × tasks</h2>
-        <span className="small muted">
-          {plural(grid.hosts.length, 'host')} · {plural(grid.tasks.length, 'task')}
-        </span>
-        <div className="legend" style={{ marginLeft: 'auto' }}>
-          <span>
-            <Cell state="ok" />
-            ok {c.ok}
-          </span>
-          <span>
-            <Cell state="changed" />
-            changed {c.changed}
-          </span>
-          <span>
-            <Cell state="failed" />
-            failed {c.failed + c.unreachable}
-          </span>
-          <span>
-            <Cell state="skipped" />
-            skipped {c.skipped}
-          </span>
-          <span>
-            <Cell state="none" />
-            not run {c.none}
-          </span>
-        </div>
-      </div>
-      <div style={{ overflowX: 'auto', padding: '8px 12px 12px' }}>
-        <table className="hostgrid">
-          <thead>
-            <tr>
-              <th scope="col" style={{ textAlign: 'left', fontWeight: 500, color: 'var(--muted-2)', paddingRight: 12, verticalAlign: 'bottom' }}>
-                host
-              </th>
-              {grid.tasks.map((t) => (
-                <th key={t.key} scope="col" className="task" title={`${t.play} · ${t.name}`}>
-                  <div>{t.name}</div>
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {shown.map((h) => (
-              <tr key={h.name}>
-                <th scope="row" className={`host ${h.bad ? 'bad' : ''}`}>
-                  <button className="link-btn" style={{ color: 'inherit', fontFamily: 'inherit' }} onClick={() => onCell(h.name)} title={`Show output for ${h.name}`}>
-                    {h.name}
-                  </button>
-                </th>
-                {h.cells.map((s, i) => (
-                  <td key={i}>
-                    <Cell state={s} size="md" onClick={() => onCell(h.name)} label={`${h.name} · ${grid.tasks[i].name}: ${cellLabel[s]}`} />
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {hidden > 0 && (
-          <button className="link-btn small" style={{ marginTop: 8 }} onClick={() => setAll(true)}>
-            Show {plural(hidden, 'more host')} (no failures)
-          </button>
-        )}
-      </div>
-    </section>
   )
 }
 

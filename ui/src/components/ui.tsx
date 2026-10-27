@@ -41,11 +41,12 @@ export function Status({ status, children }: { status: string | null | undefined
   )
 }
 
-export function StatusBadge({ status }: { status: string | null | undefined }) {
+/** A status pill; `children` can phrase it by scope ("Failed on 1 of 6 hosts"). */
+export function StatusBadge({ status, children }: { status: string | null | undefined; children?: ReactNode }) {
   return (
     <span className={`badge ${statusKind(status)}`}>
       <StatusDot status={status} />
-      {statusLabel(status)}
+      {children ?? statusLabel(status)}
     </span>
   )
 }

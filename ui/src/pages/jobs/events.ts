@@ -93,6 +93,9 @@ export interface Line {
   /** Index of the task header this line belongs to (for collapsing). */
   task: number
   meta?: string
+  /** On task headers: the task's column number in the hosts x tasks grid, and its worst result. */
+  taskNo?: number
+  taskState?: TaskState
 }
 
 const failedEvent = (e: JobEvent) => (e.event === 'runner_on_failed' && !e.event_data?.ignore_errors) || e.event === 'runner_on_unreachable'
@@ -124,6 +127,9 @@ export function kindOf(e: JobEvent): LineKind {
 export function toLines(events: JobEvent[]): Line[] {
   const lines: Line[] = []
   let task = -1
+  // Same numbering as the columns of toGrid.
+  const taskNos = new Map<string, number>()
+  for (const e of events) if (isTaskStart(e) && !taskNos.has(taskKey(e))) taskNos.set(taskKey(e), taskNos.size + 1)
   // Per task: counts of results and timing, for the header meta.
   const taskStats = new Map<string, { ok: number; changed: number; failed: number; skipped: number; start: number; end: number }>()
   for (const e of events) {
@@ -164,6 +170,8 @@ export function toLines(events: JobEvent[]): Line[] {
           const secs = s.end > s.start ? (s.end - s.start) / 1000 : 0
           line.meta = bits.join(' · ') + (secs ? ` · ${secs.toFixed(1)}s` : '')
         }
+        line.taskNo = taskNos.get(taskKey(e))
+        line.taskState = !s ? 'none' : s.failed ? 'failed' : s.changed ? 'changed' : s.ok ? 'ok' : s.skipped ? 'skipped' : 'none'
       }
       lines.push(line)
     })
@@ -173,13 +181,27 @@ export function toLines(events: JobEvent[]): Line[] {
 
 export type TaskState = 'ok' | 'changed' | 'failed' | 'unreachable' | 'skipped' | 'none'
 
+export interface GridHost {
+  name: string
+  /** Inventory host id, when an event named it. */
+  id?: number
+  cells: TaskState[]
+  /** Per task, the event that decided the cell. */
+  events: (JobEvent | undefined)[]
+  bad: boolean
+}
+
 export interface Grid {
-  tasks: { key: string; name: string; play: string }[]
-  hosts: { name: string; cells: TaskState[]; bad: boolean }[]
+  /** `bad`: some host failed this task. */
+  tasks: { key: string; name: string; play: string; bad: boolean }[]
+  hosts: GridHost[]
   counts: Record<TaskState, number>
 }
 
 const rank: Record<TaskState, number> = { none: 0, skipped: 1, ok: 2, changed: 3, failed: 4, unreachable: 5 }
+const isTaskStart = (e: JobEvent) => e.event === 'playbook_on_task_start' || e.event === 'playbook_on_handler_task_start'
+const taskKey = (e: JobEvent) => `${e.play}\u0000${e.task}`
+export const isBad = (s: TaskState) => s === 'failed' || s === 'unreachable'
 
 /** Host × task matrix of results; tasks repeated per serial batch share a column. */
 export function toGrid(events: JobEvent[], hostOrder: string[] = []): Grid {
@@ -187,24 +209,27 @@ export function toGrid(events: JobEvent[], hostOrder: string[] = []): Grid {
   const tasks: Grid['tasks'] = []
   const byUuid = new Map<string, number>()
   for (const e of events) {
-    if (e.event === 'playbook_on_task_start' || e.event === 'playbook_on_handler_task_start') {
-      const key = `${e.play}\u0000${e.task}`
+    if (isTaskStart(e)) {
+      const key = taskKey(e)
       let idx = taskIndex.get(key)
       if (idx === undefined) {
         idx = tasks.length
         taskIndex.set(key, idx)
-        tasks.push({ key, name: e.task, play: e.play })
+        tasks.push({ key, name: e.task, play: e.play, bad: false })
       }
       byUuid.set(e.uuid, idx)
     }
   }
   const results = new Map<string, TaskState[]>()
+  const deciders = new Map<string, (JobEvent | undefined)[]>()
+  const ids = new Map<string, number>()
   const hostList: string[] = [...hostOrder]
   const ensure = (h: string) => {
     let row = results.get(h)
     if (!row) {
       row = new Array(tasks.length).fill('none')
       results.set(h, row)
+      deciders.set(h, new Array(tasks.length).fill(undefined))
       if (!hostList.includes(h)) hostList.push(h)
     }
     return row
@@ -221,14 +246,19 @@ export function toGrid(events: JobEvent[], hostOrder: string[] = []): Grid {
     else if (e.event === 'runner_on_ok') s = e.changed ? 'changed' : 'ok'
     else continue
     const row = ensure(e.host_name)
-    if (rank[s] > rank[row[idx]]) row[idx] = s
+    if (e.host) ids.set(e.host_name, e.host)
+    if (rank[s] > rank[row[idx]]) {
+      row[idx] = s
+      deciders.get(e.host_name)![idx] = e
+    }
   }
   const counts: Record<TaskState, number> = { ok: 0, changed: 0, failed: 0, unreachable: 0, skipped: 0, none: 0 }
   const hosts = hostList.map((name) => {
     const cells: TaskState[] = results.get(name) ?? new Array<TaskState>(tasks.length).fill('none')
     cells.forEach((c) => counts[c]++)
-    return { name, cells, bad: cells.some((c) => c === 'failed' || c === 'unreachable') }
+    return { name, id: ids.get(name), cells, events: deciders.get(name) ?? new Array(tasks.length).fill(undefined), bad: cells.some(isBad) }
   })
+  tasks.forEach((t, i) => (t.bad = hosts.some((h) => isBad(h.cells[i]))))
   return { tasks, hosts, counts }
 }
 
@@ -256,8 +286,33 @@ export function firstFailure(events: JobEvent[]): Failure | null {
     play: first.play,
     hosts: [...new Set(sameTask.map((e) => e.host_name))],
     message: (msg ?? stripAnsi(first.stdout).split('\n')[0]).slice(0, 600),
-    path: path.includes('/project/') ? path.slice(path.indexOf('/project/') + 9) : path.split('/').slice(-3).join('/'),
+    path: projectPath(path),
     event: first,
     stopped: events.some((e) => /NO MORE HOSTS LEFT/.test(e.stdout ?? '')),
   }
+}
+
+const word: Record<TaskState, string> = { ok: 'ok', changed: 'changed', failed: 'failed', unreachable: 'unreachable', skipped: 'skipped', none: 'not run' }
+
+/** How the other hosts did on the same task: "Only this host failed · others: 5 ok". */
+export function peers(grid: Grid, host: number, task: number): string {
+  const me = grid.hosts[host].cells[task]
+  const others = grid.hosts.filter((_, i) => i !== host).map((h) => h.cells[task])
+  if (!others.length) return 'The only host in this run'
+  const tally = (['ok', 'changed', 'failed', 'unreachable', 'skipped', 'none'] as const)
+    .map((s) => [s, others.filter((o) => o === s).length] as const)
+    .filter(([, n]) => n)
+    .map(([s, n]) => `${n} ${word[s]}`)
+    .join(' · ')
+  if (others.every((o) => o === me)) return `Same on all ${others.length + 1} hosts`
+  if (isBad(me)) {
+    const bad = others.filter(isBad).length
+    return bad ? `${bad} other host${bad === 1 ? '' : 's'} failed here too · ${tally}` : `Only this host failed · others: ${tally}`
+  }
+  return `Others: ${tally}`
+}
+
+/** A task path relative to the project, with its line: "playbooks/site.yml:20". */
+export function projectPath(path: string): string {
+  return path.includes('/project/') ? path.slice(path.indexOf('/project/') + 9) : path.split('/').slice(-3).join('/')
 }
