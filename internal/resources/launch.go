@@ -297,7 +297,8 @@ func LaunchJobTemplate(c *Ctx, jt Obj, body Obj, launchType string, ov *LaunchOv
 	surveyPasswords := map[string]any{}
 	spec := templateSurvey(c, id)
 	if boolv(jt["survey_enabled"]) && len(spec) > 0 {
-		sv, pw, errs := ApplySurvey(c, spec, launchVars)
+		invID, _ := api.ID(inv)
+		sv, pw, errs := ApplySurvey(c, spec, launchVars, SurveyContext{Template: jt, Inventory: invID})
 		if len(errs) > 0 {
 			return 0, nil, &api.Error{Status: 400, Body: Obj{"variables_needed_to_start": errs}}
 		}

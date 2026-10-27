@@ -7,6 +7,7 @@ import { Icon } from '../../components/icons'
 import { Dialog, useToast } from '../../components/overlay'
 import { useInvalidate } from '../../api/hooks'
 import { typeLabel } from '../../lib/format'
+import { describeSource, type ChoicesFrom } from '../templates/surveyLogic'
 import './automation.css'
 import { browserZone, DAY_NAMES, DAYS, defaultModel, describe, MONTHS, parseRRule, toRRule, type Day, type Freq, type RuleModel } from './rrule'
 
@@ -410,6 +411,7 @@ export interface SurveyQuestion {
   required?: boolean
   default?: unknown
   choices?: string[] | string
+  choices_from?: ChoicesFrom
   min?: number
   max?: number
 }
@@ -735,6 +737,20 @@ export function SurveyField({ q, value, onChange }: { q: SurveyQuestion; value: 
   const label: ReactNode = q.question_name
   const help = q.question_description || undefined
   const str = value === undefined || value === null ? '' : String(value)
+  if (q.choices_from) {
+    // Choices listed at launch: take the answer as typed, checked when the job starts.
+    const multi = q.type === 'multiselect'
+    const text = Array.isArray(value) ? value.join('\n') : str
+    return (
+      <Field label={label} help={`${help ? `${help} ` : ''}One of the ${describeSource(q.choices_from)}${multi ? ', one per line' : ''}; checked when the job starts.`} optional={!q.required} full={multi} htmlFor={id}>
+        {multi ? (
+          <textarea id={id} className="textarea mono" rows={3} value={text} onChange={(e) => onChange(e.target.value.split('\n').map((x) => x.trim()).filter(Boolean))} />
+        ) : (
+          <input id={id} className="input mono" value={str} onChange={(e) => onChange(e.target.value)} />
+        )}
+      </Field>
+    )
+  }
   switch (q.type) {
     case 'textarea':
       return (

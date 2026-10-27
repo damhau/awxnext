@@ -5,6 +5,7 @@ import (
 
 	"github.com/damhau/awxnext/internal/api"
 	"github.com/damhau/awxnext/internal/auth"
+	"github.com/damhau/awxnext/internal/crypto"
 )
 
 // userVisible: superusers/auditors see everyone; others see themselves and users sharing an organization or team.
@@ -64,8 +65,8 @@ func registerUsers() {
 				}
 				return nil
 			}},
-			{Name: "is_active", Type: api.TBool, Hidden: true, Default: true},
-			{Name: "external_source", Type: api.TString, ReadOnly: true, Hidden: true},
+			{Name: "is_active", Type: api.TBool, Default: true, Help: "Inactive users cannot sign in."},
+			{Name: "external_source", Type: api.TString, ReadOnly: true, Help: "The identity provider the user signs in with (oidc), empty for local accounts."},
 			{Name: "last_login", Type: api.TDateTime, ReadOnly: true, Nullable: true},
 		},
 		View: userVisible,
@@ -120,7 +121,8 @@ func registerUsers() {
 		BeforeSave: func(c *Ctx, old, data Obj) error {
 			if pw, ok := data["password"]; ok {
 				s := str(pw)
-				if s == "" {
+				// "$encrypted$" is what reads return: sending it back keeps the password.
+				if s == "" || s == crypto.Placeholder {
 					if old == nil {
 						delete(data, "password")
 					} else {
@@ -141,6 +143,10 @@ func registerUsers() {
 			o["ldap_dn"] = ""
 			o["external_account"] = nil
 			o["auth"] = []any{}
+			if src := str(o["external_source"]); src != "" {
+				o["external_account"] = "social"
+				o["auth"] = []any{Obj{"provider": src}}
+			}
 		},
 		Capabilities: func(c *Ctx, obj Obj, p map[string]bool) map[string]bool {
 			id, _ := api.ID(obj["id"])

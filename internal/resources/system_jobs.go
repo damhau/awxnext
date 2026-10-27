@@ -73,8 +73,9 @@ func LaunchSystemJob(c *Ctx, sjt Obj, extra map[string]any, launchType string) (
 	return jid, nil
 }
 
-// validateSystemJobVars checks the days/dry_run variables of management jobs.
-func validateSystemJobVars(extra map[string]any) error {
+// validateSystemJobVars checks the days/dry_run variables of management jobs,
+// reporting errors on field.
+func validateSystemJobVars(field string, extra map[string]any) error {
 	for k, v := range extra {
 		switch k {
 		case "days":
@@ -86,11 +87,11 @@ func validateSystemJobVars(extra map[string]any) error {
 				}
 			}
 			if err != nil || n < 0 {
-				return api.FieldError("extra_vars", "days must be a non-negative integer.")
+				return api.FieldError(field, "days must be a non-negative integer.")
 			}
 		case "dry_run":
 		default:
-			return api.FieldError("extra_vars", fmt.Sprintf("Unsupported variable %q for management jobs.", k))
+			return api.FieldError(field, fmt.Sprintf("Unsupported variable %q for management jobs.", k))
 		}
 	}
 	return nil
@@ -159,7 +160,7 @@ func registerSystemJobs() {
 				return
 			}
 		}
-		if err := validateSystemJobVars(extra); err != nil {
+		if err := validateSystemJobVars("extra_vars", extra); err != nil {
 			api.WriteError(w, err)
 			return
 		}

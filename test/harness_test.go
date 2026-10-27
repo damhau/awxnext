@@ -1,7 +1,8 @@
 // Package test contains API integration tests run against a real PostgreSQL.
 //
-// Set AWXNEXT_TEST_DATABASE_URL to a server the tests may create databases on
-// (default postgres://postgres@localhost:5432/). Tests are skipped when it is unreachable.
+// Set AWXNEXT_TEST_DATABASE_URL to a server the tests may create databases on;
+// without it they start a throwaway PostgreSQL (see internal/pgtest). Tests are
+// skipped when the configured server is unreachable.
 package test
 
 import (
@@ -22,6 +23,7 @@ import (
 	"github.com/damhau/awxnext/internal/auth"
 	"github.com/damhau/awxnext/internal/config"
 	"github.com/damhau/awxnext/internal/jobs"
+	"github.com/damhau/awxnext/internal/pgtest"
 	"github.com/damhau/awxnext/internal/server"
 	"github.com/jackc/pgx/v5"
 )
@@ -31,26 +33,34 @@ var (
 	app        *api.App
 	jobManager *jobs.Manager
 	dbSkip     string
+	// dbServer is the URL of the server the test databases are created on.
+	dbServer string
 )
 
 func TestMain(m *testing.M) {
-	base := os.Getenv("AWXNEXT_TEST_DATABASE_URL")
-	if base == "" {
-		base = "postgres://postgres@localhost:5432/postgres?sslmode=disable"
+	os.Exit(run(m))
+}
+
+func run(m *testing.M) int {
+	base, stopPG, err := pgtest.URL()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
 	}
+	defer stopPG()
+	dbServer = base
 	ctx := context.Background()
 	name := fmt.Sprintf("awxnext_test_%d", time.Now().UnixNano())
 	admin, err := pgx.Connect(ctx, base)
 	if err != nil {
 		dbSkip = "postgres unavailable: " + err.Error()
-		os.Exit(m.Run())
+		return m.Run()
 	}
 	if _, err := admin.Exec(ctx, "CREATE DATABASE "+name); err != nil {
 		panic(err)
 	}
 	cfg := config.Load()
-	pcfg, _ := pgx.ParseConfig(base)
-	cfg.DatabaseURL = fmt.Sprintf("postgres://%s@%s:%d/%s?sslmode=disable", pcfg.User, pcfg.Host, pcfg.Port, name)
+	cfg.DatabaseURL = databaseURL(name)
 	cfg.SecretKey = "test-secret"
 	cfg.NodeName = "test-node"
 	app, err = server.Setup(ctx, cfg)
@@ -79,7 +89,17 @@ func TestMain(m *testing.M) {
 	app.DB.Close()
 	admin.Exec(ctx, "DROP DATABASE "+name+" WITH (FORCE)")
 	admin.Close(ctx)
-	os.Exit(code)
+	return code
+}
+
+// databaseURL is the URL of database name on the test server.
+func databaseURL(name string) string {
+	u, err := url.Parse(dbServer)
+	if err != nil {
+		panic(err)
+	}
+	u.Path = "/" + name
+	return u.String()
 }
 
 // client performs authenticated API calls.

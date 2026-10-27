@@ -210,8 +210,10 @@ func runJob(ctx context.Context, rc *jobs.RunContext) jobs.Result {
 	for k, v := range inj.Env {
 		env[k] = v
 	}
+	var facts seededFacts
 	if row.Bool("use_fact_cache") {
-		if err := prepareFactCache(ctx, app, run, row, env); err != nil {
+		var err error
+		if facts, err = prepareFactCache(ctx, app, run, row, env); err != nil {
 			return jobs.Result{Status: "error", Explanation: err.Error()}
 		}
 	}
@@ -249,7 +251,7 @@ func runJob(ctx context.Context, rc *jobs.RunContext) jobs.Result {
 		}
 	}
 	if oc != nil && row.Bool("use_fact_cache") {
-		saveFactCache(ctx, app, row, oc.Artifacts, fmt.Sprint(id))
+		saveFactCache(ctx, app, row, oc.Artifacts, fmt.Sprint(id), facts)
 	}
 	if err != nil {
 		return jobs.Result{Status: "error", Explanation: err.Error(), Update: update}
@@ -514,65 +516,6 @@ func setImage(ctx context.Context, app *api.App, run *Run, row jobs.Row) error {
 		run.RegistryPassword, _ = rc.Inputs["password"].(string)
 	}
 	return nil
-}
-
-// prepareFactCache writes cached facts and points Ansible's jsonfile cache at them.
-func prepareFactCache(ctx context.Context, app *api.App, run *Run, row jobs.Row, env map[string]string) error {
-	rel := filepath.Join("artifacts", fmt.Sprint(row.ID()), "fact_cache")
-	timeout := app.Settings.Int(ctx, "ANSIBLE_FACT_CACHE_TIMEOUT")
-	q := "SELECT name, ansible_facts FROM hosts WHERE inventory_id = $1 AND ansible_facts <> '{}'"
-	args := []any{row.Int("inventory_id")}
-	if timeout > 0 {
-		q += " AND ansible_facts_modified > now() - make_interval(secs => $2)"
-		args = append(args, timeout)
-	}
-	rows, err := app.DB.Query(ctx, q, args...)
-	if err != nil {
-		return err
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var name string
-		var facts map[string]any
-		rows.Scan(&name, &facts)
-		if strings.ContainsAny(name, "/\\") || name == ".." {
-			continue
-		}
-		b, _ := json.Marshal(facts)
-		if err := run.WriteFile(filepath.Join(rel, name), b, 0o600); err != nil {
-			return err
-		}
-	}
-	os.MkdirAll(filepath.Join(run.Dir, rel), 0o700)
-	env["ANSIBLE_CACHE_PLUGIN"] = "jsonfile"
-	env["ANSIBLE_CACHE_PLUGIN_CONNECTION"] = run.Path(filepath.ToSlash(rel))
-	env["ANSIBLE_CACHE_PLUGIN_TIMEOUT"] = fmt.Sprint(max(timeout, 0))
-	return nil
-}
-
-// saveFactCache stores facts gathered during the run back on the hosts.
-func saveFactCache(ctx context.Context, app *api.App, row jobs.Row, artifacts, ident string) {
-	// The worker returns the contents of artifacts/<ident>/ as the artifacts root.
-	dir := filepath.Join(artifacts, "fact_cache")
-	if _, err := os.Stat(dir); err != nil {
-		dir = filepath.Join(artifacts, ident, "fact_cache")
-	}
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return
-	}
-	for _, e := range entries {
-		b, err := os.ReadFile(filepath.Join(dir, e.Name()))
-		if err != nil {
-			continue
-		}
-		var facts map[string]any
-		if json.Unmarshal(b, &facts) != nil {
-			continue
-		}
-		app.DB.Exec(ctx, `UPDATE hosts SET ansible_facts = $3, ansible_facts_modified = now() WHERE inventory_id = $1 AND name = $2`,
-			row.Int("inventory_id"), e.Name(), facts)
-	}
 }
 
 // recordHostSummaries stores per-host results from playbook_on_stats.

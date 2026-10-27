@@ -1,6 +1,7 @@
 package resources
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -8,12 +9,14 @@ import (
 	"github.com/damhau/awxnext/internal/api"
 	"github.com/damhau/awxnext/internal/jobs"
 	"github.com/damhau/awxnext/internal/rbac"
+	"github.com/jackc/pgx/v5"
 )
 
 var edgeKinds = []string{"success", "failure", "always"}
 
 // nodeTypes are the template types a workflow node may run.
-var nodeTypes = map[string]bool{"job_template": true, "project": true, "inventory_source": true, "workflow_job_template": true, "workflow_approval_template": true}
+var nodeTypes = map[string]bool{"job_template": true, "project": true, "inventory_source": true, "workflow_job_template": true, "workflow_approval_template": true,
+	"system_job_template": true}
 
 var unifiedJobTypes = map[string]string{"job_template": "job", "project": "project_update", "inventory_source": "inventory_update",
 	"workflow_job_template": "workflow_job", "system_job_template": "system_job", "workflow_approval_template": "workflow_approval"}
@@ -37,6 +40,39 @@ func nodePromptFields() []*Field {
 		{Name: "success_nodes", Type: api.TJSON, ReadOnly: true, Virtual: true},
 		{Name: "failure_nodes", Type: api.TJSON, ReadOnly: true, Virtual: true},
 		{Name: "always_nodes", Type: api.TJSON, ReadOnly: true, Virtual: true},
+	}
+}
+
+// nodeFlowFields are a node's condition and loop (see wfexpr.go).
+func nodeFlowFields() []*Field {
+	expression := func(c *Ctx, v any, data Obj) error {
+		if src := str(v); src != "" {
+			if err := checkExpr(src); err != nil {
+				return fmt.Errorf("Invalid expression: %v", err)
+			}
+		}
+		return nil
+	}
+	return []*Field{
+		{Name: "when", Column: "when_expr", Type: api.TText, Default: "", Validate: expression,
+			Help: "Run the node only when this expression is true, e.g. deploy_env == 'prod' or nodes.build.status == 'successful'. Otherwise the node is skipped, like a node on a path not taken."},
+		{Name: "loop", Column: "loop_expr", Type: api.TText, Default: "", Validate: expression,
+			Help: "Run the node's template once per item of the list this expression gives, e.g. regions or ['eu', 'us']. The node fails if any item fails."},
+		{Name: "loop_var", Type: api.TString, Default: "", MaxLength: 64,
+			Help: "Variable holding the current item (default item). loop_index holds its position, from 0.",
+			Validate: func(c *Ctx, v any, data Obj) error {
+				if s := str(v); s != "" && !varNameRe.MatchString(s) {
+					return fmt.Errorf("%q is not a valid variable name.", s)
+				}
+				return nil
+			}},
+		{Name: "loop_concurrency", Type: api.TInt, Default: 0, Help: "How many items run at once; 0 runs them all at once.",
+			Validate: func(c *Ctx, v any, data Obj) error {
+				if n, _ := num(v); n < 0 {
+					return errors.New("Must be 0 or more.")
+				}
+				return nil
+			}},
 	}
 }
 
@@ -228,6 +264,7 @@ func registerWorkflows() {
 	wf.Actions = []*api.Action{
 		{Name: "launch", Methods: []string{"GET", "POST"}, Perm: "execute", Handler: handleWorkflowLaunch},
 		{Name: "survey_spec", Methods: []string{"GET", "POST", "DELETE"}, Handler: handleSurveySpec},
+		{Name: "survey_choices", Methods: []string{"GET"}, Perm: "execute", Handler: handleSurveyChoices},
 		{Name: "webhook_key", Methods: []string{"GET", "POST"}, Perm: "change", Handler: handleWebhookKey},
 	}
 
@@ -244,7 +281,7 @@ func registerWorkflows() {
 			{Name: "unified_job_template", Type: api.TFK, Ref: "unified_job_templates", Nullable: true},
 			{Name: "identifier", Type: api.TString, MaxLength: 512, Help: "An identifier for this node that is unique within its workflow. It is copied to workflow job nodes corresponding to this node."},
 			{Name: "all_parents_must_converge", Type: api.TBool, Default: false, Help: "If enabled then the node will only run if all of the parent nodes have met the criteria to reach this node"},
-		}, nodePromptFields()...),
+		}, append(nodePromptFields(), nodeFlowFields()...)...),
 		View: func(c *Ctx, arg ArgFunc) string {
 			if c.User.Superuser || c.User.Auditor {
 				return "TRUE"
@@ -287,8 +324,19 @@ func registerWorkflows() {
 				}
 				return nil
 			}
-			if t := ujtType(c, ujt); !nodeTypes[t] {
+			t := ujtType(c, ujt)
+			if !nodeTypes[t] {
 				return api.FieldError("unified_job_template", fmt.Sprintf("Cannot nest a %s inside a WorkflowJobTemplate", t))
+			}
+			if t == "workflow_approval_template" && str(merged["loop"]) != "" {
+				return api.FieldError("loop", "Approval nodes cannot loop.")
+			}
+			if t == "system_job_template" {
+				// Management jobs take only days and dry_run, from the node.
+				ed, _ := merged["extra_data"].(map[string]any)
+				if err := validateSystemJobVars("extra_data", ed); err != nil {
+					return err
+				}
 			}
 			if wf, _ := api.ID(merged["workflow_job_template"]); wf == ujt {
 				return api.FieldError("unified_job_template", "Workflow job template cannot include itself.")
@@ -481,7 +529,10 @@ func registerWorkflows() {
 			{Name: "do_not_run", Type: api.TBool, ReadOnly: true, Help: "Indicates that a job will not be created when True. Workflow runtime semantics will mark this True if the node is in a path that will decidedly not be ran. A value of False means the node may not run."},
 			{Name: "identifier", Type: api.TString, ReadOnly: true},
 			{Name: "all_parents_must_converge", Type: api.TBool, ReadOnly: true},
-		}, nodePromptFields()...),
+			{Name: "skip_reason", Type: api.TString, ReadOnly: true, Help: "Why the node did not run, when its condition decided it."},
+			{Name: "loop_items", Type: api.TJSON, ReadOnly: true, Nullable: true, Help: "The items of a loop node, once its loop has started."},
+			{Name: "iterations", Type: api.TJSON, ReadOnly: true, Virtual: true, Help: "The job of each loop item."},
+		}, append(nodePromptFields(), nodeFlowFields()...)...),
 		View: func(c *Ctx, arg ArgFunc) string {
 			if c.User.Superuser || c.User.Auditor {
 				return "TRUE"
@@ -493,6 +544,29 @@ func registerWorkflows() {
 				return err
 			}
 			for _, o := range objs {
+				o["iterations"] = []Obj{}
+				if o["loop_items"] != nil {
+					id, _ := api.ID(o["id"])
+					rows, err := c.DB().Query(c, `SELECT i.idx, j.id, j.type, j.name, j.status, j.failed, j.elapsed FROM workflow_job_node_iterations i
+						JOIN unified_jobs j ON j.id = i.job_id WHERE i.node_id = $1 ORDER BY i.idx`, id)
+					if err != nil {
+						return err
+					}
+					var iters []Obj
+					for rows.Next() {
+						var idx int
+						var jid int64
+						var typ, name, status string
+						var failed bool
+						var elapsed float64
+						rows.Scan(&idx, &jid, &typ, &name, &status, &failed, &elapsed)
+						iters = append(iters, Obj{"index": idx, "job": Obj{"id": jid, "type": typ, "name": name, "status": status, "failed": failed, "elapsed": elapsed}})
+					}
+					rows.Close()
+					if iters != nil {
+						o["iterations"] = iters
+					}
+				}
 				if jid, ok := api.ID(o["job"]); ok {
 					var typ, name, status string
 					var failed bool
@@ -593,7 +667,7 @@ func registerWorkflows() {
 			for _, o := range objs {
 				var wfID int64
 				var wfName, status string
-				err := c.DB().QueryRow(c, `SELECT w.id, w.name, w.status FROM workflow_job_nodes n JOIN unified_jobs w ON w.id = n.workflow_job_id
+				err := c.DB().QueryRow(c, `SELECT w.id, w.name, w.status FROM workflow_node_jobs n JOIN unified_jobs w ON w.id = n.workflow_job_id
 					WHERE n.job_id = $1`, o["id"]).Scan(&wfID, &wfName, &status)
 				if err == nil {
 					o["summary_fields"].(Obj)["source_workflow_job"] = Obj{"id": wfID, "name": wfName, "status": status}
@@ -703,13 +777,28 @@ func copyWorkflowNodes(c *Ctx, src, dst Obj) error {
 		var nid int64
 		if err := c.DB().QueryRow(c, `INSERT INTO workflow_job_template_nodes (workflow_job_template_id, unified_job_template_id, identifier,
 			all_parents_must_converge, extra_data, inventory_id, execution_environment_id, scm_branch, job_type, job_tags, skip_tags, "limit",
-			diff_mode, verbosity, forks, job_slice_count, timeout)
+			diff_mode, verbosity, forks, job_slice_count, timeout, when_expr, loop_expr, loop_var, loop_concurrency)
 			SELECT $2, unified_job_template_id, identifier, all_parents_must_converge, extra_data, inventory_id, execution_environment_id,
-			scm_branch, job_type, job_tags, skip_tags, "limit", diff_mode, verbosity, forks, job_slice_count, timeout
+			scm_branch, job_type, job_tags, skip_tags, "limit", diff_mode, verbosity, forks, job_slice_count, timeout,
+			when_expr, loop_expr, loop_var, loop_concurrency
 			FROM workflow_job_template_nodes WHERE id = $1 RETURNING id`, id, dstID).Scan(&nid); err != nil {
 			return err
 		}
 		ids[id] = nid
+		// An approval template belongs to its node: the copy gets its own.
+		var approval int64
+		err := c.DB().QueryRow(c, `INSERT INTO unified_job_templates (type, name, description, timeout, organization_id, status, created_by_id, modified_by_id)
+			SELECT 'workflow_approval_template', u.name, u.description, u.timeout, u.organization_id, 'never updated', $2, $2
+			FROM workflow_job_template_nodes n JOIN unified_job_templates u ON u.id = n.unified_job_template_id
+			WHERE n.id = $1 AND u.type = 'workflow_approval_template' RETURNING id`, id, nullID(c.User.UserID)).Scan(&approval)
+		switch {
+		case err == nil:
+			if _, err := c.DB().Exec(c, "UPDATE workflow_job_template_nodes SET unified_job_template_id = $2 WHERE id = $1", nid, approval); err != nil {
+				return err
+			}
+		case !errors.Is(err, pgx.ErrNoRows):
+			return err
+		}
 		for _, q := range []string{
 			"INSERT INTO workflow_job_template_node_credentials (node_id, credential_id) SELECT $2, credential_id FROM workflow_job_template_node_credentials WHERE node_id = $1",
 			"INSERT INTO workflow_job_template_node_labels (node_id, label_id) SELECT $2, label_id FROM workflow_job_template_node_labels WHERE node_id = $1",

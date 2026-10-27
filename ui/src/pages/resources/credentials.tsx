@@ -6,6 +6,7 @@ import { useInvalidate, useList, useObject } from '../../api/hooks'
 import type { Base, Ref } from '../../api/types'
 import { useOrg, usePreselectOrg } from '../../app/context'
 import { AccessTab } from '../../components/access/Access'
+import { useCopy } from '../../components/CopyDialog'
 import { Field, FormError, Lookup, TextInput, useForm } from '../../components/form'
 import { Icon } from '../../components/icons'
 import { Dialog, Menu, useToast } from '../../components/overlay'
@@ -82,6 +83,7 @@ export function CredentialList() {
   const q = compile(ls.q, keys)
   const list = useList<Credential>('credentials/', { ...q.params, ...scope, order_by: ls.order, page: ls.page, page_size: ls.pageSize })
   const del = useDelete('credentials')
+  const copy = useCopy('credentials', { to: (id) => `/credentials/${id}`, what: 'Secret values and secret lookups are copied as they are.' })
   const orgCol = useOrgColumn<Credential>()
   const cols: Column<Credential>[] = [
     { key: 'name', header: 'Credential', sort: 'name', render: (c) => <NameCell to={`/credentials/${c.id}`} name={c.name} sub={c.description || undefined} /> },
@@ -107,6 +109,7 @@ export function CredentialList() {
         <Menu label={`Actions for ${c.name}`} className="btn sm icon ghost">
           <Link to={`/credentials/${c.id}/edit`}>Edit</Link>
           <Link to={`/credentials/${c.id}/access`}>Access</Link>
+          {c.summary_fields.user_capabilities?.copy && !c.managed && <button onClick={() => copy.open(c)}>Copy…</button>}
           <hr />
           <button className="danger" onClick={() => del(c, 'credential')}>
             Delete…
@@ -127,6 +130,7 @@ export function CredentialList() {
           </Link>
         }
       />
+      {copy.dialog}
       <div className="page-body">
         <FilterBox value={ls.q} onApply={ls.setQ} placeholder="name…  try  kind:machine  type:vault*  folder:checkout" />
         <DataTable
@@ -630,6 +634,7 @@ export function CredentialDetail() {
   const { id } = useParams()
   const cred = useObject<Credential>(`credentials/${id}/`)
   const del = useDelete('credentials', '/credentials')
+  const copy = useCopy('credentials', { to: (id) => `/credentials/${id}`, what: 'Secret values and secret lookups are copied as they are.' })
   if (cred.isPending) return <Loading />
   if (cred.error || !cred.data) return <div className="page-body"><ErrorNote error={cred.error ?? 'Not found'} /></div>
   const c = cred.data
@@ -637,6 +642,7 @@ export function CredentialDetail() {
   const base = `/credentials/${c.id}`
   return (
     <div className="page">
+      {copy.dialog}
       <PageHead
         crumbs={[{ label: 'Credentials', to: '/credentials' }, { label: c.name }]}
         title={c.name}
@@ -649,11 +655,15 @@ export function CredentialDetail() {
                 Edit
               </Link>
             )}
-            {caps.delete && !c.managed && (
+            {(caps.copy || caps.delete) && !c.managed && (
               <Menu label="More actions">
-                <button className="danger" onClick={() => del(c, 'credential; templates using it will fail until they get another one')}>
-                  Delete…
-                </button>
+                {caps.copy && <button onClick={() => copy.open(c)}>Copy…</button>}
+                {caps.copy && caps.delete && <hr />}
+                {caps.delete && (
+                  <button className="danger" onClick={() => del(c, 'credential; templates using it will fail until they get another one')}>
+                    Delete…
+                  </button>
+                )}
               </Menu>
             )}
           </>

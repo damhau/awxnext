@@ -129,6 +129,21 @@ func TestProjectGitSync(t *testing.T) {
 	if _, err := os.Stat(local); err != nil {
 		t.Fatalf("local path not populated: %v", err)
 	}
+	// A copy gets its own checkout and syncs it.
+	cp := must(t, a.post(fmt.Sprintf("projects/%d/copy/", pid), map[string]any{"name": uniq("copy")}), 201)
+	if cp.Body["local_path"] == p.Body["local_path"] {
+		t.Fatalf("copy shares the checkout %v", cp.Body["local_path"])
+	}
+	cups := must(t, a.get(fmt.Sprintf("projects/%d/project_updates/", cp.id())), 200)
+	if cups.count() != 1 {
+		t.Fatalf("project copy should launch an update: %s", cups.Raw)
+	}
+	if cu := waitJob(t, a, fmt.Sprintf("project_updates/%d/", int64(cups.results()[0]["id"].(float64)))); cu.Body["status"] != "successful" {
+		t.Fatalf("copy sync: %v", cu.Body["job_explanation"])
+	}
+	if _, err := os.Stat(filepath.Join(app.Cfg.ProjectsRoot, must(t, a.get(fmt.Sprintf("projects/%d/", cp.id())), 200).Body["local_path"].(string), "site.yml")); err != nil {
+		t.Fatalf("copy checkout not populated: %v", err)
+	}
 
 	// New commit: update picks it up; old revision dir stays.
 	sha2 := commitFiles(t, repo, map[string]string{"site.yml": helloPlaybook + "# v2\n"}, "v2")

@@ -5,6 +5,7 @@ import { api, type Page } from '../../api/client'
 import { useInvalidate, useList, useObject } from '../../api/hooks'
 import type { Base, Job, Template } from '../../api/types'
 import { AccessTab } from '../../components/access/Access'
+import { useCopy } from '../../components/CopyDialog'
 import { varsText } from '../../components/form'
 import { Icon } from '../../components/icons'
 import { Menu, useConfirm, useToast } from '../../components/overlay'
@@ -33,6 +34,11 @@ export function TemplateDetail({ kind }: { kind: Kind }) {
   const toast = useToast()
   const invalidate = useInvalidate()
   const tree = useMemo(() => buildTree(folders.data ?? []), [folders.data])
+  const copy = useCopy(res, {
+    to: (nid) => `/templates/${kind}/${nid}`,
+    what: kind === 'job' ? 'Credentials, labels and the survey are copied.' : 'Nodes, links and the survey are copied.',
+    invalidates: ['unified_job_templates', 'folders'],
+  })
 
   if (t.isPending) return <div className="page"><Loading /></div>
   if (t.error || !t.data) return <div className="page page-body"><ErrorNote error={t.error} /></div>
@@ -45,15 +51,6 @@ export function TemplateDetail({ kind }: { kind: Kind }) {
   ]
   const base = `/templates/${kind}/${id}`
 
-  const copy = async () => {
-    try {
-      const r = await api.post<Template>(`${res}/${id}/copy/`, { name: `${tpl.name} (copy)` })
-      toast(`Copied to "${r.name}"`)
-      nav(`/templates/${kind}/${r.id}`)
-    } catch (e) {
-      toast((e as Error).message, 'error')
-    }
-  }
   const remove = async () => {
     if (!(await confirm({ title: `Delete ${tpl.name}?`, body: 'Its schedules are deleted too. Job history stays.', confirm: 'Delete', danger: true }))) return
     try {
@@ -67,6 +64,7 @@ export function TemplateDetail({ kind }: { kind: Kind }) {
 
   return (
     <div className="page">
+      {copy.dialog}
       <PageHead
         crumbs={crumbs}
         title={tpl.name}
@@ -101,7 +99,7 @@ export function TemplateDetail({ kind }: { kind: Kind }) {
               </Link>
             )}
             <Menu label="More actions">
-              {caps.copy && <button onClick={copy}>Copy</button>}
+              {caps.copy && <button onClick={() => copy.open(tpl)}>Copy…</button>}
               <a href={`/api/v2/${res}/${id}/`} target="_blank" rel="noreferrer">
                 View in API
               </a>
@@ -225,7 +223,7 @@ function Details({ kind, tpl }: { kind: Kind; tpl: Template }) {
                       .join(', ') || <span className="faint">none</span>,
                   ],
                   ['Asked at launch', prompts.length ? prompts.join(', ') : <span className="faint">nothing</span>],
-                  ['Webhook', tpl.webhook_service ? `${tpl.webhook_service} · /api/v2/job_templates/${tpl.id}/${tpl.webhook_service}/` : null],
+                  ['Webhook', tpl.webhook_service ? `${tpl.webhook_service} · /api/v2/job_templates/${tpl.id}/${tpl.webhook_service === 'generic' ? 'webhook' : tpl.webhook_service}/` : null],
                   ['Callback', tpl.host_config_key ? <span className="mono">/api/v2/job_templates/{tpl.id}/callback/</span> : null],
                 ]}
               />

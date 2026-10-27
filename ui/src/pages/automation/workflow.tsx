@@ -14,6 +14,7 @@ import { duration, statusKind, statusLabel, templatePath } from '../../lib/forma
 import { useHotkeys } from '../../lib/hotkeys'
 import './automation.css'
 import { edgePath, layout, type Box, type EdgeKind, type GraphNode, type Layout } from './layout'
+import { itemLabel, loopProgress, type Iteration, type LoopProgress } from './loops'
 import { PromptField, PROMPTS, SurveyField, useTemplatePrompts } from './ScheduleForm'
 
 const KINDS: EdgeKind[] = ['success', 'failure', 'always']
@@ -47,6 +48,13 @@ interface WfNode {
   do_not_run?: boolean
   job?: number | null
   extra_data?: Record<string, unknown>
+  when?: string
+  loop?: string
+  loop_var?: string
+  loop_concurrency?: number
+  skip_reason?: string
+  loop_items?: unknown[] | null
+  iterations?: Iteration[]
   summary_fields: Any
   [k: string]: unknown
 }
@@ -71,9 +79,11 @@ function isGenerated(identifier: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(identifier)
 }
 
-/** One-line summary of the prompts a node overrides. */
+/** One-line summary of a node's condition, loop and the prompts it overrides. */
 function promptSummary(n: WfNode): string {
   const parts: string[] = []
+  if (n.when) parts.push(`if ${n.when}`)
+  if (n.loop) parts.push(`each of ${n.loop}`)
   if (n.limit) parts.push(`limit ${n.limit}`)
   if (n.scm_branch) parts.push(`branch ${n.scm_branch}`)
   if (n.job_tags) parts.push(`tags ${n.job_tags}`)
@@ -512,6 +522,11 @@ function NodePanel({
   const ujt = node.summary_fields?.unified_job_template
   const [identifier, setIdentifier] = useState(node.identifier ?? '')
   const [converge, setConverge] = useState(!!node.all_parents_must_converge)
+  const [when, setWhen] = useState(node.when ?? '')
+  const [loopOn, setLoopOn] = useState(!!node.loop)
+  const [loop, setLoop] = useState(node.loop ?? '')
+  const [loopVar, setLoopVar] = useState(node.loop_var ?? '')
+  const [loopConcurrency, setLoopConcurrency] = useState(node.loop_concurrency ? String(node.loop_concurrency) : '')
   const [tpl, setTpl] = useState<Ref | null>(ujt && !isApproval ? ({ id: ujt.id, name: ujt.name, type: ujt.type } as Ref) : null)
   const [apName, setApName] = useState(isApproval ? ujt?.name ?? '' : '')
   const [apDesc, setApDesc] = useState(isApproval ? ujt?.description ?? '' : '')
@@ -548,8 +563,11 @@ function NodePanel({
     setErrors({})
     setError(null)
     try {
-      const body: Any = { identifier, all_parents_must_converge: converge }
+      const body: Any = { identifier, all_parents_must_converge: converge, when: when.trim() }
       if (!isApproval) {
+        body.loop = loopOn ? loop.trim() : ''
+        body.loop_var = loopOn ? loopVar.trim() : ''
+        body.loop_concurrency = loopOn && loopConcurrency ? Number(loopConcurrency) : 0
         if (tpl && tpl.id !== node.unified_job_template) body.unified_job_template = tpl.id
         for (const p of PROMPTS) if (allowed.includes(p)) body[p.field] = p.field === 'inventory' ? inv?.id ?? null : p.field === 'execution_environment' ? ee?.id ?? null : emptyNull(prompts[p.field])
         if (askVars || survey.length) {
@@ -647,6 +665,31 @@ function NodePanel({
         )}
         <TextInput label="Identifier" value={identifier} onChange={setIdentifier} mono disabled={ro} help="Stable name for this step, used by GitOps and the API." error={errors.identifier} />
         {incoming.length > 1 && <Check label="Wait for all parents" checked={converge} onChange={(v) => !ro && setConverge(v)} help="Run only when every link into this step fired, not the first one." />}
+        <TextInput
+          label="Run only when"
+          value={when}
+          onChange={setWhen}
+          mono
+          optional
+          disabled={ro}
+          placeholder="deploy_env == 'prod'"
+          error={errors.when}
+          help={
+            <>
+              False skips this step. Use variables and earlier steps by identifier: <span className="mono">nodes.build.status == 'successful'</span>, <span className="mono">nodes.build.artifacts.version</span>.
+            </>
+          }
+        />
+        {!isApproval && <Check label="Repeat for each item of a list" checked={loopOn} onChange={(v) => !ro && setLoopOn(v)} help="Runs the template once per item. The step fails if any item fails." />}
+        {!isApproval && loopOn && (
+          <div className="stack" style={{ gap: 12, paddingLeft: 24 }}>
+            <TextInput label="Items" value={loop} onChange={setLoop} mono disabled={ro} placeholder="regions   or   ['eu', 'us']" error={errors.loop} help="A variable or expression giving a list." />
+            <div className="row" style={{ gap: 12, alignItems: 'flex-start' }}>
+              <TextInput label="Item variable" value={loopVar} onChange={setLoopVar} mono optional disabled={ro} placeholder="item" error={errors.loop_var} help="loop_index holds its position." />
+              <TextInput label="At most at once" type="number" value={loopConcurrency} onChange={setLoopConcurrency} optional disabled={ro} placeholder="all" error={errors.loop_concurrency} help="1 runs the items one by one." />
+            </div>
+          </div>
+        )}
         {!isApproval && allowed.length > 0 && (
           <div className="stack" style={{ gap: 12 }}>
             {allowed.map((p) => (
@@ -674,7 +717,7 @@ function NodePanel({
         )}
         {canEdit && (
           <div className="form-actions">
-            <button className="btn primary" disabled={busy || (isApproval ? !apName.trim() : !tpl)} onClick={save}>
+            <button className="btn primary" disabled={busy || (isApproval ? !apName.trim() : !tpl || (loopOn && !loop.trim()))} onClick={save}>
               {busy ? 'Saving…' : 'Save step'}
             </button>
           </div>
@@ -914,6 +957,59 @@ function AddStepDialog({
 
 // ---------- live job graph ----------
 
+/** A run node's status and label: its job's, its loop's, or why it did not run. */
+function runState(n: WfNode): { status: string; label: string; loop?: LoopProgress } {
+  if (Array.isArray(n.loop_items)) {
+    const p = loopProgress(n.loop_items, n.iterations ?? [])
+    const label = p.total === 0 ? 'No items' : `${p.done} of ${p.total} item${p.total === 1 ? '' : 's'} done${p.failed ? ` · ${p.failed} failed` : ''}`
+    return { status: p.status, label, loop: p }
+  }
+  const job = n.summary_fields?.job
+  if (job) return { status: job.status, label: statusLabel(job.status) }
+  if (n.do_not_run) return { status: 'none', label: n.skip_reason ? 'Skipped by its condition' : 'Will not run' }
+  return { status: 'waiting', label: 'Waiting' }
+}
+
+/** The jobs of a loop node, one per item. */
+function LoopItems({ node, onClose }: { node: WfNode; onClose: () => void }) {
+  const items = node.loop_items ?? []
+  const byIndex = new Map((node.iterations ?? []).map((i) => [i.index, i]))
+  return (
+    <Dialog title={`${nodeName(node)}: ${items.length} item${items.length === 1 ? '' : 's'}`} onClose={onClose}>
+      <p className="small muted" style={{ marginTop: 0 }}>
+        Each item of <span className="mono">{node.loop}</span> runs as its own job, with the item in <span className="mono">{node.loop_var || 'item'}</span>
+        {node.loop_concurrency ? `, ${node.loop_concurrency} at a time` : ''}.
+      </p>
+      <ul className="wf-links">
+        {items.map((item, i) => {
+          const job = byIndex.get(i)?.job
+          return (
+            <li key={i}>
+              <StatusDot status={job?.status ?? 'waiting'} />
+              <span className="mono ellipsis" title={typeof item === 'string' ? item : JSON.stringify(item)}>
+                {itemLabel(item, i)}
+              </span>
+              <span style={{ marginLeft: 'auto' }} className="small nowrap">
+                {job ? (
+                  <>
+                    <Link to={`/jobs/${job.type}/${job.id}`} onClick={onClose}>
+                      #{job.id}
+                    </Link>{' '}
+                    {statusLabel(job.status)}
+                    {job.elapsed ? ` · ${duration(job.elapsed)}` : ''}
+                  </>
+                ) : (
+                  <span className="muted">waiting</span>
+                )}
+              </span>
+            </li>
+          )
+        })}
+      </ul>
+    </Dialog>
+  )
+}
+
 export function WorkflowJobGraph({ jobId }: { jobId: number }) {
   const qc = useQueryClient()
   const nav = useNavigate()
@@ -931,6 +1027,8 @@ export function WorkflowJobGraph({ jobId }: { jobId: number }) {
     enabled: pendingApprovals.length > 0,
   })
   const canDecide = new Map((approvals.data?.results ?? []).map((a) => [a.id as number, !!a.can_approve_or_deny]))
+  const [loopNodeId, setLoopNodeId] = useState<number | null>(null)
+  const loopNode = nodes.find((n) => n.id === loopNodeId)
   const timer = useRef<number | undefined>(undefined)
   useLive({ workflow_events: [jobId], jobs: ['status_changed'] }, (m) => {
     if (m.group_name === 'jobs' && m.workflow_job_id !== jobId && m.unified_job_id !== jobId) return
@@ -962,14 +1060,15 @@ export function WorkflowJobGraph({ jobId }: { jobId: number }) {
 
   const counts: Record<string, number> = {}
   for (const n of nodes) {
-    const s = n.summary_fields?.job?.status ?? (n.do_not_run ? 'skipped' : 'waiting')
-    const k = s === 'skipped' ? 'skipped' : statusKind(s)
+    const s = runState(n).status
+    const k = s === 'none' ? 'skipped' : statusKind(s)
     counts[k] = (counts[k] ?? 0) + 1
   }
   const dnr = new Set(nodes.filter((n) => n.do_not_run).map((n) => n.id))
 
   return (
     <div className="wf-main" style={{ flex: 'none', width: '100%' }} ref={mainRef}>
+      {loopNode && <LoopItems node={loopNode} onClose={() => setLoopNodeId(null)} />}
       <div className="wf-toolbar">
         <div className="wf-counts">
           {counts.ok ? (
@@ -1014,14 +1113,15 @@ export function WorkflowJobGraph({ jobId }: { jobId: number }) {
         renderNode={(n, b) => {
           const job = n.summary_fields?.job
           const t = nodeType(n)
-          const status: string = job?.status ?? (n.do_not_run ? 'none' : 'waiting')
+          const { status, label, loop } = runState(n)
           const k = statusKind(status)
           const approvalPending = job?.type === 'workflow_approval' && job.status === 'pending'
           const decidable = approvalPending && canDecide.get(job.id)
-          const label = job ? statusLabel(job.status) : n.do_not_run ? 'Will not run' : 'Waiting'
+          const clickable = !!job || !!loop
           const open = () => {
-            if (!job) return
-            if (job.type === 'workflow_approval') nav('/approvals')
+            if (loop) setLoopNodeId(n.id)
+            else if (!job) return
+            else if (job.type === 'workflow_approval') nav('/approvals')
             else nav(`/jobs/${job.type}/${job.id}`)
           }
           return (
@@ -1030,14 +1130,15 @@ export function WorkflowJobGraph({ jobId }: { jobId: number }) {
               tabIndex={0}
               data-node={n.id}
               className={`wf-node ${k} ${n.do_not_run ? 'dnr' : ''} ${t === 'workflow_approval_template' ? 'approval' : ''}`}
-              style={{ left: b.x, top: b.y, width: b.w, height: b.h, cursor: job ? 'pointer' : 'default' }}
+              style={{ left: b.x, top: b.y, width: b.w, height: b.h, cursor: clickable ? 'pointer' : 'default' }}
               onClick={(e) => !(e.target as HTMLElement).closest('button') && open()}
               onKeyDown={(e) => e.key === 'Enter' && open()}
-              title={job ? `#${job.id} ${nodeName(n)}: ${label}` : nodeName(n)}
+              title={job ? `#${job.id} ${nodeName(n)}: ${label}` : n.skip_reason ? `${nodeName(n)}: ${n.skip_reason}` : nodeName(n)}
             >
               <span className="k">
                 <StatusDot status={status} />
                 {NODE_TYPE[t] ?? 'Step'}
+                {loop && <span className="mono">× {loop.total}</span>}
                 {job && <span className="mono">#{job.id}</span>}
               </span>
               <span className="t">{nodeName(n)}</span>

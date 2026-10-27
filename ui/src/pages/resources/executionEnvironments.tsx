@@ -4,6 +4,7 @@ import { api } from '../../api/client'
 import { useInvalidate, useList } from '../../api/hooks'
 import type { Base, Ref } from '../../api/types'
 import { useOrg, usePreselectOrg } from '../../app/context'
+import { useCopy } from '../../components/CopyDialog'
 import { FormError, Lookup, SelectField, TextInput, useForm } from '../../components/form'
 import { Dialog, Menu, useToast } from '../../components/overlay'
 import { DataTable, Pager, useListState, type Column } from '../../components/table'
@@ -45,6 +46,7 @@ export function ExecutionEnvironmentList() {
   const list = useList<EE>('execution_environments/', { search: ls.q || undefined, ...params, order_by: ls.order, page: ls.page, page_size: ls.pageSize })
   const [edit, setEdit] = useState<null | { ee?: EE }>(null)
   const del = useDelete('execution_environments')
+  const copy = useCopy('execution_environments', { onCopied: (ee) => setEdit({ ee: ee as EE }) })
   const cols: Column<EE>[] = [
     {
       key: 'name',
@@ -96,6 +98,7 @@ export function ExecutionEnvironmentList() {
         e.summary_fields.user_capabilities?.edit ? (
           <Menu label={`Actions for ${e.name}`} className="btn sm icon ghost">
             <button onClick={() => setEdit({ ee: e })}>Edit…</button>
+            {e.summary_fields.user_capabilities?.copy && <button onClick={() => copy.open(e)}>Copy…</button>}
             {!e.managed && (
               <>
                 <hr />
@@ -120,6 +123,7 @@ export function ExecutionEnvironmentList() {
           </button>
         }
       />
+      {copy.dialog}
       <div className="page-body">
         <FilterBox value={ls.q} onApply={ls.setQ} placeholder="name or image…" />
         <DataTable

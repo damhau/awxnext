@@ -983,7 +983,8 @@ func (r *reconciler) workflowNodes(wf int64, nodes []Node) (bool, error) {
 	cur := map[string]nodeState{}
 	rows, err := r.c.DB().Query(r.c, `SELECT n.id, n.identifier, coalesce(n.unified_job_template_id, 0), coalesce(u.type, ''), coalesce(u.name, ''),
 		coalesce(u.description, ''), coalesce(u.timeout, 0), n.all_parents_must_converge, n.extra_data, n.inventory_id, n.execution_environment_id,
-		n.scm_branch, n.job_type, n.job_tags, n.skip_tags, n."limit", n.diff_mode, n.verbosity, n.forks, n.job_slice_count, n.timeout
+		n.scm_branch, n.job_type, n.job_tags, n.skip_tags, n."limit", n.diff_mode, n.verbosity, n.forks, n.job_slice_count, n.timeout,
+		n.when_expr, n.loop_expr, n.loop_var, n.loop_concurrency
 		FROM workflow_job_template_nodes n LEFT JOIN unified_job_templates u ON u.id = n.unified_job_template_id WHERE n.workflow_job_template_id = $1`, wf)
 	if err != nil {
 		return false, err
@@ -999,7 +1000,10 @@ func (r *reconciler) workflowNodes(wf int64, nodes []Node) (bool, error) {
 		var scm, jt, tags, skip, limit *string
 		var diff *bool
 		var verb, forks, slices, tout *int64
-		if err := rows.Scan(&nid, &ident, &tid, &typ, &name, &desc, &timeout, &converge, &extra, &inv, &ee, &scm, &jt, &tags, &skip, &limit, &diff, &verb, &forks, &slices, &tout); err != nil {
+		var when, loop, loopVar string
+		var loopConcurrency int64
+		if err := rows.Scan(&nid, &ident, &tid, &typ, &name, &desc, &timeout, &converge, &extra, &inv, &ee, &scm, &jt, &tags, &skip, &limit, &diff, &verb, &forks, &slices, &tout,
+			&when, &loop, &loopVar, &loopConcurrency); err != nil {
 			rows.Close()
 			return false, err
 		}
@@ -1020,6 +1024,14 @@ func (r *reconciler) workflowNodes(wf int64, nodes []Node) (bool, error) {
 		}
 		if diff != nil {
 			st.Prompts["diff_mode"] = *diff
+		}
+		for k, v := range map[string]string{"when": when, "loop": loop, "loop_var": loopVar} {
+			if v != "" {
+				st.Prompts[k] = v
+			}
+		}
+		if loopConcurrency != 0 {
+			st.Prompts["loop_concurrency"] = loopConcurrency
 		}
 		for k, v := range map[string]*int64{"verbosity": verb, "forks": forks, "job_slice_count": slices, "timeout": tout} {
 			if v != nil {

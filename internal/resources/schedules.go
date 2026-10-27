@@ -161,7 +161,7 @@ func validateSchedulePrompts(c *Ctx, ujt int64, merged Obj, data Obj, old Obj) e
 	}
 	switch typ {
 	case "system_job_template":
-		return validateSystemJobVars(extra)
+		return validateSystemJobVars("extra_data", extra)
 	case "job_template", "workflow_job_template":
 	default:
 		return api.FieldError("extra_data", "Extra variables are not supported for this template type.")

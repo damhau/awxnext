@@ -26,6 +26,11 @@ func ProjectLocalPath(id int64, name string) string {
 	return fmt.Sprintf("_%d__%s", id, strings.ToLower(slug))
 }
 
+// ProjectRepoDir is the fetch clone of a git project on this node.
+func ProjectRepoDir(root string, id int64) string {
+	return filepath.Join(root, ".repos", fmt.Sprint(id))
+}
+
 // LaunchProjectUpdate creates a project update job. jobType is "check" for a
 // project sync or "run" for a job-specific checkout (branch override).
 func LaunchProjectUpdate(c *Ctx, project Obj, launchType, jobType, branch string) (int64, error) {

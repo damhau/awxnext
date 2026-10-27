@@ -6,7 +6,8 @@ design, scope and roadmap.
 
 **Status:** early development. The API, job execution (local, remote agents,
 Kubernetes container groups), workflows, schedules, notifications, GitOps, the AWX
-importer and the web UI are in place; see [docs/PLAN.md](docs/PLAN.md) for what's next.
+importer and the web UI are in place; see [docs/PLAN.md](docs/PLAN.md) for what's next and
+[docs/parity.md](docs/parity.md) for a feature by feature comparison with AWX 24.6.
 
 ## Try it with Docker Compose
 
@@ -75,10 +76,13 @@ provider work against it. Additions: `/api/v2/folders/`, `/<resource>/<id>/histo
 ## Development
 
 ```sh
-make test   # vet + unit and integration tests (needs PostgreSQL, see make dev-db)
+make test   # vet + unit and integration tests
 cd ui && npx tsc --noEmit -p . && npx vitest run   # UI typecheck and unit tests
 ```
 
-Job tests run only when `ansible-runner` is on the PATH; they are skipped otherwise.
+The integration tests use the PostgreSQL server in `AWXNEXT_TEST_DATABASE_URL`, or start a
+throwaway PostgreSQL 16 when it isn't set (its binaries are downloaded once from Maven Central
+into the user cache directory). Job tests run only when `ansible-runner` is on the PATH; they
+are skipped otherwise.
 
 Licensed under the Apache License 2.0.

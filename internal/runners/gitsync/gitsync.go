@@ -63,7 +63,7 @@ func projectLock(id int64) *sync.Mutex {
 
 // RepoDir is the fetch clone of a project on this node.
 func RepoDir(root string, project int64) string {
-	return filepath.Join(root, ".repos", fmt.Sprint(project))
+	return resources.ProjectRepoDir(root, project)
 }
 
 // RevisionDir is the immutable checkout of one revision on this node.

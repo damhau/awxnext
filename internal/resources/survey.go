@@ -108,13 +108,45 @@ func ValidateSurveySpec(c *Ctx, raw any, previous map[string]any) (map[string]an
 		if def == "" {
 			hasDef = false
 		}
+		dynamic := qm["choices_from"] != nil
+		if dynamic {
+			src, ok := qm["choices_from"].(map[string]any)
+			if !ok || (typ != "multiplechoice" && typ != "multiselect") {
+				return nil, bad(fmt.Sprintf("'choices_from' in survey question %d needs a multiplechoice or multiselect question.", i))
+			}
+			if err := validateChoicesFrom(src); err != nil {
+				return nil, bad(fmt.Sprintf("%v in survey question %d.", err, i))
+			}
+		}
+		if si := qm["show_if"]; si != nil {
+			m, _ := si.(map[string]any)
+			if dep := str(m["variable"]); !seen[dep] || dep == v {
+				return nil, bad(fmt.Sprintf("'show_if' in survey question %d must name the variable of an earlier question.", i))
+			}
+			if values, ok := m["values"].([]any); !ok || len(values) == 0 {
+				return nil, bad(fmt.Sprintf("'show_if' in survey question %d needs a list of values.", i))
+			}
+		}
+		if p := qm["pattern"]; p != nil && p != "" {
+			ps, ok := p.(string)
+			if !ok || (typ != "text" && typ != "textarea" && typ != "password") {
+				return nil, bad(fmt.Sprintf("'pattern' in survey question %d needs a text, textarea or password question.", i))
+			}
+			re, err := surveyPattern(ps)
+			if err != nil {
+				return nil, bad(fmt.Sprintf("'pattern' in survey question %d is not a valid regular expression: %v", i, err))
+			}
+			if s, ok := def.(string); ok && hasDef && typ != "password" && !re.MatchString(s) {
+				return nil, bad(fmt.Sprintf("Default value in survey question %d does not match its pattern.", i))
+			}
+		}
 		switch typ {
 		case "multiplechoice", "multiselect":
 			choices := surveyChoices(qm["choices"])
-			if len(choices) == 0 {
+			if len(choices) == 0 && !dynamic {
 				return nil, bad(fmt.Sprintf("Survey question %d of type %s must provide 'choices'.", i, typ))
 			}
-			if hasDef {
+			if hasDef && !dynamic {
 				var defs []string
 				if typ == "multiselect" {
 					defs = surveyChoices(def)
@@ -174,10 +206,45 @@ func contains(list []string, s string) bool {
 	return false
 }
 
+// surveyPattern compiles a question's pattern, which must match the whole answer.
+func surveyPattern(p string) (*regexp.Regexp, error) {
+	return regexp.Compile("^(?:" + p + ")$")
+}
+
+// shown reports whether a question's show_if holds for the answers so far:
+// the answer to its variable (or, for a multiselect, any of its answers) is
+// one of its values.
+func shown(q map[string]any, answers map[string]any) bool {
+	si, ok := q["show_if"].(map[string]any)
+	if !ok {
+		return true
+	}
+	ans, ok := answers[str(si["variable"])]
+	if !ok {
+		return false
+	}
+	values, _ := si["values"].([]any)
+	given := []any{ans}
+	if list, ok := ans.([]any); ok {
+		given = list
+	}
+	for _, g := range given {
+		for _, want := range values {
+			if fmt.Sprint(g) == fmt.Sprint(want) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // ApplySurvey validates answers and fills defaults. It returns the survey
 // variables (password answers encrypted) and the names of password variables.
-func ApplySurvey(c *Ctx, spec map[string]any, answers map[string]any) (map[string]any, []string, []string) {
+// Questions hidden by show_if are skipped and their answers dropped; dynamic
+// choices are resolved against sc as the user of c.
+func ApplySurvey(c *Ctx, spec map[string]any, answers map[string]any, sc SurveyContext) (map[string]any, []string, []string) {
 	out := map[string]any{}
+	answered := map[string]any{} // valid answers so far, for show_if
 	var passwords, errs []string
 	qs, _ := spec["spec"].([]any)
 	for _, q := range qs {
@@ -187,6 +254,9 @@ func ApplySurvey(c *Ctx, spec map[string]any, answers map[string]any) (map[strin
 		}
 		v := str(qm["variable"])
 		typ := str(qm["type"])
+		if !shown(qm, answered) {
+			continue
+		}
 		required, _ := qm["required"].(bool)
 		ans, given := answers[v]
 		if typ == "password" {
@@ -232,6 +302,17 @@ func ApplySurvey(c *Ctx, spec map[string]any, answers map[string]any) (map[strin
 			if hasMax && maxV > 0 && float64(len(s)) > maxV {
 				errs = append(errs, fmt.Sprintf("'%s' value is too large (must be no more than %v).", v, maxV))
 			}
+			if pat := str(qm["pattern"]); pat != "" && s != "" && !(typ == "password" && crypto.IsEncrypted(s)) {
+				if re, err := surveyPattern(pat); err == nil && !re.MatchString(s) {
+					msg := fmt.Sprintf("'%s' value does not match the expected format.", v)
+					if hint := str(qm["pattern_hint"]); hint != "" {
+						msg = fmt.Sprintf("'%s': %s", v, hint)
+					}
+					errs = append(errs, msg)
+					continue
+				}
+			}
+			answered[v] = s
 			if typ == "password" && s != "" {
 				enc, err := c.App.Crypto.Encrypt(s)
 				if err == nil {
@@ -254,7 +335,7 @@ func ApplySurvey(c *Ctx, spec map[string]any, answers map[string]any) (map[strin
 				errs = append(errs, fmt.Sprintf("'%s' value %v must be between %v and %v.", v, n, minV, maxV))
 				continue
 			}
-			out[v] = int64(n)
+			out[v], answered[v] = int64(n), int64(n)
 		case "float":
 			n, ok := num(ans)
 			if !ok {
@@ -265,27 +346,36 @@ func ApplySurvey(c *Ctx, spec map[string]any, answers map[string]any) (map[strin
 				errs = append(errs, fmt.Sprintf("'%s' value %v must be between %v and %v.", v, n, minV, maxV))
 				continue
 			}
-			out[v] = n
+			out[v], answered[v] = n, n
 		case "multiplechoice":
-			s := fmt.Sprint(ans)
-			if !contains(surveyChoices(qm["choices"]), s) {
-				errs = append(errs, fmt.Sprintf("Value %s for '%s' expected to be one of %v.", s, v, surveyChoices(qm["choices"])))
+			choices, err := resolveChoices(c, qm, sc)
+			if err != nil {
+				errs = append(errs, fmt.Sprintf("Could not list the choices for '%s': %v", v, err))
 				continue
 			}
-			out[v] = s
+			s := fmt.Sprint(ans)
+			if !contains(choices, s) {
+				errs = append(errs, fmt.Sprintf("Value %s for '%s' expected to be one of %v.", s, v, choices))
+				continue
+			}
+			out[v], answered[v] = s, s
 		case "multiselect":
 			list, ok := ans.([]any)
 			if !ok {
 				errs = append(errs, fmt.Sprintf("'%s' value is expected to be a list.", v))
 				continue
 			}
-			choices := surveyChoices(qm["choices"])
+			choices, err := resolveChoices(c, qm, sc)
+			if err != nil {
+				errs = append(errs, fmt.Sprintf("Could not list the choices for '%s': %v", v, err))
+				continue
+			}
 			for _, x := range list {
 				if !contains(choices, fmt.Sprint(x)) {
 					errs = append(errs, fmt.Sprintf("Value %v for '%s' expected to be one of %v.", x, v, choices))
 				}
 			}
-			out[v] = list
+			out[v], answered[v] = list, list
 		}
 	}
 	return out, passwords, errs

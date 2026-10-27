@@ -18,16 +18,15 @@ func freshDB(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 	setup(t)
 	ctx := context.Background()
-	cfg := app.DB.Config().ConnConfig
 	name := fmt.Sprintf("awxnext_kr_%d", time.Now().UnixNano())
-	admin, err := pgx.Connect(ctx, fmt.Sprintf("postgres://%s@%s:%d/postgres?sslmode=disable", cfg.User, cfg.Host, cfg.Port))
+	admin, err := pgx.Connect(ctx, databaseURL("postgres"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := admin.Exec(ctx, "CREATE DATABASE "+name); err != nil {
 		t.Fatal(err)
 	}
-	pool, err := db.Connect(ctx, fmt.Sprintf("postgres://%s@%s:%d/%s?sslmode=disable", cfg.User, cfg.Host, cfg.Port, name))
+	pool, err := db.Connect(ctx, databaseURL(name))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -5,9 +5,10 @@ import { useInvalidate, useList, useObject } from '../../api/hooks'
 import type { Base, Ref } from '../../api/types'
 import { useOrg, usePreselectOrg } from '../../app/context'
 import { AccessTab } from '../../components/access/Access'
+import { useCopy } from '../../components/CopyDialog'
 import { Check, Field, FormError, Lookup, SelectField, TextArea, TextInput, useForm } from '../../components/form'
 import { Icon } from '../../components/icons'
-import { useToast } from '../../components/overlay'
+import { Menu, useToast } from '../../components/overlay'
 import { DataTable } from '../../components/table'
 import { Ago, Empty, ErrorNote, KV, Loading, PageHead, Panel, Tab } from '../../components/ui'
 import { ListPage, useDelete } from './common'
@@ -71,6 +72,7 @@ export function NotificationList() {
   const nav = useNavigate()
   const { scope } = useOrg()
   const test = useTest()
+  const copy = useCopy('notification_templates', { to: (id) => `/notifications/${id}` })
   return (
     <ListPage<NT>
       title="Notifications"
@@ -108,14 +110,24 @@ export function NotificationList() {
           header: <span className="sr-only">Actions</span>,
           className: 'end',
           render: (n) => (
-            <button className="btn sm" onClick={() => test(n)}>
-              Send test
-            </button>
+            <div className="row" style={{ justifyContent: 'flex-end', gap: 4 }}>
+              <button className="btn sm" onClick={() => test(n)}>
+                Send test
+              </button>
+              {n.summary_fields.user_capabilities?.copy && (
+                <Menu label={`Actions for ${n.name}`} className="btn sm icon ghost">
+                  <Link to={`/notifications/${n.id}/edit`}>Edit</Link>
+                  <button onClick={() => copy.open(n)}>Copy…</button>
+                </Menu>
+              )}
+            </div>
           ),
         },
       ]}
       empty={<Empty title="No notifications yet">Create a webhook, then attach it to templates, projects or organizations.</Empty>}
-    />
+    >
+      {copy.dialog}
+    </ListPage>
   )
 }
 
@@ -135,6 +147,7 @@ export function NotificationDetail() {
   const nt = useObject<NT>(`notification_templates/${id}/`)
   const del = useDelete()
   const test = useTest()
+  const copy = useCopy('notification_templates', { to: (id) => `/notifications/${id}` })
   if (nt.error) return <div className="page-body"><ErrorNote error={nt.error} /></div>
   if (!nt.data) return <Loading />
   const n = nt.data
@@ -143,6 +156,7 @@ export function NotificationDetail() {
   const custom = !!n.messages && Object.values(n.messages).some(Boolean)
   return (
     <div className="page">
+      {copy.dialog}
       <PageHead
         crumbs={[{ label: 'Notifications', to: '/notifications' }, { label: n.name }]}
         title={n.name}
@@ -156,6 +170,11 @@ export function NotificationDetail() {
               <Link className="btn" to={`${base}/edit`}>
                 Edit
               </Link>
+            )}
+            {n.summary_fields.user_capabilities?.copy && (
+              <button className="btn" onClick={() => copy.open(n)}>
+                Copy
+              </button>
             )}
             {n.summary_fields.user_capabilities?.delete && (
               <button className="btn danger" onClick={() => del({ path: `notification_templates/${id}/`, name: n.name, what: 'notification', then: '/notifications' })}>

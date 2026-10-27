@@ -65,7 +65,8 @@ func LaunchWorkflowJobTemplate(c *Ctx, wf Obj, body Obj, launchType string, ov *
 	spec := templateSurvey(c, id)
 	surveyVars := map[string]bool{}
 	if boolv(wf["survey_enabled"]) && len(spec) > 0 {
-		sv, pw, errs := ApplySurvey(c, spec, launchVars)
+		invID, _ := api.ID(inv)
+		sv, pw, errs := ApplySurvey(c, spec, launchVars, SurveyContext{Template: wf, Inventory: invID})
 		if len(errs) > 0 {
 			return 0, nil, &api.Error{Status: 400, Body: Obj{"variables_needed_to_start": errs}}
 		}
@@ -162,9 +163,10 @@ func copyTemplateNodes(c *Ctx, wfjt, wfJob int64) error {
 		ins AS (
 			INSERT INTO workflow_job_nodes (workflow_job_id, unified_job_template_id, identifier, all_parents_must_converge, extra_data,
 				inventory_id, execution_environment_id, scm_branch, job_type, job_tags, skip_tags, "limit", diff_mode, verbosity, forks,
-				job_slice_count, timeout)
+				job_slice_count, timeout, when_expr, loop_expr, loop_var, loop_concurrency)
 			SELECT $2, unified_job_template_id, identifier, all_parents_must_converge, extra_data, inventory_id, execution_environment_id,
-				scm_branch, job_type, job_tags, skip_tags, "limit", diff_mode, verbosity, forks, job_slice_count, timeout
+				scm_branch, job_type, job_tags, skip_tags, "limit", diff_mode, verbosity, forks, job_slice_count, timeout,
+				when_expr, loop_expr, loop_var, loop_concurrency
 			FROM src RETURNING id, identifier),
 		m AS (SELECT src.id AS old_id, ins.id AS new_id FROM src JOIN ins ON ins.identifier = src.identifier),
 		e AS (INSERT INTO workflow_job_node_edges (from_node_id, to_node_id, kind)
@@ -185,9 +187,10 @@ func copyJobNodes(c *Ctx, oldJob, newJob int64) error {
 		ins AS (
 			INSERT INTO workflow_job_nodes (workflow_job_id, unified_job_template_id, identifier, all_parents_must_converge, extra_data,
 				inventory_id, execution_environment_id, scm_branch, job_type, job_tags, skip_tags, "limit", diff_mode, verbosity, forks,
-				job_slice_count, timeout)
+				job_slice_count, timeout, when_expr, loop_expr, loop_var, loop_concurrency)
 			SELECT $2, unified_job_template_id, identifier || chr(31) || id, all_parents_must_converge, extra_data, inventory_id,
-				execution_environment_id, scm_branch, job_type, job_tags, skip_tags, "limit", diff_mode, verbosity, forks, job_slice_count, timeout
+				execution_environment_id, scm_branch, job_type, job_tags, skip_tags, "limit", diff_mode, verbosity, forks, job_slice_count, timeout,
+				when_expr, loop_expr, loop_var, loop_concurrency
 			FROM src RETURNING id, identifier),
 		m AS (SELECT src.id AS old_id, ins.id AS new_id FROM src JOIN ins ON ins.identifier = src.identifier || chr(31) || src.id),
 		e AS (INSERT INTO workflow_job_node_edges (from_node_id, to_node_id, kind)

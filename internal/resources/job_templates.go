@@ -389,6 +389,7 @@ func registerJobTemplates() {
 	jt.Actions = []*api.Action{
 		{Name: "launch", Methods: []string{"GET", "POST"}, Perm: "execute", Handler: handleLaunch},
 		{Name: "survey_spec", Methods: []string{"GET", "POST", "DELETE"}, Handler: handleSurveySpec},
+		{Name: "survey_choices", Methods: []string{"GET"}, Perm: "execute", Handler: handleSurveyChoices},
 	}
 
 	registerJobResource(jobSpec{

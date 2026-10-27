@@ -34,6 +34,57 @@ type wfNode struct {
 	artifacts          map[string]any
 	children           map[string][]int64 // edge kind -> child ids
 	parents            []int64
+	identifier         string
+	when, loop         string
+	loopVar            string
+	loopConcurrency    int
+	// A loop node has expanded once its items are evaluated; its jobs are its iterations.
+	expanded bool
+	items    []any
+	iters    []wfIter
+}
+
+// wfIter is the job of one loop item. Iterations start in item order.
+type wfIter struct {
+	job    int64
+	status string
+}
+
+// loopJob stands in for the job of a started loop node, whose status is the
+// combined status of its iterations.
+const loopJob = -1
+
+// settleLoop derives a started loop node's status from its iterations:
+// running until every item has finished, then failed if any item failed.
+func (n *wfNode) settleLoop() {
+	if !n.expanded {
+		return
+	}
+	n.job, n.jobStatus = loopJob, "successful"
+	if len(n.iters) < len(n.items) {
+		n.jobStatus = "running"
+		return
+	}
+	for _, it := range n.iters {
+		switch {
+		case it.job == 0, failedStatus(it.status): // a deleted job counts as failed
+			n.jobStatus = "failed"
+		case !finishedStatus(it.status):
+			n.jobStatus = "running"
+			return
+		}
+	}
+}
+
+// runningIters counts started iterations that have not finished.
+func (n *wfNode) runningIters() int {
+	k := 0
+	for _, it := range n.iters {
+		if it.job != 0 && !finishedStatus(it.status) {
+			k++
+		}
+	}
+	return k
 }
 
 func finishedStatus(s string) bool {
@@ -44,12 +95,15 @@ func failedStatus(s string) bool { return s == "failed" || s == "error" || s == 
 type dag struct {
 	nodes map[int64]*wfNode
 	order []int64 // node ids by id
+	// own caches the artifacts each node's job (or iterations) produced.
+	own map[int64]map[string]any
 }
 
 func loadDAG(c *Ctx, wfID int64) (*dag, error) {
-	d := &dag{nodes: map[int64]*wfNode{}}
+	d := &dag{nodes: map[int64]*wfNode{}, own: map[int64]map[string]any{}}
 	rows, err := c.DB().Query(c, `SELECT n.id, coalesce(n.unified_job_template_id, 0), coalesce(u.type, ''), coalesce(n.job_id, 0),
-		coalesce(j.status, ''), n.do_not_run, n.all_parents_must_converge, n.ancestor_artifacts
+		coalesce(j.status, ''), n.do_not_run, n.all_parents_must_converge, n.ancestor_artifacts, n.identifier,
+		n.when_expr, n.loop_expr, n.loop_var, n.loop_concurrency, n.loop_items
 		FROM workflow_job_nodes n LEFT JOIN unified_job_templates u ON u.id = n.unified_job_template_id
 		LEFT JOIN unified_jobs j ON j.id = n.job_id WHERE n.workflow_job_id = $1 ORDER BY n.id`, wfID)
 	if err != nil {
@@ -57,14 +111,41 @@ func loadDAG(c *Ctx, wfID int64) (*dag, error) {
 	}
 	for rows.Next() {
 		n := &wfNode{children: map[string][]int64{}}
-		if err := rows.Scan(&n.id, &n.ujt, &n.ujtType, &n.job, &n.jobStatus, &n.dnr, &n.converge, &n.artifacts); err != nil {
+		var items []byte
+		if err := rows.Scan(&n.id, &n.ujt, &n.ujtType, &n.job, &n.jobStatus, &n.dnr, &n.converge, &n.artifacts, &n.identifier,
+			&n.when, &n.loop, &n.loopVar, &n.loopConcurrency, &items); err != nil {
 			rows.Close()
 			return nil, err
+		}
+		if items != nil && n.job == 0 {
+			n.expanded = true
+			json.Unmarshal(items, &n.items)
 		}
 		d.nodes[n.id] = n
 		d.order = append(d.order, n.id)
 	}
 	rows.Close()
+	rows, err = c.DB().Query(c, `SELECT i.node_id, coalesce(i.job_id, 0), coalesce(j.status, '') FROM workflow_job_node_iterations i
+		JOIN workflow_job_nodes n ON n.id = i.node_id LEFT JOIN unified_jobs j ON j.id = i.job_id
+		WHERE n.workflow_job_id = $1 ORDER BY i.node_id, i.idx`, wfID)
+	if err != nil {
+		return nil, err
+	}
+	for rows.Next() {
+		var nid int64
+		var it wfIter
+		if err := rows.Scan(&nid, &it.job, &it.status); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		if n := d.nodes[nid]; n != nil {
+			n.iters = append(n.iters, it)
+		}
+	}
+	rows.Close()
+	for _, n := range d.nodes {
+		n.settleLoop()
+	}
 	rows, err = c.DB().Query(c, `SELECT e.from_node_id, e.to_node_id, e.kind FROM workflow_job_node_edges e
 		JOIN workflow_job_nodes n ON n.id = e.from_node_id WHERE n.workflow_job_id = $1 ORDER BY e.from_node_id, e.to_node_id`, wfID)
 	if err != nil {
@@ -339,28 +420,46 @@ func processWorkflow(c *Ctx, m *jobs.Manager, wfID int64) error {
 	}
 	if wf.Bool("cancel_flag") {
 		running := 0
-		for _, n := range d.nodes {
-			if n.job != 0 && !finishedStatus(n.jobStatus) {
-				running++
-				m.Cancel(c, n.job)
-			}
+		for _, id := range d.unfinishedJobs() {
+			running++
+			m.Cancel(c, id)
 		}
 		if running == 0 {
 			return m.Complete(c, wfID, jobs.Result{Status: "canceled", Explanation: "Workflow job was canceled."})
 		}
 		return nil
 	}
-	if marked := d.markDNR(); len(marked) > 0 {
-		if _, err := m.DB().Exec(c, "UPDATE workflow_job_nodes SET do_not_run = true WHERE id = ANY($1)", marked); err != nil {
-			return err
+	spawned := false
+	// Nodes decided without a job (a false condition, an empty loop) can
+	// unblock or skip their children within the same tick.
+	for pass := 0; pass <= len(d.nodes); pass++ {
+		if marked := d.markDNR(); len(marked) > 0 {
+			if _, err := m.DB().Exec(c, "UPDATE workflow_job_nodes SET do_not_run = true WHERE id = ANY($1)", marked); err != nil {
+				return err
+			}
+		}
+		decided := false
+		for _, n := range d.toRun() {
+			started, err := startNode(c, m, wf, d, n)
+			if err != nil {
+				return err
+			}
+			spawned = spawned || started
+			decided = decided || !started
+		}
+		if !decided {
+			break
 		}
 	}
-	spawned := false
-	for _, n := range d.toRun() {
-		if err := spawnNode(c, m, wf, d, n); err != nil {
-			return err
+	for _, id := range d.order {
+		n := d.nodes[id]
+		if n.expanded && len(n.iters) < len(n.items) {
+			started, err := continueLoop(c, m, wf, d, n)
+			if err != nil {
+				return err
+			}
+			spawned = spawned || started
 		}
-		spawned = true
 	}
 	if spawned {
 		jobs.Wake(c, m.DB())
@@ -375,6 +474,52 @@ func processWorkflow(c *Ctx, m *jobs.Manager, wfID int64) error {
 	return m.Complete(c, wfID, jobs.Result{Status: "successful"})
 }
 
+// unfinishedJobs lists the jobs of the workflow's nodes and loop iterations still running.
+func (d *dag) unfinishedJobs() []int64 {
+	var ids []int64
+	for _, id := range d.order {
+		n := d.nodes[id]
+		if n.job > 0 && !finishedStatus(n.jobStatus) {
+			ids = append(ids, n.job)
+		}
+		for _, it := range n.iters {
+			if it.job != 0 && !finishedStatus(it.status) {
+				ids = append(ids, it.job)
+			}
+		}
+	}
+	return ids
+}
+
+// ownArtifacts returns the artifacts a node's job produced; a loop node
+// merges its iterations' artifacts in item order.
+func (d *dag) ownArtifacts(c *Ctx, n *wfNode) map[string]any {
+	if a, ok := d.own[n.id]; ok {
+		return a
+	}
+	var jobIDs []int64
+	switch {
+	case n.job > 0:
+		jobIDs = []int64{n.job}
+	case n.job == loopJob:
+		for _, it := range n.iters {
+			if it.job != 0 {
+				jobIDs = append(jobIDs, it.job)
+			}
+		}
+	}
+	out := map[string]any{}
+	for _, id := range jobIDs {
+		var art map[string]any
+		c.DB().QueryRow(c, "SELECT artifacts FROM unified_jobs WHERE id = $1", id).Scan(&art)
+		for k, v := range art {
+			out[k] = v
+		}
+	}
+	d.own[n.id] = out
+	return out
+}
+
 // nodeAncestorArtifacts merges artifacts of a node's parents (their own ancestors first).
 func nodeAncestorArtifacts(c *Ctx, d *dag, n *wfNode) map[string]any {
 	out := map[string]any{}
@@ -385,13 +530,34 @@ func nodeAncestorArtifacts(c *Ctx, d *dag, n *wfNode) map[string]any {
 		for k, v := range p.artifacts {
 			out[k] = v
 		}
-		if p.job != 0 {
-			var art map[string]any
-			c.DB().QueryRow(c, "SELECT artifacts FROM unified_jobs WHERE id = $1", p.job).Scan(&art)
-			for k, v := range art {
-				out[k] = v
-			}
+		for k, v := range d.ownArtifacts(c, p) {
+			out[k] = v
 		}
+	}
+	return out
+}
+
+// nodeStates describes every node for conditions, by identifier:
+// nodes.build.status, nodes.build.artifacts.image_tag.
+func (d *dag) nodeStates(c *Ctx) map[string]any {
+	out := map[string]any{}
+	for _, id := range d.order {
+		n := d.nodes[id]
+		status := n.jobStatus
+		switch {
+		case n.dnr:
+			status = "skipped"
+		case n.job == 0:
+			status = "pending"
+		}
+		st := map[string]any{"status": status, "failed": failedStatus(status), "artifacts": d.ownArtifacts(c, n), "job": nil}
+		if n.job > 0 {
+			st["job"] = n.job
+		}
+		if n.expanded {
+			st["items"] = n.items
+		}
+		out[n.identifier] = st
 	}
 	return out
 }
@@ -402,19 +568,17 @@ func workflowAncestry(c *Ctx, wfID int64) []int64 {
 	for i := 0; i < 50 && wfID != 0; i++ {
 		var ujt, parent int64
 		c.DB().QueryRow(c, `SELECT coalesce(w.unified_job_template_id, 0), coalesce(n.workflow_job_id, 0) FROM unified_jobs w
-			LEFT JOIN workflow_job_nodes n ON n.job_id = w.id WHERE w.id = $1`, wfID).Scan(&ujt, &parent)
+			LEFT JOIN workflow_node_jobs n ON n.job_id = w.id WHERE w.id = $1`, wfID).Scan(&ujt, &parent)
 		out = append(out, ujt)
 		wfID = parent
 	}
 	return out
 }
 
-func spawnNode(c *Ctx, m *jobs.Manager, wf jobs.Row, d *dag, n *wfNode) error {
-	node, err := api.Get(c, api.Lookup("workflow_job_nodes"), n.id)
-	if err != nil {
-		return err
-	}
-	artifacts := map[string]any{}
+// nodeVars returns the artifacts passed down to a node and the variables its
+// job gets: node extra_data < ancestor artifacts < workflow extra vars.
+func nodeVars(c *Ctx, wf jobs.Row, d *dag, n *wfNode, node Obj) (artifacts, extra map[string]any) {
+	artifacts = map[string]any{}
 	if len(n.parents) > 0 {
 		artifacts = nodeAncestorArtifacts(c, d, n)
 	} else {
@@ -422,8 +586,7 @@ func spawnNode(c *Ctx, m *jobs.Manager, wf jobs.Row, d *dag, n *wfNode) error {
 			artifacts[k] = v
 		}
 	}
-	// Variables: node extra_data < ancestor artifacts < workflow extra vars.
-	extra := map[string]any{}
+	extra = map[string]any{}
 	if ed, ok := node["extra_data"].(map[string]any); ok {
 		for k, v := range ed {
 			if s, ok := v.(string); ok && crypto.IsEncrypted(s) {
@@ -448,45 +611,185 @@ func spawnNode(c *Ctx, m *jobs.Manager, wf jobs.Row, d *dag, n *wfNode) error {
 		}
 		extra[k] = v
 	}
-	launchedBy, _ := json.Marshal(Obj{"id": wf.ID(), "name": wf.Str("name"), "type": "workflow_job", "url": api.Lookup("workflow_jobs").URL(wf.ID())})
+	return artifacts, extra
+}
 
-	var jobID int64
-	var launchErr error
+// exprEnv is what node conditions and loops see: the node's variables, the
+// state of every node by identifier, and the workflow job.
+func exprEnv(c *Ctx, wf jobs.Row, d *dag, extra map[string]any) map[string]any {
+	env := map[string]any{}
+	for k, v := range extra {
+		env[k] = v
+	}
+	env["nodes"] = d.nodeStates(c)
+	env["workflow"] = map[string]any{"id": wf.ID(), "name": wf.Str("name")}
+	return env
+}
+
+// startNode starts a node whose parents allow it to run. It reports whether
+// it started a job; otherwise the node was decided without one (its
+// condition is false, or its loop has no items).
+func startNode(c *Ctx, m *jobs.Manager, wf jobs.Row, d *dag, n *wfNode) (bool, error) {
+	node, err := api.Get(c, api.Lookup("workflow_job_nodes"), n.id)
+	if err != nil {
+		return false, err
+	}
+	artifacts, extra := nodeVars(c, wf, d, n, node)
+	art, _ := json.Marshal(artifacts)
+	var env map[string]any
+	if n.when != "" || n.loop != "" {
+		env = exprEnv(c, wf, d, extra)
+	}
+	if n.when != "" {
+		ok, err := evalWhen(n.when, env)
+		if err != nil {
+			return true, failNode(c, m, wf, n, string(art), "The node's condition could not be evaluated: "+err.Error())
+		}
+		if !ok {
+			n.dnr = true
+			_, err := c.DB().Exec(c, "UPDATE workflow_job_nodes SET do_not_run = true, skip_reason = $2, ancestor_artifacts = $3, modified = now() WHERE id = $1",
+				n.id, "Condition is false: "+n.when, string(art))
+			return false, err
+		}
+	}
+	if n.loop != "" {
+		items, err := evalLoop(n.loop, env)
+		if err != nil {
+			return true, failNode(c, m, wf, n, string(art), "The node's loop could not be evaluated: "+err.Error())
+		}
+		b, _ := json.Marshal(items)
+		if _, err := c.DB().Exec(c, "UPDATE workflow_job_nodes SET loop_items = $2, ancestor_artifacts = $3, modified = now() WHERE id = $1", n.id, string(b), string(art)); err != nil {
+			return false, err
+		}
+		n.expanded, n.items = true, items
+		n.settleLoop()
+		if len(items) == 0 {
+			return false, nil
+		}
+		return continueLoop(c, m, wf, d, n)
+	}
+	jobID, launchErr, err := launchNodeJob(c, wf, n, node, extra)
+	if err != nil {
+		return false, err
+	}
+	if _, err := c.DB().Exec(c, "UPDATE workflow_job_nodes SET job_id = $2, ancestor_artifacts = $3, modified = now() WHERE id = $1", n.id, jobID, string(art)); err != nil {
+		return false, err
+	}
+	n.job, n.jobStatus = jobID, "pending"
+	if launchErr == nil && n.ujtType == "workflow_approval_template" {
+		notifyApproval(c, jobID, "running")
+	}
+	return true, nil
+}
+
+// continueLoop starts the next iterations of a loop node, up to its concurrency.
+func continueLoop(c *Ctx, m *jobs.Manager, wf jobs.Row, d *dag, n *wfNode) (bool, error) {
+	running := n.runningIters()
+	if len(n.iters) >= len(n.items) || (n.loopConcurrency > 0 && running >= n.loopConcurrency) {
+		return false, nil
+	}
+	node, err := api.Get(c, api.Lookup("workflow_job_nodes"), n.id)
+	if err != nil {
+		return false, err
+	}
+	_, extra := nodeVars(c, wf, d, n, node)
+	loopVar := n.loopVar
+	if loopVar == "" {
+		loopVar = "item"
+	}
+	started := false
+	for idx := len(n.iters); idx < len(n.items); idx++ {
+		if n.loopConcurrency > 0 && running >= n.loopConcurrency {
+			break
+		}
+		item := n.items[idx]
+		vars := map[string]any{}
+		for k, v := range extra {
+			vars[k] = v
+		}
+		vars[loopVar] = item
+		vars["loop_index"] = idx
+		jobID, _, err := launchNodeJob(c, wf, n, node, vars)
+		if err != nil {
+			return started, err
+		}
+		if _, err := c.DB().Exec(c, "INSERT INTO workflow_job_node_iterations (node_id, idx, job_id) VALUES ($1, $2, $3)", n.id, idx, jobID); err != nil {
+			return started, err
+		}
+		c.DB().Exec(c, "UPDATE unified_jobs SET name = left(name || ' (' || $2 || ')', 512) WHERE id = $1", jobID, itemLabel(item, idx))
+		n.iters = append(n.iters, wfIter{job: jobID, status: "pending"})
+		running++
+		started = true
+	}
+	return started, nil
+}
+
+// itemLabel names a loop item in its job's name: the item itself when it is
+// short and scalar, its position otherwise.
+func itemLabel(item any, idx int) string {
+	switch v := item.(type) {
+	case string, float64, int, int64, bool:
+		if s := fmt.Sprint(v); len(s) <= 60 {
+			return s
+		}
+	}
+	return fmt.Sprintf("#%d", idx+1)
+}
+
+// launchNodeJob launches a node's template with vars. When the launch is
+// refused, a failed job records why (launchErr), so the node fails visibly
+// and error handling paths can run.
+func launchNodeJob(c *Ctx, wf jobs.Row, n *wfNode, node Obj, vars map[string]any) (jobID int64, launchErr, err error) {
+	launchedBy, _ := json.Marshal(Obj{"id": wf.ID(), "name": wf.Str("name"), "type": "workflow_job", "url": api.Lookup("workflow_jobs").URL(wf.ID())})
 	err = c.WithTx(func(c *Ctx) error {
-		jobID, launchErr = launchNode(c, wf, n, node, extra)
+		jobID, launchErr = launchNode(c, wf, n, node, vars)
 		if launchErr != nil {
-			// The node fails visibly so error handling paths can run.
-			var name string
-			c.DB().QueryRow(c, "SELECT name FROM unified_job_templates WHERE id = $1", n.ujt).Scan(&name)
-			typ := unifiedJobTypes[n.ujtType]
-			if typ == "" {
-				typ = "job"
-			}
 			var err error
-			jobID, err = jobs.Create(c, c.DB(), map[string]any{"type": typ, "name": name, "unified_job_template_id": n.ujt, "status": "failed",
-				"failed": true, "launch_type": "workflow", "job_explanation": launchFailure(launchErr), "started": time.Now(), "finished": time.Now()})
-			if err != nil {
+			if jobID, err = createFailedJob(c, n, launchFailure(launchErr)); err != nil {
 				return err
 			}
-		}
-		art, _ := json.Marshal(artifacts)
-		if _, err := c.DB().Exec(c, "UPDATE workflow_job_nodes SET job_id = $2, ancestor_artifacts = $3, modified = now() WHERE id = $1", n.id, jobID, string(art)); err != nil {
-			return err
 		}
 		_, err := c.DB().Exec(c, "UPDATE unified_jobs SET launched_by = $2, created_by_id = coalesce(created_by_id, $3) WHERE id = $1",
 			jobID, string(launchedBy), nullID(wf.Int("created_by_id")))
 		return err
 	})
-	if err != nil {
+	if err == nil && launchErr != nil {
+		jobs.Wake(c, c.App.DB)
+	}
+	return jobID, launchErr, err
+}
+
+// createFailedJob records a node job that could not run.
+func createFailedJob(c *Ctx, n *wfNode, explanation string) (int64, error) {
+	var name string
+	c.DB().QueryRow(c, "SELECT name FROM unified_job_templates WHERE id = $1", n.ujt).Scan(&name)
+	typ := unifiedJobTypes[n.ujtType]
+	if typ == "" {
+		typ = "job"
+	}
+	return jobs.Create(c, c.DB(), map[string]any{"type": typ, "name": name, "unified_job_template_id": n.ujt, "status": "failed",
+		"failed": true, "launch_type": "workflow", "job_explanation": explanation, "started": time.Now(), "finished": time.Now()})
+}
+
+// failNode fails a node without running its template.
+func failNode(c *Ctx, m *jobs.Manager, wf jobs.Row, n *wfNode, artifacts, explanation string) error {
+	err := c.WithTx(func(c *Ctx) error {
+		jobID, err := createFailedJob(c, n, explanation)
+		if err != nil {
+			return err
+		}
+		n.job, n.jobStatus = jobID, "failed"
+		launchedBy, _ := json.Marshal(Obj{"id": wf.ID(), "name": wf.Str("name"), "type": "workflow_job", "url": api.Lookup("workflow_jobs").URL(wf.ID())})
+		if _, err := c.DB().Exec(c, "UPDATE unified_jobs SET launched_by = $2 WHERE id = $1", jobID, string(launchedBy)); err != nil {
+			return err
+		}
+		_, err = c.DB().Exec(c, "UPDATE workflow_job_nodes SET job_id = $2, ancestor_artifacts = $3, modified = now() WHERE id = $1", n.id, jobID, artifacts)
 		return err
-	}
-	if launchErr == nil && n.ujtType == "workflow_approval_template" {
-		notifyApproval(c, jobID, "running")
-	}
-	if launchErr != nil {
+	})
+	if err == nil {
 		jobs.Wake(c, m.DB())
 	}
-	return nil
+	return err
 }
 
 func launchFailure(err error) string {
@@ -557,6 +860,13 @@ func launchNode(c *Ctx, wf jobs.Row, n *wfNode, node Obj, extra map[string]any) 
 		}
 		id, _, err := LaunchWorkflowJobTemplate(c, tpl, Obj{"extra_vars": extra}, "workflow", &LaunchOverrides{Trusted: Obj{}})
 		return id, err
+	case "system_job_template":
+		// Only the node's own days and dry_run: management jobs take no other variables.
+		ed, _ := node["extra_data"].(map[string]any)
+		if err := validateSystemJobVars("extra_data", ed); err != nil {
+			return 0, err
+		}
+		return LaunchSystemJob(c, tpl, ed, "workflow")
 	case "workflow_approval_template":
 		return jobs.Create(c, c.DB(), map[string]any{"type": "workflow_approval", "name": tpl["name"], "description": tpl["description"],
 			"unified_job_template_id": n.ujt, "approval_timeout": tpl["timeout"], "status": "pending", "launch_type": "workflow"})

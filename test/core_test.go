@@ -303,3 +303,59 @@ func TestOrderingDescendingNullsFirst(t *testing.T) {
 		t.Fatalf("order %v, want %v", got, want)
 	}
 }
+
+// The unified template list reports each template's own capabilities, so a
+// list can offer edit, copy and delete only where they work.
+func TestUnifiedTemplateCapabilities(t *testing.T) {
+	a := adminClient(t)
+	org := newOrg(t, a)
+	wf := must(t, a.post("workflow_job_templates/", map[string]any{"name": uniq("wf"), "organization": org}), 201).id()
+	caps := func(c *client) map[string]any {
+		t.Helper()
+		r := must(t, c.get(fmt.Sprintf("unified_job_templates/?id=%d", wf)), 200).results()
+		if len(r) != 1 {
+			t.Fatalf("template not listed: %v", r)
+		}
+		return r[0]["summary_fields"].(map[string]any)["user_capabilities"].(map[string]any)
+	}
+	if c := caps(a); c["edit"] != true || c["copy"] != true || c["delete"] != true || c["start"] != true {
+		t.Fatalf("admin capabilities: %v", c)
+	}
+	u, uid := newUser(t, a)
+	must(t, a.post(fmt.Sprintf("users/%d/roles/", uid), map[string]any{"id": objectRole(t, a, "workflow_job_templates", wf, "execute_role")}), 204)
+	if c := caps(u); c["start"] != true || c["edit"] != false || c["copy"] != false || c["delete"] != false {
+		t.Fatalf("executor capabilities: %v", c)
+	}
+}
+
+func TestUserPasswordPlaceholderActiveAndSSO(t *testing.T) {
+	a := adminClient(t)
+	name := uniq("u")
+	id := must(t, a.post("users/", map[string]any{"username": name, "password": "first-pass"}), 201).id()
+	login := func(pass string) int {
+		return (&client{t: t, user: name, pass: pass}).get("me/").Status
+	}
+	// Sending back what a read returns keeps the password.
+	u := must(t, a.get(fmt.Sprintf("users/%d/", id)), 200).Body
+	if u["password"] != "$encrypted$" || u["is_active"] != true || u["external_account"] != nil {
+		t.Fatalf("user: %v", u)
+	}
+	must(t, a.patch(fmt.Sprintf("users/%d/", id), map[string]any{"password": "$encrypted$", "first_name": "Ann"}), 200)
+	if st := login("first-pass"); st != 200 {
+		t.Fatalf("password changed by the placeholder: %d", st)
+	}
+	// Deactivation shows, and blocks sign-in.
+	if u := must(t, a.patch(fmt.Sprintf("users/%d/", id), map[string]any{"is_active": false}), 200).Body; u["is_active"] != false {
+		t.Fatalf("is_active: %v", u["is_active"])
+	}
+	if st := login("first-pass"); st != 401 {
+		t.Fatalf("inactive user signed in: %d", st)
+	}
+	// Users from the identity provider are marked external.
+	if _, err := app.DB.Exec(context.Background(), "UPDATE users SET external_source = 'oidc', external_id = 'sub-1' WHERE id = $1", id); err != nil {
+		t.Fatal(err)
+	}
+	if u := must(t, a.get(fmt.Sprintf("users/%d/", id)), 200).Body; u["external_account"] != "social" || fmt.Sprint(u["auth"]) != "[map[provider:oidc]]" {
+		t.Fatalf("external user: %v %v", u["external_account"], u["auth"])
+	}
+}

@@ -480,15 +480,31 @@ func addSummaries(c *Ctx, res *Resource, raws, out []Obj, ids []int64) error {
 			}
 		}
 	}
-	// user_capabilities.
+	caps, err := UserCapabilities(c, res, raws, ids)
+	if err != nil {
+		return err
+	}
+	for i := range raws {
+		if len(caps[i]) > 0 {
+			summaries[i]["user_capabilities"] = caps[i]
+		}
+		out[i]["summary_fields"] = summaries[i]
+	}
+	return nil
+}
+
+// UserCapabilities computes the user_capabilities of objects of res (raw rows
+// with their ids), as res's own serializer reports them.
+func UserCapabilities(c *Ctx, res *Resource, raws []Obj, ids []int64) ([]map[string]bool, error) {
 	var perms map[int64]map[string]bool
 	if res.ContentType != "" && !c.User.Superuser {
 		var err error
 		perms, err = c.User.PermsFor(c, c.App.DB, res.Table, res.ContentType, res.OrgColumn, res.FolderColumn, ids)
 		if err != nil {
-			return err
+			return nil, err
 		}
 	}
+	out := make([]map[string]bool, len(raws))
 	for i, raw := range raws {
 		p := perms[ids[i]]
 		if p == nil {
@@ -500,12 +516,9 @@ func addSummaries(c *Ctx, res *Resource, raws, out []Obj, ids []int64) error {
 				caps[k] = v
 			}
 		}
-		if len(caps) > 0 {
-			summaries[i]["user_capabilities"] = caps
-		}
-		out[i]["summary_fields"] = summaries[i]
+		out[i] = caps
 	}
-	return nil
+	return out, nil
 }
 
 func defaultCapabilities(c *Ctx, res *Resource, p map[string]bool) map[string]bool {

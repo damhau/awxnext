@@ -150,9 +150,7 @@ func TestImportAWX(t *testing.T) {
 	ctx := context.Background()
 	a := adminClient(t)
 	// The source AWX database lives next to the test database.
-	pcfg := app.DB.Config().ConnConfig
-	adminURL := fmt.Sprintf("postgres://%s@%s:%d/postgres?sslmode=disable", pcfg.User, pcfg.Host, pcfg.Port)
-	admin, err := pgx.Connect(ctx, adminURL)
+	admin, err := pgx.Connect(ctx, databaseURL("postgres"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -162,7 +160,7 @@ func TestImportAWX(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer admin.Exec(ctx, "DROP DATABASE "+name+" WITH (FORCE)")
-	srcURL := fmt.Sprintf("postgres://%s@%s:%d/%s?sslmode=disable", pcfg.User, pcfg.Host, pcfg.Port, name)
+	srcURL := databaseURL(name)
 	src, err := pgx.Connect(ctx, srcURL)
 	if err != nil {
 		t.Fatal(err)

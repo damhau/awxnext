@@ -59,6 +59,8 @@ const slowPlaybook = `- hosts: all
 const factsPlaybook = `- hosts: all
   gather_facts: false
   tasks:
+    - ansible.builtin.debug:
+        msg: "cached={{ app_color | default('none') }}"
     - ansible.builtin.set_fact:
         app_color: blue
         cacheable: true
@@ -392,6 +394,12 @@ func TestJobFactCacheAndProjectUpdateOnLaunch(t *testing.T) {
 	facts := must(t, a.get(fmt.Sprintf("hosts/%d/ansible_facts/", int64(h["id"].(float64)))), 200)
 	if facts.Body["app_color"] != "blue" {
 		t.Fatalf("fact cache not saved: %s", facts.Raw)
+	}
+	// The next run starts with the saved facts.
+	job = f.launch(t, a, jt, nil)
+	mustStatus(t, f, job, "successful")
+	if out := f.stdout(t, job.id()); !strings.Contains(out, "cached=blue") {
+		t.Fatalf("cached facts not offered to the next run:\n%s", out)
 	}
 
 	// Update on launch picks up a new commit through a dependency.

@@ -517,7 +517,7 @@ func (m *Manager) publishStatus(ctx context.Context, row Row, status string) {
 	}
 	// Jobs spawned by a workflow also update viewers of that workflow.
 	var wfJob, wfNode int64
-	if err := m.DB().QueryRow(ctx, "SELECT workflow_job_id, id FROM workflow_job_nodes WHERE job_id = $1", row.ID()).Scan(&wfJob, &wfNode); err == nil {
+	if err := m.DB().QueryRow(ctx, "SELECT workflow_job_id, node_id FROM workflow_node_jobs WHERE job_id = $1", row.ID()).Scan(&wfJob, &wfNode); err == nil {
 		msg["workflow_job_id"], msg["workflow_node_id"] = wfJob, wfNode
 	}
 	b, _ := json.Marshal(msg)

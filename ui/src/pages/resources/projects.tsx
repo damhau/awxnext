@@ -7,6 +7,7 @@ import { useLive } from '../../api/live'
 import type { Base, Job, Ref } from '../../api/types'
 import { useOrg, usePreselectOrg } from '../../app/context'
 import { AccessTab } from '../../components/access/Access'
+import { useCopy } from '../../components/CopyDialog'
 import { Check, FormError, Lookup, Segmented, TextInput, useForm } from '../../components/form'
 import { Icon } from '../../components/icons'
 import { Menu, useToast } from '../../components/overlay'
@@ -87,6 +88,7 @@ export function ProjectList() {
   const list = useList<Project>('projects/', { ...q.params, ...scope, order_by: ls.order, page: ls.page, page_size: ls.pageSize })
   const sync = useSync()
   const del = useDelete('projects')
+  const copy = useCopy('projects', { to: (id) => `/projects/${id}`, what: 'Git projects get their own checkout, synced right away.' })
   const orgCol = useOrgColumn<Project>()
   const invalidate = useInvalidate()
   useLive({ jobs: ['status_changed'] }, (m) => m.type === 'project_update' && invalidate('projects'))
@@ -139,6 +141,7 @@ export function ProjectList() {
           <Menu label={`Actions for ${p.name}`} className="btn sm icon ghost">
             <Link to={`/projects/${p.id}/edit`}>Edit</Link>
             <Link to={`/projects/${p.id}/jobs`}>Sync history</Link>
+            {p.summary_fields.user_capabilities?.copy && <button onClick={() => copy.open(p)}>Copy…</button>}
             <hr />
             <button className="danger" onClick={() => del(p, 'project')}>
               Delete…
@@ -160,6 +163,7 @@ export function ProjectList() {
           </Link>
         }
       />
+      {copy.dialog}
       <div className="page-body">
         <FilterBox value={ls.q} onApply={ls.setQ} placeholder="name…  try  status:failed  type:manual  folder:checkout" />
         <DataTable
@@ -394,6 +398,7 @@ export function ProjectDetail() {
   const proj = useObject<Project>(`projects/${id}/`)
   const sync = useSync()
   const del = useDelete('projects', '/projects')
+  const copy = useCopy('projects', { to: (id) => `/projects/${id}`, what: 'Git projects get their own checkout, synced right away.' })
   const invalidate = useInvalidate()
   useLive({ jobs: ['status_changed'] }, (m) => m.type === 'project_update' && String(m.unified_job_template_id) === String(id) && invalidate(`projects/${id}`, 'project_updates'))
   if (proj.isPending) return <Loading />
@@ -403,6 +408,7 @@ export function ProjectDetail() {
   const base = `/projects/${p.id}`
   return (
     <div className="page">
+      {copy.dialog}
       <PageHead
         crumbs={[{ label: 'Projects', to: '/projects' }, { label: p.name }]}
         title={p.name}
@@ -420,11 +426,15 @@ export function ProjectDetail() {
                 Edit
               </Link>
             )}
-            {caps.delete && (
+            {(caps.copy || caps.delete) && (
               <Menu label="More actions">
-                <button className="danger" onClick={() => del(p, 'project')}>
-                  Delete…
-                </button>
+                {caps.copy && <button onClick={() => copy.open(p)}>Copy…</button>}
+                {caps.copy && caps.delete && <hr />}
+                {caps.delete && (
+                  <button className="danger" onClick={() => del(p, 'project')}>
+                    Delete…
+                  </button>
+                )}
               </Menu>
             )}
           </>

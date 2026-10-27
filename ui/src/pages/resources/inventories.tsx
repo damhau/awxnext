@@ -7,6 +7,7 @@ import { useLive } from '../../api/live'
 import type { Base, Ref } from '../../api/types'
 import { useOrg, usePreselectOrg } from '../../app/context'
 import { AccessTab } from '../../components/access/Access'
+import { useCopy } from '../../components/CopyDialog'
 import { FormError, Lookup, MultiLookup, SelectField, TextInput, VarsEditor, useForm } from '../../components/form'
 import { Icon } from '../../components/icons'
 import { Menu, useToast } from '../../components/overlay'
@@ -47,6 +48,7 @@ export function InventoryList() {
   const q = compile(ls.q, keys)
   const list = useList<Inventory>('inventories/', { ...q.params, ...scope, order_by: ls.order, page: ls.page, page_size: ls.pageSize })
   const del = useDelete('inventories')
+  const copy = useCopy('inventories', { to: (id) => `/inventories/${id}`, what: 'Hosts and groups are copied with their variables. Inventory sources are not.' })
   const orgCol = useOrgColumn<Inventory>()
   const cols: Column<Inventory>[] = [
     {
@@ -86,6 +88,7 @@ export function InventoryList() {
           <Link to={`/inventories/${r.id}/edit`}>Edit</Link>
           <Link to={`/inventories/${r.id}/hosts`}>Hosts</Link>
           {r.kind !== 'smart' && <Link to={`/inventories/${r.id}/sources`}>Sources</Link>}
+          {r.summary_fields.user_capabilities?.copy && <button onClick={() => copy.open(r)}>Copy…</button>}
           <hr />
           <button className="danger" onClick={() => del(r, 'inventory with all its hosts and groups')}>
             Delete…
@@ -102,6 +105,7 @@ export function InventoryList() {
         bordered={false}
         actions={<NewInventoryMenu />}
       />
+      {copy.dialog}
       <div className="page-body">
         <FilterBox value={ls.q} onApply={ls.setQ} placeholder="name…  try  kind:smart  org:Acme*  folder:checkout" />
         <DataTable
@@ -349,6 +353,7 @@ export function InventoryDetail() {
   const { id } = useParams()
   const inv = useObject<Inventory>(`inventories/${id}/`)
   const del = useDelete('inventories', '/inventories')
+  const copy = useCopy('inventories', { to: (id) => `/inventories/${id}`, what: 'Hosts and groups are copied with their variables. Inventory sources are not.' })
   const invalidate = useInvalidate()
   // Source updates and commands change hosts, groups and statuses.
   useLive({ jobs: ['status_changed'] }, (m) => {
@@ -361,6 +366,7 @@ export function InventoryDetail() {
   const base = `/inventories/${i.id}`
   return (
     <div className="page">
+      {copy.dialog}
       <PageHead
         crumbs={[{ label: 'Inventories', to: '/inventories' }, { label: i.name }]}
         title={i.name}
@@ -377,6 +383,7 @@ export function InventoryDetail() {
               <a href={`/api/v2/inventories/${i.id}/script/?hostvars=1`} target="_blank" rel="noreferrer">
                 View as JSON inventory <Icon name="external" size={12} />
               </a>
+              {caps.copy && <button onClick={() => copy.open(i)}>Copy…</button>}
               {caps.delete && (
                 <>
                   <hr />

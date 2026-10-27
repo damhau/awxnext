@@ -16,6 +16,7 @@ import { userName } from '../../lib/format'
 import { compile, statusValue, type KeyTable } from '../../lib/query'
 import { useStored } from '../../lib/storage'
 import { FolderDialog } from '../../components/FolderDialog'
+import { useCopy } from '../../components/CopyDialog'
 import { ancestors, buildTree, flatten, subtreeIds, useFolders, type FolderNode } from '../../lib/folders'
 
 const keys: KeyTable = {
@@ -89,6 +90,19 @@ export function TemplateList() {
   const toggleStar = (t: Template) => setStarred((s) => (s.includes(tkey(t)) ? s.filter((x) => x !== tkey(t)) : [...s, tkey(t)]))
   const open = (t: Template) => nav(`/templates/${kindPath(t)}/${t.id}`)
   const launch = (t: Template) => nav(`/launch/${kindPath(t)}/${t.id}`)
+  const res = (t: Template) => (t.type === 'workflow_job_template' ? 'workflow_job_templates' : 'job_templates')
+  const copyJob = useCopy('job_templates', { to: (id) => `/templates/job/${id}`, what: 'Credentials, labels and the survey are copied.', invalidates: ['unified_job_templates', 'folders'] })
+  const copyWorkflow = useCopy('workflow_job_templates', { to: (id) => `/templates/workflow/${id}`, what: 'Nodes, links and the survey are copied.', invalidates: ['unified_job_templates', 'folders'] })
+  const remove = async (t: Template) => {
+    if (!(await confirm({ title: `Delete ${t.name}?`, body: 'Its schedules are deleted too. Job history stays.', confirm: 'Delete', danger: true }))) return
+    try {
+      await api.del(`${res(t)}/${t.id}/`)
+      toast(`Deleted ${t.name}`)
+      invalidate('unified_job_templates', 'job_templates', 'workflow_job_templates', 'folders')
+    } catch (e) {
+      toast((e as Error).message, 'error')
+    }
+  }
 
   const columns: Column<Template>[] = [
     {
@@ -172,13 +186,34 @@ export function TemplateList() {
       key: 'act',
       header: <span className="sr-only">Actions</span>,
       className: 'end',
-      render: (t) =>
-        t.summary_fields.user_capabilities?.start !== false && (
-          <button className="btn sm" onClick={() => launch(t)}>
-            <Icon name="play" size={10} />
-            Launch
-          </button>
-        ),
+      render: (t) => {
+        const caps = t.summary_fields.user_capabilities ?? {}
+        const base = `/templates/${kindPath(t)}/${t.id}`
+        return (
+          <div className="row" style={{ justifyContent: 'flex-end', gap: 4 }}>
+            {caps.start !== false && (
+              <button className="btn sm" onClick={() => launch(t)}>
+                <Icon name="play" size={10} />
+                Launch
+              </button>
+            )}
+            <Menu label={`Actions for ${t.name}`} className="btn sm icon ghost">
+              {caps.edit && !t.managed_by && <Link to={`${base}/edit`}>Edit</Link>}
+              <Link to={`${base}/jobs`}>Jobs</Link>
+              <Link to={`${base}/schedules`}>Schedules</Link>
+              {caps.copy && <button onClick={() => (t.type === 'workflow_job_template' ? copyWorkflow : copyJob).open(t)}>Copy…</button>}
+              {caps.delete && (
+                <>
+                  <hr />
+                  <button className="danger" onClick={() => remove(t)}>
+                    Delete…
+                  </button>
+                </>
+              )}
+            </Menu>
+          </div>
+        )
+      },
     },
   ]
 
@@ -189,7 +224,6 @@ export function TemplateList() {
     else toast(`${label}: done for ${results.length} template${results.length === 1 ? '' : 's'}`)
     invalidate('unified_job_templates', 'job_templates', 'workflow_job_templates', 'folders')
   }
-  const res = (t: Template) => (t.type === 'workflow_job_template' ? 'workflow_job_templates' : 'job_templates')
 
   const title = special === 'starred' ? 'Starred' : special === 'mine' ? 'Recently run by me' : folder ? folder.folder.name : 'All templates'
   const crumbs = folder ? [{ label: 'Templates', to: '/templates' }, ...ancestors(folder, byId).map((a, i, arr) => (i === arr.length - 1 ? { label: a.folder.name } : { label: a.folder.name, to: `/templates?folder=${a.folder.id}` }))] : [{ label: 'Templates' }]
@@ -345,6 +379,8 @@ export function TemplateList() {
           </div>
         )}
 
+        {copyJob.dialog}
+        {copyWorkflow.dialog}
         <div style={{ margin: '8px 24px 24px' }}>
           <DataTable
             label="Templates"

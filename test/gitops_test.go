@@ -64,6 +64,10 @@ nodes:
     always: [again]
   - id: again
     template: {kind: JobTemplate, name: Deploy web}
+    when: nodes.deploy.status == 'successful'
+    loop: "['web01', 'web02']"
+    loop_var: target
+    loop_concurrency: 1
 ---
 kind: Schedule
 name: Nightly deploy
@@ -145,6 +149,9 @@ func TestGitOpsReconcile(t *testing.T) {
 	}
 	if s := nodes[0]["success_nodes"].([]any); len(s) != 1 {
 		t.Fatalf("edges %v", nodes[0])
+	}
+	if n := nodes[2]; n["when"] != "nodes.deploy.status == 'successful'" || n["loop"] != "['web01', 'web02']" || n["loop_var"] != "target" || n["loop_concurrency"] != float64(1) {
+		t.Fatalf("condition and loop %v", n)
 	}
 	sched := one(t, a, "schedules/?name=Nightly+deploy")
 	if int64(sched["unified_job_template"].(float64)) != jtID || sched["managed_by"] != tag {

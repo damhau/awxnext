@@ -80,6 +80,9 @@ nodes:
   - id: verify
     template: {kind: JobTemplate, name: Smoke test}
     limit: web01          # node prompts are plain keys
+    when: nodes.deploy.status == 'successful'   # conditions and loops: see workflows.md
+    loop: "['web01', 'web02']"
+    loop_var: target
 ---
 kind: Schedule
 name: Nightly

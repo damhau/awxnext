@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { useMemo, useState, type ReactNode } from 'react'
+import { isValidElement, useMemo, useState, type ReactNode } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { api } from '../../api/client'
 import { useInvalidate, useList, useObject } from '../../api/hooks'
@@ -9,7 +9,9 @@ import { Check, FormError, Lookup, MultiLookup, parseVars, VarsEditor, varsError
 import { Icon } from '../../components/icons'
 import { Empty, Loading, Panel, Status } from '../../components/ui'
 import { ago, duration, jobPath, plural, shortSha, statusKind } from '../../lib/format'
-import { SurveyFields, validateSurvey, type Survey } from './SurveyEditor'
+import { useStored } from '../../lib/storage'
+import { SurveyFields, useSurveyChoices, validateSurvey, type Survey } from './SurveyEditor'
+import { visibleQuestions } from './surveyLogic'
 import { resOf, type Kind } from './TemplateDetail'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -95,16 +97,58 @@ function Catalog({ current }: { current?: string }) {
   )
 }
 
+/** Operator home: tiles of everything the user may run, starred ones first, then by folder. */
 export function RunHome() {
+  const [q, setQ] = useState('')
+  const { scope } = useOrg()
+  const [starred] = useStored<string[]>('starred-templates', [])
+  const list = useList<Template>('unified_job_templates/', { type__in: 'job_template,workflow_job_template', search: q || undefined, order_by: 'name', page_size: 200, ...scope })
+  const items = (list.data?.results ?? []).filter((t) => t.summary_fields.user_capabilities?.start !== false)
+  const groups = new Map<string, Template[]>()
+  const add = (name: string, t: Template) => groups.set(name, [...(groups.get(name) ?? []), t])
+  for (const t of items) if (starred.includes(`${t.type}:${t.id}`)) add('Starred', t)
+  for (const t of items) if (!starred.includes(`${t.type}:${t.id}`)) add(t.summary_fields.folder?.name ?? 'Other', t)
+  const names = [...groups.keys()].sort((a, b) => (a === 'Starred' ? -1 : b === 'Starred' ? 1 : a === 'Other' ? 1 : b === 'Other' ? -1 : a.localeCompare(b)))
   return (
-    <div className="body" style={{ minHeight: '100%' }}>
-      <Catalog />
-      <div className="page ground">
-        <div className="page-body">
-          <Empty title="Pick something to run">
-            The list shows every template you are allowed to launch. Search by what you want to achieve: “deploy”, “restart”, “certificate”.
-          </Empty>
-        </div>
+    <div className="page ground">
+      <div className="page-body" style={{ padding: '20px 28px 32px', maxWidth: 1180 }}>
+        <h1 style={{ fontSize: 20, margin: '0 0 4px' }}>What do you want to do?</h1>
+        <p className="muted" style={{ margin: '0 0 14px' }}>
+          Everything you are allowed to run. Each one asks only what it needs; the rest is set by its owner.
+        </p>
+        <input className="input" style={{ maxWidth: 440, marginBottom: 20 }} aria-label="Search" placeholder="deploy, restart, certificate…" value={q} onChange={(e) => setQ(e.target.value)} autoFocus />
+        {list.isPending && <Loading rows={3} />}
+        {list.data && items.length === 0 && (
+          <Empty title={q ? 'Nothing you can run matches' : 'Nothing to run yet'}>{q ? 'Try another word.' : 'Ask a template owner to give you the Execute role on what you need.'}</Empty>
+        )}
+        {names.map((name) => (
+          <section key={name} style={{ marginBottom: 22 }} aria-label={name}>
+            <h2 className="nav-label" style={{ padding: '0 0 8px' }}>
+              {name}
+            </h2>
+            <div className="tiles">
+              {groups.get(name)!.map((t) => {
+                const kind = t.type === 'workflow_job_template' ? 'workflow' : 'job'
+                const last = t.summary_fields.recent_jobs?.[0]
+                return (
+                  <Link key={`${t.type}:${t.id}`} className="tile" to={`/run/${kind}/${t.id}`}>
+                    <span className="tile-title">{t.name}</span>
+                    <span className="small muted tile-desc">{t.description || (kind === 'workflow' ? 'Workflow' : 'Playbook')}</span>
+                    <span className="small faint row" style={{ gap: 6, marginTop: 'auto' }}>
+                      {last ? (
+                        <>
+                          <Status status={last.status} /> {last.finished ? ago(last.finished) : 'running'}
+                        </>
+                      ) : (
+                        'Never run'
+                      )}
+                    </span>
+                  </Link>
+                )
+              })}
+            </div>
+          </section>
+        ))}
       </div>
     </div>
   )
@@ -136,13 +180,17 @@ function LaunchForm({ kind, tpl, info, survey, operator }: { kind: Kind; tpl: Te
     extra_vars: varsText(d.extra_vars ?? ''),
   })
   const [passwords, setPasswords] = useState<Record<string, string>>({})
-  const [showAll, setShowAll] = useState(!operator)
+  // Operators see what a run needs; the template's owners also get the
+  // advanced settings, which others can open.
+  const [showAll, setShowAll] = useState(!operator || !!tpl.summary_fields.user_capabilities?.edit)
   const [error, setError] = useState<unknown>(null)
   const [busy, setBusy] = useState(false)
   const set = (k: string, v: unknown) => setFields((p) => ({ ...p, [k]: v }))
 
   const questions = survey?.spec ?? []
-  const surveyErrors = validateSurvey(questions, answers)
+  const dynamic = useSurveyChoices(res, tpl.id, questions, asks('inventory') ? inventory?.id : null)
+  const surveyErrors = validateSurvey(questions, answers, dynamic)
+  const shownQuestions = visibleQuestions(questions, answers)
   const [touched, setTouched] = useState(false)
   const varsErr = asks('variables') ? varsError(fields.extra_vars) : null
   const missing: string[] = []
@@ -176,7 +224,7 @@ function LaunchForm({ kind, tpl, info, survey, operator }: { kind: Kind; tpl: Te
     if (asks('variables')) add(parseVars(fields.extra_vars), 'launch variables')
     const secret = new Set(questions.filter((q) => q.type === 'password').map((q) => q.variable))
     const surveyVals: Record<string, unknown> = {}
-    for (const q of questions) {
+    for (const q of visibleQuestions(questions, answers)) {
       const v = answers[q.variable] ?? q.default
       if (v !== undefined && v !== '') surveyVals[q.variable] = v
     }
@@ -197,7 +245,7 @@ function LaunchForm({ kind, tpl, info, survey, operator }: { kind: Kind; tpl: Te
     setError(null)
     const payload: Record<string, any> = {}
     const extra: Record<string, unknown> = asks('variables') ? parseVars(fields.extra_vars) : {}
-    for (const q of questions) {
+    for (const q of shownQuestions) {
       const v = answers[q.variable] ?? q.default
       if (v !== undefined && v !== '') extra[q.variable] = q.type === 'multiselect' && typeof v === 'string' ? v.split('\n').filter(Boolean) : v
     }
@@ -288,6 +336,9 @@ function LaunchForm({ kind, tpl, info, survey, operator }: { kind: Kind; tpl: Te
   if (asks('diff_mode')) prompts.push(<Check key="diff" label="Show changes (--diff)" checked={fields.diff_mode} onChange={(v) => set('diff_mode', v)} />)
 
   const hidden = operator && !showAll
+  const essentialKeys = new Set(['inv', 'limit', 'branch', 'jt', ...(info.credential_needed_to_start ? ['cred'] : [])])
+  const isEssential = (p: ReactNode) => isValidElement(p) && essentialKeys.has(String(p.key))
+  const advanced = prompts.filter((p) => !isEssential(p))
   const hostCount = inv.data?.total_hosts as number | undefined
   const launchLabel = kind === 'workflow' ? 'Launch workflow' : hostCount !== undefined ? `Launch on ${fields.limit && asks('limit') ? 'limited hosts' : plural(hostCount, 'host')}` : 'Launch'
   const approvals = (nodes.data?.results ?? []).filter((n) => n.summary_fields?.unified_job_template?.unified_job_type === 'workflow_approval').length
@@ -322,7 +373,7 @@ function LaunchForm({ kind, tpl, info, survey, operator }: { kind: Kind; tpl: Te
           <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 20 }}>
             <FormError error={error} />
             {questions.length > 0 && (
-              <SurveyFields questions={questions} values={answers} onChange={(v, x) => setAnswers((a) => ({ ...a, [v]: x }))} errors={touched ? surveyErrors : {}} />
+              <SurveyFields questions={questions} values={answers} onChange={(v, x) => setAnswers((a) => ({ ...a, [v]: x }))} errors={touched ? surveyErrors : {}} dynamic={dynamic} />
             )}
             {(info.passwords_needed_to_start ?? []).map((p) => (
               <div key={p} className="field">
@@ -331,18 +382,19 @@ function LaunchForm({ kind, tpl, info, survey, operator }: { kind: Kind; tpl: Te
                 <span className="help">A credential of this template asks for it at launch; it is not stored.</span>
               </div>
             ))}
-            {!hidden && prompts}
+            {prompts.filter(isEssential)}
+            {!hidden && advanced}
             {!hidden && asks('variables') && <VarsEditor label="Extra variables" value={fields.extra_vars} onChange={(v) => set('extra_vars', v)} rows={6} />}
             {questions.length === 0 && prompts.length === 0 && !asks('variables') && !(info.passwords_needed_to_start ?? []).length && (
               <p className="muted" style={{ margin: 0 }}>
                 Nothing to answer: this template runs with its saved settings.
               </p>
             )}
-            {operator && (prompts.length > 0 || asks('variables')) && (
+            {operator && (advanced.length > 0 || asks('variables')) && (
               <p className="small muted" style={{ margin: 0, borderTop: '1px solid var(--line-soft)', paddingTop: 12 }}>
-                {hidden ? 'Inventory, credentials and other settings are preset by the template owner. ' : ''}
+                {hidden ? 'Credentials, environment and other settings are preset by the template owner. ' : ''}
                 <button type="button" className="link-btn" onClick={() => setShowAll((s) => !s)}>
-                  {hidden ? 'Show all fields' : 'Hide advanced fields'}
+                  {hidden ? 'Show advanced settings' : 'Hide advanced settings'}
                 </button>
               </p>
             )}

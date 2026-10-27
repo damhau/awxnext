@@ -17,15 +17,31 @@ const showPlaybook = `- hosts: all
       run_once: true
 `
 
+// itemPlaybook prints its loop item, publishes it as an artifact and fails on "bad".
+const itemPlaybook = `- hosts: all
+  gather_facts: false
+  tasks:
+    - ansible.builtin.debug:
+        msg: "region={{ region | default('none') }} index={{ loop_index | default('none') }}"
+      run_once: true
+    - ansible.builtin.fail:
+        msg: bad region
+      when: region | default('') == 'bad'
+      run_once: true
+    - ansible.builtin.set_stats:
+        data: {last_region: "{{ region | default('none') }}"}
+      run_once: true
+`
+
 type wfFixture struct {
 	*jobFixture
-	site, fail, show, slow int64
+	site, fail, show, slow, item int64
 }
 
 func newWorkflowFixture(t *testing.T) *wfFixture {
 	t.Helper()
 	f := newJobFixture(t)
-	repo := gitRepo(t, map[string]string{"site.yml": sitePlaybook, "fail.yml": failPlaybook, "show.yml": showPlaybook, "slow.yml": slowPlaybook})
+	repo := gitRepo(t, map[string]string{"site.yml": sitePlaybook, "fail.yml": failPlaybook, "show.yml": showPlaybook, "slow.yml": slowPlaybook, "item.yml": itemPlaybook})
 	f.project = must(t, f.a.post("projects/", map[string]any{"name": uniq("wfproj"), "organization": f.org, "scm_type": "git", "scm_url": repo}), 201).id()
 	f.waitProject(t)
 	w := &wfFixture{jobFixture: f}
@@ -33,6 +49,7 @@ func newWorkflowFixture(t *testing.T) *wfFixture {
 	w.fail = f.template(t, "fail.yml", nil)
 	w.show = f.template(t, "show.yml", nil)
 	w.slow = f.template(t, "slow.yml", nil)
+	w.item = f.template(t, "item.yml", nil)
 	return w
 }
 
@@ -114,7 +131,8 @@ func TestWorkflowTemplateValidation(t *testing.T) {
 	must(t, a.post(fmt.Sprintf("workflow_job_templates/%d/workflow_nodes/", wf), map[string]any{"unified_job_template": w.show, "limit": "h1"}), 400)
 	must(t, a.post(fmt.Sprintf("workflow_job_templates/%d/workflow_nodes/", wf), map[string]any{"unified_job_template": w.site, "extra_data": map[string]any{"v": 1}}), 201)
 	sjt := int64(a.get("system_job_templates/").results()[0]["id"].(float64))
-	must(t, a.post(fmt.Sprintf("workflow_job_templates/%d/workflow_nodes/", wf), map[string]any{"unified_job_template": sjt}), 400)
+	// Management jobs are allowed (see TestWorkflowManagementJobNode), with days and dry_run only.
+	must(t, a.post(fmt.Sprintf("workflow_job_templates/%d/workflow_nodes/", wf), map[string]any{"unified_job_template": sjt, "extra_data": map[string]any{"v": 1}}), 400)
 	must(t, a.post(fmt.Sprintf("workflow_job_templates/%d/workflow_nodes/", wf), map[string]any{"unified_job_template": wf}), 400)
 	// Creating a child through the parent node links it.
 	child := must(t, a.post(fmt.Sprintf("workflow_job_template_nodes/%d/failure_nodes/", n3), map[string]any{"unified_job_template": w.show}), 201)
@@ -125,11 +143,23 @@ func TestWorkflowTemplateValidation(t *testing.T) {
 	if fmt.Sprint(node["success_nodes"]) != fmt.Sprintf("[%d]", n2) || node["summary_fields"].(map[string]any)["unified_job_template"].(map[string]any)["unified_job_type"] != "job" {
 		t.Fatalf("node: %v", node)
 	}
-	// Copy keeps the graph.
+	// Copy keeps the graph; approval nodes get their own approval template.
+	ap := w.approval(t, wf, "Gate", 60)
 	cp := must(t, a.post(fmt.Sprintf("workflow_job_templates/%d/copy/", wf), map[string]any{"name": uniq("copy")}), 201)
-	if n := a.get(fmt.Sprintf("workflow_job_templates/%d/workflow_nodes/", cp.id())).count(); n != 5 {
-		t.Fatalf("copied nodes: %d", n)
+	copied := a.get(fmt.Sprintf("workflow_job_templates/%d/workflow_nodes/?order_by=id", cp.id())).results()
+	if len(copied) != 6 {
+		t.Fatalf("copied nodes: %d", len(copied))
 	}
+	origAp := a.get(fmt.Sprintf("workflow_job_template_nodes/%d/", ap)).Body["unified_job_template"]
+	cpAp := copied[5]["unified_job_template"]
+	if cpAp == nil || cpAp == origAp || copied[5]["summary_fields"].(map[string]any)["unified_job_template"].(map[string]any)["name"] != "Gate" {
+		t.Fatalf("copied approval node shares or lost its template: %v vs %v", cpAp, origAp)
+	}
+	must(t, a.post(fmt.Sprintf("workflow_job_template_nodes/%d/create_approval_template/", int64(copied[5]["id"].(float64))), map[string]any{"name": "Renamed", "timeout": 0}), 201)
+	if name := a.get(fmt.Sprintf("workflow_approval_templates/%d/", int64(origAp.(float64)))).Body["name"]; name != "Gate" {
+		t.Fatalf("editing the copy changed the original approval: %v", name)
+	}
+	must(t, a.delete(fmt.Sprintf("workflow_job_template_nodes/%d/", ap)), 204)
 	info := must(t, a.get(fmt.Sprintf("workflow_job_templates/%d/launch/", wf)), 200).Body
 	if info["can_start_without_user_input"] != true {
 		t.Fatalf("launch info: %v", info)
@@ -415,5 +445,198 @@ func TestWorkflowApprovalCleanupAndUnlink(t *testing.T) {
 	}
 	if s := waitJob(t, a, fmt.Sprintf("workflow_approvals/%d/", approval)).Body["status"]; s != "canceled" {
 		t.Fatalf("approval after workflow ended: %v", s)
+	}
+}
+
+// nodeByID indexes a workflow job's nodes by identifier.
+func (w *wfFixture) nodeByID(t *testing.T, wj int64) map[string]map[string]any {
+	out := map[string]map[string]any{}
+	for _, n := range w.jobNodes(t, wj) {
+		out[n["identifier"].(string)] = n
+	}
+	return out
+}
+
+func nodeJob(n map[string]any) map[string]any {
+	job, _ := n["summary_fields"].(map[string]any)["job"].(map[string]any)
+	return job
+}
+
+func TestWorkflowConditions(t *testing.T) {
+	w := newWorkflowFixture(t)
+	a := w.a
+	wf := w.wfjt(t, nil)
+	id := func(name string) map[string]any { return map[string]any{"identifier": name} }
+	with := func(name string, extra map[string]any) map[string]any {
+		m := id(name)
+		for k, v := range extra {
+			m[k] = v
+		}
+		return m
+	}
+	build := w.node(t, wf, w.site, with("build", map[string]any{"extra_data": map[string]any{"version": "v2"}}))
+	onV2 := w.node(t, wf, w.show, with("on-v2", map[string]any{"when": "deployed_version == 'v2'"}))
+	onV1 := w.node(t, wf, w.show, with("on-v1", map[string]any{"when": "deployed_version == 'v1'"}))
+	afterV1 := w.node(t, wf, w.show, id("after-v1"))
+	byNode := w.node(t, wf, w.show, with("by-node", map[string]any{"when": "nodes.build.status == 'successful' and nodes.build.artifacts.deployed_version == 'v2'"}))
+	broken := w.node(t, wf, w.show, with("broken", map[string]any{"when": "nodes.nope.status == 'x'"}))
+	rescue := w.node(t, wf, w.show, id("rescue"))
+	for _, to := range []int64{onV2, onV1, byNode, broken} {
+		w.link(t, build, "success", to)
+	}
+	w.link(t, onV1, "success", afterV1)
+	w.link(t, broken, "failure", rescue)
+
+	// Invalid expressions are rejected when saved.
+	must(t, a.patch(fmt.Sprintf("workflow_job_template_nodes/%d/", onV2), map[string]any{"when": "deployed_version =="}), 400)
+
+	wj := w.launch(t, wf, nil)
+	if done := waitJob(t, a, fmt.Sprintf("workflow_jobs/%d/", wj)); done.Body["status"] != "successful" {
+		t.Fatalf("workflow: %v (%v)", done.Body["status"], done.Body["job_explanation"])
+	}
+	nodes := w.nodeByID(t, wj)
+	for _, ran := range []string{"build", "on-v2", "by-node", "rescue"} {
+		if job := nodeJob(nodes[ran]); job == nil || job["status"] != "successful" {
+			t.Fatalf("%s should have run: %v", ran, nodes[ran])
+		}
+	}
+	if n := nodes["on-v1"]; n["do_not_run"] != true || n["skip_reason"] != "Condition is false: deployed_version == 'v1'" || nodeJob(n) != nil {
+		t.Fatalf("on-v1 should be skipped by its condition: %v", n)
+	}
+	if n := nodes["after-v1"]; n["do_not_run"] != true || n["skip_reason"] != "" {
+		t.Fatalf("after-v1 should not run: %v", n)
+	}
+	job := nodeJob(nodes["broken"])
+	if job == nil || job["status"] != "failed" {
+		t.Fatalf("broken condition should fail the node: %v", nodes["broken"])
+	}
+	if exp := a.get(fmt.Sprintf("jobs/%d/", int64(job["id"].(float64)))).Body["job_explanation"].(string); !strings.Contains(exp, "condition could not be evaluated") {
+		t.Fatalf("explanation: %s", exp)
+	}
+}
+
+func TestWorkflowLoops(t *testing.T) {
+	w := newWorkflowFixture(t)
+	a := w.a
+	wf := w.wfjt(t, map[string]any{"extra_vars": "regions: [eu, us, ap]"})
+	node := func(ujt int64, ident string, extra map[string]any) int64 {
+		body := map[string]any{"identifier": ident}
+		for k, v := range extra {
+			body[k] = v
+		}
+		return w.node(t, wf, ujt, body)
+	}
+	regions := node(w.item, "regions", map[string]any{"loop": "regions", "loop_var": "region", "loop_concurrency": 1})
+	after := node(w.show, "after", map[string]any{"when": "last_region == 'ap' and len(nodes.regions.items) == 3"})
+	empty := node(w.item, "empty", map[string]any{"loop": "[]", "loop_var": "region"})
+	afterEmpty := node(w.show, "after-empty", nil)
+	mixed := node(w.item, "mixed", map[string]any{"loop": "['ok', 'bad']", "loop_var": "region"})
+	onFail := node(w.show, "on-fail", nil)
+	onSuccess := node(w.show, "on-success", nil)
+	w.link(t, regions, "success", after)
+	w.link(t, empty, "success", afterEmpty)
+	w.link(t, mixed, "failure", onFail)
+	w.link(t, mixed, "success", onSuccess)
+
+	// Validation.
+	ap := w.approval(t, wf, "Gate", 0)
+	must(t, a.patch(fmt.Sprintf("workflow_job_template_nodes/%d/", ap), map[string]any{"loop": "regions"}), 400)
+	must(t, a.patch(fmt.Sprintf("workflow_job_template_nodes/%d/", regions), map[string]any{"loop_var": "1bad"}), 400)
+	must(t, a.patch(fmt.Sprintf("workflow_job_template_nodes/%d/", regions), map[string]any{"loop_concurrency": -1}), 400)
+	must(t, a.delete(fmt.Sprintf("workflow_job_template_nodes/%d/", ap)), 204)
+
+	wj := w.launch(t, wf, nil)
+	if done := waitJob(t, a, fmt.Sprintf("workflow_jobs/%d/", wj)); done.Body["status"] != "successful" {
+		t.Fatalf("workflow: %v (%v)", done.Body["status"], done.Body["job_explanation"])
+	}
+	nodes := w.nodeByID(t, wj)
+
+	// One job per item, in order, one at a time.
+	n := nodes["regions"]
+	iters := n["iterations"].([]any)
+	if len(iters) != 3 || fmt.Sprint(n["loop_items"]) != "[eu us ap]" || n["job"] != nil {
+		t.Fatalf("regions loop: %v", n)
+	}
+	var prevFinished string
+	for i, it := range iters {
+		job := it.(map[string]any)["job"].(map[string]any)
+		jid := int64(job["id"].(float64))
+		region := []string{"eu", "us", "ap"}[i]
+		if job["status"] != "successful" || !strings.HasSuffix(job["name"].(string), "("+region+")") {
+			t.Fatalf("iteration %d: %v", i, job)
+		}
+		if out := w.stdout(t, jid); !strings.Contains(out, fmt.Sprintf("region=%s index=%d", region, i)) {
+			t.Fatalf("iteration %d output:\n%s", i, out)
+		}
+		j := a.get(fmt.Sprintf("jobs/%d/", jid)).Body
+		if src, _ := j["summary_fields"].(map[string]any)["source_workflow_job"].(map[string]any); src == nil || src["id"] != float64(wj) {
+			t.Fatalf("iteration %d source workflow: %v", i, j["summary_fields"])
+		}
+		if prevFinished != "" && j["started"].(string) < prevFinished {
+			t.Fatalf("iteration %d started at %v before the previous one finished at %v", i, j["started"], prevFinished)
+		}
+		prevFinished = j["finished"].(string)
+	}
+	// Artifacts merge in item order, and conditions see the node's items.
+	if job := nodeJob(nodes["after"]); job == nil || job["status"] != "successful" {
+		t.Fatalf("after: %v", nodes["after"])
+	}
+	// An empty loop succeeds without jobs.
+	if n := nodes["empty"]; len(n["iterations"].([]any)) != 0 || nodeJob(nodes["after-empty"]) == nil {
+		t.Fatalf("empty loop: %v / %v", n, nodes["after-empty"])
+	}
+	// One failed item fails the node.
+	if len(nodes["mixed"]["iterations"].([]any)) != 2 || nodeJob(nodes["on-fail"]) == nil || nodes["on-success"]["do_not_run"] != true {
+		t.Fatalf("mixed loop: %v / on-fail %v / on-success %v", nodes["mixed"], nodes["on-fail"], nodes["on-success"])
+	}
+
+	// Canceling the workflow cancels running iterations.
+	wf2 := w.wfjt(t, nil)
+	w.node(t, wf2, w.slow, map[string]any{"identifier": "slow", "loop": "['a', 'b']"})
+	wj2 := w.launch(t, wf2, nil)
+	deadline := time.Now().Add(30 * time.Second)
+	for len(w.nodeByID(t, wj2)["slow"]["iterations"].([]any)) < 2 {
+		if time.Now().After(deadline) {
+			t.Fatal("slow iterations never started")
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	must(t, a.post(fmt.Sprintf("workflow_jobs/%d/cancel/", wj2), nil), 202)
+	if done := waitJob(t, a, fmt.Sprintf("workflow_jobs/%d/", wj2)); done.Body["status"] != "canceled" {
+		t.Fatalf("canceled workflow: %v", done.Body["status"])
+	}
+	for _, it := range w.nodeByID(t, wj2)["slow"]["iterations"].([]any) {
+		job := it.(map[string]any)["job"].(map[string]any)
+		if st := waitJob(t, a, fmt.Sprintf("jobs/%d/", int64(job["id"].(float64)))).Body["status"]; st != "canceled" {
+			t.Fatalf("iteration not canceled: %v", st)
+		}
+	}
+}
+
+// Management jobs can be workflow steps, with only days and dry_run.
+func TestWorkflowManagementJobNode(t *testing.T) {
+	a := adminClient(t)
+	org := newOrg(t, a)
+	cleanup := int64(must(t, a.get("system_job_templates/?job_type=cleanup_jobs"), 200).results()[0]["id"].(float64))
+	wf := must(t, a.post("workflow_job_templates/", map[string]any{"name": uniq("wf"), "organization": org}), 201).id()
+	nodes := fmt.Sprintf("workflow_job_templates/%d/workflow_nodes/", wf)
+	must(t, a.post(nodes, map[string]any{"unified_job_template": cleanup, "extra_data": map[string]any{"limit": "x"}}), 400)
+	must(t, a.post(nodes, map[string]any{"unified_job_template": cleanup, "extra_data": map[string]any{"days": 90, "dry_run": true}}), 201)
+	user, uid := newUser(t, a)
+	must(t, a.post(fmt.Sprintf("users/%d/roles/", uid), map[string]any{"id": objectRole(t, a, "workflow_job_templates", wf, "admin_role")}), 204)
+	must(t, user.post(nodes, map[string]any{"unified_job_template": cleanup}), 403)
+
+	r := must(t, a.post(fmt.Sprintf("workflow_job_templates/%d/launch/", wf), nil), 201)
+	wj := int64(r.Body["workflow_job"].(float64))
+	if done := waitJob(t, a, fmt.Sprintf("workflow_jobs/%d/", wj)); done.Body["status"] != "successful" {
+		t.Fatalf("workflow: %v (%v)", done.Body["status"], done.Body["job_explanation"])
+	}
+	n := a.get(fmt.Sprintf("workflow_jobs/%d/workflow_nodes/", wj)).results()[0]
+	job := n["summary_fields"].(map[string]any)["job"].(map[string]any)
+	if job["type"] != "system_job" || job["status"] != "successful" {
+		t.Fatalf("management job node: %v", job)
+	}
+	if ev := a.get(fmt.Sprintf("system_jobs/%d/", int64(job["id"].(float64)))).Body["extra_vars"]; !strings.Contains(fmt.Sprint(ev), "90") {
+		t.Fatalf("days not passed: %v", ev)
 	}
 }

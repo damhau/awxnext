@@ -93,6 +93,29 @@ func ujtSummary(c *Ctx, objs []Obj) error {
 			sf["inventory"] = i
 		}
 	}
+	// Capabilities as each template's own endpoint reports them.
+	byType := map[string][]int{}
+	for i, o := range objs {
+		byType[str(o["type"])] = append(byType[str(o["type"])], i)
+	}
+	for typ, idx := range byType {
+		r := api.LookupType(typ)
+		if r == nil {
+			continue
+		}
+		raws := make([]Obj, len(idx))
+		tids := make([]int64, len(idx))
+		for j, i := range idx {
+			raws[j], tids[j] = objs[i], ids[i]
+		}
+		caps, err := api.UserCapabilities(c, r, raws, tids)
+		if err != nil {
+			return err
+		}
+		for j, i := range idx {
+			objs[i]["summary_fields"].(Obj)["user_capabilities"] = caps[j]
+		}
+	}
 	for _, o := range objs {
 		id, _ := api.ID(o["id"])
 		sf := o["summary_fields"].(Obj)
