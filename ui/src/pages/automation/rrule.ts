@@ -314,3 +314,30 @@ export function describeText(text: string | null | undefined): string {
   const p = parseRRule(text)
   return p.model ? describe(p.model) : 'Custom rule'
 }
+
+/** A few words for a list column: "every 3 h", "weekdays 06:00", "Mon, Thu 06:00". */
+export function shortRule(text: string | null | undefined): string {
+  const m = text ? parseRRule(text).model : null
+  if (!m) return text ? 'custom' : '—'
+  const n = m.interval
+  const at = timeFmt(m.start)
+  switch (m.freq) {
+    case 'once':
+      return `once ${dateFmt(m.start).replace(/ \d{4}$/, '')}`
+    case 'MINUTELY':
+      return n === 1 ? 'every minute' : `every ${n} min`
+    case 'HOURLY':
+      return n === 1 ? 'hourly' : `every ${n} h`
+    case 'DAILY':
+      return n === 1 ? `daily ${at}` : `every ${n} days ${at}`
+    case 'WEEKLY': {
+      const days = DAYS.filter((d) => m.byday.includes(d))
+      const names = days.length === 7 ? 'daily' : days.length === 5 && !days.includes('SA') && !days.includes('SU') ? 'weekdays' : days.map((d) => DAY_NAMES[d].slice(0, 3)).join(', ')
+      return `${n === 1 ? '' : `every ${n} wk, `}${names} ${at}`
+    }
+    case 'MONTHLY':
+      return `${n === 1 ? 'monthly' : `every ${n} months`} ${at}`
+    case 'YEARLY':
+      return `yearly ${at}`
+  }
+}

@@ -417,6 +417,37 @@ pre.code {
 .sidelist .item .x { margin-left: auto; opacity: 0; border: none; background: none; cursor: pointer; color: var(--muted-2); }
 .sidelist .item:hover .x { opacity: 1; }
 
+/* ---------- quick-view chips ---------- */
+.chips { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.qchip {
+  display: inline-flex; align-items: center; height: 30px; border: 1px solid var(--line-strong); background: var(--surface);
+  border-radius: 999px; color: var(--ink-3); font-size: 12.5px; font-weight: 500; white-space: nowrap;
+}
+.qchip:hover { border-color: var(--ink); color: var(--ink); }
+.qchip.on { background: var(--ink); border-color: var(--ink); color: var(--ground); }
+.qchip-main { border: 0; background: none; color: inherit; height: 100%; padding: 0 12px; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; border-radius: 999px; }
+.qchip .n { font-family: var(--mono); font-size: 11px; color: var(--muted-2); }
+.qchip.on .n { color: var(--line-strong); }
+.qchip .n.bad { color: var(--fail-ink); }
+.qchip.on .n.bad { color: #ffb08a; }
+.qchip-x { border: 0; background: none; color: inherit; opacity: 0.6; padding: 0 10px 0 0; margin-left: -6px; height: 100%; cursor: pointer; display: inline-flex; align-items: center; }
+.qchip-x:hover { opacity: 1; }
+button.qchip { padding: 0 12px; gap: 6px; cursor: pointer; }
+button.qchip:disabled { opacity: 0.5; cursor: not-allowed; border-color: var(--line-strong); color: var(--ink-3); }
+.qchip.add { border-style: dashed; background: transparent; }
+.qchip.tree-toggle { margin-left: auto; background: transparent; }
+.qchip.tree-toggle.on { background: var(--ink); color: var(--ground); }
+.chip-sep { width: 1px; height: 22px; background: var(--line-strong); margin: 0 4px; }
+/* Folder rows above a folder's templates. */
+table.data tr.folder-row td { padding-top: 10px; padding-bottom: 10px; background: var(--surface-2); }
+table.data tr.folder-row:hover td { background: var(--hover); }
+.folder-cell { display: flex; align-items: center; gap: 12px; }
+.folder-link { display: inline-flex; align-items: center; gap: 8px; border: 0; background: none; padding: 0; cursor: pointer; color: var(--ink); font-size: 13.5px; }
+.folder-link b { font-weight: 600; }
+.folder-link:hover b { text-decoration: underline; }
+.folder-bad { display: inline-flex; align-items: center; gap: 5px; }
+.sidelist.folder-pane { flex-basis: 200px; }
+
 /* ---------- filter bar ---------- */
 .filterbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .filter-input {
@@ -603,6 +634,7 @@ pre.code {
 @media (max-width: 900px) {
   .nav { display: none; }
   .sidelist { display: none; }
+  .qchip.tree-toggle { display: none; }
   .page-head, .page-body { padding-left: 16px; padding-right: 16px; }
   .topbar { gap: 10px; }
   .topbar .org { display: none; }

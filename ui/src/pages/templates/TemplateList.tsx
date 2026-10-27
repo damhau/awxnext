@@ -1,23 +1,24 @@
 import { useQuery } from '@tanstack/react-query'
-import { useMemo, useState } from 'react'
-import { Link, useNavigate } from 'react-router'
+import { useMemo, useState, type ReactNode } from 'react'
+import { Link, useNavigate, useSearchParams } from 'react-router'
 import { api, getAll, type Page } from '../../api/client'
 import { useInvalidate, useList } from '../../api/hooks'
-import type { Job, Ref, Template } from '../../api/types'
+import type { Base, Job, Ref, Template } from '../../api/types'
 import { useMe, useOrg } from '../../app/context'
 import { FilterBar } from '../../components/filterbar'
 import { Lookup, MultiLookup, SelectField } from '../../components/form'
 import { Icon } from '../../components/icons'
 import { Dialog, Menu, useConfirm, useToast } from '../../components/overlay'
 import { DataTable, Pager, useListState, type Column } from '../../components/table'
-import { Ago, Crumbs, Empty, RunBars, Status, Upcoming } from '../../components/ui'
+import { Ago, Cell, Crumbs, Empty, RunBars, Status, Upcoming } from '../../components/ui'
 import { AccessTab } from '../../components/access/Access'
-import { userName } from '../../lib/format'
+import { plural, userName } from '../../lib/format'
 import { compile, statusValue, type KeyTable } from '../../lib/query'
 import { useStored } from '../../lib/storage'
 import { FolderDialog } from '../../components/FolderDialog'
 import { useCopy } from '../../components/CopyDialog'
 import { ancestors, buildTree, flatten, subtreeIds, useFolders, type FolderNode } from '../../lib/folders'
+import { shortRule } from '../automation/rrule'
 
 const keys: KeyTable = {
   status: { field: 'status', map: statusValue, help: 'failed' },
@@ -30,13 +31,21 @@ const keys: KeyTable = {
   by: { field: 'modified_by__username', help: 'user' },
 }
 
-type View = { name: string; q: string; folder?: number | null }
+type View = { name: string; q: string; folder?: number | null; show?: string | null }
+type Sched = Base & { unified_job_template: number; rrule: string; next_run: string | null }
 
 const tkey = (t: { type: string; id: number }) => `${t.type}:${t.id}`
 const kindPath = (t: { type: string }) => (t.type === 'workflow_job_template' ? 'workflow' : 'job')
 
+/**
+ * Templates, browsed like a file manager: a folder shows its subfolders as
+ * rows above its own templates, and the breadcrumb leads back up. The chips
+ * are filters; with one on (or a search), the list is flat over the folder
+ * and everything below it. The folder tree beside the list is optional.
+ */
 export function TemplateList() {
   const ls = useListState({ order: 'name' })
+  const [sp] = useSearchParams()
   const nav = useNavigate()
   const me = useMe()
   const { org, scope } = useOrg()
@@ -44,6 +53,7 @@ export function TemplateList() {
   const { roots, byId } = useMemo(() => buildTree(folders.data ?? []), [folders.data])
   const [starred, setStarred] = useStored<string[]>('starred-templates', [])
   const [views, setViews] = useStored<View[]>('template-views', [])
+  const [tree, setTree] = useStored('templates-folder-tree', false)
   const [selected, setSelected] = useState<Set<number | string>>(new Set())
   const [dialog, setDialog] = useState<null | 'move' | 'labels' | 'grant' | 'save' | 'access' | 'folder-new' | 'folder-edit'>(null)
   const confirm = useConfirm()
@@ -51,9 +61,10 @@ export function TemplateList() {
   const invalidate = useInvalidate()
 
   const folderId = Number(ls.get('folder')) || null
-  const special = ls.get('show') // starred | mine
+  const special = ls.get('show') // all | starred | mine
   const folder = folderId ? byId.get(folderId) : undefined
   const compiled = compile(ls.q, keys)
+  const browse = !ls.q && !special
 
   const mine = useQuery({
     queryKey: ['unified_jobs/', 'mine', me.id],
@@ -70,26 +81,43 @@ export function TemplateList() {
         ? (mine.data ?? []).join(',') || '0'
         : undefined
 
-  const base = {
-    type__in: 'job_template,workflow_job_template',
-    ...scope,
-    ...(folder ? { folder__in: subtreeIds(folder).join(',') } : {}),
-    ...(idFilter ? { id__in: idFilter } : {}),
-  }
+  const kinds = { type__in: 'job_template,workflow_job_template', ...scope }
+  const where = browse ? (folder ? { folder: folder.folder.id } : { folder__isnull: true }) : folder ? { folder__in: subtreeIds(folder).join(',') } : {}
+  const base = { ...kinds, ...where, ...(idFilter ? { id__in: idFilter } : {}) }
   const params = { ...base, ...compiled.params, order_by: ls.order, page: ls.page, page_size: ls.pageSize }
   const list = useList<Template>('unified_job_templates/', params)
   // How many the filter hides, for the footer.
   const unfiltered = useList<Template>('unified_job_templates/', { ...base, page_size: 1 }, { enabled: !!ls.q })
-  const failing = useList<Template>('unified_job_templates/', { type__in: 'job_template,workflow_job_template', ...scope, status__in: 'failed,error', page_size: 1 })
-  const all = useList<Template>('unified_job_templates/', { type__in: 'job_template,workflow_job_template', ...scope, page_size: 1 })
+  const failing = useList<Template>('unified_job_templates/', { ...kinds, status__in: 'failed,error', page_size: 200 })
+  const all = useList<Template>('unified_job_templates/', { ...kinds, page_size: 1 })
 
   const rows = list.data?.results ?? []
+  const schedules = useList<Sched>(rows.length ? 'schedules/' : null, { unified_job_template__in: rows.map((r) => r.id).join(','), enabled: true, order_by: 'next_run', page_size: 200 })
+  const scheduleOf = useMemo(() => {
+    const by = new Map<number, Sched[]>()
+    for (const sc of schedules.data?.results ?? []) by.set(sc.unified_job_template, [...(by.get(sc.unified_job_template) ?? []), sc])
+    return by
+  }, [schedules.data])
+  const subfolders = browse && ls.page <= 1 ? (folder ? folder.children : roots) : []
+  const failingIn = (n: FolderNode) => {
+    const ids = new Set(subtreeIds(n))
+    return (failing.data?.results ?? []).filter((t) => t.folder && ids.has(t.folder)).length
+  }
+  const failingHere = folder ? failingIn(folder) : (failing.data?.count ?? 0)
   const multiOrg = !org && new Set(rows.map((r) => r.organization)).size > 1
   const selectedRows = rows.filter((r) => selected.has(tkey(r)))
   const isStarred = (t: Template) => starred.includes(tkey(t))
   const toggleStar = (t: Template) => setStarred((s) => (s.includes(tkey(t)) ? s.filter((x) => x !== tkey(t)) : [...s, tkey(t)]))
   const open = (t: Template) => nav(`/templates/${kindPath(t)}/${t.id}`)
   const launch = (t: Template) => nav(`/launch/${kindPath(t)}/${t.id}`)
+  // Moving between folders is navigation: it gets a history entry, so Back works.
+  const goTo = (id: number | null) => {
+    const n = new URLSearchParams(sp)
+    if (id) n.set('folder', String(id))
+    else n.delete('folder')
+    n.delete('page')
+    nav({ search: n.toString() })
+  }
   const res = (t: Template) => (t.type === 'workflow_job_template' ? 'workflow_job_templates' : 'job_templates')
   const copyJob = useCopy('job_templates', { to: (id) => `/templates/job/${id}`, what: 'Credentials, labels and the survey are copied.', invalidates: ['unified_job_templates', 'folders'] })
   const copyWorkflow = useCopy('workflow_job_templates', { to: (id) => `/templates/workflow/${id}`, what: 'Nodes, links and the survey are copied.', invalidates: ['unified_job_templates', 'folders'] })
@@ -111,6 +139,7 @@ export function TemplateList() {
       sort: 'name',
       render: (t) => {
         const info = t.summary_fields.template ?? {}
+        const where = t.folder && t.folder !== folderId ? byId.get(t.folder)?.path : undefined
         return (
           <>
             <div className="row" style={{ gap: 6 }}>
@@ -119,7 +148,7 @@ export function TemplateList() {
                 aria-label={isStarred(t) ? `Unstar ${t.name}` : `Star ${t.name}`}
                 aria-pressed={isStarred(t)}
                 onClick={() => toggleStar(t)}
-                style={{ color: isStarred(t) ? 'var(--star)' : 'var(--line-strong)', fontSize: 14, lineHeight: 1 }}
+                style={{ color: isStarred(t) ? 'var(--star)' : 'var(--line-strong)', fontSize: 14, lineHeight: 1, textDecoration: 'none' }}
               >
                 ★
               </button>
@@ -132,7 +161,7 @@ export function TemplateList() {
             </div>
             <div className="cell-sub" style={{ marginLeft: 20 }}>
               {t.type === 'workflow_job_template' ? `${info.workflow_nodes ?? 0} nodes` : info.playbook || '—'}
-              {!folder && t.summary_fields.folder && <span style={{ fontFamily: 'var(--sans)' }}> · {t.summary_fields.folder.name}</span>}
+              {where && <span style={{ fontFamily: 'var(--sans)' }}> · {where}</span>}
               {multiOrg && t.summary_fields.organization && <span style={{ fontFamily: 'var(--sans)' }}> · {t.summary_fields.organization.name}</span>}
             </div>
           </>
@@ -161,7 +190,7 @@ export function TemplateList() {
           <>
             <Status status={st} />
             <div className="faint small" style={{ marginTop: 2 }}>
-              <Link to={`/jobs/${recent?.type ?? (t.type === 'workflow_job_template' ? 'workflow_job' : 'job')}/${jid}`} className="faint">
+              <Link to={`/jobs/${recent?.type ?? (t.type === 'workflow_job_template' ? 'workflow_job' : 'job')}/${jid}`} className="faint mono">
                 #{jid}
               </Link>{' '}
               · <Ago at={recent?.finished ?? t.last_job_run} />
@@ -170,7 +199,27 @@ export function TemplateList() {
         )
       },
     },
-    { key: 'next', header: 'Next scheduled', sort: 'next_job_run', className: 'nowrap', render: (t) => (t.next_job_run ? <Upcoming at={t.next_job_run} /> : <span className="faint">Manual</span>) },
+    {
+      key: 'schedule',
+      header: 'Schedule',
+      sort: 'next_job_run',
+      className: 'nowrap',
+      render: (t) => {
+        const list = scheduleOf.get(t.id) ?? []
+        if (!list.length) return <span className="faint">—</span>
+        return (
+          <>
+            <Link to={`/templates/${kindPath(t)}/${t.id}/schedules`} className="mono" style={{ color: 'var(--ink)' }} title={list.map((x) => x.name).join(', ')}>
+              {shortRule(list[0].rrule)}
+              {list.length > 1 && <span className="faint"> +{list.length - 1}</span>}
+            </Link>
+            <div className="faint small" style={{ marginTop: 2 }}>
+              next <Upcoming at={list[0].next_run} />
+            </div>
+          </>
+        )
+      },
+    },
     {
       key: 'edited',
       header: 'Edited',
@@ -225,68 +274,81 @@ export function TemplateList() {
     invalidate('unified_job_templates', 'job_templates', 'workflow_job_templates', 'folders')
   }
 
-  const title = special === 'starred' ? 'Starred' : special === 'mine' ? 'Recently run by me' : folder ? folder.folder.name : 'All templates'
-  const crumbs = folder ? [{ label: 'Templates', to: '/templates' }, ...ancestors(folder, byId).map((a, i, arr) => (i === arr.length - 1 ? { label: a.folder.name } : { label: a.folder.name, to: `/templates?folder=${a.folder.id}` }))] : [{ label: 'Templates' }]
+  const trail = folder ? ancestors(folder, byId) : []
+  const crumbs = folder ? [{ label: 'Templates', to: '/templates' }, ...trail.slice(0, -1).map((a) => ({ label: a.folder.name, to: `/templates?folder=${a.folder.id}` }))] : null
+  const viewOn = (v: View) => ls.q === v.q && (v.folder ?? null) === folderId && (v.show ?? null) === (special ?? null)
+  const failedView = ls.q === 'status:failed'
+  const leadRows = subfolders.map((n) => {
+    const bad = failingIn(n)
+    return (
+      <tr key={`f${n.folder.id}`} className="folder-row clickable" onClick={(e) => !(e.target as HTMLElement).closest('a,button') && goTo(n.folder.id)}>
+        <td className="sel" />
+        <td colSpan={columns.length}>
+          <div className="folder-cell">
+            <button className="folder-link" onClick={() => goTo(n.folder.id)}>
+              <Icon name="folder" size={15} />
+              <b>{n.folder.name}</b>
+            </button>
+            <span className="mono small muted">
+              {plural(n.total, 'template')}
+              {n.children.length > 0 && ` · ${plural(n.children.length, 'folder')}`}
+            </span>
+            {bad > 0 && (
+              <span className="small fail-text folder-bad">
+                <Cell state="failed" /> {bad} failing
+              </span>
+            )}
+          </div>
+        </td>
+      </tr>
+    )
+  })
 
   return (
     <div className="body" style={{ minHeight: '100%' }}>
-      <aside className="sidelist" aria-label="Folders and views">
-        <div className="group">
-          <SideLink active={!folderId && !special} onClick={() => ls.set({ folder: null, show: null, page: null })} label="All templates" n={all.data?.count} />
-          <SideLink active={special === 'starred'} onClick={() => ls.set({ show: 'starred', folder: null, page: null })} label="Starred" n={starred.length} />
-          <SideLink active={special === 'mine'} onClick={() => ls.set({ show: 'mine', folder: null, page: null })} label="Recently run by me" />
-        </div>
-        <div className="group">
-          <div className="group-head">
-            <span>Saved views</span>
-            <button aria-label="Save current view" title="Save current view" onClick={() => setDialog('save')}>
-              +
-            </button>
-          </div>
-          <SideLink active={ls.q === 'status:failed' && !folderId} onClick={() => ls.set({ q: 'status:failed', folder: null, show: null, page: null })} label="Last run failed" n={failing.data?.count} bad />
-          {views.map((v) => (
-            <div key={v.name} className={`item ${ls.q === v.q && (v.folder ?? null) === folderId ? 'active' : ''}`} role="link" tabIndex={0}
-              onClick={() => ls.set({ q: v.q, folder: v.folder ? String(v.folder) : null, show: null, page: null })}
-              onKeyDown={(e) => e.key === 'Enter' && ls.set({ q: v.q, folder: v.folder ? String(v.folder) : null, show: null, page: null })}>
-              <span className="ellipsis">{v.name}</span>
-              <button className="x" aria-label={`Delete view ${v.name}`} onClick={(e) => { e.stopPropagation(); setViews((all) => all.filter((x) => x.name !== v.name)) }}>
-                <Icon name="x" size={12} />
+      {tree && (
+        <aside className="sidelist folder-pane" aria-label="Folder tree">
+          <div className="group">
+            <div className="group-head">
+              <span>Folders</span>
+              <button aria-label="New folder" title="New folder" onClick={() => setDialog('folder-new')}>
+                +
               </button>
             </div>
-          ))}
-          {views.length === 0 && <span className="small faint" style={{ padding: '2px 8px' }}>Filter the list, then + to keep it here.</span>}
-        </div>
-        <div className="group">
-          <div className="group-head">
-            <span>Folders</span>
-            <button aria-label="New folder" title="New folder" onClick={() => setDialog('folder-new')}>
-              +
+            <button className={`item ${!folderId ? 'active' : ''}`} onClick={() => goTo(null)} aria-current={!folderId ? 'page' : undefined}>
+              <Icon name="templates" size={14} />
+              <span className="ellipsis grow">Templates</span>
+              <span className="n">{all.data?.count}</span>
             </button>
+            {flatten(roots).map((n) => (
+              <FolderLink key={n.folder.id} n={n} active={n.folder.id === folderId} onClick={() => goTo(n.folder.id)} />
+            ))}
+            {folders.data && roots.length === 0 && <span className="small faint" style={{ padding: '2px 8px' }}>No folders yet.</span>}
           </div>
-          {flatten(roots).map((n) => (
-            <FolderLink key={n.folder.id} n={n} active={n.folder.id === folderId} onClick={() => ls.set({ folder: String(n.folder.id), show: null, page: null })} />
-          ))}
-          {folders.data && roots.length === 0 && <span className="small faint" style={{ padding: '2px 8px' }}>No folders yet.</span>}
-        </div>
-      </aside>
+        </aside>
+      )}
 
       <div className="page" style={{ minWidth: 0 }}>
         <div className="page-head" style={{ paddingBottom: 0 }}>
-          <Crumbs items={crumbs} />
+          {crumbs && <Crumbs items={crumbs} />}
           <div className="title-row">
             <div style={{ flex: '1 1 320px' }}>
-              <h1>{title}</h1>
-              {folder && (
-                <p className="subtitle">
-                  {folder.folder.description ? folder.folder.description + ' · ' : ''}
-                  Roles granted on this folder apply to all {folder.total} templates below.
-                </p>
-              )}
+              <h1>{folder ? folder.folder.name : 'Templates'}</h1>
+              <p className="subtitle mono small">
+                {plural(folder ? folder.total : (all.data?.count ?? 0), 'template')}
+                {failingHere > 0 && (
+                  <>
+                    {' · '}
+                    <span className="fail-text">{failingHere} failing</span>
+                  </>
+                )}
+                {folder?.folder.description ? <span style={{ fontFamily: 'var(--sans)' }}> · {folder.folder.description}</span> : null}
+              </p>
             </div>
             <div className="actions">
               {folder && (
                 <>
-                  <button className="btn" onClick={() => setDialog('access')}>
+                  <button className="btn" onClick={() => setDialog('access')} title="Roles granted on this folder apply to everything in it">
                     Folder access
                   </button>
                   <Menu label="Folder actions">
@@ -301,7 +363,7 @@ export function TemplateList() {
                         try {
                           await api.del(`folders/${folder.folder.id}/`)
                           invalidate('folders')
-                          ls.set({ folder: folder.folder.parent ? String(folder.folder.parent) : null, page: null })
+                          goTo(folder.folder.parent ?? null)
                         } catch (e) {
                           toast((e as Error).message, 'error')
                         }
@@ -312,23 +374,48 @@ export function TemplateList() {
                   </Menu>
                 </>
               )}
-              <Menu label="New template" className="btn primary" trigger={<>New template <Icon name="chevron" size={12} /></>}>
+              <Menu label="New" className="btn primary" trigger={<>New template <Icon name="chevron" size={12} /></>}>
                 <Link to={`/templates/new/job${folder ? `?folder=${folder.folder.id}` : ''}`}>Job template</Link>
                 <Link to={`/templates/new/workflow${folder ? `?folder=${folder.folder.id}` : ''}`}>Workflow template</Link>
+                <hr />
+                <button onClick={() => setDialog('folder-new')}>{folder ? 'Subfolder…' : 'Folder…'}</button>
               </Menu>
             </div>
+          </div>
+          <div className="chips" role="group" aria-label="Quick views">
+            <Chip on={special === 'all'} onClick={() => ls.set({ show: special === 'all' ? null : 'all', page: null })} n={folder ? folder.total : all.data?.count}>
+              All
+            </Chip>
+            <Chip on={special === 'starred'} onClick={() => ls.set({ show: special === 'starred' ? null : 'starred', page: null })} n={starred.length}>
+              ★ Starred
+            </Chip>
+            <Chip on={special === 'mine'} onClick={() => ls.set({ show: special === 'mine' ? null : 'mine', page: null })}>
+              Run by me
+            </Chip>
+            <Chip on={failedView} onClick={() => ls.set({ q: failedView ? null : 'status:failed', page: null })} n={failingHere} bad>
+              Last run failed
+            </Chip>
+            {views.length > 0 && <span className="chip-sep" aria-hidden="true" />}
+            {views.map((v) => (
+              <Chip key={v.name} on={viewOn(v)} onClick={() => ls.set({ q: v.q || null, folder: v.folder ? String(v.folder) : null, show: v.show ?? null, page: null })} onRemove={() => setViews((list) => list.filter((x) => x.name !== v.name))}>
+                {v.name}
+              </Chip>
+            ))}
+            <button className="qchip add" onClick={() => setDialog('save')} disabled={browse && !folder} title="Keep the current filter and folder as a chip">
+              + Save view
+            </button>
+            <button className={`qchip tree-toggle${tree ? ' on' : ''}`} aria-pressed={tree} onClick={() => setTree(!tree)} title="Show the folder tree beside the list">
+              <Icon name="folder" size={13} />
+              Folder tree
+            </button>
           </div>
           <FilterBar
             value={ls.q}
             onChange={ls.setQ}
             keys={keys}
             placeholder="name, playbook, label…  try  status:failed  inventory:prod-*"
-            chips={folder ? [{ label: <>folder:<b>{folder.path}</b></>, onRemove: () => ls.set({ folder: null, page: null }) }] : []}
-          >
-            <button className="btn" onClick={() => setDialog('save')} disabled={!ls.q && !folder}>
-              Save view
-            </button>
-          </FilterBar>
+            chips={folder && !browse ? [{ label: <>in folder:<b>{folder.path}</b></>, onRemove: () => goTo(null) }] : []}
+          />
         </div>
 
         {selected.size > 0 && (
@@ -396,9 +483,14 @@ export function TemplateList() {
             onOrder={ls.setOrder}
             keys={{ l: launch, s: toggleStar }}
             minWidth={900}
+            lead={leadRows.length ? leadRows : undefined}
             empty={
-              ls.q || folder || special ? (
+              !browse ? (
                 <Empty title="No templates match">Remove a filter, or pick another folder.</Empty>
+              ) : folder ? (
+                <Empty title="This folder is empty" action={<Link to={`/templates/new/job?folder=${folder.folder.id}`} className="btn primary">New job template here</Link>}>
+                  Create a template here, or move templates in from the list with “Move to folder”.
+                </Empty>
               ) : (
                 <Empty title="No templates yet" action={<Link to="/templates/new/job" className="btn primary">New job template</Link>}>
                   A job template runs a playbook from a project against an inventory.
@@ -408,7 +500,8 @@ export function TemplateList() {
             footer={
               <div className="table-foot">
                 <span>
-                  {list.data ? `${list.data.count} template${list.data.count === 1 ? '' : 's'}` : ''}
+                  {list.data ? plural(list.data.count, 'template') : ''}
+                  {browse && subfolders.length > 0 ? ` · ${plural(subfolders.length, 'folder')}` : ''}
                   {ls.q && unfiltered.data && unfiltered.data.count > (list.data?.count ?? 0) ? ` · ${unfiltered.data.count - (list.data?.count ?? 0)} hidden by the filter` : ''}
                 </span>
                 <Pager count={list.data?.count ?? 0} page={ls.page} pageSize={ls.pageSize} onPage={ls.setPage} />
@@ -436,7 +529,7 @@ export function TemplateList() {
           onSaved={(id) => {
             setDialog(null)
             invalidate('folders')
-            ls.set({ folder: String(id), show: null, page: null })
+            goTo(id)
           }}
         />
       )}
@@ -444,7 +537,7 @@ export function TemplateList() {
         <SaveViewDialog
           onClose={() => setDialog(null)}
           onSave={(name) => {
-            setViews((all) => [...all.filter((v) => v.name !== name), { name, q: ls.q, folder: folderId }])
+            setViews((all) => [...all.filter((v) => v.name !== name), { name, q: ls.q, folder: folderId, show: special }])
             setDialog(null)
           }}
         />
@@ -486,12 +579,20 @@ export function TemplateList() {
   )
 }
 
-function SideLink({ label, n, active, onClick, bad }: { label: string; n?: number; active: boolean; onClick: () => void; bad?: boolean }) {
+/** A quick-view filter; on when its filter is the one applied. Click again to clear it. */
+function Chip({ on, onClick, n, bad, onRemove, children }: { on: boolean; onClick: () => void; n?: number; bad?: boolean; onRemove?: () => void; children: ReactNode }) {
   return (
-    <button className={`item ${active ? 'active' : ''}`} onClick={onClick} aria-current={active ? 'page' : undefined}>
-      <span className="ellipsis">{label}</span>
-      {n !== undefined && <span className={`n ${bad && n ? 'bad' : ''}`}>{n}</span>}
-    </button>
+    <span className={`qchip${on ? ' on' : ''}`}>
+      <button className="qchip-main" aria-pressed={on} onClick={onClick}>
+        {children}
+        {n !== undefined && <span className={`n${bad && n ? ' bad' : ''}`}>{n}</span>}
+      </button>
+      {onRemove && (
+        <button className="qchip-x" aria-label={`Delete view ${typeof children === 'string' ? children : ''}`} onClick={onRemove}>
+          <Icon name="x" size={11} />
+        </button>
+      )}
+    </span>
   )
 }
 
@@ -525,7 +626,7 @@ function SaveViewDialog({ onClose, onSave }: { onClose: () => void; onSave: (nam
       <div className="field">
         <label htmlFor="vn">Name</label>
         <input id="vn" className="input" value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && name.trim() && onSave(name.trim())} placeholder="Prod deploys · EU" />
-        <span className="help">Saved in this browser. Shows in the sidebar under Saved views.</span>
+        <span className="help">Saved in this browser, with the current folder. Shows as a chip above the list.</span>
       </div>
     </Dialog>
   )

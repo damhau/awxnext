@@ -1,5 +1,5 @@
 import { describe as suite, expect, it } from 'vitest'
-import { defaultModel, describe, describeText, parseRRule, toRRule, zonedToUtc } from './rrule'
+import { defaultModel, describe, describeText, parseRRule, shortRule, toRRule, zonedToUtc } from './rrule'
 
 suite('rrule model', () => {
   it('round-trips the forms the editor produces', () => {
@@ -46,5 +46,19 @@ suite('rrule model', () => {
     expect(describeText('DTSTART:20250103T090000Z RRULE:FREQ=MONTHLY;BYDAY=2TU;COUNT=3')).toBe('Monthly on the second Tuesday at 09:00 UTC, 3 times')
     expect(describeText('weird')).toBe('Custom rule')
     expect(describe({ ...defaultModel('UTC'), freq: 'WEEKLY', byday: ['MO', 'WE'], start: '2025-01-06T07:30', interval: 2 })).toBe('Every 2 weeks on Monday and Wednesday at 07:30 UTC')
+  })
+})
+
+suite('shortRule', () => {
+  it('fits a list column', () => {
+    expect(shortRule('DTSTART:20250101T020000Z RRULE:FREQ=HOURLY;INTERVAL=3')).toBe('every 3 h')
+    expect(shortRule('DTSTART:20250101T020000Z RRULE:FREQ=HOURLY;INTERVAL=1')).toBe('hourly')
+    expect(shortRule('DTSTART;TZID=Europe/Zurich:20250106T060000 RRULE:FREQ=WEEKLY;INTERVAL=1;BYDAY=MO,TU,WE,TH,FR')).toBe('weekdays 06:00')
+    expect(shortRule('DTSTART;TZID=Europe/Zurich:20250106T060000 RRULE:FREQ=WEEKLY;INTERVAL=1;BYDAY=MO,TH')).toBe('Mon, Thu 06:00')
+    expect(shortRule('DTSTART:20250101T020000Z RRULE:FREQ=DAILY;INTERVAL=1')).toBe('daily 02:00')
+    expect(shortRule('DTSTART:20250101T020000Z RRULE:FREQ=MINUTELY;INTERVAL=1;COUNT=1')).toBe('once 1 Jan')
+    expect(shortRule('DTSTART:20250101T020000Z RRULE:FREQ=MINUTELY;INTERVAL=15')).toBe('every 15 min')
+    expect(shortRule('DTSTART:20250101T000000Z RRULE:FREQ=DAILY;BYHOUR=3')).toBe('custom')
+    expect(shortRule(null)).toBe('—')
   })
 })

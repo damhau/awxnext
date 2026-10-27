@@ -31,6 +31,8 @@ interface Props<T> {
   footer?: ReactNode
   minWidth?: number
   label?: string
+  /** Rows shown above the data rows (folder rows); the caller spans the columns. */
+  lead?: ReactNode
 }
 
 export function DataTable<T>({
@@ -50,6 +52,7 @@ export function DataTable<T>({
   footer,
   minWidth,
   label,
+  lead,
 }: Props<T>) {
   const [cursor, setCursor] = useState(-1)
   const list = rows ?? []
@@ -121,6 +124,7 @@ export function DataTable<T>({
           </tr>
         </thead>
         <tbody>
+          {lead}
           {list.map((r, i) => {
             const k = rowKey(r)
             const sel = selected?.has(k)
@@ -153,7 +157,7 @@ export function DataTable<T>({
         </tbody>
       </table>
       {loading && list.length === 0 && <Loading />}
-      {!loading && list.length === 0 && (empty ?? <Empty title="Nothing here yet" />)}
+      {!loading && list.length === 0 && !lead && (empty ?? <Empty title="Nothing here yet" />)}
       {footer}
     </div>
   )
