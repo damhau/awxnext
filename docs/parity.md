@@ -152,7 +152,8 @@ The gaps fall in four groups:
 | Node instance groups prompt; workflow labels passed to nodes | Yes | Missing | |
 | Schedules: rrule with exclusions, timezones, saved prompts, preview | Yes | Done | `SCHEDULE_MAX_JOBS` not enforced; no labels/IG prompts |
 | Notifications: webhook, started/success/error/approval events, custom messages | Yes | Done | Attach only through the API |
-| Email, Slack, PagerDuty, Twilio, Grafana, IRC, Mattermost, Rocket.Chat, AWS SNS | Yes | Later | |
+| Email | Yes | Later | Roadmap M3-01 |
+| Slack, PagerDuty, Twilio, Grafana, IRC, Mattermost, Rocket.Chat, AWS SNS | Yes | Out of scope | Dropped on 2026-10-27 |
 | GitHub/GitLab/Bitbucket DC webhooks with status posting | Yes | Done | Plus a generic JSONPath-mapped webhook |
 | Provisioning callbacks | Yes | Done | |
 | Management jobs (cleanups) with schedules | Yes | Done | `host_metric_summary_monthly` missing |

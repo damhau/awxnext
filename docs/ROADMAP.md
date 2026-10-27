@@ -23,9 +23,9 @@ milestone becomes a GitHub milestone and each task a GitHub issue. The task ID
 
 | Milestone | Goal | Tasks |
 |---|---|---|
-| [M1 Nothing misleading](#m1-nothing-misleading) | What awxnext shows or accepts does what it says | 18 |
+| [M1 Nothing misleading](#m1-nothing-misleading) | What awxnext shows or accepts does what it says | 17 |
 | [M2 AWX clients work unchanged](#m2-awx-clients-work-unchanged) | Collection, awxkit and Terraform run against awxnext, proven in CI | 13 |
-| [M3 Jobs, workflows and notifications](#m3-jobs-workflows-and-notifications) | The rest of AWX's run-time features, plus typed node outputs | 6 |
+| [M3 Jobs, workflows and notifications](#m3-jobs-workflows-and-notifications) | Email notifications, the rest of AWX's run-time features, typed node outputs | 4 |
 | [M4 Inventories, credentials and projects](#m4-inventories-credentials-and-projects) | Every inventory source, credential type, lookup and project type | 10 |
 | [M5 Authentication](#m5-authentication) | Every login method AWX has, except RADIUS and TACACS+ | 6 |
 | [M6 Operations and scale](#m6-operations-and-scale) | Run awxnext in production: policies, logging, Helm, backup, job isolation | 13 |
@@ -38,8 +38,8 @@ milestone becomes a GitHub milestone and each task a GitHub issue. The task ID
 Settings that are saved but ignored, filters that are silently dropped and
 fields that are not checked are worse than missing features: users believe
 they work. **Exit:** no setting without effect, no ignored filter or launch
-field, no launch input that reaches Ansible's connection settings, the P1
-list in `parity.md` closed, and browser tests in CI.
+field, no launch input that reaches Ansible's connection settings, and the
+P1 list in `parity.md` closed.
 
 ### M1-01 Fail CI when a setting has no effect
 **Labels:** chore, settings · **Size:** S
@@ -101,7 +101,7 @@ updates off. `MAX_WEBSOCKET_EVENT_RATE` throttles job events sent to each
 client.
 
 **Done when:** the hub throttle has a Go test, and the UI behaviour has
-Vitest or browser tests.
+Vitest tests.
 
 ### M1-07 Make the runner settings work
 **Labels:** bug, jobs, settings · **Size:** S
@@ -189,18 +189,7 @@ the test.
 
 **Done when:** each correction has a test.
 
-### M1-15 Browser tests in CI
-**Labels:** chore, ui · **Size:** M
-
-No UI change has been checked in a browser so far. Add Playwright tests
-against the server with embedded PostgreSQL, run in CI, covering login,
-creating and launching a template, live job output, the survey and workflow
-editors, copy, and the notifications tab.
-
-**Done when:** the suite runs on every pull request, with screenshots saved
-on failure.
-
-### M1-16 Refuse Ansible connection variables from launchers
+### M1-15 Refuse Ansible connection variables from launchers
 **Labels:** security, jobs, workflows, api · **Size:** M
 
 Today, like AWX, a template that prompts for variables accepts any name at
@@ -225,7 +214,7 @@ on an `ansible_*` variable opens the same door to whoever answers it.
 no job, the survey editor and API refuse such a question, and turning the
 setting on gives AWX's behaviour back.
 
-### M1-17 Refuse launch fields the template does not prompt for
+### M1-16 Refuse launch fields the template does not prompt for
 **Labels:** security, jobs, workflows, api · **Size:** S
 
 Today, like AWX, a launch field the template does not prompt for is moved
@@ -244,7 +233,7 @@ that patches one host patches all of them.
 no job, the setting restores `ignored_fields`, and the M2 client tests pass
 (with the setting on where a client relies on it).
 
-### M1-18 Keep the server's secrets out of reach of jobs on runtime `none`
+### M1-17 Keep the server's secrets out of reach of jobs on runtime `none`
 **Labels:** security, jobs, deploy · **Size:** S
 
 With `AWXNEXT_CONTAINER_RUNTIME=none` (the default of the all-in-one image)
@@ -252,7 +241,7 @@ jobs run as the server's own user. Checked on 2026-10-27: such a process
 reads `AWXNEXT_SECRET_KEY` and `AWXNEXT_DATABASE_URL` from the server's
 `/proc/<pid>/environ`, which is enough to decrypt every credential. Any
 playbook can do it (a task on `localhost` runs beside the server), and with
-M1-16 open, so can anyone allowed to launch a template that prompts for
+M1-15 open, so can anyone allowed to launch a template that prompts for
 variables.
 
 - The server makes itself non-dumpable at start (`PR_SET_DUMPABLE`), so its
@@ -406,7 +395,7 @@ page.
 
 ## M3 Jobs, workflows and notifications
 
-**Exit:** every AWX notification type works, launch-time choices are kept
+**Exit:** email notifications work, launch-time choices are kept
 everywhere, and workflow nodes can declare typed outputs.
 
 ### M3-01 Email notifications
@@ -417,23 +406,7 @@ inputs and custom messages. The test send works.
 
 **Done when:** sends are tested against an SMTP server started by the test.
 
-### M3-02 Slack notifications
-**Labels:** feature, notifications · **Size:** S
-
-Token, channels, hex colour, custom messages, as in AWX.
-
-**Done when:** tested against a fake Slack API.
-
-### M3-03 Remaining notification types
-**Labels:** feature, notifications · **Size:** M
-
-One checklist item per type: PagerDuty, Twilio, Grafana, IRC, Mattermost,
-Rocket.Chat, AWS SNS. Each uses AWX's inputs, so the importer and the
-collection work without changes.
-
-**Done when:** each type has a test send against a fake endpoint.
-
-### M3-04 Relaunch keeps launch-time labels and instance groups
+### M3-02 Relaunch keeps launch-time labels and instance groups
 **Labels:** feature, jobs · **Size:** S
 
 Relaunching a job reuses the labels and instance groups chosen when it was
@@ -441,7 +414,7 @@ launched.
 
 **Done when:** tested for jobs and workflow jobs.
 
-### M3-05 Labels and instance groups through workflows and schedules
+### M3-03 Labels and instance groups through workflows and schedules
 **Labels:** feature, workflows · **Size:** M
 
 Workflow labels are passed to the nodes that ask for labels. Nodes and
@@ -451,7 +424,7 @@ the editors get the fields too.
 **Done when:** a scheduled workflow runs its nodes with the saved labels and
 instance groups.
 
-### M3-06 Typed workflow node outputs
+### M3-04 Typed workflow node outputs
 **Labels:** feature, workflows · **Size:** L
 
 The last phase 6 item. Templates declare outputs (name, type, required).
@@ -743,7 +716,7 @@ alone.
 ### M6-13 Isolate jobs from each other on the process runtime
 **Labels:** security, jobs, deploy · **Size:** L
 
-After M1-18, jobs on runtime `none` still share the server's user: a job can
+After M1-17, jobs on runtime `none` still share the server's user: a job can
 read the private data directory (keys, passwords) of another job running at
 the same time, and write to other projects' checkouts. Run each job under
 its own user or in a sandbox (user namespaces, for example bubblewrap) that
@@ -767,7 +740,7 @@ Instance groups (ordered), `prevent_instance_group_fallback`,
 `start_at_task` (including the launch prompt), and showing and rotating the
 webhook key.
 
-**Done when:** each field saves and reloads, as checked by browser tests.
+**Done when:** each field saves and reloads.
 
 ### M7-02 Missing fields on the inventory form
 **Labels:** feature, ui · **Size:** S
@@ -806,7 +779,7 @@ ask for credential passwords.
 **Labels:** feature, ui, workflows · **Size:** S
 
 The workflow editor does not offer the credential and label prompts of a
-node, or instance groups (after M3-05).
+node, or instance groups (after M3-03).
 
 **Done when:** they save, reload and are used at run time.
 
@@ -843,8 +816,7 @@ Turn the template bulk bar into a shared component. Use it on inventories,
 projects, credentials, schedules (turn on and off) and users. Add a column
 chooser to the lists.
 
-**Done when:** each list supports select all and its bulk actions, as
-checked by browser tests.
+**Done when:** each list supports select all and its bulk actions.
 
 ### M7-11 "Used by" everywhere, and before delete
 **Labels:** feature, ui · **Size:** M
@@ -877,7 +849,7 @@ across the whole app. The job output terminal is already dark.
 The UI has two media queries. Make approvals, job output, the operator
 catalog and launch usable on a phone, and the rest usable on a tablet.
 
-**Done when:** browser tests run those pages at phone width.
+**Done when:** those pages work at phone width (375 px).
 
 ### M7-15 About dialog and keyboard shortcut help
 **Labels:** feature, ui · **Size:** S
@@ -923,6 +895,8 @@ These stay out unless you want any of them back:
 | DRF browsable HTML API | Replaced by interactive OpenAPI docs (M2-13). |
 | Kubelet log tailing for container groups | Push-based execution is what fixes AWX's dropped-log problem. |
 | RADIUS and TACACS+ login | Rarely used. Left out by decision on 2026-10-27. |
+| Slack, PagerDuty, Twilio, Grafana, IRC, Mattermost, Rocket.Chat and AWS SNS notifications | Email and webhook cover the need. Left out by decision on 2026-10-27. |
+| Browser tests in CI | UI logic is covered by Vitest. Left out by decision on 2026-10-27. |
 
 ## Decisions
 
@@ -934,7 +908,9 @@ Taken on 2026-10-27:
 4. RADIUS and TACACS+ are dropped.
 5. Launching is safe by default: `ansible_*` variables from launchers and
    launch fields a template does not prompt for are refused. Settings
-   restore AWX's behaviour for clients that rely on it (M1-16, M1-17).
+   restore AWX's behaviour for clients that rely on it (M1-15, M1-16).
+6. Notifications: only email is added (M3-01); the other types are dropped.
+7. Browser tests in CI are dropped.
 
 ## Moving it to GitHub
 
@@ -944,6 +920,6 @@ After approval, using `gh` on `damhau/awxnext`:
 2. Create one milestone per section, described by its goal and exit line.
 3. Create one issue per task, in order. The title is the task title. The
    body has the ID, the description and a **Done when** checklist. Tasks with
-   several parts (M3-03, M4-07) get one checkbox per item.
+   several parts (M4-07) get one checkbox per item.
 4. Link `parity.md` and this file from the milestones, then keep this file as
    the index, or remove it once the issues exist.
