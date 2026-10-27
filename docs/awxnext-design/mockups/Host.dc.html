@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>awxnext — Host rbx-nbo-02</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Schibsted+Grotesk:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#F3F1EA;color:#15171A;font-family:'Schibsted Grotesk',system-ui,sans-serif;font-size:14px}
+a{color:#15171A}a:hover{color:#4A4E55}
+.mono{font-family:'JetBrains Mono',ui-monospace,monospace}
+.c{width:12px;height:12px;border-radius:2px;box-sizing:border-box;flex:none;position:relative}
+.c.lg{width:auto;height:20px}
+.ok{background:#2D6A4F}.ch{background:#F2B33D}.fa{background:#E4572E}.sk{background:#D6D2C6}.em{background:#EEEBE3}.nr{background:transparent;border:1px dashed #BDB7A9}
+.fa::after{content:'';position:absolute;left:50%;top:50%;width:4px;height:4px;margin:-2px 0 0 -2px;background:#fff;transform:rotate(45deg)}
+.nav a{display:flex;align-items:center;gap:10px;padding:6px 10px;border-radius:4px;text-decoration:none;color:#3C4047;font-size:13.5px}
+.nav a:hover{background:#EAE7DE;color:#15171A}
+.nav a.on{color:#15171A;font-weight:600}
+.dot{width:6px;height:6px;border-radius:1px;flex:none}
+.on .dot{background:#15171A}
+.sec{font-size:10.5px;letter-spacing:.09em;color:#5B5F66;margin:18px 10px 6px;font-weight:600}
+.btn{font:600 13px 'Schibsted Grotesk',sans-serif;border:1px solid #15171A;background:#fff;border-radius:6px;padding:8px 13px;cursor:pointer;color:#15171A}
+.hr{display:grid;grid-template-columns:250px repeat(30,minmax(0,1fr)) 190px;gap:3px;align-items:center}
+.flag{font:600 11.5px 'Schibsted Grotesk',sans-serif;padding:3px 8px;border-radius:999px;white-space:nowrap}
+.kv{display:grid;grid-template-columns:110px 1fr;gap:6px 12px;font-size:12.5px}
+.kv dt{color:#4A4E55}.kv dd{margin:0}
+</style>
+</helmet>
+<div style="min-height: 100vh; display: flex; flex-direction: column">
+  <header style="background: #15171A; color: #F3F1EA; display: flex; align-items: center; gap: 20px; padding: 0 20px; height: 52px; flex-wrap: wrap">
+    <a href="Main.dc.html" style="display: flex; align-items: center; gap: 10px; color: #F3F1EA; text-decoration: none" aria-label="awxnext home">
+      <span aria-hidden="true" style="display: grid; grid-template-columns: repeat(3, 6px); gap: 2px">
+        <span style="width: 6px; height: 6px; background: #C8F03C"></span><span style="width: 6px; height: 6px; background: #2D6A4F"></span><span style="width: 6px; height: 6px; background: #2D6A4F"></span>
+        <span style="width: 6px; height: 6px; background: #2D6A4F"></span><span style="width: 6px; height: 6px; background: #F2B33D"></span><span style="width: 6px; height: 6px; background: #2D6A4F"></span>
+        <span style="width: 6px; height: 6px; background: #2D6A4F"></span><span style="width: 6px; height: 6px; background: #2D6A4F"></span><span style="width: 6px; height: 6px; background: #C8F03C"></span>
+      </span>
+      <span style="font-family: 'Bricolage Grotesque', sans-serif; font-weight: 700; font-size: 18px; letter-spacing: -0.02em">awxnext</span>
+    </a>
+    <label style="flex: 1 1 260px; max-width: 520px; display: flex; align-items: center; gap: 10px; background: #24272B; border: 1px solid #33373C; border-radius: 6px; padding: 7px 12px; color: #A9ADB3; font-size: 13px">
+      <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-3.5-3.5"></path></svg>
+      <input aria-label="Jump to template, host, job" placeholder="Jump to template, host, job…" style="flex: 1; background: transparent; border: 0; color: #F3F1EA; font: inherit; outline: none">
+      <span class="mono" style="font-size: 11px; border: 1px solid #44484E; border-radius: 4px; padding: 1px 6px">Ctrl K</span>
+    </label>
+    <div style="margin-left: auto; display: flex; align-items: center; gap: 14px">
+      <span class="mono" style="font-size: 12px; color: #C9CCD1">1 running · 0 queued</span>
+      <button aria-label="Account" style="width: 30px; height: 30px; border-radius: 6px; border: 0; background: #C8F03C; color: #15171A; font-weight: 700; font-size: 12px; cursor: pointer">DH</button>
+    </div>
+  </header>
+
+  <div style="display: flex; flex-wrap: wrap; flex: 1">
+    <nav class="nav" aria-label="Main" style="flex: 1 1 200px; max-width: 220px; padding: 12px 10px; border-right: 1px solid #E2DED3; box-sizing: border-box">
+      <div class="sec">AUTOMATION</div>
+      <a href="Main.dc.html"><span class="dot"></span>Now</a>
+      <a href="Templates.dc.html"><span class="dot"></span>Templates</a>
+      <a href="Job.dc.html"><span class="dot"></span>Jobs</a>
+      <a href="#"><span class="dot"></span>Schedules</a>
+      <div class="sec">RESOURCES</div>
+      <a href="#"><span class="dot"></span>Inventories</a>
+      <a class="on" href="#"><span class="dot"></span>Hosts</a>
+      <a href="#"><span class="dot"></span>Projects</a>
+      <div class="sec">ADMIN</div>
+      <a href="#"><span class="dot"></span>Settings</a>
+    </nav>
+
+    <main style="flex: 999 1 560px; min-width: 0; padding: 22px 36px 48px; box-sizing: border-box">
+      <div style="max-width: 1180px; display: flex; flex-direction: column; gap: 18px">
+        <div>
+          <div style="font-size: 12.5px; color: #4A4E55"><a href="#">Hosts</a> / <a href="#">redbox</a></div>
+          <div style="display: flex; align-items: center; gap: 14px; margin-top: 8px; flex-wrap: wrap">
+            <h1 class="mono" style="margin: 0; font-weight: 500; font-size: 28px; letter-spacing: -0.02em">rbx-nbo-02</h1>
+            <span class="flag" style="background: #FBE3DA; color: #8E2A10">Failing since #409</span>
+            <span class="flag" style="background: #FDF0D2; color: #6E4A00">1 task not idempotent</span>
+            <div style="margin-left: auto; display: flex; gap: 8px">
+              <button class="btn">Run ad hoc command</button>
+              <button class="btn">Edit variables</button>
+            </div>
+          </div>
+          <p class="mono" style="margin: 10px 0 0; font-size: 12px; color: #3C4047">Rocky 10.1 · 8 vCPU · 31 GB RAM · python 3.12 · last contact 27.10 05:20 CET · groups nairobi, kubevirt-nodes</p>
+        </div>
+
+        <section aria-labelledby="hist-h" style="background: #fff; border: 1px solid #E2DED3; border-radius: 8px; padding: 18px 20px">
+          <div style="display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 14px">
+            <h2 id="hist-h" style="margin: 0; font-size: 15px; font-weight: 600">Task history · last 5 days</h2>
+            <span style="font-size: 12.5px; color: #4A4E55">Every task that touched this host, across templates. One column = 4 h.</span>
+            <span style="margin-left: auto; display: flex; gap: 12px; font-size: 12px; color: #3C4047; align-items: center">
+              <span style="display: flex; gap: 5px; align-items: center"><span class="c ok"></span>ok</span>
+              <span style="display: flex; gap: 5px; align-items: center"><span class="c ch"></span>changed</span>
+              <span style="display: flex; gap: 5px; align-items: center"><span class="c fa"></span>failed</span>
+              <span style="display: flex; gap: 5px; align-items: center"><span class="c em"></span>no run</span>
+            </span>
+          </div>
+          <div style="overflow-x: auto">
+            <div style="min-width: 980px; display: flex; flex-direction: column; gap: 4px">
+              <div class="hr mono" aria-hidden="true" style="font-size: 10.5px; color: #5B5F66">
+                <span></span>
+                <sc-for list="{{days}}" as="d" hint-placeholder-count="30"><span>{{d.t}}</span></sc-for>
+                <span></span>
+              </div>
+              <sc-for list="{{groups}}" as="g" hint-placeholder-count="4">
+                <div class="mono" style="font-size: 11px; color: #4A4E55; margin: 10px 0 2px; letter-spacing: .02em">{{g.n}}</div>
+                <sc-for list="{{g.rows}}" as="r" hint-placeholder-count="2">
+                  <div class="hr" role="img" aria-label="{{r.aria}}" style="background: {{r.bg}}; border-radius: 4px; padding: 2px 0">
+                    <span style="font-size: 13px; padding-left: 8px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis">{{r.n}}</span>
+                    <sc-for list="{{r.cells}}" as="cell" hint-placeholder-count="30"><span class="c lg {{cell.s}}" title="{{cell.tip}}"></span></sc-for>
+                    <span style="text-align: right; padding-right: 6px">
+                      <sc-if value="{{r.hasFlag}}" hint-placeholder-val="{{false}}"><span class="flag" style="background: {{r.flagBg}}; color: {{r.flagFg}}">{{r.flag}}</span></sc-if>
+                    </span>
+                  </div>
+                </sc-for>
+              </sc-for>
+            </div>
+          </div>
+        </section>
+
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 18px">
+          <section aria-labelledby="why-h" style="background: #fff; border: 1px solid #E2DED3; border-radius: 8px; padding: 18px 20px">
+            <h2 id="why-h" style="margin: 0 0 12px; font-size: 15px; font-weight: 600">What the matrix is telling you</h2>
+            <div style="display: flex; flex-direction: column; gap: 12px; font-size: 13px; line-height: 1.5">
+              <div style="display: flex; gap: 10px"><span class="c fa" style="margin-top: 3px"></span><div><strong>Wait for VMI ready</strong> fails only here, since the last run. Other nairobi hosts pass the same task. <a href="Job.dc.html">Open #409</a></div></div>
+              <div style="display: flex; gap: 10px"><span class="c ch" style="margin-top: 3px"></span><div><strong>Render VM manifest</strong> reports changed on 15 of 15 runs. The template probably writes a timestamp — not idempotent.</div></div>
+              <div style="display: flex; gap: 10px"><span class="c ch" style="margin-top: 3px"></span><div><strong>Template sysctl</strong> changed once on Saturday, 14:00, then went back to ok — someone edited the host by hand.</div></div>
+            </div>
+          </section>
+          <section aria-labelledby="facts-h" style="background: #fff; border: 1px solid #E2DED3; border-radius: 8px; padding: 18px 20px">
+            <h2 id="facts-h" style="margin: 0 0 12px; font-size: 15px; font-weight: 600">Host</h2>
+            <dl class="kv">
+              <dt>Inventory</dt><dd class="mono">redbox</dd>
+              <dt>Groups</dt><dd class="mono">nairobi, kubevirt-nodes</dd>
+              <dt>ansible_host</dt><dd class="mono">10.42.8.12</dd>
+              <dt>Enabled</dt><dd>Yes</dd>
+              <dt>Last job</dt><dd class="mono"><a href="Job.dc.html">#409</a> · failed · 05:14</dd>
+              <dt>Facts cached</dt><dd class="mono">27.10 05:14 CET</dd>
+            </dl>
+          </section>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1060}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const dayNames = ['Thu', 'Fri', 'Sat', 'Sun', 'Mon'];
+    const days = [];
+    for (let i = 0; i < 30; i++) days.push({ t: i % 6 === 0 ? dayNames[i / 6] : '' });
+    const word = { ok: 'ok', ch: 'changed', fa: 'failed', em: 'no run' };
+    const row = (n, every, off, base, over, flag) => {
+      const cells = [];
+      for (let i = 0; i < 30; i++) {
+        let s = (i >= off && (i - off) % every === 0) ? base : 'em';
+        if (over[i]) s = over[i];
+        cells.push({ s, tip: n + ' · ' + dayNames[Math.floor(i / 6)] + ' ' + String((i % 6) * 4).padStart(2, '0') + ':00 · ' + word[s] });
+      }
+      const f = flag || null;
+      return { n, cells, hasFlag: !!f, flag: f ? f.t : '', flagBg: f ? f.bg : '', flagFg: f ? f.fg : '', bg: f && f.hi ? '#FBF7EC' : 'transparent', aria: n + (f ? ', ' + f.t : '') };
+    };
+    const red = { bg: '#FBE3DA', fg: '#8E2A10' };
+    const amber = { bg: '#FDF0D2', fg: '#6E4A00' };
+    const groups = [
+      { n: 'deploy-kubevirt-vm', rows: [
+        row('Render VM manifest', 2, 0, 'ch', {}, { t: 'changes every run', bg: amber.bg, fg: amber.fg, hi: true }),
+        row('Apply VirtualMachine', 2, 0, 'ok', { 10: 'ch', 22: 'ch' }),
+        row('Wait for VMI ready', 2, 0, 'ok', { 28: 'fa' }, { t: 'new failure', bg: red.bg, fg: red.fg, hi: true })
+      ] },
+      { n: 'patch-rocky', rows: [
+        row('dnf update --security', 1, 0, 'ok', { 7: 'ch', 19: 'ch' }),
+        row('Restart services', 1, 0, 'ok', { 7: 'ch', 19: 'ch' })
+      ] },
+      { n: 'net-baseline', rows: [
+        row('Template sysctl', 3, 1, 'ok', { 16: 'ch' }, { t: 'drift Sat 14:00', bg: amber.bg, fg: amber.fg, hi: false })
+      ] },
+      { n: 'cert-rotate', rows: [
+        row('Fetch CA bundle', 6, 2, 'ok', {}),
+        row('Install node certificate', 6, 2, 'ok', { 14: 'ch' })
+      ] }
+    ];
+    return { days, groups };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>awxnext — Signature sheet</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Schibsted+Grotesk:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:'Schibsted Grotesk',system-ui,sans-serif}
+a{color:#15171A}a:hover{color:#4A4E55}
+.mono{font-family:'JetBrains Mono',ui-monospace,monospace}
+.c{border-radius:4px;box-sizing:border-box;position:relative;width:44px;height:44px;flex:none}
+.ok{background:#2D6A4F}.ch{background:#F2B33D}.fa{background:#E4572E}.sk{background:#D6D2C6}.nr{background:transparent;border:2px dashed #BDB7A9}
+.ru{background:#C8F03C;box-shadow:inset 0 0 0 3px #15171A}
+.fa::after{content:'';position:absolute;left:50%;top:50%;width:12px;height:12px;margin:-6px 0 0 -6px;background:#fff;transform:rotate(45deg)}
+.lab{font-size:12.5px;font-weight:600;margin-top:8px}
+.hex{font-size:11px;color:#4A4E55}
+.h{font-size:11px;letter-spacing:.1em;font-weight:600;color:#4A4E55;margin:0 0 14px}
+</style>
+</helmet>
+<div style="width: 1200px; height: 760px; box-sizing: border-box; background: #F3F1EA; color: #15171A; display: grid; grid-template-columns: 420px 1fr; gap: 0">
+  <div style="background: #15171A; color: #F3F1EA; padding: 56px 48px; display: flex; flex-direction: column; gap: 28px">
+    <div aria-hidden="true" style="display: grid; grid-template-columns: repeat(3, 34px); gap: 8px">
+      <span style="height: 34px; background: #C8F03C; border-radius: 3px"></span><span style="height: 34px; background: #2D6A4F; border-radius: 3px"></span><span style="height: 34px; background: #2D6A4F; border-radius: 3px"></span>
+      <span style="height: 34px; background: #2D6A4F; border-radius: 3px"></span><span style="height: 34px; background: #F2B33D; border-radius: 3px"></span><span style="height: 34px; background: #2D6A4F; border-radius: 3px"></span>
+      <span style="height: 34px; background: #2D6A4F; border-radius: 3px"></span><span style="height: 34px; background: #2D6A4F; border-radius: 3px"></span><span style="height: 34px; background: #C8F03C; border-radius: 3px"></span>
+    </div>
+    <div>
+      <div style="font-family: 'Bricolage Grotesque', sans-serif; font-weight: 700; font-size: 64px; letter-spacing: -0.035em; line-height: 1">awxnext</div>
+      <p style="margin: 18px 0 0; font-size: 16px; line-height: 1.5; color: #C9CCD1; max-width: 300px">The logo is a run. Three hosts, three tasks, one change — the same cell the whole product is built from.</p>
+    </div>
+    <div style="margin-top: auto; display: flex; flex-direction: column; gap: 10px">
+      <div style="display: flex; align-items: center; gap: 12px"><span style="width: 28px; height: 28px; background: #C8F03C; border-radius: 4px"></span><span class="mono" style="font-size: 12px">Signal lime #C8F03C — live, primary action, selection</span></div>
+      <div style="display: flex; align-items: center; gap: 12px"><span style="width: 28px; height: 28px; background: #F3F1EA; border-radius: 4px"></span><span class="mono" style="font-size: 12px">Paper #F3F1EA — ground</span></div>
+      <div style="display: flex; align-items: center; gap: 12px"><span style="width: 28px; height: 28px; background: #15171A; border-radius: 4px; box-shadow: inset 0 0 0 1px #3A3E44"></span><span class="mono" style="font-size: 12px">Ink #15171A — text, chrome</span></div>
+    </div>
+  </div>
+
+  <div style="padding: 52px 56px; display: flex; flex-direction: column; gap: 40px">
+    <div>
+      <p class="h">THE CELL — ONE HOST × ONE TASK × ONE MOMENT</p>
+      <div style="display: flex; gap: 26px">
+        <div><div class="c ok"></div><div class="lab">ok</div><div class="hex mono">#2D6A4F</div></div>
+        <div><div class="c ch"></div><div class="lab">changed</div><div class="hex mono">#F2B33D</div></div>
+        <div><div class="c fa"></div><div class="lab">failed</div><div class="hex mono">#E4572E + ◆</div></div>
+        <div><div class="c ru"></div><div class="lab">running</div><div class="hex mono">lime + ink ring</div></div>
+        <div><div class="c sk"></div><div class="lab">skipped</div><div class="hex mono">#D6D2C6</div></div>
+        <div><div class="c nr"></div><div class="lab">not run</div><div class="hex mono">dashed</div></div>
+      </div>
+      <p style="margin: 16px 0 0; font-size: 13px; color: #3C4047; line-height: 1.55; max-width: 620px">States differ in lightness as well as hue, and failed carries a diamond, so the matrix still reads in greyscale and for red-green colour blindness.</p>
+    </div>
+
+    <div>
+      <p class="h">TYPE</p>
+      <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 28px">
+        <div><div style="font-family: 'Bricolage Grotesque', sans-serif; font-weight: 700; font-size: 36px; letter-spacing: -0.03em">Now</div><div class="hex mono" style="margin-top: 6px">Bricolage Grotesque 700 — page titles only</div></div>
+        <div><div style="font-size: 18px; font-weight: 500; line-height: 1.35">Relaunch on failed host</div><div class="hex mono" style="margin-top: 6px">Schibsted Grotesk — UI and prose</div></div>
+        <div><div class="mono" style="font-size: 16px">rbx-nbo-02 · #409</div><div class="hex mono" style="margin-top: 6px">JetBrains Mono — anything a machine named</div></div>
+      </div>
+    </div>
+
+    <div>
+      <p class="h">RULES FOR THE MOTIF</p>
+      <ol style="margin: 0; padding-left: 20px; font-size: 13.5px; line-height: 1.7; color: #15171A; columns: 2; column-gap: 40px">
+        <li>A cell always means a result. Never decorate with it.</li>
+        <li>Time runs left to right, oldest to newest.</li>
+        <li>Rows are hosts or templates; columns are tasks or time.</li>
+        <li>Every cell is clickable and lands on the output.</li>
+        <li>Lime is reserved for live and for the one primary action.</li>
+        <li>Mono for names the machine gave; sans for words people wrote.</li>
+      </ol>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1200,"height":760}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

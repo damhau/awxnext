@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>awxnext — Job 409</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Schibsted+Grotesk:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#F3F1EA;color:#15171A;font-family:'Schibsted Grotesk',system-ui,sans-serif;font-size:14px}
+a{color:#15171A}a:hover{color:#4A4E55}
+.mono{font-family:'JetBrains Mono',ui-monospace,monospace}
+.c{width:12px;height:12px;border-radius:2px;box-sizing:border-box;flex:none;position:relative}
+.ok{background:#2D6A4F}.ch{background:#F2B33D}.fa{background:#E4572E}.sk{background:#D6D2C6}.em{background:#E9E6DD}.nr{background:transparent;border:1px dashed #BDB7A9}
+.ru{background:#C8F03C;box-shadow:inset 0 0 0 2px #15171A}
+.fa::after{content:'';position:absolute;left:50%;top:50%;width:6px;height:6px;margin:-3px 0 0 -3px;background:#fff;transform:rotate(45deg)}
+.cellbtn{all:unset;cursor:pointer;width:30px;height:30px;border-radius:3px;box-sizing:border-box;position:relative;display:block}
+.cellbtn:hover{transform:scale(1.08)}
+.cellbtn.sel{outline:2px solid #15171A;outline-offset:2px}
+.cellbtn:focus-visible{outline:2px solid #15171A;outline-offset:2px}
+.nav a{display:flex;align-items:center;gap:10px;padding:6px 10px;border-radius:4px;text-decoration:none;color:#3C4047;font-size:13.5px}
+.nav a:hover{background:#EAE7DE;color:#15171A}
+.nav a.on{color:#15171A;font-weight:600}
+.dot{width:6px;height:6px;border-radius:1px;flex:none}
+.on .dot{background:#15171A}
+.sec{font-size:10.5px;letter-spacing:.09em;color:#5B5F66;margin:18px 10px 6px;font-weight:600}
+.tab{all:unset;cursor:pointer;padding:10px 2px;font-size:13.5px;color:#4A4E55;border-bottom:2px solid transparent}
+.tab.on{color:#15171A;font-weight:600;border-bottom-color:#15171A}
+.btn{font:600 13px 'Schibsted Grotesk',sans-serif;border:1px solid #15171A;background:#fff;border-radius:6px;padding:8px 13px;cursor:pointer;color:#15171A}
+.tchip{font:500 12px 'Schibsted Grotesk',sans-serif;padding:5px 10px;border:1px solid #3A3E44;background:transparent;border-radius:999px;color:#C9CCD1;cursor:pointer}
+.tchip.on{background:#F3F1EA;color:#15171A;border-color:#F3F1EA}
+.num{display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;border-radius:3px;font:600 11px 'JetBrains Mono',monospace;color:#fff;padding:0 4px;box-sizing:border-box}
+.num.ch,.num.sk{color:#15171A}
+</style>
+</helmet>
+<div style="min-height: 100vh; display: flex; flex-direction: column">
+  <header style="background: #15171A; color: #F3F1EA; display: flex; align-items: center; gap: 20px; padding: 0 20px; height: 52px; flex-wrap: wrap">
+    <a href="Main.dc.html" style="display: flex; align-items: center; gap: 10px; color: #F3F1EA; text-decoration: none" aria-label="awxnext home">
+      <span aria-hidden="true" style="display: grid; grid-template-columns: repeat(3, 6px); gap: 2px">
+        <span style="width: 6px; height: 6px; background: #C8F03C"></span><span style="width: 6px; height: 6px; background: #2D6A4F"></span><span style="width: 6px; height: 6px; background: #2D6A4F"></span>
+        <span style="width: 6px; height: 6px; background: #2D6A4F"></span><span style="width: 6px; height: 6px; background: #F2B33D"></span><span style="width: 6px; height: 6px; background: #2D6A4F"></span>
+        <span style="width: 6px; height: 6px; background: #2D6A4F"></span><span style="width: 6px; height: 6px; background: #2D6A4F"></span><span style="width: 6px; height: 6px; background: #C8F03C"></span>
+      </span>
+      <span style="font-family: 'Bricolage Grotesque', sans-serif; font-weight: 700; font-size: 18px; letter-spacing: -0.02em">awxnext</span>
+    </a>
+    <label style="flex: 1 1 260px; max-width: 520px; display: flex; align-items: center; gap: 10px; background: #24272B; border: 1px solid #33373C; border-radius: 6px; padding: 7px 12px; color: #A9ADB3; font-size: 13px">
+      <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-3.5-3.5"></path></svg>
+      <input aria-label="Jump to template, host, job" placeholder="Jump to template, host, job…" style="flex: 1; background: transparent; border: 0; color: #F3F1EA; font: inherit; outline: none">
+      <span class="mono" style="font-size: 11px; border: 1px solid #44484E; border-radius: 4px; padding: 1px 6px">Ctrl K</span>
+    </label>
+    <div style="margin-left: auto; display: flex; align-items: center; gap: 14px">
+      <span class="mono" style="font-size: 12px; color: #C9CCD1">1 running · 0 queued</span>
+      <button aria-label="Account" style="width: 30px; height: 30px; border-radius: 6px; border: 0; background: #C8F03C; color: #15171A; font-weight: 700; font-size: 12px; cursor: pointer">DH</button>
+    </div>
+  </header>
+
+  <div style="display: flex; flex-wrap: wrap; flex: 1">
+    <nav class="nav" aria-label="Main" style="flex: 1 1 200px; max-width: 220px; padding: 12px 10px; border-right: 1px solid #E2DED3; box-sizing: border-box">
+      <div class="sec">AUTOMATION</div>
+      <a href="Main.dc.html"><span class="dot"></span>Now</a>
+      <a href="Templates.dc.html"><span class="dot"></span>Templates</a>
+      <a class="on" href="#"><span class="dot"></span>Jobs</a>
+      <a href="#"><span class="dot"></span>Schedules</a>
+      <a href="#"><span class="dot"></span>Approvals</a>
+      <div class="sec">RESOURCES</div>
+      <a href="#"><span class="dot"></span>Inventories</a>
+      <a href="Host.dc.html"><span class="dot"></span>Hosts</a>
+      <a href="#"><span class="dot"></span>Projects</a>
+      <div class="sec">ADMIN</div>
+      <a href="#"><span class="dot"></span>Settings</a>
+    </nav>
+
+    <main style="flex: 999 1 560px; min-width: 0; padding: 22px 36px 48px; box-sizing: border-box">
+      <div style="max-width: 1180px; display: flex; flex-direction: column; gap: 18px">
+        <div>
+          <div style="font-size: 12.5px; color: #4A4E55"><a href="#">Jobs</a> / <span class="mono">#409</span></div>
+          <div style="display: flex; align-items: center; gap: 12px; margin-top: 8px; flex-wrap: wrap">
+            <h1 style="margin: 0; font-family: 'Bricolage Grotesque', sans-serif; font-weight: 700; font-size: 30px; letter-spacing: -0.025em">deploy-kubevirt-vm</h1>
+            <span style="display: inline-flex; align-items: center; gap: 6px; background: #FBE3DA; color: #8E2A10; font-weight: 600; font-size: 12.5px; padding: 4px 10px; border-radius: 999px"><span class="c fa" style="width: 10px; height: 10px"></span>Failed on 1 of 6 hosts</span>
+            <div style="margin-left: auto; display: flex; gap: 8px">
+              <button class="btn">↻ Relaunch</button>
+              <button class="btn" style="background: #C8F03C">↻ Relaunch on failed host</button>
+              <button class="btn" aria-label="More actions">⋯</button>
+            </div>
+          </div>
+          <p class="mono" style="margin: 10px 0 0; font-size: 12px; color: #3C4047; line-height: 1.7">
+            Started 27.10.2026 05:14:02 CET · Duration 6 m 12 s · Launched by schedule (every 3 h) · Revision 46b8575 · Inventory <a href="#">redbox</a> · 6 hosts · EE awx-ee 24.6 · Node 470a1de3
+          </p>
+          <div role="tablist" style="display: flex; gap: 22px; border-bottom: 1px solid #E2DED3; margin-top: 10px">
+            <button role="tab" aria-selected="true" class="tab on">Output</button>
+            <button role="tab" class="tab">Hosts 6</button>
+            <button role="tab" class="tab">Variables</button>
+            <button role="tab" class="tab">Artifacts</button>
+            <button role="tab" class="tab">Details</button>
+          </div>
+        </div>
+
+        <section aria-labelledby="mx-h" style="background: #fff; border: 1px solid #E2DED3; border-radius: 8px; padding: 18px 20px">
+          <div style="display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 14px">
+            <h2 id="mx-h" style="margin: 0; font-size: 15px; font-weight: 600">Hosts × tasks</h2>
+            <span class="mono" style="font-size: 12px; color: #4A4E55">6 hosts · 10 tasks · ok 37 · changed 15 · failed 1 · skipped 1 · not run 6</span>
+            <span style="margin-left: auto; font-size: 12px; color: #4A4E55">Click a cell — arrows to move</span>
+          </div>
+          <div style="display: flex; gap: 28px; flex-wrap: wrap; align-items: flex-start">
+            <div style="overflow-x: auto; flex: 1 1 520px; min-width: 0">
+              <div style="display: grid; grid-template-columns: 110px auto; gap: 6px 14px; align-items: center; width: max-content">
+                <span></span>
+                <div style="display: flex; gap: 6px">
+                  <sc-for list="{{cols}}" as="k" hint-placeholder-count="10">
+                    <span class="mono" title="{{k.n}}" style="width: 30px; text-align: center; font-size: 11.5px; font-weight: {{k.w}}; color: {{k.col}}">{{k.i}}</span>
+                  </sc-for>
+                </div>
+                <sc-for list="{{grid}}" as="h" hint-placeholder-count="6">
+                  <a href="Host.dc.html" class="mono" style="font-size: 12.5px; text-decoration: none; font-weight: {{h.w}}">{{h.n}}</a>
+                  <div style="display: flex; gap: 6px">
+                    <sc-for list="{{h.cells}}" as="cell" hint-placeholder-count="10">
+                      <button class="cellbtn {{cell.s}} {{cell.sel}}" onClick="{{cell.pick}}" aria-label="{{cell.aria}}" title="{{cell.aria}}"></button>
+                    </sc-for>
+                  </div>
+                </sc-for>
+              </div>
+              <ol class="mono" style="margin: 18px 0 0; padding-left: 24px; columns: 2; column-gap: 32px; font-size: 12px; line-height: 1.75; color: #3C4047; max-width: 560px">
+                <sc-for list="{{cols}}" as="k" hint-placeholder-count="10"><li style="font-weight: {{k.w}}; color: {{k.col}}">{{k.n}}</li></sc-for>
+              </ol>
+            </div>
+
+            <aside aria-label="Selected cell" style="flex: 0 1 380px; min-width: 300px; border: 1px solid #E2DED3; border-radius: 6px; overflow: hidden">
+              <div style="padding: 14px 16px; border-bottom: 1px solid #E2DED3; display: flex; gap: 12px; align-items: center">
+                <span class="c {{sel.s}}" style="width: 22px; height: 22px"></span>
+                <div style="min-width: 0">
+                  <div class="mono" style="font-size: 11px; color: #4A4E55">{{sel.host}} · TASK {{sel.i}}</div>
+                  <div style="font-weight: 600; font-size: 14px">{{sel.task}}</div>
+                </div>
+                <span class="mono" style="margin-left: auto; font-size: 12px; color: #3C4047">{{sel.dur}}</span>
+              </div>
+              <div style="padding: 10px 16px; font-size: 12.5px; color: #3C4047; display: flex; gap: 14px; flex-wrap: wrap">
+                <span><strong style="color: #15171A">{{sel.word}}</strong></span>
+                <span>{{sel.peer}}</span>
+              </div>
+              <pre class="mono" style="margin: 0; background: #15171A; color: #E6E3DA; font-size: 11.5px; line-height: 1.6; padding: 14px 16px; white-space: pre-wrap; min-height: 150px">{{sel.out}}</pre>
+              <div style="padding: 10px 16px; display: flex; gap: 14px; font-size: 12.5px; font-weight: 600; flex-wrap: wrap">
+                <a href="#">Jump to line in output</a>
+                <a href="Host.dc.html">This task on this host, last 30 runs →</a>
+              </div>
+            </aside>
+          </div>
+        </section>
+
+        <section aria-label="Output" style="background: #15171A; border-radius: 8px; overflow: hidden; color: #E6E3DA">
+          <div style="display: flex; gap: 8px; padding: 12px 14px; border-bottom: 1px solid #2C3035; flex-wrap: wrap; align-items: center">
+            <input class="mono" aria-label="Search output" placeholder="Search output" style="background: #22252A; border: 1px solid #33373C; border-radius: 6px; padding: 6px 10px; color: #E6E3DA; font-size: 12px; width: 220px">
+            <button class="tchip on">Failed only</button><button class="tchip">Changed</button><button class="tchip">Collapse all</button><button class="tchip">Show prompts</button>
+            <button class="tchip" style="margin-left: auto">Download</button>
+          </div>
+          <div class="mono" style="font-size: 12px; line-height: 1.75; padding: 12px 0">
+            <sc-for list="{{out}}" as="o" hint-placeholder-count="10">
+              <div style="display: flex; gap: 10px; align-items: center; padding: 3px 16px; background: {{o.bg}}">
+                <span style="color: #8A8F96; width: 14px">{{o.caret}}</span>
+                <span class="num {{o.s}}">{{o.i}}</span>
+                <span style="color: #F3F1EA; font-weight: 500">{{o.n}}</span>
+                <span style="color: #9EA3AA">{{o.sum}}</span>
+              </div>
+              <sc-if value="{{o.open}}" hint-placeholder-val="{{false}}">
+                <pre style="margin: 0; padding: 4px 16px 10px 74px; white-space: pre-wrap; color: #F3A58C; font: inherit">{{o.body}}</pre>
+              </sc-if>
+            </sc-for>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1180}}'>
+class Component extends DCLogic {
+  constructor(props) { super(props); this.state = { h: 1, t: 6 }; }
+  renderVals() {
+    const tasks = ['Gathering facts', 'Render VM manifest', 'Ensure namespace', 'Apply DataVolume', 'Wait for DV import', 'Apply VirtualMachine', 'Wait for VMI ready', 'Attach multus network', 'Smoke test (ssh)', 'Publish inventory facts'];
+    const hosts = ['rbx-nbo-01', 'rbx-nbo-02', 'rbx-nbo-03', 'rbx-gva-01', 'rbx-gva-02', 'redboxdha'];
+    const word = { ok: 'ok', ch: 'changed', fa: 'failed', sk: 'skipped', nr: 'not run' };
+    const stat = (h, t) => {
+      if (h === 1 && t === 6) return 'fa';
+      if (h === 1 && t > 6) return 'nr';
+      if (h === 4 && t === 7) return 'sk';
+      if (t === 1 || t === 3 || t === 5) return 'ch';
+      return 'ok';
+    };
+    const dur = (h, t) => {
+      if (h === 1 && t === 6) return '300.0 s';
+      if (t === 4) return (38 + h * 7) + '.' + h + ' s';
+      if (t === 6) return (41 + h * 5) + '.2 s';
+      return (0.2 + ((h * 3 + t * 7) % 9) / 10).toFixed(1) + ' s';
+    };
+    const sh = this.state.h, st = this.state.t;
+    const grid = hosts.map((n, h) => ({
+      n, w: h === sh ? 700 : 400,
+      cells: tasks.map((tn, t) => {
+        const s = stat(h, t);
+        return { s, sel: (h === sh && t === st) ? 'sel' : '', aria: n + ', task ' + (t + 1) + ' ' + tn + ': ' + word[s], pick: () => this.setState({ h, t }) };
+      })
+    }));
+    const cols = tasks.map((n, t) => {
+      const worst = hosts.some((x, h) => stat(h, t) === 'fa');
+      return { i: t + 1, n, w: t === st ? 700 : 400, col: worst ? '#B23A16' : (t === st ? '#15171A' : '#4A4E55') };
+    });
+    const s = stat(sh, st);
+    const peers = hosts.filter((x, h) => h !== sh && stat(h, st) === 'fa').length;
+    const outs = {
+      fa: 'fatal: [' + hosts[sh] + ']: FAILED! => {\n  "msg": "Timed out waiting for VMI phase Running",\n  "phase": "Scheduling",\n  "reason": "0/3 nodes available: 3 Insufficient devices.kubevirt.io/kvm"\n}',
+      ch: 'changed: [' + hosts[sh] + ']\n  diff: +12 -3 lines',
+      ok: 'ok: [' + hosts[sh] + ']',
+      sk: 'skipping: [' + hosts[sh] + ']\n  when: multus_enabled  →  false',
+      nr: 'Not run — host stopped after task 7 failed.'
+    };
+    const sel = { s, host: hosts[sh], i: st + 1, task: tasks[st], dur: s === 'nr' ? '—' : dur(sh, st), word: word[s], peer: s === 'fa' ? 'Only this host failed · 5 others ok' : (peers ? peers + ' other hosts failed here' : 'Same on all hosts'), out: outs[s] };
+    const out = tasks.map((n, t) => {
+      const row = hosts.map((x, h) => stat(h, t));
+      const has = (k) => row.filter((v) => v === k).length;
+      const worst = has('fa') ? 'fa' : has('ch') ? 'ch' : has('sk') ? 'sk' : 'ok';
+      const parts = [];
+      if (has('ok')) parts.push(has('ok') + ' ok');
+      if (has('ch')) parts.push(has('ch') + ' changed');
+      if (has('fa')) parts.push(has('fa') + ' failed');
+      if (has('sk')) parts.push(has('sk') + ' skipped');
+      if (has('nr')) parts.push(has('nr') + ' not run');
+      return { i: t + 1, n, s: worst, sum: parts.join(' · '), open: worst === 'fa', caret: worst === 'fa' ? '▾' : '▸', bg: worst === 'fa' ? '#2A1A15' : 'transparent', body: 'fatal: [rbx-nbo-02]: FAILED! => Timed out waiting for VMI phase Running\n  reason: 0/3 nodes available: 3 Insufficient devices.kubevirt.io/kvm' };
+    });
+    return { grid, cols, sel, out };
+  }
+}
+</script>
+</body>
+</html>
