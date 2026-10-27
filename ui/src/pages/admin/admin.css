@@ -24,7 +24,7 @@
 .activity-main {
   display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 14px; border: none; background: none; cursor: pointer; text-align: left;
 }
-.activity-main:hover { background: #fbfbfa; }
+.activity-main:hover { background: var(--surface-2); }
 .activity-row.open .activity-main { background: var(--accent-wash); }
 .activity-detail { padding: 4px 14px 14px 48px; }
 .activity-detail .changes { border: 1px solid var(--line-soft); border-radius: var(--radius); }

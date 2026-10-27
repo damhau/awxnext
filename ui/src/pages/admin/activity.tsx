@@ -189,7 +189,7 @@ export function Activity() {
                   {head}
                   <li className={`activity-row ${expanded ? 'open' : ''}`}>
                     <button className="activity-main" onClick={() => toggle(e.id)} aria-expanded={expanded}>
-                      {actor ? <Avatar name={userName(actor)} size="sm" /> : <span className="avatar sm" style={{ background: '#DCDFDA' }} aria-hidden="true">·</span>}
+                      {actor ? <Avatar name={userName(actor)} size="sm" /> : <span className="avatar sm" style={{ background: 'var(--line)' }} aria-hidden="true">·</span>}
                       <span className="grow" style={{ textAlign: 'left' }}>
                         <b style={{ fontWeight: 500 }}>{actor ? userName(actor) : 'System'}</b> {describe(e)}
                       </span>

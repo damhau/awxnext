@@ -82,6 +82,18 @@ export function useTick(ms: number) {
   }, [ms])
 }
 
+/** The logo is a run: three hosts by three tasks, one change, two live cells. */
+export function BrandMark() {
+  const cells = ['live', '', '', '', 'changed', '', '', '', 'live']
+  return (
+    <span className="brand-mark" aria-hidden="true">
+      {cells.map((c, i) => (
+        <i key={i} className={c} />
+      ))}
+    </span>
+  )
+}
+
 export function Avatar({ name, size }: { name: string; size?: 'sm' }) {
   return (
     <span className={`avatar ${size ?? ''}`} style={{ background: avatarColor(name) }} aria-hidden="true">

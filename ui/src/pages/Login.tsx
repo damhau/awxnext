@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { useState, type FormEvent } from 'react'
 import { api } from '../api/client'
+import { BrandMark } from '../components/ui'
 
 export function Login({ onDone, expired }: { onDone: () => void; expired?: boolean }) {
   const [username, setUsername] = useState('')
@@ -27,10 +28,8 @@ export function Login({ onDone, expired }: { onDone: () => void; expired?: boole
     <main className="login">
       <form className="login-card" onSubmit={submit} aria-labelledby="login-title">
         <div className="brand">
-          <span className="brand-mark" aria-hidden="true" />
-          <span>
-            awx<span className="dim">next</span>
-          </span>
+          <BrandMark />
+          <span>awxnext</span>
         </div>
         <div>
           <h1 id="login-title" style={{ fontSize: 18 }}>

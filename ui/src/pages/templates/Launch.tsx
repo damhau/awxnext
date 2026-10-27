@@ -81,7 +81,7 @@ function Catalog({ current }: { current?: string }) {
             <Link
               key={t.id}
               to={`/run/${t.type === 'workflow_job_template' ? 'workflow' : 'job'}/${t.id}`}
-              style={{ display: 'flex', flexDirection: 'column', gap: 3, padding: 10, borderRadius: 3, border: `1px solid ${on ? '#9fb0e6' : 'transparent'}`, background: on ? 'var(--surface)' : undefined, color: 'inherit', textDecoration: 'none' }}
+              style={{ display: 'flex', flexDirection: 'column', gap: 3, padding: 10, borderRadius: 3, border: `1px solid ${on ? 'var(--ink)' : 'transparent'}`, background: on ? 'var(--surface)' : undefined, color: 'inherit', textDecoration: 'none' }}
             >
               <span className="row" style={{ justifyContent: 'space-between' }}>
                 <span style={{ fontWeight: 500, color: 'var(--ink)' }}>{t.name}</span>

@@ -3,11 +3,12 @@ import { Suspense, useEffect, useRef, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router'
 import { useList } from '../api/hooks'
 import { useLive } from '../api/live'
+import type { RecentJob } from '../api/types'
 import { ErrorBoundary } from '../components/ErrorBoundary'
 import { Icon, type IconName } from '../components/icons'
 import { Menu } from '../components/overlay'
-import { Avatar, Loading } from '../components/ui'
-import { userName } from '../lib/format'
+import { Avatar, BrandMark, Loading, RunBars } from '../components/ui'
+import { jobsNewestFirst, userName } from '../lib/format'
 import { useHotkeys } from '../lib/hotkeys'
 import { useStored } from '../lib/storage'
 import { useOrg, useSession } from './context'
@@ -45,6 +46,13 @@ function LiveCount() {
       {r} running · {q} queued
     </Link>
   )
+}
+
+/** The last 12 jobs as cells, newest on the right. */
+function RecentStrip() {
+  const { scope } = useOrg()
+  const recent = useList<RecentJob>('unified_jobs/', { order_by: jobsNewestFirst, page_size: 12, not__type: 'workflow_approval', ...scope })
+  return <RunBars jobs={recent.data?.results} slots={12} />
 }
 
 type NavItem = { to: string; label: string; icon: IconName; end?: boolean; count?: number; superuser?: boolean }
@@ -108,7 +116,7 @@ function Nav() {
             .filter((i) => !i.superuser || me.is_superuser || me.is_system_auditor)
             .map((i) => (
               <NavLink key={i.to} to={i.to} end={i.end} className={({ isActive }) => (isActive ? 'active' : '')} title={collapsed ? i.label : undefined} aria-label={collapsed ? i.label : undefined}>
-                <Icon name={i.icon} />
+                {collapsed ? <Icon name={i.icon} /> : <span className="mark" aria-hidden="true" />}
                 {!collapsed && <span>{i.label}</span>}
                 {!collapsed && i.count ? <span className="count">{i.count}</span> : null}
               </NavLink>
@@ -209,10 +217,8 @@ export function Shell() {
       <LiveRefresh />
       <header className="topbar">
         <Link to="/" className="brand" aria-label="awxnext home">
-          <span className="brand-mark" aria-hidden="true" />
-          <span>
-            awx<span className="dim">next</span>
-          </span>
+          <BrandMark />
+          <span>awxnext</span>
         </Link>
         <OrgSwitcher />
         <button className="bar-button jump" onClick={() => setPalette(true)}>
@@ -221,6 +227,7 @@ export function Shell() {
           <span className="kbd">{navigator.platform.includes('Mac') ? '⌘K' : 'Ctrl K'}</span>
         </button>
         <div className="topbar-right">
+          {loc.pathname === '/' && <RecentStrip />}
           <LiveCount />
           <Account />
         </div>

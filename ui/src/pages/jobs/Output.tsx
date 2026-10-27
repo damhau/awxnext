@@ -108,7 +108,7 @@ export function Output({
     <section aria-label="Job output" className="term">
       <div className="term-bar">
         <div className="term-search">
-          <Icon name="search" size={13} style={{ color: '#9aa09b' }} />
+          <Icon name="search" size={13} style={{ color: '#8a8f96' }} />
           <label htmlFor="search-out" className="sr-only">
             Search output
           </label>
@@ -123,7 +123,7 @@ export function Output({
             }}
           />
           {needle && (
-            <span style={{ fontSize: 11, color: '#9aa09b', whiteSpace: 'nowrap' }}>
+            <span style={{ fontSize: 11, color: '#8a8f96', whiteSpace: 'nowrap' }}>
               {hits.length ? `${Math.min(hit, hits.length - 1) + 1} of ${hits.length}` : 'no match'}
             </span>
           )}

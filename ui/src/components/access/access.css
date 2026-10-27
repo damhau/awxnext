@@ -3,5 +3,5 @@
   border-radius: var(--radius); cursor: pointer;
 }
 .role-option:hover { border-color: var(--line-strong); }
-.role-option:has(input:checked) { border-color: #9fb0e6; background: var(--accent-wash); }
+.role-option:has(input:checked) { border-color: var(--ink); background: var(--lime-wash); }
 .role-option input { margin-top: 3px; }

@@ -96,7 +96,7 @@ export function History({ kind, tpl }: { kind: Kind; tpl: Template }) {
             const cur = v.version === to
             const cmp = v.version === from
             return (
-              <li key={v.version} style={{ borderBottom: '1px solid var(--line-soft)', background: cur ? 'var(--accent-soft)' : cmp ? '#f2f3f0' : undefined }}>
+              <li key={v.version} style={{ borderBottom: '1px solid var(--line-soft)', background: cur ? 'var(--accent-soft)' : cmp ? 'var(--surface-3)' : undefined }}>
                 <button className="link-btn" style={{ display: 'block', width: '100%', textAlign: 'left', padding: '11px 16px', color: 'var(--ink)' }} onClick={() => select(v.version)} aria-current={cur ? 'true' : undefined}>
                   <div className="row" style={{ alignItems: 'baseline' }}>
                     <span className="mono" style={{ fontWeight: 500, width: 34 }}>

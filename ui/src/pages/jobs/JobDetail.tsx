@@ -263,23 +263,23 @@ function HostGrid({ grid, onCell }: { grid: Grid; onCell: (host: string) => void
         </span>
         <div className="legend" style={{ marginLeft: 'auto' }}>
           <span>
-            <i style={{ background: 'var(--ok)' }} />
+            <i className="cell ok" />
             ok {c.ok}
           </span>
           <span>
-            <i style={{ background: 'var(--changed)' }} />
+            <i className="cell changed" />
             changed {c.changed}
           </span>
           <span>
-            <i style={{ background: 'var(--fail)', transform: 'rotate(45deg) scale(0.8)' }} />
+            <i className="cell failed" />
             failed {c.failed + c.unreachable}
           </span>
           <span>
-            <i style={{ background: 'var(--skip)' }} />
+            <i className="cell skipped" />
             skipped {c.skipped}
           </span>
           <span>
-            <i style={{ width: 8, height: 8, border: '1px solid #a6aba5' }} />
+            <i className="cell none" />
             not run {c.none}
           </span>
         </div>
