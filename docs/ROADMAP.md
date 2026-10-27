@@ -191,7 +191,7 @@ the test.
 **Done when:** each correction has a test.
 
 ### M1-15 Refuse Ansible connection variables from launchers
-**Labels:** security, jobs, workflows, api · **Size:** M · not on GitHub yet (see below)
+**Labels:** security, jobs, workflows, api · **Size:** M · [#77](https://github.com/damhau/awxnext/issues/77)
 
 Today, like AWX, a template that prompts for variables accepts any name at
 launch, including `ansible_ssh_common_args`, `ansible_connection`,
@@ -216,7 +216,7 @@ no job, the survey editor and API refuse such a question, and turning the
 setting on gives AWX's behaviour back.
 
 ### M1-16 Refuse launch fields the template does not prompt for
-**Labels:** security, jobs, workflows, api · **Size:** S · not on GitHub yet (see below)
+**Labels:** security, jobs, workflows, api · **Size:** S · [#78](https://github.com/damhau/awxnext/issues/78)
 
 Today, like AWX, a launch field the template does not prompt for is moved
 to `ignored_fields` and the job starts anyway. A `limit` sent to a template
@@ -235,7 +235,7 @@ no job, the setting restores `ignored_fields`, and the M2 client tests pass
 (with the setting on where a client relies on it).
 
 ### M1-17 Keep the server's secrets out of reach of jobs on runtime `none`
-**Labels:** security, jobs, deploy · **Size:** S · not on GitHub yet (see below)
+**Labels:** security, jobs, deploy · **Size:** S · [#79](https://github.com/damhau/awxnext/issues/79)
 
 With `AWXNEXT_CONTAINER_RUNTIME=none` (the default of the all-in-one image)
 jobs run as the server's own user. Checked on 2026-10-27: such a process
@@ -715,7 +715,7 @@ generated from the settings definitions.
 alone.
 
 ### M6-13 Isolate jobs from each other on the process runtime
-**Labels:** security, jobs, deploy · **Size:** L · not on GitHub yet (see below)
+**Labels:** security, jobs, deploy · **Size:** L · [#80](https://github.com/damhau/awxnext/issues/80)
 
 After M1-17, jobs on runtime `none` still share the server's user: a job can
 read the private data directory (keys, passwords) of another job running at
@@ -916,10 +916,6 @@ Taken on 2026-10-27:
 ## On GitHub
 
 Created on 2026-10-27 on `damhau/awxnext`: the type, area and size labels,
-one milestone per section, and one issue per task (#1 to #76), each with a
+one milestone per section, and one issue per task (#1 to #80), each with a
 **Done when** checklist (one box per lookup for M4-07). This file stays the
 index; when a task changes, change its issue too.
-
-The security tasks M1-15, M1-16, M1-17 and M6-13 are not on the public
-tracker yet: their text explains how to exploit weaknesses that are not
-fixed. File them once fixed, or as private security advisories.
