@@ -96,7 +96,7 @@ func registerProjects() {
 			{Name: "scm_url", Type: api.TString, Default: "", MaxLength: 1024, Label: "Source Control URL", Help: "The location where the project is stored."},
 			{Name: "scm_branch", Type: api.TString, Default: "", MaxLength: 256, Label: "Source Control Branch", Help: "Specific branch, tag or commit to checkout."},
 			{Name: "scm_refspec", Type: api.TString, Default: "", MaxLength: 1024, Label: "Source Control Refspec", Help: "For git projects, an additional refspec to fetch."},
-			{Name: "scm_clean", Type: api.TBool, Default: false, Help: "Discard any local changes before syncing the project."},
+			{Name: "scm_clean", Type: api.TBool, Default: false, Help: "Discard any local changes before syncing the project. Jobs always work on a copy, so only changes made on the server's disk are discarded."},
 			{Name: "scm_track_submodules", Type: api.TBool, Default: false, Help: "Track submodules latest commits on defined branch."},
 			{Name: "scm_delete_on_update", Type: api.TBool, Default: false, Help: "Delete the project before syncing."},
 			{Name: "credential", Type: api.TFK, Ref: "credentials", Nullable: true},

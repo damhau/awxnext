@@ -45,6 +45,8 @@ type Source struct {
 	CredentialID    int64
 	TrackSubmodules bool
 	DeleteOnUpdate  bool
+	// Clean (scm_clean) discards changes made on disk to a reused checkout.
+	Clean bool
 }
 
 var (
@@ -163,6 +165,18 @@ func Sync(ctx context.Context, app *api.App, src Source, logf func(string)) (str
 		git(repo, "worktree", "repair", dir)
 	} else {
 		logf("Revision already checked out on this node")
+		// Jobs work on a copy, so only a change made on disk can show here.
+		if src.Clean {
+			if out, err := git(dir, "status", "--porcelain", "--untracked-files=all"); err == nil && strings.TrimSpace(out) != "" {
+				logf("Discarding local changes (scm_clean)")
+				if _, err := git(dir, "reset", "--hard", "--quiet", sha); err != nil {
+					return "", "", err
+				}
+				if _, err := git(dir, "clean", "-ffdxq"); err != nil {
+					return "", "", err
+				}
+			}
+		}
 	}
 	return sha, dir, nil
 }
@@ -289,6 +303,7 @@ func runProjectUpdate(ctx context.Context, rc *jobs.RunContext) jobs.Result {
 		CredentialID:    row.Int("credential_id"),
 		TrackSubmodules: row.Bool("scm_track_submodules"),
 		DeleteOnUpdate:  row.Bool("scm_delete_on_update"),
+		Clean:           row.Bool("scm_clean"),
 	}
 	rc.Out.Line(fmt.Sprintf("Updating project from %s", redact(src.URL)))
 	sha, dir, err := Sync(ctx, app, src, rc.Out.Line)

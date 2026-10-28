@@ -295,11 +295,11 @@ func checkoutProject(ctx context.Context, app *api.App, row jobs.Row) (string, s
 	if pid == 0 {
 		return "", "", errors.New("Job has no project.")
 	}
-	var scmType, url, localPath, branch, revision string
+	var scmType, url, localPath, branch, revision, refspec string
 	var credID *int64
-	var track bool
-	err := app.DB.QueryRow(ctx, `SELECT scm_type, scm_url, local_path, scm_branch, scm_revision, credential_id, scm_track_submodules
-		FROM unified_job_templates WHERE id = $1`, pid).Scan(&scmType, &url, &localPath, &branch, &revision, &credID, &track)
+	var track, clean bool
+	err := app.DB.QueryRow(ctx, `SELECT scm_type, scm_url, local_path, scm_branch, scm_revision, credential_id, scm_track_submodules, scm_refspec, scm_clean
+		FROM unified_job_templates WHERE id = $1`, pid).Scan(&scmType, &url, &localPath, &branch, &revision, &credID, &track, &refspec, &clean)
 	if err != nil {
 		return "", "", errors.New("The project for this job no longer exists.")
 	}
@@ -318,7 +318,8 @@ func checkoutProject(ctx context.Context, app *api.App, row jobs.Row) (string, s
 	if want == "" {
 		return "", "", errors.New("The project has not been synced yet.")
 	}
-	src := gitsync.Source{ProjectID: pid, URL: url, Branch: want, TrackSubmodules: track}
+	// The refspec fetches refs a branch override may name, such as pull requests.
+	src := gitsync.Source{ProjectID: pid, URL: url, Branch: want, Refspec: refspec, TrackSubmodules: track, Clean: clean}
 	if credID != nil {
 		src.CredentialID = *credID
 	}

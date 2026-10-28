@@ -135,7 +135,7 @@ The gaps fall in four groups:
 |---|---|---|---|
 | Git and manual projects | Yes | Done | Native Go sync, one immutable checkout per commit |
 | SVN, archive | Yes | Later | Insights projects: by design |
-| Branch override, refspec, submodules, delete on update, update on launch with cache | Yes | Done | Refspec not used for job branch overrides; `scm_clean` has no effect |
+| Branch override, refspec, submodules, delete on update, clean, update on launch with cache | Yes | Done | |
 | Requirements (roles, collections) | Yes | Done | Installed in the EE at run time, cached by content |
 | Content signature validation | Yes | Partial | Field only, nothing verifies |
 | Job template fields, multiple credentials, labels, instance groups, EE | Yes | Done | `MAX_FORKS` not enforced |

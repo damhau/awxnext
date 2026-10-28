@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/damhau/awxnext/internal/runners/gitsync"
 )
 
 // gitRepo creates a local git repository with the given files and returns its path.
@@ -248,5 +250,83 @@ func TestProjectCapabilities(t *testing.T) {
 	git := must(t, a.post("projects/", map[string]any{"name": uniq("git"), "organization": org, "scm_type": "git", "scm_url": "file://" + repo}), 201).Body
 	if c := git["summary_fields"].(map[string]any)["user_capabilities"].(map[string]any); c["start"] != true || c["schedule"] != true {
 		t.Fatalf("git project capabilities: %v", c)
+	}
+}
+
+// A branch override can name a ref only the project's refspec fetches, such
+// as a pull request.
+func TestBranchOverrideUsesRefspec(t *testing.T) {
+	f := newJobFixture(t)
+	a := f.a
+	play := "- hosts: all\n  gather_facts: false\n  tasks:\n    - ansible.builtin.debug:\n        msg: \"from %s\"\n      run_once: true\n"
+	repo := gitRepo(t, map[string]string{"main.yml": fmt.Sprintf(play, "main")})
+	git := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", append([]string{"-c", "user.name=Test", "-c", "user.email=t@example.com"}, args...)...)
+		cmd.Dir = repo
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	// A pull request: a commit no branch points to, under refs/pull/7/head.
+	git("checkout", "-q", "-b", "pr")
+	commitFiles(t, repo, map[string]string{"main.yml": fmt.Sprintf(play, "the pull request")}, "pr")
+	git("update-ref", "refs/pull/7/head", "HEAD")
+	git("checkout", "-q", "main")
+	git("branch", "-q", "-D", "pr")
+
+	pid := must(t, a.post("projects/", map[string]any{"name": uniq("p"), "organization": f.org, "scm_type": "git", "scm_url": repo, "allow_override": true}), 201).id()
+	waitJob(t, a, fmt.Sprintf("project_updates/%d/", int64(must(t, a.post(fmt.Sprintf("projects/%d/update/", pid), nil), 202).Body["project_update"].(float64))))
+	jt := must(t, a.post("job_templates/", map[string]any{"name": uniq("jt"), "project": pid, "inventory": f.inv, "playbook": "main.yml",
+		"ask_scm_branch_on_launch": true}), 201).id()
+
+	without := f.launch(t, a, jt, map[string]any{"scm_branch": "pull/7/head"})
+	if without.Body["status"] == "successful" {
+		t.Fatal("a pull request ref was found without a refspec fetching it")
+	}
+	must(t, a.patch(fmt.Sprintf("projects/%d/", pid), map[string]any{"scm_refspec": "refs/pull/*:refs/remotes/origin/pull/*"}), 200)
+	job := f.launch(t, a, jt, map[string]any{"scm_branch": "pull/7/head"})
+	mustStatus(t, f, job, "successful")
+	if out := f.stdout(t, job.id()); !strings.Contains(out, "from the pull request") {
+		t.Fatalf("stdout:\n%s", out)
+	}
+}
+
+// scm_clean discards changes made on disk to a checkout that a sync reuses.
+func TestProjectSyncScmClean(t *testing.T) {
+	a := adminClient(t)
+	allowFileURLs(t, a)
+	org := newOrg(t, a)
+	repo := gitRepo(t, map[string]string{"site.yml": helloPlaybook})
+	pid := must(t, a.post("projects/", map[string]any{"name": uniq("p"), "organization": org, "scm_type": "git", "scm_url": repo}), 201).id()
+	sync := func() resp {
+		t.Helper()
+		up := must(t, a.post(fmt.Sprintf("projects/%d/update/", pid), nil), 202)
+		pu := waitJob(t, a, fmt.Sprintf("project_updates/%d/", int64(up.Body["project_update"].(float64))))
+		if pu.Body["status"] != "successful" {
+			t.Fatalf("sync: %v", pu.Body["job_explanation"])
+		}
+		return pu
+	}
+	dir := gitsync.RevisionDir(app.Cfg.ProjectsRoot, pid, sync().Body["scm_revision"].(string))
+	tamper := func() {
+		os.WriteFile(filepath.Join(dir, "stray.txt"), []byte("x"), 0o644)
+		os.WriteFile(filepath.Join(dir, "site.yml"), []byte("changed on disk"), 0o644)
+	}
+	pristine := func() bool {
+		b, _ := os.ReadFile(filepath.Join(dir, "site.yml"))
+		_, err := os.Stat(filepath.Join(dir, "stray.txt"))
+		return string(b) == helloPlaybook && os.IsNotExist(err)
+	}
+
+	tamper()
+	sync()
+	if pristine() {
+		t.Fatal("without scm_clean, local changes should be left alone")
+	}
+	must(t, a.patch(fmt.Sprintf("projects/%d/", pid), map[string]any{"scm_clean": true}), 200)
+	sync()
+	if !pristine() {
+		t.Fatal("scm_clean did not discard the local changes")
 	}
 }
