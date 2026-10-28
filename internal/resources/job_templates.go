@@ -486,6 +486,27 @@ func registerJobTemplates() {
 			sort.Strings(needs[ids[i]])
 			o["passwords_needed_to_start"] = nonNil(needs[ids[i]])
 		}
+		// AWX's count of the plays and tasks the job ran.
+		counts := map[int64]Obj{}
+		rows, err = c.DB().Query(c, `SELECT job_id, count(*) FILTER (WHERE event = 'playbook_on_play_start'),
+			count(*) FILTER (WHERE event = 'playbook_on_task_start') FROM job_events WHERE job_id = ANY($1) GROUP BY job_id`, ids)
+		if err != nil {
+			return err
+		}
+		for rows.Next() {
+			var jid, plays, tasks int64
+			if err := rows.Scan(&jid, &plays, &tasks); err == nil {
+				counts[jid] = Obj{"play_count": plays, "task_count": tasks}
+			}
+		}
+		rows.Close()
+		for i, o := range objs {
+			if pc, ok := counts[ids[i]]; ok {
+				o["playbook_counts"] = pc
+			} else {
+				o["playbook_counts"] = Obj{"play_count": 0, "task_count": 0}
+			}
+		}
 		for _, o := range objs {
 			id, _ := api.ID(o["id"])
 			counts := Obj{}

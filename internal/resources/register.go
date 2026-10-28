@@ -22,4 +22,5 @@ func init() {
 	registerWebhooks()
 	registerRoles()
 	registerActivity()
+	registerRelatedLists()
 }

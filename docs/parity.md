@@ -90,7 +90,7 @@ The gaps fall in four groups:
 | Organizations: max_hosts, default EE, Galaxy credentials, instance groups | Yes | Done | max_hosts also stops inventory source imports. AWX's public `Ansible Galaxy` credential exists from the start, read-only |
 | Organization notification attachments | Yes | Done | |
 | Teams | Yes | Done | Plus nested teams |
-| `teams/N/projects/`, `teams/N/credentials/`, `users/N/projects/`, `users/N/access_list/` | Yes | Missing | |
+| `teams/N/projects/`, `teams/N/credentials/`, `users/N/projects/`, `users/N/access_list/` | Yes | Done | Under a parent the requester sees, what the requester sees of the target. A user's access list is superusers, the user, and the admins of their organizations and teams |
 | Object roles (`/roles/`, `object_roles`, users/teams roles, role fields per type) | Yes | Done | |
 | `access_list` | Yes | Partial | No `direct_access`/`indirect_access` details |
 | Role definitions and assignments (DAB RBAC) | Yes | Done | No UI to create custom roles; `role_metadata` and `*_ansible_id` missing |
@@ -112,7 +112,8 @@ The gaps fall in four groups:
 | Inventory script endpoint | Yes | Partial | No `subset=slice` parameter |
 | Inventory instance groups, `prevent_instance_group_fallback` | Yes | Done (API only) | Not in the inventory form |
 | Inventory copy | Yes | Done | Groups, hosts, memberships and instance groups |
-| Inventory labels, `inventories/N/job_templates/`, `groups/N/job_events/` | Yes | Missing | |
+| `inventories/N/job_templates/`, `groups/N/job_events/` | Yes | Done | A group's events are those of its hosts |
+| Inventory labels | Yes | Missing | |
 | Asynchronous inventory delete | Yes | Partial | Deletes are synchronous |
 | Cloud sources: ec2, gce, azure_rm, vmware, openstack, satellite6, controller, terraform, openshift_virtualization | Yes | Done | AWX's per-source default enabled/instance-id variables are not applied |
 | Project file (scm) source | Yes | Partial | `source_vars` not exported as environment |
@@ -145,9 +146,9 @@ The gaps fall in four groups:
 | `ansible_*` variables at launch (extra vars, survey questions, schedules, ad hoc) | Yes | Done | Deliberate difference: refused, as they set how Ansible connects and runs; `ALLOW_ANSIBLE_VARS_AT_LAUNCH` gives AWX's behaviour. Template, inventory and host variables are not affected |
 | Surveys (all types, password encryption) | Yes | Done | Plus choices from the system, conditional questions, answer formats |
 | Relaunch (all, failed hosts) | Yes | Done | Launch-time labels/IGs not kept (roadmap M3-02) |
-| `jobs/N/create_schedule/` | Yes | Missing | |
-| Job slicing | Yes | Done | `slice_workflow_jobs` sublist missing |
-| Job events, stdout formats, host summaries, artifacts | Yes | Done | `job_events/N/children/`, `playbook_counts` missing. `event_processing_finished` is true once a job has ended, including a job that never ran (a failed dependency, canceled while pending), and workflow jobs don't have it, as in AWX: clients wait on it |
+| `jobs/N/create_schedule/` | Yes | Done | A disabled monthly schedule of the job's template with its launch prompts and credentials; labels and instance groups wait for schedules to store them (M3-03) |
+| Job slicing | Yes | Done | |
+| Job events, stdout formats, host summaries, artifacts | Yes | Done | `job_events/N/children/` and `playbook_counts` (also on job lists). `event_processing_finished` is true once a job has ended, including a job that never ran (a failed dependency, canceled while pending), and workflow jobs don't have it, as in AWX: clients wait on it |
 | Ad hoc commands | Yes | Done | UI dialog lacks EE and passwords |
 | Workflows: edges, convergence, nested, approvals, artifacts, prompts | Yes | Done | Plus `when` conditions and loops |
 | Management-job workflow nodes | Yes | Done | Fixed during the audit |

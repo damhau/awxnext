@@ -89,6 +89,27 @@ func (p *Principal) Predicate(arg ArgFunc, contentType, perm string, s Scope) st
 		arg(p.UserID), arg(p.teamsArg()), arg(perm), ScopeSQL(arg, contentType, s))
 }
 
+// UserPredicate is Predicate for a user other than the principal, all in
+// SQL: true when that user holds perm on the scoped object, as a superuser,
+// an auditor (view permissions), or through their roles and their teams'.
+func UserPredicate(arg ArgFunc, userID int64, contentType, perm string, s Scope) string {
+	u, pm := arg(userID), arg(perm)
+	flags := "su.is_superuser"
+	if strings.HasPrefix(perm, "view_") {
+		flags += " OR su.is_system_auditor"
+	}
+	return fmt.Sprintf(`(EXISTS (SELECT 1 FROM users su WHERE su.id = %[1]s AND (%[3]s))
+		OR EXISTS (SELECT 1 FROM role_assignments ra JOIN role_definitions rd ON rd.id = ra.role_definition_id
+		WHERE (ra.user_id = %[1]s OR ra.team_id IN (SELECT user_teams(%[1]s))) AND %[2]s = ANY(rd.permissions) AND (%[4]s)))`,
+		u, pm, flags, ScopeSQL(arg, contentType, s))
+}
+
+// TeamPredicate is true when the team holds perm on the scoped object.
+func TeamPredicate(arg ArgFunc, teamID int64, contentType, perm string, s Scope) string {
+	return fmt.Sprintf(`EXISTS (SELECT 1 FROM role_assignments ra JOIN role_definitions rd ON rd.id = ra.role_definition_id
+		WHERE ra.team_id = %s AND %s = ANY(rd.permissions) AND (%s))`, arg(teamID), arg(perm), ScopeSQL(arg, contentType, s))
+}
+
 // PredicateAll is true when the principal holds every one of perms on the
 // scoped object, through any of its assignments.
 func (p *Principal) PredicateAll(arg ArgFunc, contentType string, perms []string, s Scope) string {
