@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -42,6 +43,33 @@ func TestManagedCredentialTypes(t *testing.T) {
 	}
 	// Managed types are read-only.
 	must(t, a.patch(fmt.Sprintf("credential_types/%d/", credType(t, a, "ssh")), map[string]any{"description": "x"}), 403)
+}
+
+// AWX's public Galaxy credential exists from the start, read-only, and can be
+// added to organizations by name.
+func TestAnsibleGalaxyCredential(t *testing.T) {
+	a := adminClient(t)
+	r := must(t, a.get("credentials/?name="+url.QueryEscape("Ansible Galaxy")), 200)
+	if r.count() != 1 {
+		t.Fatalf("Ansible Galaxy credential: %s", r.Raw)
+	}
+	cred := r.results()[0]
+	id := int64(cred["id"].(float64))
+	if cred["managed"] != true || cred["organization"] != nil || cred["inputs"].(map[string]any)["url"] != "https://galaxy.ansible.com/" ||
+		int64(cred["credential_type"].(float64)) != credType(t, a, "galaxy_api_token") {
+		t.Fatalf("Ansible Galaxy credential: %v", cred)
+	}
+	must(t, a.patch(fmt.Sprintf("credentials/%d/", id), map[string]any{"description": "x"}), 403)
+	must(t, a.delete(fmt.Sprintf("credentials/%d/", id)), 403)
+	org := newOrg(t, a)
+	must(t, a.post(fmt.Sprintf("organizations/%d/galaxy_credentials/", org), map[string]any{"id": id}), 204)
+	if r := must(t, a.get(fmt.Sprintf("organizations/%d/galaxy_credentials/", org)), 200); r.count() != 1 {
+		t.Fatalf("galaxy credentials: %s", r.Raw)
+	}
+	bob, _ := newUser(t, a)
+	if r := must(t, bob.get("credentials/?managed=true"), 200); r.count() != 0 {
+		t.Fatalf("visible to a plain user: %s", r.Raw)
+	}
 }
 
 func TestCustomCredentialType(t *testing.T) {

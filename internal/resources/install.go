@@ -28,6 +28,13 @@ func Bootstrap(ctx context.Context, app *api.App) error {
 	if err := SeedCredentialTypes(ctx, app); err != nil {
 		return err
 	}
+	// AWX's public Galaxy credential, which organizations pick by name. It
+	// is read-only, so this only creates it on the first start.
+	if _, err := app.DB.Exec(ctx, `INSERT INTO credentials (name, credential_type_id, inputs, managed)
+		SELECT 'Ansible Galaxy', id, '{"url": "https://galaxy.ansible.com/"}', true FROM credential_types
+		WHERE namespace = 'galaxy_api_token' AND managed AND NOT EXISTS (SELECT 1 FROM credentials WHERE managed)`); err != nil {
+		return err
+	}
 	if !app.Settings.IsSet(ctx, "INSTALL_UUID") {
 		var uuid string
 		if err := app.DB.QueryRow(ctx, "SELECT gen_random_uuid()::text").Scan(&uuid); err != nil {

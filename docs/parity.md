@@ -86,7 +86,7 @@ The gaps fall in four groups:
 |---|---|---|---|
 | Local users, superuser and system auditor | Yes | Done | `createsuperuser` CLI also resets a password |
 | Password policy settings | Yes | Missing | |
-| Organizations: max_hosts, default EE, Galaxy credentials, instance groups | Yes | Done | max_hosts also stops inventory source imports |
+| Organizations: max_hosts, default EE, Galaxy credentials, instance groups | Yes | Done | max_hosts also stops inventory source imports. AWX's public `Ansible Galaxy` credential exists from the start, read-only |
 | Organization notification attachments | Yes | Done | |
 | Teams | Yes | Done | Plus nested teams |
 | `teams/N/projects/`, `teams/N/credentials/`, `users/N/projects/`, `users/N/access_list/` | Yes | Missing | |

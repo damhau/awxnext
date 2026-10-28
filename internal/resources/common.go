@@ -284,6 +284,18 @@ func teams(c *Ctx) []int64 {
 	return c.User.Teams
 }
 
+// requirePerm is the default permission check, for hooks that add their own rules first.
+func requirePerm(c *Ctx, resName string, obj Obj, perm string) error {
+	ok, err := api.HasPerm(c, api.Lookup(resName), obj, perm)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return api.ErrForbidden
+	}
+	return nil
+}
+
 func countQuery(c *Ctx, sql string, args ...any) int64 {
 	var n int64
 	c.DB().QueryRow(c, sql, args...).Scan(&n)

@@ -266,6 +266,19 @@ func registerCredentials() {
 			{Name: "user", Type: api.TFK, Ref: "users", Virtual: true, WriteOnly: true, Help: "Write-only field used to add a user to the owner role. If provided, do not give either team or organization. Only valid for creation."},
 			{Name: "team", Type: api.TFK, Ref: "teams", Virtual: true, WriteOnly: true, Help: "Write-only field used to add a team to the owner role. If provided, do not give either user or organization. Only valid for creation."},
 		},
+		// Managed credentials (the public Galaxy one) are read-only, as in AWX.
+		CanChange: func(c *Ctx, old, data Obj) error {
+			if boolv(old["managed"]) {
+				return api.Detail(403, "Modifications not allowed for managed credentials")
+			}
+			return requirePerm(c, "credentials", old, "change")
+		},
+		CanDelete: func(c *Ctx, obj Obj) error {
+			if boolv(obj["managed"]) {
+				return api.Detail(403, "Deletion not allowed for managed credentials")
+			}
+			return requirePerm(c, "credentials", obj, "delete")
+		},
 		CanAdd: func(c *Ctx, data Obj) error {
 			if uid, ok := api.ID(data["user"]); ok && uid != c.User.UserID && !c.User.Superuser {
 				return api.Detail(403, "You can only create personal credentials for yourself.")
