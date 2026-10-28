@@ -22,6 +22,8 @@ func init() {
 			"command", "shell", "yum", "apt", "apt_key", "apt_repository", "apt_rpm", "service", "group", "user", "mount", "ping",
 			"selinux", "setup", "win_ping", "win_service", "win_updates", "win_group", "win_user"}},
 		{Key: "ALLOW_JINJA_IN_EXTRA_VARS", Category: "jobs", Type: "choice", Default: "template", Choices: [][]any{{"always", "Always"}, {"never", "Never"}, {"template", "Only On Job Template Definitions"}}},
+		{Key: "ALLOW_ANSIBLE_VARS_AT_LAUNCH", Category: "jobs", Type: "boolean", Default: false, Label: "Allow ansible_* variables at launch",
+			Help: "Off: launch-time variables, survey questions and answers, schedule and ad hoc variables named ansible_* are refused, as they control how Ansible connects and runs (for example ansible_ssh_common_args). On: AWX's behaviour. Variables on templates, inventories and hosts are not affected."},
 		{Key: "IGNORE_UNPROMPTED_LAUNCH_FIELDS", Category: "jobs", Type: "boolean", Default: false, Label: "Ignore launch fields that are not prompted",
 			Help: "Off: a launch that sends a field the template does not prompt for (limit, inventory, extra variables…) is refused. On: AWX's behaviour, the field is ignored, the job starts without it and the response lists it in ignored_fields."},
 		{Key: "AWX_ISOLATION_BASE_PATH", Category: "jobs", Type: "string", Default: "/tmp"},

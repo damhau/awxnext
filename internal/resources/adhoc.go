@@ -136,6 +136,9 @@ func registerAdHocCommands() {
 			return err
 		}
 		ev, _ := vars.Parse(str(data["extra_vars"]))
+		if err := refuseAnsibleVars(c, "extra_vars", ev); err != nil {
+			return err
+		}
 		names := make([]string, 0, len(ev))
 		for k := range ev {
 			names = append(names, k)

@@ -307,6 +307,8 @@ function QuestionDialog({
   const dep = earlier.find((e) => e.variable === showVar)
   const depChoices = dep && (dep.type === 'multiplechoice' || dep.type === 'multiselect') && !dep.choices_from ? choicesOf(dep) : null
   const varError = !q.variable ? '' : !/^[A-Za-z_][A-Za-z0-9_]*$/.test(q.variable) ? 'Letters, digits and _ only; must not start with a digit.' : taken.includes(q.variable) ? 'Another question already sets this variable.' : ''
+  // The server decides (setting ALLOW_ANSIBLE_VARS_AT_LAUNCH), so this only warns.
+  const varWarning = /^ansible_/i.test(q.variable) ? 'ansible_* variables control how Ansible connects and runs: saving is refused unless an administrator allows them at launch.' : ''
   const patternOk = !isText || validPattern(q.pattern)
   const sourceOk = !src || (src.type === 'resource' ? !!src.resource : src.type === 'git_refs' && kind === 'workflow' ? !!project : true)
   const valid =
@@ -369,7 +371,7 @@ function QuestionDialog({
     >
       <div className="form-grid">
         <TextInput label="Question" value={q.question_name} onChange={(v) => set('question_name', v)} autoFocus />
-        <TextInput label="Answer variable" value={q.variable} onChange={(v) => set('variable', v)} mono error={varError || undefined} help="Passed to the playbook as this extra variable." />
+        <TextInput label="Answer variable" value={q.variable} onChange={(v) => set('variable', v)} mono error={varError || undefined} help={varWarning || 'Passed to the playbook as this extra variable.'} />
         <TextInput label="Help text" value={q.question_description ?? ''} onChange={(v) => set('question_description', v)} optional full />
         <SelectField label="Answer type" value={q.type} onChange={(v) => set('type', v as Question['type'])} options={Object.entries(typeLabels) as [string, string][]} />
         <div className="field" style={{ justifyContent: 'flex-end' }}>

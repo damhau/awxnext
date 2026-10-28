@@ -61,6 +61,11 @@ func LaunchWorkflowJobTemplate(c *Ctx, wf Obj, body Obj, launchType string, ov *
 		launchVars = p
 	}
 	trusted := ov != nil && ov.Trusted != nil
+	if ov == nil {
+		if err := refuseAnsibleVars(c, "extra_vars", launchVars); err != nil {
+			return 0, nil, err
+		}
+	}
 	surveyPasswords := map[string]any{}
 	spec := templateSurvey(c, id)
 	surveyVars := map[string]bool{}

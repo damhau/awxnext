@@ -100,6 +100,9 @@ func ValidateSurveySpec(c *Ctx, raw any, previous map[string]any) (map[string]an
 		if seen[v] {
 			return nil, bad(fmt.Sprintf("'variable' '%s' duplicated in survey question %d.", v, i))
 		}
+		if isAnsibleVar(v) && !c.App.Settings.Bool(c, "ALLOW_ANSIBLE_VARS_AT_LAUNCH") {
+			return nil, bad(fmt.Sprintf("'variable' '%s' in survey question %d: ansible_* variables control how Ansible connects and runs, so whoever answers could choose them. Set them on the template, inventory or host instead.", v, i))
+		}
 		seen[v] = true
 		if _, ok := qm["required"].(bool); !ok {
 			return nil, bad(fmt.Sprintf("'required' missing from survey question %d.", i))

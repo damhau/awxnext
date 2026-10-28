@@ -142,6 +142,7 @@ The gaps fall in four groups:
 | Job template fields, multiple credentials, labels, instance groups, EE | Yes | Done | `MAX_FORKS` not enforced |
 | All 16 `ask_*_on_launch` prompts | Yes | Done | No RBAC check on prompted labels and instance groups |
 | Launch fields the template does not prompt for | Yes | Done | Deliberate difference: refused with a 400 instead of ignored (`ignored_fields`); `IGNORE_UNPROMPTED_LAUNCH_FIELDS` gives AWX's behaviour |
+| `ansible_*` variables at launch (extra vars, survey questions, schedules, ad hoc) | Yes | Done | Deliberate difference: refused, as they set how Ansible connects and runs; `ALLOW_ANSIBLE_VARS_AT_LAUNCH` gives AWX's behaviour. Template, inventory and host variables are not affected |
 | Surveys (all types, password encryption) | Yes | Done | Plus choices from the system, conditional questions, answer formats |
 | Relaunch (all, failed hosts) | Yes | Done | UI does not ask for passwords; launch-time labels/IGs not kept |
 | `jobs/N/create_schedule/` | Yes | Missing | |

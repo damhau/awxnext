@@ -118,6 +118,29 @@ func handleLaunch(c *Ctx, w http.ResponseWriter, r *http.Request, jt Obj) {
 	writeLaunched(c, w, jobID, Obj{"ignored_fields": ignored})
 }
 
+// refuseAnsibleVars fails launch-time variables named ansible_*. Ansible reads
+// them as connection and execution settings, and extra variables override
+// every other variable, so they would let whoever launches choose a command
+// run where the job connects from (ansible_ssh_common_args) or the host the
+// job's credentials go to (ansible_host). Variables on templates, inventories
+// and hosts are set by those who may edit them and are not checked here.
+// ALLOW_ANSIBLE_VARS_AT_LAUNCH restores AWX's behaviour.
+func refuseAnsibleVars(c *Ctx, field string, vars map[string]any) error {
+	var names []string
+	for k := range vars {
+		if isAnsibleVar(k) {
+			names = append(names, k)
+		}
+	}
+	if len(names) == 0 || c.App.Settings.Bool(c, "ALLOW_ANSIBLE_VARS_AT_LAUNCH") {
+		return nil
+	}
+	sort.Strings(names)
+	return api.FieldError(field, fmt.Sprintf("Variables %s cannot be set at launch: ansible_* variables control how Ansible connects and runs. Set them on the template, inventory or host instead.", strings.Join(names, ", ")))
+}
+
+func isAnsibleVar(name string) bool { return strings.HasPrefix(strings.ToLower(name), "ansible_") }
+
 // refuseUnprompted fails a launch that sends fields the template does not
 // prompt for. AWX ignores them and starts the job anyway, so a limit meant for
 // one host runs on the whole inventory; IGNORE_UNPROMPTED_LAUNCH_FIELDS brings
@@ -331,6 +354,11 @@ func LaunchJobTemplate(c *Ctx, jt Obj, body Obj, launchType string, ov *LaunchOv
 				fe.Add("extra_vars", err.Error())
 			}
 			launchVars = p
+		}
+	}
+	if ov == nil {
+		if err := refuseAnsibleVars(c, "extra_vars", launchVars); err != nil {
+			return 0, nil, err
 		}
 	}
 	var launchVarNames []string
@@ -598,9 +626,23 @@ func handleRelaunch(c *Ctx, w http.ResponseWriter, r *http.Request, job Obj) {
 	trusted := Obj{"inventory": job["inventory"], "limit": limit, "job_tags": job["job_tags"], "skip_tags": job["skip_tags"],
 		"job_type": job["job_type"], "verbosity": job["verbosity"], "diff_mode": job["diff_mode"], "scm_branch": job["scm_branch"],
 		"forks": job["forks"], "timeout": job["timeout"], "execution_environment": job["execution_environment"]}
+	// The original launch's variables are replayed, so those it got at launch
+	// are checked again; template variables are the template's own.
+	tplVars, _ := vars.Parse(str(jt["extra_vars"]))
+	launched := map[string]any{}
+	for k, v := range ev {
+		if _, own := tplVars[k]; !own {
+			launched[k] = v
+		}
+	}
+	if err := refuseAnsibleVars(c, "extra_vars", launched); err != nil {
+		api.WriteError(w, err)
+		return
+	}
+	// The body only brings passwords: everything else is the original job's.
 	launchBody := Obj{"extra_vars": ev}
 	for k, v := range body {
-		if k != "hosts" {
+		if k == "credential_passwords" || contains(passwordKeys, k) || strings.HasPrefix(k, "vault_password") {
 			launchBody[k] = v
 		}
 	}

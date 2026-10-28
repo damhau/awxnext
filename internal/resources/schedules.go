@@ -166,6 +166,9 @@ func validateSchedulePrompts(c *Ctx, ujt int64, merged Obj, data Obj, old Obj) e
 	default:
 		return api.FieldError("extra_data", "Extra variables are not supported for this template type.")
 	}
+	if err := refuseAnsibleVars(c, "extra_data", extra); err != nil {
+		return err
+	}
 	if tpl == nil {
 		return nil
 	}
@@ -393,6 +396,12 @@ func registerSchedules() {
 	}
 
 	scheduleLaunchers["job_template"] = func(c *Ctx, jt Obj, s Obj) (int64, error) {
+		// Schedules saved before ansible_* variables were refused at launch.
+		if extra, _ := s["extra_data"].(map[string]any); extra != nil {
+			if err := refuseAnsibleVars(c, "extra_data", extra); err != nil {
+				return 0, err
+			}
+		}
 		body := Obj{}
 		trusted := Obj{}
 		for _, f := range schedulePrompts {
@@ -435,6 +444,12 @@ func registerSchedules() {
 		return id, err
 	}
 	scheduleLaunchers["workflow_job_template"] = func(c *Ctx, wf Obj, s Obj) (int64, error) {
+		// Schedules saved before ansible_* variables were refused at launch.
+		if extra, _ := s["extra_data"].(map[string]any); extra != nil {
+			if err := refuseAnsibleVars(c, "extra_data", extra); err != nil {
+				return 0, err
+			}
+		}
 		trusted := Obj{}
 		for _, f := range []string{"inventory", "limit", "scm_branch", "job_tags", "skip_tags"} {
 			if v := s[f]; v != nil {

