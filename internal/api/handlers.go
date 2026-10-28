@@ -38,7 +38,6 @@ func (a *App) Router() chi.Router {
 			"description":             "AWX REST API",
 			"current_version":         "/api/v2/",
 			"available_versions":      Obj{"v2": "/api/v2/"},
-			"oauth2":                  "/api/o/",
 			"custom_logo":             a.Settings.String(c, "CUSTOM_LOGO"),
 			"custom_login_info":       a.Settings.String(c, "CUSTOM_LOGIN_INFO"),
 			"login_redirect_override": a.Settings.String(c, "LOGIN_REDIRECT_OVERRIDE"),

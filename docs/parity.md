@@ -86,7 +86,7 @@ The gaps fall in four groups:
 |---|---|---|---|
 | Local users, superuser and system auditor | Yes | Done | `createsuperuser` CLI also resets a password |
 | Password policy settings | Yes | Missing | |
-| Organizations: max_hosts, default EE, Galaxy credentials, instance groups | Yes | Done | max_hosts is not checked by inventory source imports |
+| Organizations: max_hosts, default EE, Galaxy credentials, instance groups | Yes | Done | max_hosts also stops inventory source imports |
 | Organization notification attachments | Yes | Done (API only) | No UI |
 | Teams | Yes | Done | Plus nested teams |
 | `teams/N/projects/`, `teams/N/credentials/`, `users/N/projects/`, `users/N/access_list/` | Yes | Missing | |
@@ -94,7 +94,7 @@ The gaps fall in four groups:
 | `access_list` | Yes | Partial | No `direct_access`/`indirect_access` details |
 | Role definitions and assignments (DAB RBAC) | Yes | Done | No UI to create custom roles; `role_metadata` and `*_ansible_id` missing |
 | Personal access tokens with read/write scope | Yes | Done | Stored hashed, shown once |
-| OAuth2 applications, `/api/o/` | Deprecated | By design | `/api/` still advertises `/api/o/` |
+| OAuth2 applications, `/api/o/` | Deprecated | By design | Not advertised by `/api/` |
 | Session login, CSRF, basic auth, `/me/` | Yes | Done | |
 | OIDC login | Yes | Done | Ahead of AWX: rules re-applied at every login, bearer JWTs, dry-run endpoint |
 | LDAP, SAML, GitHub/Google/Azure AD | Yes | Later | |
@@ -110,7 +110,7 @@ The gaps fall in four groups:
 | Hosts, groups (nested), variables, facts | Yes | Done | `instance_id` is not set by imports |
 | Inventory script endpoint | Yes | Partial | No `subset=slice` parameter |
 | Inventory instance groups, `prevent_instance_group_fallback` | Yes | Done (API only) | Not in the inventory form |
-| Inventory copy | Yes | Partial | Instance group links are not copied |
+| Inventory copy | Yes | Done | Groups, hosts, memberships and instance groups |
 | Inventory labels, `inventories/N/job_templates/`, `groups/N/job_events/` | Yes | Missing | |
 | Asynchronous inventory delete | Yes | Partial | Deletes are synchronous |
 | Cloud sources: ec2, gce, azure_rm, vmware, openstack, satellite6, controller, terraform, openshift_virtualization | Yes | Done | AWX's per-source default enabled/instance-id variables are not applied |

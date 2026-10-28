@@ -561,7 +561,9 @@ func copyInventoryContents(c *Ctx, src, dst any) error {
 			return err
 		}
 	}
-	return nil
+	_, err := c.DB().Exec(c, `INSERT INTO instance_group_links (content_type, object_id, instance_group_id, position)
+		SELECT content_type, $2, instance_group_id, position FROM instance_group_links WHERE content_type = 'inventory' AND object_id = $1`, src, dst)
+	return err
 }
 
 // ScriptOptions controls InventoryScript output (AWX /script/ query parameters).

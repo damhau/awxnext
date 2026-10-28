@@ -228,3 +228,23 @@ func TestInventoryMaxHostsCopyAndVariableData(t *testing.T) {
 		t.Fatalf("variable_data put should replace: %s", vd.Raw)
 	}
 }
+
+func TestInventoryCopyKeepsInstanceGroups(t *testing.T) {
+	a := adminClient(t)
+	org := newOrg(t, a)
+	inv := must(t, a.post("inventories/", map[string]any{"name": uniq("inv"), "organization": org}), 201).id()
+	ig := must(t, a.post("instance_groups/", map[string]any{"name": uniq("ig")}), 201).id()
+	must(t, a.post(fmt.Sprintf("inventories/%d/instance_groups/", inv), map[string]any{"id": ig}), 204)
+	cp := must(t, a.post(fmt.Sprintf("inventories/%d/copy/", inv), map[string]any{"name": uniq("copy")}), 201).id()
+	if got := a.get(fmt.Sprintf("inventories/%d/instance_groups/", cp)).results(); len(got) != 1 || got[0]["id"] != float64(ig) {
+		t.Fatalf("instance groups of the copy: %v", got)
+	}
+}
+
+// /api/ no longer advertises /api/o/: awxnext has no OAuth2 applications.
+func TestAPIRootHasNoOAuth2(t *testing.T) {
+	root := must(t, (&client{t: t}).get("/api/"), 200)
+	if _, ok := root.Body["oauth2"]; ok {
+		t.Fatalf("API root: %s", root.Raw)
+	}
+}

@@ -554,6 +554,9 @@ func ImportInventory(ctx context.Context, db interface {
 		}
 		newNames, newVars, newEnabled = append(newNames, h), append(newVars, varsText(hv)), append(newEnabled, enabled)
 	}
+	if err := checkMaxHosts(ctx, tx, invID, newNames); err != nil {
+		return nil, err
+	}
 	if len(newNames) > 0 {
 		rows, err := tx.Query(ctx, `INSERT INTO hosts (inventory_id, name, variables, enabled)
 			SELECT $1, n, v, e FROM unnest($2::text[], $3::text[], $4::boolean[]) AS x(n, v, e) RETURNING id, name`, invID, newNames, newVars, newEnabled)
@@ -731,6 +734,22 @@ func ImportInventory(ctx context.Context, db interface {
 		return nil, err
 	}
 	return stats, nil
+}
+
+// checkMaxHosts refuses an import that would take the organization over its
+// max_hosts (0: no limit). Hosts are counted by name across the
+// organization's inventories, as when hosts are added through the API.
+func checkMaxHosts(ctx context.Context, tx pgx.Tx, invID int64, newNames []string) error {
+	var max, current, added int64
+	err := tx.QueryRow(ctx, `SELECT o.max_hosts,
+			(SELECT count(DISTINCT h.name) FROM hosts h JOIN inventories i2 ON i2.id = h.inventory_id WHERE i2.organization_id = o.id),
+			(SELECT count(*) FROM unnest($2::text[]) AS n(name) WHERE NOT EXISTS (
+				SELECT 1 FROM hosts h JOIN inventories i2 ON i2.id = h.inventory_id WHERE i2.organization_id = o.id AND h.name = n.name))
+		FROM inventories i JOIN organizations o ON o.id = i.organization_id WHERE i.id = $1`, invID, newNames).Scan(&max, &current, &added)
+	if err != nil || max <= 0 || added == 0 || current+added <= max {
+		return nil
+	}
+	return fmt.Errorf("the organization allows %d hosts (max_hosts): it has %d, and this import would add %d", max, current, added)
 }
 
 // deleteReturning runs a DELETE ... RETURNING id, name and lists what it removed.

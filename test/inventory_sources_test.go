@@ -297,3 +297,28 @@ func TestJobUpdatesInventoryOnLaunch(t *testing.T) {
 		t.Fatalf("cache timeout ignored: %d updates", r.count())
 	}
 }
+
+// An inventory sync cannot take the organization over its max_hosts.
+func TestInventorySyncRespectsMaxHosts(t *testing.T) {
+	requireAnsible(t)
+	a := adminClient(t)
+	allowFileURLs(t, a)
+	org := must(t, a.post("organizations/", map[string]any{"name": uniq("org"), "max_hosts": 3}), 201).id()
+	repo := gitRepo(t, map[string]string{"inventories/lab.yml": scmInventory})
+	proj := must(t, a.post("projects/", map[string]any{"name": uniq("p"), "organization": org, "scm_type": "git", "scm_url": repo,
+		"scm_update_on_launch": true}), 201).id()
+	inv := must(t, a.post("inventories/", map[string]any{"name": uniq("inv"), "organization": org}), 201).id()
+	src := must(t, a.post("inventory_sources/", map[string]any{"name": "lab", "inventory": inv, "source": "scm", "source_project": proj,
+		"source_path": "inventories/lab.yml", "overwrite": true}), 201).id()
+
+	started := must(t, a.post(fmt.Sprintf("inventory_sources/%d/update/", src), nil), 202)
+	u := waitJob(t, a, fmt.Sprintf("inventory_updates/%d/", int64(started.Body["inventory_update"].(float64))))
+	if u.Body["status"] != "failed" || !strings.Contains(fmt.Sprint(u.Body["job_explanation"]), "max_hosts") {
+		t.Fatalf("a sync of 5 hosts into an organization allowing 3: %v %v", u.Body["status"], u.Body["job_explanation"])
+	}
+	if n := a.get(fmt.Sprintf("inventories/%d/hosts/", inv)).count(); n != 0 {
+		t.Fatalf("a refused sync imported %d hosts", n)
+	}
+	must(t, a.patch(fmt.Sprintf("organizations/%d/", org), map[string]any{"max_hosts": 5}), 200)
+	waitUpdate(t, a, must(t, a.post(fmt.Sprintf("inventory_sources/%d/update/", src), nil), 202))
+}
