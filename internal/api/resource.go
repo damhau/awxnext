@@ -196,6 +196,10 @@ type Resource struct {
 	// SoftDelete, when set, replaces the deletion of the row (AWX's
 	// soft_delete): the object stays, marked deleted.
 	SoftDelete func(c *Ctx, obj Obj) error
+	// FinishDelete, with SoftDelete, finishes a delete in the background
+	// once it is committed, and the request is answered 202 (AWX's
+	// asynchronous inventory delete).
+	FinishDelete func(app *App, obj Obj)
 
 	// Related adds custom related links.
 	Related func(c *Ctx, obj Obj, rel map[string]any)

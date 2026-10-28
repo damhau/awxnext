@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 )
 
 type invFixture struct {
@@ -297,5 +298,83 @@ func TestGroupDeleteRecursive(t *testing.T) {
 	}
 	if n := must(t, a.get(fmt.Sprintf("groups/%d/children/?id=%d", other, shared)), 200).count(); n != 1 {
 		t.Error("the shared child lost its other parent")
+	}
+}
+
+// Inventory labels, subset=slice on the script, and AWX's asynchronous
+// inventory delete (202, pending_deletion, then gone).
+func TestInventoryLabelsSlicesAndDelete(t *testing.T) {
+	f := newLaunchFixture(t)
+	a := f.a
+	must(t, a.post(fmt.Sprintf("inventories/%d/labels/", f.inv), map[string]any{"name": uniq("prod")}), 201)
+	if l := must(t, a.get(fmt.Sprintf("inventories/%d/", f.inv)), 200).Body["summary_fields"].(map[string]any)["labels"].(map[string]any); l["count"] != float64(1) {
+		t.Errorf("labels summary: %v", l)
+	}
+	if n := must(t, a.get(fmt.Sprintf("inventories/%d/labels/", f.inv)), 200).count(); n != 1 {
+		t.Errorf("labels: %d", n)
+	}
+
+	// Slices: hosts in name order, every Nth from the slice's number.
+	inv := must(t, a.post("inventories/", map[string]any{"name": uniq("inv"), "organization": f.org}), 201).id()
+	for _, h := range []string{"e", "a", "d", "b", "c"} {
+		must(t, a.post("hosts/", map[string]any{"name": h, "inventory": inv}), 201)
+	}
+	hosts := func(subset string) string {
+		t.Helper()
+		hv := must(t, a.get(fmt.Sprintf("inventories/%d/script/?hostvars=1&subset=%s", inv, subset)), 200).Body["_meta"].(map[string]any)["hostvars"].(map[string]any)
+		var names []string
+		for n := range hv {
+			names = append(names, n)
+		}
+		sort.Strings(names)
+		return strings.Join(names, ",")
+	}
+	if got := hosts("slice1of2"); got != "a,c,e" {
+		t.Errorf("slice1of2: %s", got)
+	}
+	if got := hosts("slice2of2"); got != "b,d" {
+		t.Errorf("slice2of2: %s", got)
+	}
+	for subset, msg := range map[string]string{"slice3of2": "Slice number must be less than total number of slices.",
+		"slice0of2": "Slice number must be 1 or higher.", "slicexofy": "Could not parse subset as slice specification.",
+		"all": "Subset does not use any supported syntax."} {
+		if r := must(t, a.get(fmt.Sprintf("inventories/%d/script/?subset=%s", inv, subset)), 400); r.Body["detail"] != msg {
+			t.Errorf("subset %s: %s", subset, r.Raw)
+		}
+	}
+
+	// A large inventory is deleted in the background.
+	big := must(t, a.post("inventories/", map[string]any{"name": uniq("big"), "organization": f.org}), 201).id()
+	group := must(t, a.post(fmt.Sprintf("inventories/%d/groups/", big), map[string]any{"name": "all-of-them"}), 201).id()
+	app.DB.Exec(t.Context(), "INSERT INTO hosts (name, inventory_id) SELECT 'host-' || i, $1 FROM generate_series(1, 5000) i", big)
+	app.DB.Exec(t.Context(), "INSERT INTO group_hosts (group_id, host_id) SELECT $1, id FROM hosts WHERE inventory_id = $2", group, big)
+	must(t, a.delete(fmt.Sprintf("inventories/%d/", big)), 202)
+	deadline := time.Now().Add(30 * time.Second)
+	for a.get(fmt.Sprintf("inventories/%d/", big)).Status != 404 {
+		if time.Now().After(deadline) {
+			t.Fatal("the inventory was never deleted")
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	var left int
+	app.DB.QueryRow(t.Context(), "SELECT count(*) FROM hosts WHERE inventory_id = $1", big).Scan(&left)
+	if left != 0 {
+		t.Errorf("%d hosts left", left)
+	}
+
+	// While pending deletion: not deleted again, and no job runs on it.
+	jt := f.template(t, "site.yml", nil)
+	app.DB.Exec(t.Context(), "UPDATE inventories SET pending_deletion = true WHERE id = $1", f.inv)
+	t.Cleanup(func() {
+		app.DB.Exec(t.Context(), "UPDATE inventories SET pending_deletion = false WHERE id = $1", f.inv)
+	})
+	if r := must(t, a.delete(fmt.Sprintf("inventories/%d/", f.inv)), 400); r.Body["error"] != "Inventory is already pending deletion." {
+		t.Errorf("second delete: %s", r.Raw)
+	}
+	if r := must(t, a.post(fmt.Sprintf("job_templates/%d/launch/", jt), nil), 400); !strings.Contains(r.Raw, "is being deleted") {
+		t.Errorf("launch on an inventory being deleted: %s", r.Raw)
+	}
+	if p := must(t, a.get(fmt.Sprintf("inventories/%d/", f.inv)), 200).Body["pending_deletion"]; p != true {
+		t.Errorf("pending_deletion: %v", p)
 	}
 }

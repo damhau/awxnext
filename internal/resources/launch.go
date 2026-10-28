@@ -442,8 +442,14 @@ func LaunchJobTemplate(c *Ctx, jt Obj, body Obj, launchType string, ov *LaunchOv
 			inv = invID
 		}
 	}
-	if _, ok := api.ID(inv); !ok {
+	if invID, ok := api.ID(inv); !ok {
 		fe.Add("inventory", "Job Template 'inventory' is missing or undefined.")
+	} else {
+		var pending bool
+		c.DB().QueryRow(c, "SELECT pending_deletion FROM inventories WHERE id = $1", invID).Scan(&pending)
+		if pending {
+			fe.Add("inventory", "The inventory associated with this Job Template is being deleted.")
+		}
 	}
 
 	// Credentials: launch credentials replace template credentials of the same slot.

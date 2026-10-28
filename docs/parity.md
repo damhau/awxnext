@@ -109,12 +109,12 @@ The gaps fall in four groups:
 |---|---|---|---|
 | Regular, smart and constructed inventories | Yes | Done | Smart filters compiled to SQL and checked when saved |
 | Hosts, groups (nested), variables, facts | Yes | Done | `instance_id` is not set by imports. Deleting a group deletes its hosts left in no group and its children left without a parent, recursively, as AWX's `delete_recursive` |
-| Inventory script endpoint | Yes | Partial | No `subset=slice` parameter |
+| Inventory script endpoint | Yes | Done | `subset=sliceNofM` gives one slice of the hosts, with AWX's errors |
 | Inventory instance groups, `prevent_instance_group_fallback` | Yes | Done (API only) | Not in the inventory form |
 | Inventory copy | Yes | Done | Groups, hosts, memberships and instance groups |
 | `inventories/N/job_templates/`, `groups/N/job_events/` | Yes | Done | A group's events are those of its hosts |
-| Inventory labels | Yes | Missing | |
-| Asynchronous inventory delete | Yes | Partial | Deletes are synchronous |
+| Inventory labels | Yes | Done | `inventories/N/labels/` and `summary_fields.labels` |
+| Asynchronous inventory delete | Yes | Done | 202 and `pending_deletion`, then hosts are deleted in batches in the background; a second delete and launches on it are refused, as in AWX |
 | Cloud sources: ec2, gce, azure_rm, vmware, openstack, satellite6, controller, terraform, openshift_virtualization | Yes | Done | AWX's per-source default enabled/instance-id variables are not applied |
 | Project file (scm) source | Yes | Partial | `source_vars` not exported as environment |
 | rhv, insights sources | Yes | Partial | No managed credential type |

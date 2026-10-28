@@ -623,6 +623,11 @@ func (a *App) handleDelete(c *Ctx, w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
+	if res.FinishDelete != nil {
+		go res.FinishDelete(a, obj)
+		w.WriteHeader(202)
+		return
+	}
 	w.WriteHeader(204)
 }
 

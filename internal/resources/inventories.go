@@ -3,8 +3,11 @@ package resources
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/damhau/awxnext/internal/api"
@@ -233,8 +236,23 @@ func registerInventories() {
 		AfterCopy: func(c *Ctx, src, dst Obj) error {
 			return copyInventoryContents(c, src["id"], dst["id"])
 		},
+		// As AWX: the inventory is marked pending deletion, the request is
+		// answered 202, and it is deleted in the background (a large
+		// inventory takes a while).
+		SoftDelete: func(c *Ctx, obj Obj) error {
+			tag, err := c.DB().Exec(c, "UPDATE inventories SET pending_deletion = true WHERE id = $1 AND NOT pending_deletion", obj["id"])
+			if err != nil {
+				return err
+			}
+			if tag.RowsAffected() == 0 {
+				return &api.Error{Status: 400, Body: Obj{"error": "Inventory is already pending deletion."}}
+			}
+			return nil
+		},
+		FinishDelete: deleteInventory,
 	})
 	inv.SubLists = []*SubList{
+		labelSub("inventory_labels", "inventory_id"),
 		{
 			Name: "hosts", Target: "hosts", ParentField: "inventory", SkipView: true,
 			Filter: func(arg ArgFunc, pid int64) string {
@@ -289,7 +307,29 @@ func registerInventories() {
 				api.WriteJSON(w, 200, hv)
 				return
 			}
-			script, err := InventoryScript(c, c.App, id, ScriptOptions{HostVars: q.Get("hostvars") != "", All: q.Get("all") != "", TowerVars: q.Get("towervars") != ""})
+			opt := ScriptOptions{HostVars: q.Get("hostvars") != "", All: q.Get("all") != "", TowerVars: q.Get("towervars") != ""}
+			if subset := q.Get("subset"); subset != "" {
+				// AWX's subset=sliceNofM: the hosts of one slice of a sliced job.
+				if !strings.HasPrefix(subset, "slice") {
+					api.WriteError(w, api.Detail(400, "Subset does not use any supported syntax."))
+					return
+				}
+				m := sliceSubsetRe.FindStringSubmatch(subset)
+				if m == nil {
+					api.WriteError(w, api.Detail(400, "Could not parse subset as slice specification."))
+					return
+				}
+				opt.SliceNumber, _ = strconv.Atoi(m[1])
+				opt.SliceCount, _ = strconv.Atoi(m[2])
+				if opt.SliceNumber > opt.SliceCount {
+					api.WriteError(w, api.Detail(400, "Slice number must be less than total number of slices."))
+					return
+				} else if opt.SliceNumber < 1 {
+					api.WriteError(w, api.Detail(400, "Slice number must be 1 or higher."))
+					return
+				}
+			}
+			script, err := InventoryScript(c, c.App, id, opt)
 			if err != nil {
 				api.WriteError(w, err)
 				return
@@ -571,6 +611,21 @@ func summarizeInventories(c *Ctx, objs []Obj) error {
 		o["total_inventory_sources"] = sources
 		o["has_inventory_sources"] = sources > 0
 		o["inventory_sources_with_failures"] = failedSources
+		labels := []Obj{}
+		rows, err := c.DB().Query(c, "SELECT l.id, l.name FROM inventory_labels x JOIN labels l ON l.id = x.label_id WHERE x.inventory_id = $1 ORDER BY l.name", id)
+		if err != nil {
+			return err
+		}
+		for rows.Next() {
+			var lid int64
+			var name string
+			rows.Scan(&lid, &name)
+			labels = append(labels, Obj{"id": lid, "name": name})
+		}
+		rows.Close()
+		if sf, ok := o["summary_fields"].(Obj); ok {
+			sf["labels"] = Obj{"count": len(labels), "results": labels}
+		}
 	}
 	return nil
 }
@@ -648,6 +703,32 @@ func copyInventoryContents(c *Ctx, src, dst any) error {
 }
 
 // ScriptOptions controls InventoryScript output (AWX /script/ query parameters).
+var sliceSubsetRe = regexp.MustCompile(`^slice(\d+)of(\d+)`)
+
+// deleteInventory deletes an inventory pending deletion: its hosts in
+// batches, its groups, then the inventory and what refers to it.
+func deleteInventory(app *api.App, obj Obj) {
+	ctx := context.Background()
+	id, _ := api.ID(obj["id"])
+	for {
+		tag, err := app.DB.Exec(ctx, "DELETE FROM hosts WHERE id IN (SELECT id FROM hosts WHERE inventory_id = $1 LIMIT 1000)", id)
+		if err != nil {
+			slog.Error("deleting inventory hosts", "inventory", id, "err", err)
+			return
+		}
+		if tag.RowsAffected() == 0 {
+			break
+		}
+	}
+	if _, err := app.DB.Exec(ctx, "DELETE FROM groups WHERE inventory_id = $1", id); err != nil {
+		slog.Error("deleting inventory groups", "inventory", id, "err", err)
+		return
+	}
+	if err := api.DeleteRow(ctx, app.DB, api.Lookup("inventories"), id); err != nil {
+		slog.Error("deleting inventory", "inventory", id, "err", err)
+	}
+}
+
 type ScriptOptions struct {
 	HostVars  bool // include _meta.hostvars
 	All       bool // include disabled hosts

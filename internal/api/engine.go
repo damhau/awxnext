@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/url"
@@ -76,6 +77,28 @@ func (res *Resource) orgField() *Field {
 	for _, f := range res.Fields {
 		if f.column() == res.OrgColumn {
 			return f
+		}
+	}
+	return nil
+}
+
+// DeleteRow deletes an object's row and what refers to it by content type
+// (role assignments, object roles, instance group and notification links).
+func DeleteRow(ctx context.Context, db DBTX, res *Resource, id int64) error {
+	if _, err := db.Exec(ctx, "DELETE FROM "+res.Table+" WHERE id = $1", id); err != nil {
+		return translateDBError(res, err)
+	}
+	if res.ContentType == "" {
+		return nil
+	}
+	for _, sql := range []string{
+		"DELETE FROM role_assignments WHERE content_type = $1 AND object_id = $2",
+		"DELETE FROM object_roles WHERE content_type = $1 AND object_id = $2",
+		"DELETE FROM instance_group_links WHERE content_type = $1 AND object_id = $2",
+		"DELETE FROM notification_template_links WHERE content_type = $1 AND object_id = $2",
+	} {
+		if _, err := db.Exec(ctx, sql, res.ContentType, id); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -1187,20 +1210,8 @@ func Delete(c *Ctx, res *Resource, obj Obj) error {
 		if res.SoftDelete != nil {
 			return res.SoftDelete(c, obj)
 		}
-		if _, err := c.DB().Exec(c, "DELETE FROM "+res.Table+" WHERE id = $1", id); err != nil {
-			return translateDBError(res, err)
-		}
-		if res.ContentType != "" {
-			for _, sql := range []string{
-				"DELETE FROM role_assignments WHERE content_type = $1 AND object_id = $2",
-				"DELETE FROM object_roles WHERE content_type = $1 AND object_id = $2",
-				"DELETE FROM instance_group_links WHERE content_type = $1 AND object_id = $2",
-				"DELETE FROM notification_template_links WHERE content_type = $1 AND object_id = $2",
-			} {
-				if _, err := c.DB().Exec(c, sql, res.ContentType, id); err != nil {
-					return err
-				}
-			}
+		if err := DeleteRow(c, c.DB(), res, id); err != nil {
+			return err
 		}
 		if res.AfterDelete != nil {
 			return res.AfterDelete(c, obj)
