@@ -572,7 +572,17 @@ func coerce(c *Ctx, f *Field, v any) (any, error) {
 		if f.Nullable || (f.Type == TFK && !f.Required) || f.Type == TJSON {
 			return nil, nil
 		}
-		return nil, fmt.Errorf("This field may not be null.")
+		// As AWX's CharNullField, ChoiceNullField and BooleanNullField: null
+		// is read as an empty string, then validated, or as false. The awx.awx
+		// modules send null for every option left unset.
+		switch f.Type {
+		case TString, TText, TChoice:
+			v = ""
+		case TBool:
+			return false, nil
+		default:
+			return nil, fmt.Errorf("This field may not be null.")
+		}
 	}
 	switch f.Type {
 	case TString, TText, TSecret:
@@ -744,7 +754,8 @@ func Validate(c *Ctx, res *Resource, data Obj, create bool, old Obj) (Obj, error
 			v = copyDefault(f.Default)
 		}
 		if !create && f.CreateOnly {
-			if old != nil && fmt.Sprint(old[f.Name]) != fmt.Sprint(v) {
+			// Compared after coercion: null sent for an empty kind is no change.
+			if cv, err := coerce(c, f, v); old != nil && (err != nil || fmt.Sprint(old[f.Name]) != fmt.Sprint(cv)) {
 				fe.Add(f.Name, "This field cannot be changed.")
 			}
 			continue

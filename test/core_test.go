@@ -273,6 +273,35 @@ func TestSettings(t *testing.T) {
 	}
 }
 
+// Null for a text or choice field reads as an empty string and for a boolean
+// as false, as in AWX's serializers: the awx.awx modules send null for every
+// option left unset.
+func TestNullInputs(t *testing.T) {
+	a := adminClient(t)
+	org := newOrg(t, a)
+	r := must(t, a.post("inventories/", map[string]any{"name": uniq("inv"), "organization": org, "kind": nil,
+		"host_filter": nil, "description": nil, "prevent_instance_group_fallback": nil}), 201)
+	if r.Body["kind"] != "" || r.Body["description"] != "" || r.Body["prevent_instance_group_fallback"] != false {
+		t.Fatalf("null inputs: %s", r.Raw)
+	}
+	inv := r.id()
+	must(t, a.patch(fmt.Sprintf("inventories/%d/", inv), map[string]any{"description": "d"}), 200)
+	if r = must(t, a.patch(fmt.Sprintf("inventories/%d/", inv), map[string]any{"description": nil}), 200); r.Body["description"] != "" {
+		t.Fatalf("null description: %s", r.Raw)
+	}
+	// kind cannot change after creation, and null for an empty kind is no change.
+	must(t, a.patch(fmt.Sprintf("inventories/%d/", inv), map[string]any{"kind": nil, "host_filter": nil}), 200)
+	must(t, a.patch(fmt.Sprintf("inventories/%d/", inv), map[string]any{"kind": "smart"}), 400)
+	// Then validated as empty: a required name or a choice without "" fails.
+	if r = must(t, a.post("organizations/", map[string]any{"name": nil}), 400); !strings.Contains(r.Raw, "may not be blank") {
+		t.Fatalf("null name: %s", r.Raw)
+	}
+	r = must(t, a.post("job_templates/", map[string]any{"name": uniq("jt"), "job_type": nil}), 400)
+	if !strings.Contains(r.Raw, `\"\" is not a valid choice`) {
+		t.Fatalf("null job_type: %s", r.Raw)
+	}
+}
+
 // Descending order puts empty values first, like AWX (PostgreSQL's default):
 // in a "latest start first" job list, jobs not started yet come before the
 // rest, and a job comes above the project sync it waited for.
