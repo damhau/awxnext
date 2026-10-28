@@ -26,6 +26,12 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+      # Without ansible-runner on the PATH the job tests skip themselves.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: ansible for the job tests
+        run: pip install ansible-core==2.19.14 ansible-runner==2.4.3
       - name: gofmt
         run: test -z "$(gofmt -l .)" || (gofmt -l . && exit 1)
       - name: vet
