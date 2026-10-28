@@ -3,6 +3,7 @@ package resources
 import (
 	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 
 	"github.com/damhau/awxnext/internal/api"
@@ -294,6 +295,39 @@ func dabCT(ct any) any {
 	return nil
 }
 
+// dabPerm writes a permission as django-ansible-base does, prefixed with its
+// model's app: shared.view_organization, awx.view_credential.
+func dabPerm(p string) string {
+	if _, model, ok := strings.Cut(p, "_"); ok && (model == "team" || model == "organization") {
+		return "shared." + p
+	}
+	return "awx." + p
+}
+
+// sharedTables are the shared resource types, which have an ansible_id.
+var sharedTables = map[string]string{"organization": "organizations", "team": "teams"}
+
+// ansibleID is the ansible_id of a user, team or organization (nil otherwise).
+func ansibleID(c *Ctx, table string, id any) any {
+	if table == "" {
+		return nil
+	}
+	var a string
+	if c.DB().QueryRow(c, "SELECT ansible_id::text FROM "+table+" WHERE id = $1", id).Scan(&a) != nil {
+		return nil
+	}
+	return a
+}
+
+// byAnsibleID resolves an ansible_id to the id of a user, team or organization.
+func byAnsibleID(c *Ctx, table, field string, v any) (int64, error) {
+	var id int64
+	if err := c.DB().QueryRow(c, "SELECT id FROM "+table+" WHERE ansible_id::text = $1", str(v)).Scan(&id); err != nil {
+		return 0, api.FieldError(field, fmt.Sprintf("Object with ansible_id=%s does not exist.", str(v)))
+	}
+	return id, nil
+}
+
 func stripCT(s string) string {
 	if i := strings.LastIndex(s, "."); i >= 0 {
 		return s[i+1:]
@@ -368,7 +402,7 @@ func registerDAB() {
 			if l, ok := o["permissions"].([]any); ok {
 				out := make([]string, len(l))
 				for i, p := range l {
-					out[i] = "awx." + str(p)
+					out[i] = dabPerm(str(p))
 				}
 				o["permissions"] = out
 			}
@@ -396,9 +430,12 @@ func registerDAB() {
 				{Name: "created", Type: api.TDateTime, ReadOnly: true},
 				{Name: "created_by", Type: api.TFK, Ref: "users", ReadOnly: true},
 				{Name: "role_definition", Type: api.TFK, Ref: "role_definitions", Required: true},
-				{Name: kind.col, Type: api.TFK, Ref: kind.ref, Required: true},
+				// Given here or by its ansible_id.
+				{Name: kind.col, Type: api.TFK, Ref: kind.ref, Nullable: true},
+				{Name: kind.col + "_ansible_id", Type: api.TString, Virtual: true, Nullable: true, Help: "The resource id of the " + kind.col + " who will receive permissions from this assignment. Alternative to " + kind.col + " field."},
 				{Name: "content_type", Type: api.TString, ReadOnly: true, Nullable: true},
 				{Name: "object_id", Type: api.TInt, Nullable: true},
+				{Name: "object_ansible_id", Type: api.TString, Virtual: true, Nullable: true, Help: "Resource id of the object this role applies to. Alternative to the object_id field."},
 			},
 			View: func(c *Ctx, arg ArgFunc) string {
 				base := fmt.Sprintf("t.%s_id IS NOT NULL", kind.col)
@@ -418,6 +455,27 @@ func registerDAB() {
 				var ct *string
 				if err := c.DB().QueryRow(c, "SELECT content_type FROM role_definitions WHERE id = $1", rd).Scan(&ct); err != nil {
 					return api.FieldError("role_definition", "Invalid role definition.")
+				}
+				if v := data[kind.col+"_ansible_id"]; data[kind.col] == nil && str(v) != "" {
+					id, err := byAnsibleID(c, kind.ref, kind.col+"_ansible_id", v)
+					if err != nil {
+						return err
+					}
+					data[kind.col] = id
+				}
+				if data[kind.col] == nil {
+					return api.FieldError(kind.col, "This field is required.")
+				}
+				if v := data["object_ansible_id"]; data["object_id"] == nil && str(v) != "" && ct != nil {
+					table := sharedTables[*ct]
+					if table == "" {
+						return api.FieldError("object_ansible_id", "Only organizations and teams have an ansible_id.")
+					}
+					id, err := byAnsibleID(c, table, "object_ansible_id", v)
+					if err != nil {
+						return err
+					}
+					data["object_id"] = id
 				}
 				obj, hasObj := api.ID(data["object_id"])
 				if ct == nil || *ct == "" {
@@ -445,8 +503,11 @@ func registerDAB() {
 			Serialize: func(c *Ctx, o Obj) {
 				ct := str(o["content_type"])
 				o["content_type"] = dabCT(o["content_type"])
+				o[kind.col+"_ansible_id"] = ansibleID(c, kind.ref, o[kind.col])
+				o["object_ansible_id"] = nil
 				if id, ok := api.ID(o["object_id"]); ok {
 					o["object_id"] = fmt.Sprint(id)
+					o["object_ansible_id"] = ansibleID(c, sharedTables[ct], id)
 					if sf, ok := o["summary_fields"].(Obj); ok {
 						sf["content_object"] = Obj{"id": id, "name": contentObjectName(c, ct, id)}
 					}
@@ -467,4 +528,31 @@ func title2(s string) string {
 		parts[i] = strings.ToUpper(p[:1]) + p[1:]
 	}
 	return strings.Join(parts, " ")
+}
+
+// roleMetadata is django-ansible-base's /role_metadata/: for each content
+// type, the permissions a role definition of that type can hold, here those
+// its managed roles hold (its own, and on an organization or a folder those
+// of what it contains).
+func roleMetadata(c *Ctx, w http.ResponseWriter, r *http.Request) {
+	byType := map[string][]string{}
+	seen := map[string]bool{}
+	for _, m := range rbac.Managed {
+		if m.ContentType == "" {
+			continue
+		}
+		key := str(dabCT(m.ContentType))
+		for _, p := range m.Permissions {
+			if !seen[key+p] {
+				seen[key+p] = true
+				byType[key] = append(byType[key], dabPerm(p))
+			}
+		}
+	}
+	allowed := Obj{}
+	for k, perms := range byType {
+		sort.Strings(perms)
+		allowed[k] = perms
+	}
+	api.WriteJSON(w, 200, Obj{"allowed_permissions": allowed})
 }

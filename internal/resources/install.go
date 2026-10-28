@@ -15,6 +15,7 @@ func Install(app *api.App) {
 	installBulk(app)
 	installDashboard(app)
 	installLicense(app)
+	app.Handle("GET", "/api/v2/role_metadata/", roleMetadata)
 	app.HandlePublic("GET", "/api/v2/ping/", ping)
 	app.Handle("GET", "/api/v2/config/", configView)
 	installScheduleRoutes(app)
