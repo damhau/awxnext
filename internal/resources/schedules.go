@@ -249,7 +249,7 @@ func registerSchedules() {
 			{Name: "diff_mode", Type: api.TBool, Nullable: true},
 			{Name: "verbosity", Type: api.TChoice, Nullable: true, Choices: verbosityChoices},
 			{Name: "execution_environment", Type: api.TFK, Ref: "execution_environments", Nullable: true},
-			{Name: "forks", Type: api.TInt, Nullable: true},
+			{Name: "forks", Type: api.TInt, Nullable: true, Validate: validForks},
 			{Name: "job_slice_count", Type: api.TInt, Nullable: true},
 			{Name: "timeout", Type: api.TInt, Nullable: true},
 		},
@@ -568,6 +568,16 @@ func runSchedule(c *Ctx, id int64) error {
 	tpl, err := api.Get(c, tplRes, ujt)
 	if err != nil {
 		return err
+	}
+	// SCHEDULE_MAX_JOBS: no new job while that many of the template's jobs are
+	// still waiting to run.
+	if limit := c.App.Settings.Int(c, "SCHEDULE_MAX_JOBS"); limit > 0 {
+		var waiting int
+		c.DB().QueryRow(c, "SELECT count(*) FROM unified_jobs WHERE unified_job_template_id = $1 AND status IN ('new', 'pending', 'waiting')", ujt).Scan(&waiting)
+		if waiting >= limit {
+			slog.Warn("schedule skipped: too many jobs of its template are waiting", "schedule", id, "template", ujt, "waiting", waiting, "SCHEDULE_MAX_JOBS", limit)
+			return nil
+		}
 	}
 	return c.WithTx(func(c *Ctx) error {
 		jid, err := launch(c, tpl, sched)

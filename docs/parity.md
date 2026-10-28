@@ -152,7 +152,7 @@ The gaps fall in four groups:
 | Workflows: edges, convergence, nested, approvals, artifacts, prompts | Yes | Done | Plus `when` conditions and loops |
 | Management-job workflow nodes | Yes | Done | Fixed during the audit |
 | Node instance groups prompt; workflow labels passed to nodes | Yes | Missing | |
-| Schedules: rrule with exclusions, timezones, saved prompts, preview | Yes | Done | `SCHEDULE_MAX_JOBS` not enforced; no labels/IG prompts |
+| Schedules: rrule with exclusions, timezones, saved prompts, preview | Yes | Done | No labels/IG prompts |
 | Notifications: webhook, started/success/error/approval events, custom messages | Yes | Done | Attach only through the API |
 | Email | Yes | Later | Roadmap M3-01 |
 | Slack, PagerDuty, Twilio, Grafana, IRC, Mattermost, Rocket.Chat, AWS SNS | Yes | Out of scope | Dropped on 2026-10-27 |
@@ -172,7 +172,7 @@ The gaps fall in four groups:
 | Dashboard endpoints | Yes | Missing | The UI's "Now" page replaces the dashboard |
 | Bulk API | Yes | Missing | |
 | Activity stream | Yes | Partial | No entries for job launches or role assignment API grants |
-| Settings API and UI | Yes | Partial | Settings not read by any code: `MAX_UI_JOB_EVENTS`, `UI_LIVE_UPDATES_ENABLED`, `MAX_WEBSOCKET_EVENT_RATE`, `SCHEDULE_MAX_JOBS`, `MAX_FORKS`, `AWX_RUNNER_KEEPALIVE_SECONDS`, `AWX_ISOLATION_SHOW_PATHS`, `LOG_AGGREGATOR_*`, analytics |
+| Settings API and UI | Yes | Partial | Settings not read by any code: `MAX_UI_JOB_EVENTS`, `UI_LIVE_UPDATES_ENABLED`, `MAX_WEBSOCKET_EVENT_RATE`, `AWX_RUNNER_KEEPALIVE_SECONDS`, `AWX_ISOLATION_SHOW_PATHS`, `LOG_AGGREGATOR_*`, analytics |
 | External log aggregation | Yes | Missing | JSON logs on stderr instead |
 | Prometheus metrics | Yes | Partial | No subsystem metrics or `node`/`metric` parameters; OpenTelemetry traces added |
 | Analytics, subscriptions | Yes | By design | Collection `license`/`subscriptions` modules fail |

@@ -118,6 +118,16 @@ func handleLaunch(c *Ctx, w http.ResponseWriter, r *http.Request, jt Obj) {
 	writeLaunched(c, w, jobID, Obj{"ignored_fields": ignored})
 }
 
+// validForks enforces MAX_FORKS (0: no limit) wherever forks are saved or
+// used to launch.
+func validForks(c *Ctx, v any, _ Obj) error {
+	n, _ := api.ID(v)
+	if limit := int64(c.App.Settings.Int(c, "MAX_FORKS")); limit > 0 && n > limit {
+		return fmt.Errorf("Maximum number of forks (%d) exceeded.", limit)
+	}
+	return nil
+}
+
 // refuseAnsibleVars fails launch-time variables named ansible_*. Ansible reads
 // them as connection and execution settings, and extra variables override
 // every other variable, so they would let whoever launches choose a command
@@ -445,6 +455,10 @@ func LaunchJobTemplate(c *Ctx, jt Obj, body Obj, launchType string, ov *LaunchOv
 			return v
 		}
 		return jt[field]
+	}
+	// MAX_FORKS also stops templates saved before it was lowered.
+	if err := validForks(c, pick("forks"), nil); err != nil {
+		return 0, nil, api.FieldError("forks", err.Error())
 	}
 	ee := resolveEE(c, accepted["execution_environment"], jt)
 	if v, ok := accepted["execution_environment"]; ok {

@@ -78,7 +78,7 @@ func registerAdHocCommands() {
 				return nil
 			}},
 			{Name: "module_args", Type: api.TText, Default: "", CreateOnly: true},
-			{Name: "forks", Type: api.TInt, Default: 0, CreateOnly: true},
+			{Name: "forks", Type: api.TInt, Default: 0, CreateOnly: true, Validate: validForks},
 			{Name: "verbosity", Type: api.TChoice, Default: 0, CreateOnly: true, Choices: verbosityChoices},
 			{Name: "extra_vars", Type: api.TText, Default: "", CreateOnly: true, Validate: validateVars},
 			{Name: "become_enabled", Type: api.TBool, Default: false, CreateOnly: true},

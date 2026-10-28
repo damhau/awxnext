@@ -155,7 +155,7 @@ func registerJobTemplates() {
 			{Name: "project", Type: api.TFK, Ref: "projects", Nullable: true},
 			{Name: "playbook", Type: api.TString, Default: "", MaxLength: 1024},
 			{Name: "scm_branch", Type: api.TString, Default: "", MaxLength: 1024, Help: "Branch to use in job run. Project default used if blank. Only allowed if project allow_override field is set to true."},
-			{Name: "forks", Type: api.TInt, Default: 0},
+			{Name: "forks", Type: api.TInt, Default: 0, Validate: validForks},
 			{Name: "limit", Type: api.TText, Default: ""},
 			{Name: "verbosity", Type: api.TChoice, Default: 0, Choices: verbosityChoices},
 			{Name: "extra_vars", Type: api.TText, Default: "", Validate: validateVars},

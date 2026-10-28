@@ -34,7 +34,7 @@ func nodePromptFields() []*Field {
 		{Name: "diff_mode", Type: api.TBool, Nullable: true},
 		{Name: "verbosity", Type: api.TChoice, Nullable: true, Choices: verbosityChoices},
 		{Name: "execution_environment", Type: api.TFK, Ref: "execution_environments", Nullable: true},
-		{Name: "forks", Type: api.TInt, Nullable: true},
+		{Name: "forks", Type: api.TInt, Nullable: true, Validate: validForks},
 		{Name: "job_slice_count", Type: api.TInt, Nullable: true},
 		{Name: "timeout", Type: api.TInt, Nullable: true},
 		{Name: "success_nodes", Type: api.TJSON, ReadOnly: true, Virtual: true},

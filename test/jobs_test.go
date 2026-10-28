@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/damhau/awxnext/internal/resources"
 )
 
 func requireAnsible(t *testing.T) {
@@ -558,4 +560,69 @@ func TestLaunchRefusesAnsibleVars(t *testing.T) {
 	must(t, a.post(fmt.Sprintf("job_templates/%d/survey_spec/", jt), spec), 200)
 	must(t, a.patch("settings/jobs/", map[string]any{"ALLOW_ANSIBLE_VARS_AT_LAUNCH": false}), 200)
 	refused(a.post(fmt.Sprintf("jobs/%d/relaunch/", allowed), map[string]any{}), "extra_vars")
+}
+
+// MAX_FORKS refuses saving or launching with more forks (0: no limit), also
+// for templates saved before it was lowered.
+func TestMaxForks(t *testing.T) {
+	f := newLaunchFixture(t)
+	a := f.a
+	t.Cleanup(func() { a.patch("settings/jobs/", map[string]any{"MAX_FORKS": 200}) })
+	must(t, a.patch("settings/jobs/", map[string]any{"MAX_FORKS": 5}), 200)
+	tooMany := func(r resp) {
+		t.Helper()
+		if r.Status != 400 || !strings.Contains(r.Raw, "Maximum number of forks (5) exceeded") {
+			t.Fatalf("want the MAX_FORKS error, got %d: %s", r.Status, r.Raw)
+		}
+	}
+
+	// Templates.
+	tooMany(a.post("job_templates/", map[string]any{"name": uniq("jt"), "project": f.project, "inventory": f.inv, "playbook": "site.yml", "forks": 10}))
+	jt := f.template(t, "site.yml", map[string]any{"forks": 5, "ask_forks_on_launch": true})
+	tooMany(a.patch(fmt.Sprintf("job_templates/%d/", jt), map[string]any{"forks": 6}))
+	// Launches, schedules and ad hoc commands.
+	tooMany(a.post(fmt.Sprintf("job_templates/%d/launch/", jt), map[string]any{"forks": 6}))
+	must(t, a.post(fmt.Sprintf("job_templates/%d/launch/", jt), map[string]any{"forks": 3}), 201)
+	tooMany(a.post(fmt.Sprintf("job_templates/%d/schedules/", jt), map[string]any{"name": uniq("s"), "rrule": "DTSTART:20300101T000000Z RRULE:FREQ=DAILY", "forks": 6}))
+	tooMany(a.post("ad_hoc_commands/", map[string]any{"inventory": f.inv, "module_name": "ping", "forks": 6}))
+	// A sliced template saved under a higher limit cannot launch once it is lowered.
+	sliced := f.template(t, "site.yml", map[string]any{"forks": 5, "job_slice_count": 2})
+	must(t, a.patch("settings/jobs/", map[string]any{"MAX_FORKS": 4}), 200)
+	if r := a.post(fmt.Sprintf("job_templates/%d/launch/", sliced), map[string]any{}); r.Status != 400 || !strings.Contains(r.Raw, "Maximum number of forks (4)") {
+		t.Fatalf("sliced launch over MAX_FORKS: %d %s", r.Status, r.Raw)
+	}
+	// 0: no limit.
+	must(t, a.patch("settings/jobs/", map[string]any{"MAX_FORKS": 0}), 200)
+	must(t, a.patch(fmt.Sprintf("job_templates/%d/", jt), map[string]any{"forks": 500}), 200)
+}
+
+// SCHEDULE_MAX_JOBS: a schedule creates no job while that many jobs of its
+// template are waiting to run.
+func TestScheduleMaxJobs(t *testing.T) {
+	f := newLaunchFixture(t)
+	a := f.a
+	t.Cleanup(func() { a.patch("settings/jobs/", map[string]any{"SCHEDULE_MAX_JOBS": 10}) })
+	jt := f.template(t, "site.yml", nil)
+	for range 2 {
+		id := must(t, a.post(fmt.Sprintf("job_templates/%d/launch/", jt), map[string]any{}), 201).id()
+		waitJob(t, a, fmt.Sprintf("jobs/%d/", id))
+	}
+	// Two jobs waiting to run; "new" jobs are not picked up by the dispatcher.
+	app.DB.Exec(t.Context(), "UPDATE unified_jobs SET status = 'new' WHERE unified_job_template_id = $1", jt)
+	s := must(t, a.post(fmt.Sprintf("job_templates/%d/schedules/", jt), map[string]any{"name": uniq("s"),
+		"rrule": "DTSTART:20200101T000000Z RRULE:FREQ=HOURLY;INTERVAL=1"}), 201).id()
+	fire := func() int {
+		app.DB.Exec(t.Context(), "UPDATE schedules SET next_run = now() - interval '1 second' WHERE id = $1", s)
+		resources.ScheduleTick(t.Context(), jobManager)
+		return a.get(fmt.Sprintf("schedules/%d/jobs/", s)).count()
+	}
+
+	must(t, a.patch("settings/jobs/", map[string]any{"SCHEDULE_MAX_JOBS": 2}), 200)
+	if n := fire(); n != 0 {
+		t.Fatalf("the schedule launched %d jobs with 2 already waiting", n)
+	}
+	must(t, a.patch("settings/jobs/", map[string]any{"SCHEDULE_MAX_JOBS": 3}), 200)
+	if n := fire(); n != 1 {
+		t.Fatalf("the schedule launched %d jobs under the limit, want 1", n)
+	}
 }
