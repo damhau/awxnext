@@ -38,6 +38,9 @@ func canGrant(c *Ctx, rdID int64, ct string, objectID int64) error {
 	if c.User.Superuser {
 		return nil
 	}
+	if err := membershipChange(c, ct); err != nil {
+		return err
+	}
 	var perms []string
 	if err := c.DB().QueryRow(c, "SELECT permissions FROM role_definitions WHERE id = $1", rdID).Scan(&perms); err != nil {
 		return api.ErrNotFound

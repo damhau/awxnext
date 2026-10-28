@@ -10,7 +10,7 @@ import (
 
 // userVisible: superusers/auditors see everyone; others see themselves and users sharing an organization or team.
 func userVisible(c *Ctx, arg ArgFunc) string {
-	if c.User.Superuser || c.User.Auditor {
+	if c.User.Superuser || c.User.Auditor || orgAdminsSeeAll(c) {
 		return "TRUE"
 	}
 	me := arg(c.User.UserID)
@@ -76,6 +76,9 @@ func registerUsers() {
 					return api.ErrForbidden
 				}
 			}
+			if err := manageOrgAuth(c); err != nil {
+				return err
+			}
 			ok, err := isOrgAdminOfAny(c)
 			if err != nil {
 				return err
@@ -95,6 +98,9 @@ func registerUsers() {
 			if id == c.User.UserID {
 				return nil
 			}
+			if err := manageOrgAuth(c); err != nil {
+				return err
+			}
 			ok, err := canManageUser(c, old)
 			if err != nil {
 				return err
@@ -108,6 +114,9 @@ func registerUsers() {
 			id, _ := api.ID(obj["id"])
 			if id == c.User.UserID {
 				return api.Detail(403, "Cannot delete yourself.")
+			}
+			if err := manageOrgAuth(c); err != nil {
+				return err
 			}
 			ok, err := canManageUser(c, obj)
 			if err != nil {

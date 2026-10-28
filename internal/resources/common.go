@@ -103,12 +103,27 @@ func roleUserSub(name, roleName, ct string) *SubList {
 		Target: "users",
 		Filter: roleHolders(roleName, ct),
 		Associate: func(c *Ctx, pid, uid int64) error {
+			if err := membershipChange(c, ct); err != nil {
+				return err
+			}
 			return Assign(c, roleName, uid, 0, ct, pid)
 		},
 		Disassociate: func(c *Ctx, pid, uid int64) error {
+			if err := membershipChange(c, ct); err != nil {
+				return err
+			}
 			return Unassign(c, roleName, uid, 0, ct, pid)
 		},
 	}
+}
+
+// membershipChange checks MANAGE_ORGANIZATION_AUTH for roles on
+// organizations and teams.
+func membershipChange(c *Ctx, ct string) error {
+	if ct == "organization" || ct == "team" {
+		return manageOrgAuth(c)
+	}
+	return nil
 }
 
 // childSub is a sublist of objects whose column references the parent.
@@ -205,6 +220,37 @@ func notificationSubs(ct string, approvals bool) []*SubList {
 }
 
 // isOrgAdminOfAny reports whether the principal is admin of at least one organization.
+// manageOrgAuth is MANAGE_ORGANIZATION_AUTH: when off, only superusers
+// manage users and teams (create, change, delete them) and organization and
+// team roles, as when an identity provider owns membership.
+func manageOrgAuth(c *Ctx) error {
+	if c.User.Superuser || c.App.Settings.Bool(c, "MANAGE_ORGANIZATION_AUTH") {
+		return nil
+	}
+	return api.Detail(403, "Only superusers manage users, teams, and organization and team roles here (setting MANAGE_ORGANIZATION_AUTH is off).")
+}
+
+// allowed turns a permission answer into an error.
+func allowed(ok bool, err error) error {
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return api.ErrForbidden
+	}
+	return nil
+}
+
+// orgAdminsSeeAll is ORG_ADMINS_CAN_SEE_ALL_USERS: organization admins see
+// every user and team, not only those of their organizations.
+func orgAdminsSeeAll(c *Ctx) bool {
+	if !c.App.Settings.Bool(c, "ORG_ADMINS_CAN_SEE_ALL_USERS") {
+		return false
+	}
+	ok, _ := isOrgAdminOfAny(c)
+	return ok
+}
+
 func isOrgAdminOfAny(c *Ctx) (bool, error) {
 	if c.User.Superuser {
 		return true, nil

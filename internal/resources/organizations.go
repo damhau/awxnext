@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/damhau/awxnext/internal/api"
+	"github.com/damhau/awxnext/internal/rbac"
 )
 
 func registerOrganizations() {
@@ -92,6 +93,33 @@ func registerOrganizations() {
 		OrgColumn:   "organization_id",
 		Fields: []*Field{
 			{Name: "organization", Type: api.TFK, Ref: "organizations", Required: true},
+		},
+		View: func(c *Ctx, arg ArgFunc) string {
+			if orgAdminsSeeAll(c) {
+				return "TRUE"
+			}
+			return c.User.Predicate(rbac.ArgFunc(arg), "team", "view_team", rbac.Scope{ID: "t.id", Org: "t.organization_id"})
+		},
+		CanAdd: func(c *Ctx, data Obj) error {
+			if c.User.Superuser {
+				return nil
+			}
+			if err := manageOrgAuth(c); err != nil {
+				return err
+			}
+			return allowed(api.CanAddIn(c, api.Lookup("teams"), data))
+		},
+		CanChange: func(c *Ctx, old, data Obj) error {
+			if err := manageOrgAuth(c); err != nil {
+				return err
+			}
+			return allowed(api.HasPerm(c, api.Lookup("teams"), old, "change"))
+		},
+		CanDelete: func(c *Ctx, obj Obj) error {
+			if err := manageOrgAuth(c); err != nil {
+				return err
+			}
+			return allowed(api.HasPerm(c, api.Lookup("teams"), obj, "delete"))
 		},
 		SubLists: []*SubList{
 			roleUserSub("users", "Team Member", "team"),
