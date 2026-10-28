@@ -171,6 +171,10 @@ type Resource struct {
 	View func(c *Ctx, arg ArgFunc) string
 	// CanAdd validates permission to create the object.
 	CanAdd func(c *Ctx, data Obj) error
+	// CanPostList checks a POST to the resource's own list before CanAdd, as
+	// a permission class on AWX's list view: creating through a sub-list
+	// does not go through it.
+	CanPostList func(c *Ctx, data Obj) error
 	// CanChange validates permission to modify an existing object; data holds the merged new values.
 	CanChange func(c *Ctx, obj Obj, data Obj) error
 	// CanDelete validates permission to delete.

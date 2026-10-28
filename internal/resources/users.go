@@ -70,6 +70,15 @@ func registerUsers() {
 			{Name: "last_login", Type: api.TDateTime, ReadOnly: true, Nullable: true},
 		},
 		View: userVisible,
+		// As AWX's UserPermission: superusers create users here; organization
+		// admins create them through organizations/N/users/, where they join
+		// the organization they administer.
+		CanPostList: func(c *Ctx, data Obj) error {
+			if !c.User.Superuser {
+				return api.ErrForbidden
+			}
+			return nil
+		},
 		CanAdd: func(c *Ctx, data Obj) error {
 			if boolv(data["is_superuser"]) || boolv(data["is_system_auditor"]) {
 				if !c.User.Superuser {

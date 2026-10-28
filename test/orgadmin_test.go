@@ -32,13 +32,25 @@ func TestOrgAdminSettings(t *testing.T) {
 
 	// MANAGE_ORGANIZATION_AUTH: on, an organization admin manages users,
 	// teams and membership of their organization; off, only superusers do.
-	must(t, boss.post("users/", map[string]any{"username": uniq("made"), "password": "pw"}), 201)
+	// As in AWX, they create users through their organization, where the user
+	// joins it, and not at /users/, where the user would belong to none.
+	must(t, boss.post("users/", map[string]any{"username": uniq("made"), "password": "pw"}), 403)
+	made := must(t, boss.post(fmt.Sprintf("organizations/%d/users/", mine), map[string]any{"username": uniq("made"), "password": "pw"}), 201).id()
+	if must(t, a.get(fmt.Sprintf("organizations/%d/users/?id=%d", mine, made)), 200).count() != 1 {
+		t.Error("a user created through the organization is not a member of it")
+	}
+	stray := uniq("made")
+	must(t, boss.post(fmt.Sprintf("organizations/%d/users/", other), map[string]any{"username": stray, "password": "pw"}), 403)
+	if must(t, a.get("users/?username="+stray), 200).count() != 0 {
+		t.Error("a refused create through another organization left the user behind")
+	}
+	must(t, boss.post(fmt.Sprintf("organizations/%d/users/", mine), map[string]any{"username": uniq("made"), "password": "pw", "is_superuser": true}), 403)
 	team := must(t, boss.post("teams/", map[string]any{"name": uniq("team"), "organization": mine}), 201).id()
 	must(t, boss.post(fmt.Sprintf("organizations/%d/users/", mine), map[string]any{"id": newcomerID}), 204)
 	must(t, boss.post(fmt.Sprintf("teams/%d/users/", team), map[string]any{"id": newcomerID}), 204)
 
 	must(t, a.patch("settings/system/", map[string]any{"MANAGE_ORGANIZATION_AUTH": false}), 200)
-	must(t, boss.post("users/", map[string]any{"username": uniq("made"), "password": "pw"}), 403)
+	must(t, boss.post(fmt.Sprintf("organizations/%d/users/", mine), map[string]any{"username": uniq("made"), "password": "pw"}), 403)
 	must(t, boss.post("teams/", map[string]any{"name": uniq("team"), "organization": mine}), 403)
 	must(t, boss.patch(fmt.Sprintf("teams/%d/", team), map[string]any{"description": "x"}), 403)
 	must(t, boss.post(fmt.Sprintf("organizations/%d/users/", mine), map[string]any{"id": newcomerID, "disassociate": true}), 403)

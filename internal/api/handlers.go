@@ -487,6 +487,12 @@ func (a *App) handleCreate(c *Ctx, w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
+	if res.CanPostList != nil {
+		if err := res.CanPostList(c, data); err != nil {
+			writeError(w, err)
+			return
+		}
+	}
 	c.Extra["body"] = data
 	obj, err := Create(c, res, data, nil)
 	if err != nil {

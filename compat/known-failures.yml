@@ -20,7 +20,6 @@ collection:
   "notification_template": "out of scope: Slack and other notification types (ROADMAP, Proposed out of scope)"
   "project": "#41 archive projects (after current_update, #86, passes)"
   "schedule": "#30 labels on schedules"
-  "user": "#89 org admins at POST /users/"
   "workflow_job_template": "#28 email notifications"
 terraform:
   "TestAccAAPJob_UpdateWithNewInventoryIdPromptOnLaunch": "#93 unprompted launch fields equal to the template's"

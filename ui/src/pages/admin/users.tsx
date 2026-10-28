@@ -4,9 +4,9 @@ import { Link, Route, Routes, useNavigate, useParams } from 'react-router'
 import { api, getAll } from '../../api/client'
 import { useInvalidate, useList, useObject } from '../../api/hooks'
 import type { Base, Me, Ref } from '../../api/types'
-import { useSession } from '../../app/context'
+import { usePreselectOrg, useSession } from '../../app/context'
 import { PrincipalRoles, useRoleDefinitions, type Assignment } from '../../components/access/Access'
-import { Check, FormError, MultiLookup, SelectField, TextInput, useForm } from '../../components/form'
+import { Check, FormError, Lookup, MultiLookup, SelectField, TextInput, useForm } from '../../components/form'
 import { Icon } from '../../components/icons'
 import { Dialog, useConfirm, useToast } from '../../components/overlay'
 import { DataTable } from '../../components/table'
@@ -84,6 +84,7 @@ interface UserValues extends Record<string, unknown> {
   confirm: string
   kind: 'normal' | 'auditor' | 'superuser'
   is_active: boolean
+  organization: Ref | null
 }
 
 function UserForm({ user }: { user?: User }) {
@@ -99,7 +100,12 @@ function UserForm({ user }: { user?: User }) {
     confirm: '',
     kind: user?.is_superuser ? 'superuser' : user?.is_system_auditor ? 'auditor' : 'normal',
     is_active: user?.is_active ?? true,
+    organization: null,
   })
+  // As in AWX, organization admins create users in an organization they
+  // administer (the user joins it); superusers may leave it empty.
+  const needsOrg = !user && !me.is_superuser
+  usePreselectOrg(f.values.organization, (o) => f.set('organization', o), needsOrg)
   const [error, setError] = useState<unknown>(null)
   const [busy, setBusy] = useState(false)
   const mismatch = f.values.password !== f.values.confirm
@@ -119,7 +125,10 @@ function UserForm({ user }: { user?: User }) {
     }
     if (f.values.password) body.password = f.values.password
     try {
-      const saved = user ? await api.patch<User>(`users/${user.id}/`, body) : await api.post<User>('users/', body)
+      const org = f.values.organization
+      const saved = user
+        ? await api.patch<User>(`users/${user.id}/`, body)
+        : await api.post<User>(org ? `organizations/${org.id}/users/` : 'users/', body)
       invalidate('users', 'me')
       nav(`/users/${saved.id}`)
     } catch (e) {
@@ -158,6 +167,17 @@ function UserForm({ user }: { user?: User }) {
             <TextInput label="Confirm password" type="password" optional={!!user} value={f.values.confirm} onChange={(v) => f.set('confirm', v)} error={mismatch && f.values.confirm ? 'The passwords differ.' : undefined} />
           </>
         )}
+        {!user && (
+          <Lookup
+            label="Organization"
+            optional={me.is_superuser}
+            resource="organizations/"
+            params={me.is_superuser ? undefined : { role_level: 'admin_role' }}
+            value={f.values.organization}
+            onChange={(v) => f.set('organization', v)}
+            help="The user becomes a member of it."
+          />
+        )}
         {me.is_superuser && (
           <SelectField
             label="Type"
@@ -175,7 +195,7 @@ function UserForm({ user }: { user?: User }) {
       {external && <div className="notice">This account signs in through single sign-on; its username and password are managed by the identity provider.</div>}
       <FormError error={error} />
       <div className="form-actions">
-        <button className="btn primary" disabled={busy || !f.values.username.trim() || mismatch || (!user && !f.values.password && !external)}>
+        <button className="btn primary" disabled={busy || !f.values.username.trim() || mismatch || (!user && !f.values.password && !external) || (needsOrg && !f.values.organization)}>
           {busy ? 'Saving…' : user ? 'Save changes' : 'Create user'}
         </button>
         <button type="button" className="btn ghost" onClick={() => nav(user ? `/users/${user.id}` : '/users')}>
