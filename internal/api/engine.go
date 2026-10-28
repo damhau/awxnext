@@ -81,6 +81,10 @@ func (res *Resource) orgField() *Field {
 	return nil
 }
 
+// ViewPredicate is the SQL condition (alias t) on rows of res visible to the
+// principal, for queries that aggregate rather than list.
+func ViewPredicate(c *Ctx, res *Resource, arg ArgFunc) string { return viewPredicate(c, res, arg) }
+
 // viewPredicate restricts rows to those visible to the principal.
 func viewPredicate(c *Ctx, res *Resource, arg ArgFunc) string {
 	if res.View != nil {

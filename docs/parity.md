@@ -24,9 +24,9 @@ The gaps fall in four groups:
    setting now has an effect, or says "No effect in awxnext" and why in its
    help (analytics, subscriptions, OAuth2, custom virtualenvs, and
    `LOG_AGGREGATOR_*` until M6-03). A test fails CI when a setting is neither.
-2. **API endpoints that AWX clients call**: dashboard, host metrics,
-   subscriptions/config POST, instance health checks (the bulk API is done,
-   roadmap M2-02). The `awx.awx` collection's `license` and `subscriptions`
+2. **API endpoints that AWX clients call**: host metrics,
+   subscriptions/config POST, instance health checks (the bulk API and the
+   dashboard are done, roadmap M2-02 and M2-03). The `awx.awx` collection's `license` and `subscriptions`
    modules would fail.
    Compatibility with the collection, awxkit and the Terraform provider is
    tested nightly since roadmap M2-01 ([compat/](../compat/README.md)); the
@@ -69,7 +69,7 @@ The gaps fall in four groups:
 9. Instance group policies (percentage, minimum, list) and `max_forks`; `max_concurrent_jobs` outside container groups.
 10. External log aggregation (logstash, splunk, ...) and its test endpoint.
 11. Password policy settings; activity stream entries for job launches and for role grants made through the role assignment API.
-12. Dashboard endpoints (`/dashboard/`, `/dashboard/graphs/jobs/`).
+12. ~~Dashboard endpoints (`/dashboard/`, `/dashboard/graphs/jobs/`)~~ (done, roadmap M2-03).
 13. Managed credential types for Insights and RHV (their inventory sources exist but no credential can be picked); CA file injection for the OpenShift/Kubernetes token type.
 14. Project refspec is not used when a job checks out an overridden branch, so jobs on refs only the refspec fetches (pull requests) can fail.
 
@@ -172,7 +172,7 @@ The gaps fall in four groups:
 | OPTIONS, pagination, filtering, ordering | Yes | Done | Plain filters crossing a relation match the same related row and `chain__` ones each their own, as in AWX; `role_level` needs every permission of the role. OPTIONS answers every list, sub-list and action, `/settings/` included, with DRF's `Allow` header (also on GET; HEAD answers like GET), `object_roles`, and `id` among the POST fields of attach lists, so awxkit builds the CLI's `modify`, `delete`, `grant` and `revoke` and `awx export` works. AWX's reserved query parameters (`no_truncate`, `limit`, `validate`…) are not field filters, and `type` takes a comma-separated list of types as AWX's `TypeFilterBackend` |
 | Named URLs | Yes | Partial | Common forms only |
 | Browsable HTML API | Yes | Missing | JSON only |
-| Dashboard endpoints | Yes | Missing | The UI's "Now" page replaces the dashboard |
+| Dashboard endpoints | Yes | Done | `/dashboard/` (deprecated, as in AWX) and `/dashboard/graphs/jobs/` with `period` and `job_type`, counting what the user sees. The graph counts per day for every period (AWX's `day` period matches only the jobs of the midnight hour). The UI's "Now" page replaces the dashboard |
 | Bulk API | Yes | Done | `bulk/job_launch` creates a workflow job without a template (`is_bulk_job`), one node per job; node prompts are checked against their template like a workflow node's (AWX ignores unprompted ones), and instance groups per node wait for M3-03. Limits `BULK_JOB_MAX_LAUNCH`, `BULK_HOST_MAX_CREATE`, `BULK_HOST_MAX_DELETE` (settings, jobs category) |
 | Activity stream | Yes | Partial | No entries for job launches or role assignment API grants |
 | Settings API and UI | Yes | Done | Settings with no effect say so in their help ("No effect in awxnext": analytics, subscriptions, OAuth2, custom virtualenvs, `LOG_AGGREGATOR_*` until M6-03); a test keeps it that way. Null is refused ("This field may not be null.") except for the settings AWX registers with `allow_null` (`DEFAULT_EXECUTION_ENVIRONMENT`, `LOG_AGGREGATOR_HOST`, `_PORT`, `_TYPE`) |

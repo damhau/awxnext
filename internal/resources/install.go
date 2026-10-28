@@ -13,6 +13,7 @@ import (
 func Install(app *api.App) {
 	installSettings(app)
 	installBulk(app)
+	installDashboard(app)
 	app.HandlePublic("GET", "/api/v2/ping/", ping)
 	app.Handle("GET", "/api/v2/config/", configView)
 	installScheduleRoutes(app)
