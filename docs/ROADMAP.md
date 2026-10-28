@@ -420,7 +420,8 @@ launched.
 **Labels:** feature, workflows · **Size:** M · [#30](https://github.com/damhau/awxnext/issues/30)
 
 Workflow labels are passed to the nodes that ask for labels. Nodes and
-schedules can store label and instance group prompts. Depends on M1-11, and
+schedules can store label and instance group prompts, checked like launch
+prompts (visible labels, instance groups the user may use: see M1-11), and
 the editors get the fields too.
 
 **Done when:** a scheduled workflow runs its nodes with the saved labels and
