@@ -1,0 +1,928 @@
+[
+ {
+  "error": "TemplateAssertionError: No filter named 'b64encode'.",
+  "name": "ansible filter is not jinja",
+  "template": "{{ x | b64encode }}",
+  "vars": {
+   "x": "a"
+  }
+ },
+ {
+  "name": "assume role",
+  "template": "{% if role_arn %}{{ role_arn }}{% endif %}",
+  "vars": {
+   "role_arn": "arn:aws:iam::1:role/x"
+  },
+  "want": "arn:aws:iam::1:role/x"
+ },
+ {
+  "name": "attribute and item",
+  "template": "{{ cfg.a }} {{ cfg['b'] }} [{{ cfg.missing }}]",
+  "vars": {
+   "cfg": {
+    "a": "1",
+    "b": "2"
+   }
+  },
+  "want": "1 2 []"
+ },
+ {
+  "name": "booleans",
+  "template": "verify={{ on }} {{ off }}",
+  "vars": {
+   "off": false,
+   "on": true
+  },
+  "want": "verify=True False"
+ },
+ {
+  "name": "comment",
+  "template": "a{# hidden #}b",
+  "want": "ab"
+ },
+ {
+  "name": "comparison",
+  "template": "{{ secret | length > 0 }} {{ not secret }} {{ a and b }} {{ a or b }}",
+  "vars": {
+   "a": "x",
+   "b": "",
+   "secret": "s"
+  },
+  "want": "True False  x"
+ },
+ {
+  "name": "default boolean",
+  "template": "{{ region | default('eu-west-1', true) }}",
+  "vars": {
+   "region": ""
+  },
+  "want": "eu-west-1"
+ },
+ {
+  "name": "default on empty",
+  "template": "[{{ region | default('eu-west-1') }}]",
+  "vars": {
+   "region": ""
+  },
+  "want": "[]"
+ },
+ {
+  "name": "default on undefined",
+  "template": "{{ region | default('eu-west-1') }}",
+  "want": "eu-west-1"
+ },
+ {
+  "name": "dict",
+  "template": "{{ dict(a=1)['a'] }}",
+  "want": "1"
+ },
+ {
+  "name": "elif on a string",
+  "template": "{% if env == 'prod' %}p{% elif env == 'dev' %}d{% else %}x{% endif %}",
+  "vars": {
+   "env": "dev"
+  },
+  "want": "d"
+ },
+ {
+  "name": "float",
+  "template": "{{ ratio }} {{ '%.2f' | format(ratio) }}",
+  "vars": {
+   "ratio": 0.5
+  },
+  "want": "0.5 0.50"
+ },
+ {
+  "name": "format",
+  "template": "{{ '%s:%s' | format(user, pw) }}",
+  "vars": {
+   "pw": "p",
+   "user": "u"
+  },
+  "want": "u:p"
+ },
+ {
+  "name": "if/else on a boolean",
+  "template": "{% if verify_ssl %}--verify{% else %}--insecure{% endif %}",
+  "vars": {
+   "verify_ssl": false
+  },
+  "want": "--insecure"
+ },
+ {
+  "name": "in",
+  "template": "{{ 'prod' in env }} {{ 'x' not in env }}",
+  "vars": {
+   "env": "prod-eu"
+  },
+  "want": "True True"
+ },
+ {
+  "name": "indent",
+  "template": "cert: |\n  {{ cert | indent(2) }}",
+  "vars": {
+   "cert": "line1\nline2\nline3"
+  },
+  "want": "cert: |\n  line1\n  line2\n  line3"
+ },
+ {
+  "name": "integers",
+  "template": "{{ port }} {{ port + 1 }} {{ port // 2 }} {{ port / 2 }} {{ 7 % 3 }} {{ 2 ** 10 }}",
+  "vars": {
+   "port": 8443
+  },
+  "want": "8443 8444 4221 4221.5 1 1024"
+ },
+ {
+  "name": "is defined",
+  "template": "{% if token is defined %}set{% else %}unset{% endif %}",
+  "want": "unset"
+ },
+ {
+  "name": "kubeconfig",
+  "template": "apiVersion: v1\nkind: Config\nclusters:\n- cluster:\n    server: {{ host }}\n{% if ca_cert %}    certificate-authority-data: {{ ca_cert }}\n{% else %}    insecure-skip-tls-verify: true\n{% endif %}  name: c\nusers:\n- name: u\n  user:\n    token: {{ token }}\n",
+  "vars": {
+   "ca_cert": "",
+   "host": "https://k8s:6443",
+   "token": "abc"
+  },
+  "want": "apiVersion: v1\nkind: Config\nclusters:\n- cluster:\n    server: https://k8s:6443\n    insecure-skip-tls-verify: true\n  name: c\nusers:\n- name: u\n  user:\n    token: abc"
+ },
+ {
+  "name": "list",
+  "template": "{{ items }} {{ items | join(',') }} {{ items | first }} {{ items | last }} {{ items | length }}",
+  "vars": {
+   "items": [
+    "a",
+    "b"
+   ]
+  },
+  "want": "['a', 'b'] a,b a b 2"
+ },
+ {
+  "name": "loop index",
+  "template": "{% for i in items %}{{ loop.index }}={{ i }} {% endfor %}",
+  "vars": {
+   "items": [
+    "x",
+    "y"
+   ]
+  },
+  "want": "1=x 2=y "
+ },
+ {
+  "name": "loop over split",
+  "template": "{% for h in hosts.split(',') %}{{ h | trim }}{% if not loop.last %};{% endif %}{% endfor %}",
+  "vars": {
+   "hosts": "a, b ,c"
+  },
+  "want": "a;b;c"
+ },
+ {
+  "name": "managed aws env.AWS_ACCESS_KEY_ID",
+  "template": "{{username}}",
+  "vars": {
+   "password": "p@ss\"word'<&>",
+   "security_token": "FwoGZXIvYXdzE",
+   "username": "svc-ansible"
+  },
+  "want": "svc-ansible"
+ },
+ {
+  "name": "managed aws env.AWS_SECRET_ACCESS_KEY",
+  "template": "{{password}}",
+  "vars": {
+   "password": "p@ss\"word'<&>",
+   "security_token": "FwoGZXIvYXdzE",
+   "username": "svc-ansible"
+  },
+  "want": "p@ss\"word'<&>"
+ },
+ {
+  "name": "managed aws env.AWS_SECURITY_TOKEN",
+  "template": "{{security_token}}",
+  "vars": {
+   "password": "p@ss\"word'<&>",
+   "security_token": "FwoGZXIvYXdzE",
+   "username": "svc-ansible"
+  },
+  "want": "FwoGZXIvYXdzE"
+ },
+ {
+  "name": "managed aws env.AWS_SESSION_TOKEN",
+  "template": "{{security_token}}",
+  "vars": {
+   "password": "p@ss\"word'<&>",
+   "security_token": "FwoGZXIvYXdzE",
+   "username": "svc-ansible"
+  },
+  "want": "FwoGZXIvYXdzE"
+ },
+ {
+  "name": "managed azure_rm env.AZURE_AD_USER",
+  "template": "{{username}}",
+  "vars": {
+   "client": "app-id",
+   "cloud_environment": "AzureCloud",
+   "password": "p@ss\"word'<&>",
+   "secret": "s3cr3t",
+   "subscription": "0000-1111",
+   "tenant": "tenant-id",
+   "username": "svc-ansible"
+  },
+  "want": "svc-ansible"
+ },
+ {
+  "name": "managed azure_rm env.AZURE_CLIENT_ID",
+  "template": "{{client}}",
+  "vars": {
+   "client": "app-id",
+   "cloud_environment": "AzureCloud",
+   "password": "p@ss\"word'<&>",
+   "secret": "s3cr3t",
+   "subscription": "0000-1111",
+   "tenant": "tenant-id",
+   "username": "svc-ansible"
+  },
+  "want": "app-id"
+ },
+ {
+  "name": "managed azure_rm env.AZURE_CLOUD_ENVIRONMENT",
+  "template": "{{cloud_environment}}",
+  "vars": {
+   "client": "app-id",
+   "cloud_environment": "AzureCloud",
+   "password": "p@ss\"word'<&>",
+   "secret": "s3cr3t",
+   "subscription": "0000-1111",
+   "tenant": "tenant-id",
+   "username": "svc-ansible"
+  },
+  "want": "AzureCloud"
+ },
+ {
+  "name": "managed azure_rm env.AZURE_PASSWORD",
+  "template": "{{password}}",
+  "vars": {
+   "client": "app-id",
+   "cloud_environment": "AzureCloud",
+   "password": "p@ss\"word'<&>",
+   "secret": "s3cr3t",
+   "subscription": "0000-1111",
+   "tenant": "tenant-id",
+   "username": "svc-ansible"
+  },
+  "want": "p@ss\"word'<&>"
+ },
+ {
+  "name": "managed azure_rm env.AZURE_SECRET",
+  "template": "{{secret}}",
+  "vars": {
+   "client": "app-id",
+   "cloud_environment": "AzureCloud",
+   "password": "p@ss\"word'<&>",
+   "secret": "s3cr3t",
+   "subscription": "0000-1111",
+   "tenant": "tenant-id",
+   "username": "svc-ansible"
+  },
+  "want": "s3cr3t"
+ },
+ {
+  "name": "managed azure_rm env.AZURE_SUBSCRIPTION_ID",
+  "template": "{{subscription}}",
+  "vars": {
+   "client": "app-id",
+   "cloud_environment": "AzureCloud",
+   "password": "p@ss\"word'<&>",
+   "secret": "s3cr3t",
+   "subscription": "0000-1111",
+   "tenant": "tenant-id",
+   "username": "svc-ansible"
+  },
+  "want": "0000-1111"
+ },
+ {
+  "name": "managed azure_rm env.AZURE_TENANT",
+  "template": "{{tenant}}",
+  "vars": {
+   "client": "app-id",
+   "cloud_environment": "AzureCloud",
+   "password": "p@ss\"word'<&>",
+   "secret": "s3cr3t",
+   "subscription": "0000-1111",
+   "tenant": "tenant-id",
+   "username": "svc-ansible"
+  },
+  "want": "tenant-id"
+ },
+ {
+  "name": "managed controller env.CONTROLLER_HOST",
+  "template": "{{host}}",
+  "vars": {
+   "host": "https://cloud.example.com:5000/v3",
+   "oauth_token": "tok",
+   "password": "p@ss\"word'<&>",
+   "username": "svc-ansible",
+   "verify_ssl": true
+  },
+  "want": "https://cloud.example.com:5000/v3"
+ },
+ {
+  "name": "managed controller env.CONTROLLER_OAUTH_TOKEN",
+  "template": "{{oauth_token}}",
+  "vars": {
+   "host": "https://cloud.example.com:5000/v3",
+   "oauth_token": "tok",
+   "password": "p@ss\"word'<&>",
+   "username": "svc-ansible",
+   "verify_ssl": true
+  },
+  "want": "tok"
+ },
+ {
+  "name": "managed controller env.CONTROLLER_PASSWORD",
+  "template": "{{password}}",
+  "vars": {
+   "host": "https://cloud.example.com:5000/v3",
+   "oauth_token": "tok",
+   "password": "p@ss\"word'<&>",
+   "username": "svc-ansible",
+   "verify_ssl": true
+  },
+  "want": "p@ss\"word'<&>"
+ },
+ {
+  "name": "managed controller env.CONTROLLER_USERNAME",
+  "template": "{{username}}",
+  "vars": {
+   "host": "https://cloud.example.com:5000/v3",
+   "oauth_token": "tok",
+   "password": "p@ss\"word'<&>",
+   "username": "svc-ansible",
+   "verify_ssl": true
+  },
+  "want": "svc-ansible"
+ },
+ {
+  "name": "managed controller env.CONTROLLER_VERIFY_SSL",
+  "template": "{{verify_ssl}}",
+  "vars": {
+   "host": "https://cloud.example.com:5000/v3",
+   "oauth_token": "tok",
+   "password": "p@ss\"word'<&>",
+   "username": "svc-ansible",
+   "verify_ssl": true
+  },
+  "want": "True"
+ },
+ {
+  "name": "managed controller env.TOWER_HOST",
+  "template": "{{host}}",
+  "vars": {
+   "host": "https://cloud.example.com:5000/v3",
+   "oauth_token": "tok",
+   "password": "p@ss\"word'<&>",
+   "username": "svc-ansible",
+   "verify_ssl": true
+  },
+  "want": "https://cloud.example.com:5000/v3"
+ },
+ {
+  "name": "managed controller env.TOWER_OAUTH_TOKEN",
+  "template": "{{oauth_token}}",
+  "vars": {
+   "host": "https://cloud.example.com:5000/v3",
+   "oauth_token": "tok",
+   "password": "p@ss\"word'<&>",
+   "username": "svc-ansible",
+   "verify_ssl": true
+  },
+  "want": "tok"
+ },
+ {
+  "name": "managed controller env.TOWER_PASSWORD",
+  "template": "{{password}}",
+  "vars": {
+   "host": "https://cloud.example.com:5000/v3",
+   "oauth_token": "tok",
+   "password": "p@ss\"word'<&>",
+   "username": "svc-ansible",
+   "verify_ssl": true
+  },
+  "want": "p@ss\"word'<&>"
+ },
+ {
+  "name": "managed controller env.TOWER_USERNAME",
+  "template": "{{username}}",
+  "vars": {
+   "host": "https://cloud.example.com:5000/v3",
+   "oauth_token": "tok",
+   "password": "p@ss\"word'<&>",
+   "username": "svc-ansible",
+   "verify_ssl": true
+  },
+  "want": "svc-ansible"
+ },
+ {
+  "name": "managed controller env.TOWER_VERIFY_SSL",
+  "template": "{{verify_ssl}}",
+  "vars": {
+   "host": "https://cloud.example.com:5000/v3",
+   "oauth_token": "tok",
+   "password": "p@ss\"word'<&>",
+   "username": "svc-ansible",
+   "verify_ssl": true
+  },
+  "want": "True"
+ },
+ {
+  "files": {
+   "gce_creds": "/runner/env/awx_cred_1_gce_creds"
+  },
+  "name": "managed gce env.GCE_CREDENTIALS_FILE_PATH",
+  "template": "{{tower.filename.gce_creds}}",
+  "vars": {
+   "project": "infra",
+   "ssh_key_data": "-----BEGIN PRIVATE KEY-----\nMIIEvQ\"IBADAN\n-----END PRIVATE KEY-----\n",
+   "username": "svc-ansible"
+  },
+  "want": "/runner/env/awx_cred_1_gce_creds"
+ },
+ {
+  "files": {
+   "gce_creds": "/runner/env/awx_cred_1_gce_creds"
+  },
+  "name": "managed gce env.GCE_EMAIL",
+  "template": "{{username}}",
+  "vars": {
+   "project": "infra",
+   "ssh_key_data": "-----BEGIN PRIVATE KEY-----\nMIIEvQ\"IBADAN\n-----END PRIVATE KEY-----\n",
+   "username": "svc-ansible"
+  },
+  "want": "svc-ansible"
+ },
+ {
+  "files": {
+   "gce_creds": "/runner/env/awx_cred_1_gce_creds"
+  },
+  "name": "managed gce env.GCE_PROJECT",
+  "template": "{{project}}",
+  "vars": {
+   "project": "infra",
+   "ssh_key_data": "-----BEGIN PRIVATE KEY-----\nMIIEvQ\"IBADAN\n-----END PRIVATE KEY-----\n",
+   "username": "svc-ansible"
+  },
+  "want": "infra"
+ },
+ {
+  "files": {
+   "gce_creds": "/runner/env/awx_cred_1_gce_creds"
+  },
+  "name": "managed gce env.GCP_AUTH_KIND",
+  "template": "serviceaccount",
+  "vars": {
+   "project": "infra",
+   "ssh_key_data": "-----BEGIN PRIVATE KEY-----\nMIIEvQ\"IBADAN\n-----END PRIVATE KEY-----\n",
+   "username": "svc-ansible"
+  },
+  "want": "serviceaccount"
+ },
+ {
+  "files": {
+   "gce_creds": "/runner/env/awx_cred_1_gce_creds"
+  },
+  "name": "managed gce env.GCP_ENV_TYPE",
+  "template": "tower",
+  "vars": {
+   "project": "infra",
+   "ssh_key_data": "-----BEGIN PRIVATE KEY-----\nMIIEvQ\"IBADAN\n-----END PRIVATE KEY-----\n",
+   "username": "svc-ansible"
+  },
+  "want": "tower"
+ },
+ {
+  "files": {
+   "gce_creds": "/runner/env/awx_cred_1_gce_creds"
+  },
+  "name": "managed gce env.GCP_PROJECT",
+  "template": "{{project}}",
+  "vars": {
+   "project": "infra",
+   "ssh_key_data": "-----BEGIN PRIVATE KEY-----\nMIIEvQ\"IBADAN\n-----END PRIVATE KEY-----\n",
+   "username": "svc-ansible"
+  },
+  "want": "infra"
+ },
+ {
+  "files": {
+   "gce_creds": "/runner/env/awx_cred_1_gce_creds"
+  },
+  "name": "managed gce env.GCP_SERVICE_ACCOUNT_FILE",
+  "template": "{{tower.filename.gce_creds}}",
+  "vars": {
+   "project": "infra",
+   "ssh_key_data": "-----BEGIN PRIVATE KEY-----\nMIIEvQ\"IBADAN\n-----END PRIVATE KEY-----\n",
+   "username": "svc-ansible"
+  },
+  "want": "/runner/env/awx_cred_1_gce_creds"
+ },
+ {
+  "files": {
+   "gce_creds": "/runner/env/awx_cred_1_gce_creds"
+  },
+  "name": "managed gce file.template.gce_creds",
+  "template": "{\"type\": \"service_account\", \"private_key\": {{ssh_key_data|tojson}}, \"client_email\": {{username|tojson}}, \"project_id\": {{project|tojson}}, \"token_uri\": \"https://oauth2.googleapis.com/token\"}",
+  "vars": {
+   "project": "infra",
+   "ssh_key_data": "-----BEGIN PRIVATE KEY-----\nMIIEvQ\"IBADAN\n-----END PRIVATE KEY-----\n",
+   "username": "svc-ansible"
+  },
+  "want": "{\"type\": \"service_account\", \"private_key\": \"-----BEGIN PRIVATE KEY-----\\nMIIEvQ\\\"IBADAN\\n-----END PRIVATE KEY-----\\n\", \"client_email\": \"svc-ansible\", \"project_id\": \"infra\", \"token_uri\": \"https://oauth2.googleapis.com/token\"}"
+ },
+ {
+  "name": "managed kubernetes_bearer_token env.K8S_AUTH_API_KEY",
+  "template": "{{bearer_token}}",
+  "vars": {
+   "bearer_token": "eyJhbGci",
+   "host": "https://cloud.example.com:5000/v3",
+   "verify_ssl": true
+  },
+  "want": "eyJhbGci"
+ },
+ {
+  "name": "managed kubernetes_bearer_token env.K8S_AUTH_HOST",
+  "template": "{{host}}",
+  "vars": {
+   "bearer_token": "eyJhbGci",
+   "host": "https://cloud.example.com:5000/v3",
+   "verify_ssl": true
+  },
+  "want": "https://cloud.example.com:5000/v3"
+ },
+ {
+  "name": "managed kubernetes_bearer_token env.K8S_AUTH_VERIFY_SSL",
+  "template": "{{verify_ssl}}",
+  "vars": {
+   "bearer_token": "eyJhbGci",
+   "host": "https://cloud.example.com:5000/v3",
+   "verify_ssl": true
+  },
+  "want": "True"
+ },
+ {
+  "files": {
+   "clouds": "/runner/env/awx_cred_1_clouds"
+  },
+  "name": "managed openstack env.OS_CLIENT_CONFIG_FILE",
+  "template": "{{tower.filename.clouds}}",
+  "vars": {
+   "domain": "corp",
+   "host": "https://cloud.example.com:5000/v3",
+   "password": "p@ss\"word'<&>",
+   "project": "infra",
+   "project_domain_name": "Default",
+   "region": "RegionOne",
+   "username": "svc-ansible",
+   "verify_ssl": true
+  },
+  "want": "/runner/env/awx_cred_1_clouds"
+ },
+ {
+  "files": {
+   "clouds": "/runner/env/awx_cred_1_clouds"
+  },
+  "name": "managed openstack file.template.clouds",
+  "template": "clouds:\n  devstack:\n    auth:\n      auth_url: {{host}}\n      username: {{username}}\n      password: {{password}}\n      project_name: {{project}}\n      project_domain_name: {{project_domain_name}}\n      domain_name: {{domain}}\n    region_name: {{region}}\n    verify: {{verify_ssl}}\n",
+  "vars": {
+   "domain": "corp",
+   "host": "https://cloud.example.com:5000/v3",
+   "password": "p@ss\"word'<&>",
+   "project": "infra",
+   "project_domain_name": "Default",
+   "region": "RegionOne",
+   "username": "svc-ansible",
+   "verify_ssl": true
+  },
+  "want": "clouds:\n  devstack:\n    auth:\n      auth_url: https://cloud.example.com:5000/v3\n      username: svc-ansible\n      password: p@ss\"word'<&>\n      project_name: infra\n      project_domain_name: Default\n      domain_name: corp\n    region_name: RegionOne\n    verify: True"
+ },
+ {
+  "name": "managed satellite6 env.FOREMAN_PASSWORD",
+  "template": "{{password}}",
+  "vars": {
+   "host": "https://cloud.example.com:5000/v3",
+   "password": "p@ss\"word'<&>",
+   "username": "svc-ansible"
+  },
+  "want": "p@ss\"word'<&>"
+ },
+ {
+  "name": "managed satellite6 env.FOREMAN_SERVER",
+  "template": "{{host}}",
+  "vars": {
+   "host": "https://cloud.example.com:5000/v3",
+   "password": "p@ss\"word'<&>",
+   "username": "svc-ansible"
+  },
+  "want": "https://cloud.example.com:5000/v3"
+ },
+ {
+  "name": "managed satellite6 env.FOREMAN_USER",
+  "template": "{{username}}",
+  "vars": {
+   "host": "https://cloud.example.com:5000/v3",
+   "password": "p@ss\"word'<&>",
+   "username": "svc-ansible"
+  },
+  "want": "svc-ansible"
+ },
+ {
+  "files": {
+   "backend": "/runner/env/awx_cred_1_backend",
+   "gce_credentials": "/runner/env/awx_cred_1_gce_credentials"
+  },
+  "name": "managed terraform env.GOOGLE_BACKEND_CREDENTIALS",
+  "template": "{{tower.filename.gce_credentials}}",
+  "vars": {
+   "configuration": "bucket = \"tfstate\"\nprefix = \"prod\"\n",
+   "gce_credentials": "{\"type\": \"service_account\"}"
+  },
+  "want": "/runner/env/awx_cred_1_gce_credentials"
+ },
+ {
+  "files": {
+   "backend": "/runner/env/awx_cred_1_backend",
+   "gce_credentials": "/runner/env/awx_cred_1_gce_credentials"
+  },
+  "name": "managed terraform env.TF_BACKEND_CONFIG_FILE",
+  "template": "{{tower.filename.backend}}",
+  "vars": {
+   "configuration": "bucket = \"tfstate\"\nprefix = \"prod\"\n",
+   "gce_credentials": "{\"type\": \"service_account\"}"
+  },
+  "want": "/runner/env/awx_cred_1_backend"
+ },
+ {
+  "files": {
+   "backend": "/runner/env/awx_cred_1_backend",
+   "gce_credentials": "/runner/env/awx_cred_1_gce_credentials"
+  },
+  "name": "managed terraform file.template.backend",
+  "template": "{{configuration}}",
+  "vars": {
+   "configuration": "bucket = \"tfstate\"\nprefix = \"prod\"\n",
+   "gce_credentials": "{\"type\": \"service_account\"}"
+  },
+  "want": "bucket = \"tfstate\"\nprefix = \"prod\"\n"
+ },
+ {
+  "files": {
+   "backend": "/runner/env/awx_cred_1_backend",
+   "gce_credentials": "/runner/env/awx_cred_1_gce_credentials"
+  },
+  "name": "managed terraform file.template.gce_credentials",
+  "template": "{{gce_credentials}}",
+  "vars": {
+   "configuration": "bucket = \"tfstate\"\nprefix = \"prod\"\n",
+   "gce_credentials": "{\"type\": \"service_account\"}"
+  },
+  "want": "{\"type\": \"service_account\"}"
+ },
+ {
+  "name": "managed vmware env.VMWARE_HOST",
+  "template": "{{host}}",
+  "vars": {
+   "host": "https://cloud.example.com:5000/v3",
+   "password": "p@ss\"word'<&>",
+   "username": "svc-ansible"
+  },
+  "want": "https://cloud.example.com:5000/v3"
+ },
+ {
+  "name": "managed vmware env.VMWARE_PASSWORD",
+  "template": "{{password}}",
+  "vars": {
+   "host": "https://cloud.example.com:5000/v3",
+   "password": "p@ss\"word'<&>",
+   "username": "svc-ansible"
+  },
+  "want": "p@ss\"word'<&>"
+ },
+ {
+  "name": "managed vmware env.VMWARE_USER",
+  "template": "{{username}}",
+  "vars": {
+   "host": "https://cloud.example.com:5000/v3",
+   "password": "p@ss\"word'<&>",
+   "username": "svc-ansible"
+  },
+  "want": "svc-ansible"
+ },
+ {
+  "name": "managed vmware env.VMWARE_VALIDATE_CERTS",
+  "template": "False",
+  "vars": {
+   "host": "https://cloud.example.com:5000/v3",
+   "password": "p@ss\"word'<&>",
+   "username": "svc-ansible"
+  },
+  "want": "False"
+ },
+ {
+  "name": "map",
+  "template": "{{ items | map('upper') | join(' ') }}",
+  "vars": {
+   "items": [
+    "a",
+    "b"
+   ]
+  },
+  "want": "A B"
+ },
+ {
+  "files": {
+   "cfg": "/runner/env/awx_cred_1_cfg"
+  },
+  "name": "named file",
+  "template": "{{ awx.filename.cfg }}",
+  "want": "/runner/env/awx_cred_1_cfg"
+ },
+ {
+  "name": "none",
+  "template": "{{ nothing }} {{ none }} {{ true }}",
+  "vars": {
+   "nothing": null
+  },
+  "want": "None None True"
+ },
+ {
+  "name": "range",
+  "template": "{{ range(3) | list }} {% for i in range(1, 7, 2) %}{{ i }}{% endfor %}",
+  "want": "[0, 1, 2] 135"
+ },
+ {
+  "error": "OverflowError: Range too big. The sandbox blocks ranges larger than MAX_RANGE (100000).",
+  "name": "range too big",
+  "template": "{{ range(1000000) | length }}"
+ },
+ {
+  "name": "raw",
+  "template": "{% raw %}{{ not_rendered }}{% endraw %}",
+  "want": "{{ not_rendered }}"
+ },
+ {
+  "name": "repeat",
+  "template": "{{ 'x' * 3 }}",
+  "want": "xxx"
+ },
+ {
+  "name": "replace and upper",
+  "template": "{{ name | replace('-', '_') | upper }}",
+  "vars": {
+   "name": "my-app"
+  },
+  "want": "MY_APP"
+ },
+ {
+  "name": "set and concatenate",
+  "template": "{% set url = host ~ ':' ~ port %}{{ url }}",
+  "vars": {
+   "host": "h",
+   "port": 22
+  },
+  "want": "h:22"
+ },
+ {
+  "name": "sort and unique",
+  "template": "{{ items | sort | join }} {{ items | unique | list | length }}",
+  "vars": {
+   "items": [
+    "b",
+    "a",
+    "b"
+   ]
+  },
+  "want": "abb 2"
+ },
+ {
+  "name": "string methods",
+  "template": "{{ host.startswith('https') }} {{ host.rstrip('/') }} {{ host.upper() }}",
+  "vars": {
+   "host": "https://x/"
+  },
+  "want": "True https://x HTTPS://X/"
+ },
+ {
+  "name": "ternary",
+  "template": "{{ 'https' if tls else 'http' }}://{{ host }}",
+  "vars": {
+   "host": "h",
+   "tls": true
+  },
+  "want": "https://h"
+ },
+ {
+  "name": "title and capitalize",
+  "template": "{{ s | title }} {{ s | capitalize }}",
+  "vars": {
+   "s": "hello world"
+  },
+  "want": "Hello World Hello world"
+ },
+ {
+  "name": "tojson indent",
+  "template": "{{ v | tojson(indent=2) }}",
+  "vars": {
+   "v": {
+    "a": {
+     "c": true
+    },
+    "b": [
+     1,
+     "x"
+    ]
+   }
+  },
+  "want": "{\n  \"a\": {\n    \"c\": true\n  },\n  \"b\": [\n    1,\n    \"x\"\n  ]\n}"
+ },
+ {
+  "name": "tojson non-ascii and numbers",
+  "template": "{{ v | tojson }}",
+  "vars": {
+   "v": {
+    "ctl": "\u0001",
+    "f": 2.5,
+    "list": [],
+    "n": 3,
+    "name": "Zürich ☃ 😀",
+    "obj": {}
+   }
+  },
+  "want": "{\"ctl\": \"\\u0001\\u007f\", \"f\": 2.5, \"list\": [], \"n\": 3, \"name\": \"Z\\u00fcrich \\u2603 \\ud83d\\ude00\", \"obj\": {}}"
+ },
+ {
+  "name": "tojson object",
+  "template": "{{ cfg | tojson }}",
+  "vars": {
+   "cfg": {
+    "a": [
+     true,
+     null,
+     "x"
+    ],
+    "b": 1
+   }
+  },
+  "want": "{\"a\": [true, null, \"x\"], \"b\": 1}"
+ },
+ {
+  "name": "tojson range",
+  "template": "{{ range(3) | list | tojson }}",
+  "want": "[0, 1, 2]"
+ },
+ {
+  "name": "tojson string",
+  "template": "{{ key | tojson }}",
+  "vars": {
+   "key": "line1\nline\"2 <b>&'"
+  },
+  "want": "\"line1\\nline\\\"2 \\u003cb\\u003e\\u0026\\u0027\""
+ },
+ {
+  "name": "trailing newline",
+  "template": "{{ x }}\n",
+  "vars": {
+   "x": "v"
+  },
+  "want": "v"
+ },
+ {
+  "error": "TemplateSyntaxError: Unexpected end of template. Jinja was looking for the following tags: 'elif' or 'else' or 'endif'. The innermost block that needs to be closed is 'if'.",
+  "name": "unclosed block",
+  "template": "{% if x %}a"
+ },
+ {
+  "error": "TemplateAssertionError: No filter named 'shout'.",
+  "name": "unknown filter",
+  "template": "{{ x | shout }}",
+  "vars": {
+   "x": "a"
+  }
+ },
+ {
+  "files": {
+   "": "/runner/env/awx_cred_1"
+  },
+  "name": "unnamed file",
+  "template": "{{ tower.filename }} {{ awx.filename }}",
+  "want": "/runner/env/awx_cred_1 /runner/env/awx_cred_1"
+ },
+ {
+  "name": "whitespace control",
+  "template": "a\n{%- if x %}\n  b\n{%- endif %}\nc",
+  "vars": {
+   "x": true
+  },
+  "want": "a\n  b\nc"
+ }
+]

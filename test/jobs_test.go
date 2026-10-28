@@ -336,13 +336,14 @@ func TestJobVaultAndCustomCredentials(t *testing.T) {
 	job = f.launch(t, a, jt, map[string]any{"credential_passwords": map[string]any{"vault_password.prod": "vaultpass"}})
 	mustStatus(t, f, job, "successful")
 
-	// Custom credential type: env and file injectors.
+	// Custom credential type: env and file injectors, in Jinja2.
 	ct := must(t, a.post("credential_types/", map[string]any{"name": uniq("mycloud"), "kind": "cloud",
-		"inputs": map[string]any{"fields": []any{map[string]any{"id": "token", "label": "Token", "secret": true}, map[string]any{"id": "region", "label": "Region"}}},
-		"injectors": map[string]any{"env": map[string]any{"MYCLOUD_TOKEN": "{{ token }}", "MYCLOUD_CONFIG": "{{ tower.filename.cfg }}"},
-			"file": map[string]any{"template.cfg": "{{ region }}"}}}), 201).id()
+		"inputs": map[string]any{"fields": []any{map[string]any{"id": "token", "label": "Token", "secret": true}, map[string]any{"id": "region", "label": "Region"},
+			map[string]any{"id": "zone", "label": "Zone"}}},
+		"injectors": map[string]any{"env": map[string]any{"MYCLOUD_TOKEN": "{{ token if token else 'none' }}", "MYCLOUD_CONFIG": "{{ tower.filename.cfg }}"},
+			"file": map[string]any{"template.cfg": "{% set parts = region.split('-') %}{% for p in parts %}{{ p | lower }}{% if not loop.last %}-{% endif %}{% endfor %}{{ zone | default('') }}"}}}), 201).id()
 	cc := must(t, a.post("credentials/", map[string]any{"name": uniq("c"), "organization": f.org, "credential_type": ct,
-		"inputs": map[string]any{"token": "abcdefghij", "region": "eu-west"}}), 201).id()
+		"inputs": map[string]any{"token": "abcdefghij", "region": "EU-west"}}), 201).id()
 	ejt := f.template(t, "env.yml", nil)
 	must(t, a.post(fmt.Sprintf("job_templates/%d/credentials/", ejt), map[string]any{"id": cc}), 204)
 	job = f.launch(t, a, ejt, nil)

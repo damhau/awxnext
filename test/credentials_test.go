@@ -53,6 +53,17 @@ func TestCustomCredentialType(t *testing.T) {
 			"injectors": map[string]any{"env": map[string]any{"PATH": "{{tok}}"}}},
 		{"name": uniq("ct"), "kind": "cloud", "inputs": map[string]any{"fields": []any{map[string]any{"id": "tok", "label": "T"}}},
 			"injectors": map[string]any{"env": map[string]any{"MY_TOKEN": "{{ nope }}"}}},
+		// Jinja2 checked as AWX does: filters, syntax, names in blocks, nested extra_vars, file syntax.
+		{"name": uniq("ct"), "kind": "cloud", "inputs": map[string]any{"fields": []any{map[string]any{"id": "tok", "label": "T"}}},
+			"injectors": map[string]any{"env": map[string]any{"MY_TOKEN": "{{ tok | b64encode }}"}}},
+		{"name": uniq("ct"), "kind": "cloud", "inputs": map[string]any{"fields": []any{map[string]any{"id": "tok", "label": "T"}}},
+			"injectors": map[string]any{"env": map[string]any{"MY_TOKEN": "{% if tok %}x"}}},
+		{"name": uniq("ct"), "kind": "cloud", "inputs": map[string]any{"fields": []any{map[string]any{"id": "tok", "label": "T"}}},
+			"injectors": map[string]any{"env": map[string]any{"MY_TOKEN": "{% if nope %}x{% endif %}"}}},
+		{"name": uniq("ct"), "kind": "cloud", "inputs": map[string]any{"fields": []any{map[string]any{"id": "tok", "label": "T"}}},
+			"injectors": map[string]any{"extra_vars": map[string]any{"cfg": map[string]any{"token": "{{ nope }}"}}}},
+		{"name": uniq("ct"), "kind": "cloud", "inputs": map[string]any{"fields": []any{map[string]any{"id": "tok", "label": "T"}}},
+			"injectors": map[string]any{"file": map[string]any{"template": "{{ tok }}", "template.other": "{{ tok }}"}}},
 	}
 	for _, b := range bad {
 		must(t, a.post("credential_types/", b), 400)
@@ -68,6 +79,15 @@ func TestCustomCredentialType(t *testing.T) {
 			"file": map[string]any{"template.cfg": "region={{ region | default('eu') }}"},
 		},
 	}), 201).id()
+	// Conditionals, loops, set and filters are accepted.
+	must(t, a.post("credential_types/", map[string]any{
+		"name": uniq("ct"), "kind": "cloud",
+		"inputs": map[string]any{"fields": []any{map[string]any{"id": "hosts", "label": "Hosts"}, map[string]any{"id": "tls", "label": "TLS", "type": "boolean"}}},
+		"injectors": map[string]any{
+			"env":        map[string]any{"MY_URLS": "{% set s = 'https' if tls else 'http' %}{% for h in hosts.split(',') %}{{ s }}://{{ h | trim }}{{ ',' if not loop.last }}{% endfor %}"},
+			"extra_vars": map[string]any{"my": map[string]any{"{{ 'secure' if tls else 'plain' }}": []any{"{{ hosts | upper }}"}}},
+		},
+	}), 201)
 	org := newOrg(t, a)
 	must(t, a.post("credentials/", map[string]any{"name": "c", "organization": org, "credential_type": ct, "inputs": map[string]any{"region": "mars"}}), 400)
 	cred := must(t, a.post("credentials/", map[string]any{"name": "c", "organization": org, "credential_type": ct, "inputs": map[string]any{"api_token": "t0p", "region": "eu"}}), 201).id()

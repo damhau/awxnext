@@ -55,7 +55,7 @@ The gaps fall in four groups:
 
 1. ~~Implement or remove the settings that do nothing~~ (done, roadmap M1-01 to M1-07).
 2. ~~Notifications tab on templates, projects, inventory sources and organizations~~ (done, roadmap M1-08).
-3. Custom credential types use only a Jinja subset in injectors (`{{ var }}`, a few filters): types imported from AWX that use `{% if %}` or other filters fail at run time.
+3. ~~Custom credential types use only a Jinja subset in injectors~~ (done, roadmap M1-09).
 4. ~~Relaunch from the UI never asks for credential passwords~~ (done, roadmap M1-10).
 5. A test harness running the `awx.awx` collection and awxkit against awxnext (phase 7), since compatibility is the main promise.
 
@@ -122,7 +122,7 @@ The gaps fall in four groups:
 | Bulk host create/delete | Yes | Missing | |
 | Host metrics | Yes | Partial | Collected per job and cleaned up; no API or UI |
 | Managed credential types | Yes | Partial | All but Insights and RHV; Kubernetes CA not injected |
-| Custom credential types | Yes | Partial | Injectors support a Jinja subset only |
+| Custom credential types | Yes | Done | Injectors are Jinja2 (gonja), sandboxed like AWX and checked when saved; `2 ** n` gives a float and `None` prints empty |
 | Lookups: HashiCorp Vault KV and SSH, Azure Key Vault | Yes | Done | Vault TLS cert auth missing; Azure falls back to managed identity |
 | Lookups: CyberArk, Conjur, Thycotic, AWS Secrets Manager, Centrify | Yes | Later | |
 | Credentials: owners, input sources, test, copy, ASK | Yes | Done | |

@@ -154,6 +154,13 @@ func ValidateSchema(inputs, injectors any) map[string][]string {
 		}
 		files[strings.TrimPrefix(strings.TrimPrefix(k, "template"), ".")] = true
 	}
+	if files[""] && len(files) > 1 {
+		add("injectors", "Must use multi-file syntax when injecting multiple files")
+	}
+	fieldIDs := make([]string, 0, len(s.Fields))
+	for _, f := range s.Fields {
+		fieldIDs = append(fieldIDs, f.ID)
+	}
 	for section, entries := range inj {
 		switch section {
 		case "env", "extra_vars", "file":
@@ -177,11 +184,18 @@ func ValidateSchema(inputs, injectors any) map[string][]string {
 			tmpl, ok := entries[k].(string)
 			if !ok {
 				if section == "extra_vars" {
-					continue // nested structures are allowed in extra_vars
+					// Nested structures are allowed in extra_vars: their keys and strings are templates too.
+					for _, t := range nestedTemplates(entries[k]) {
+						if err := Check(t, fieldIDs, files); err != nil {
+							add("injectors", fmt.Sprintf("%s.%s: %v", section, k, err))
+						}
+					}
+					continue
 				}
 				add("injectors", fmt.Sprintf("%s.%s: must be a string", section, k))
 				continue
 			}
+			before := len(errs["injectors"])
 			for _, m := range refRe.FindAllStringSubmatch(tmpl, -1) {
 				ref := m[1]
 				switch {
@@ -195,13 +209,40 @@ func ValidateSchema(inputs, injectors any) map[string][]string {
 					if !files[name] {
 						add("injectors", fmt.Sprintf("%s.%s: no file.template.%s injector", section, k, name))
 					}
-				default:
-					add("injectors", fmt.Sprintf("%s.%s: unknown variable %q", section, k, ref))
+				}
+			}
+			// Rendered as AWX checks it: syntax, filters, and names that are
+			// neither fields nor set by the template itself (loops, set).
+			if len(errs["injectors"]) == before {
+				if err := Check(tmpl, fieldIDs, files); err != nil {
+					add("injectors", fmt.Sprintf("%s.%s: %v", section, k, err))
 				}
 			}
 		}
 	}
 	return errs
+}
+
+// nestedTemplates lists the keys and strings of a nested extra_vars value.
+func nestedTemplates(v any) []string {
+	switch x := v.(type) {
+	case string:
+		return []string{x}
+	case map[string]any:
+		var out []string
+		for k, e := range x {
+			out = append(out, k)
+			out = append(out, nestedTemplates(e)...)
+		}
+		return out
+	case []any:
+		var out []string
+		for _, e := range x {
+			out = append(out, nestedTemplates(e)...)
+		}
+		return out
+	}
+	return nil
 }
 
 // ValidateInputs checks credential input values against the schema. Missing

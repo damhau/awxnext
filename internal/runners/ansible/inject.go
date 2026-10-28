@@ -135,6 +135,9 @@ func applyInjectors(r *Run, rc *resources.ResolvedCredential, inj *Injection) er
 	if injectors == nil {
 		return nil
 	}
+	// As in AWX, unset text fields stay undefined (they render empty, and
+	// default() applies), unset booleans are false, and private keys end
+	// with a newline.
 	vars := map[string]any{}
 	for _, f := range rc.Schema.Fields {
 		if v, ok := rc.Inputs[f.ID]; ok {
@@ -143,8 +146,9 @@ func applyInjectors(r *Run, rc *resources.ResolvedCredential, inj *Injection) er
 			vars[f.ID] = f.Default
 		} else if f.Type == "boolean" {
 			vars[f.ID] = false
-		} else {
-			vars[f.ID] = ""
+		}
+		if s, ok := vars[f.ID].(string); ok && f.Format == "ssh_private_key" && s != "" && !strings.HasSuffix(s, "\n") {
+			vars[f.ID] = s + "\n"
 		}
 	}
 	files := map[string]string{}
@@ -198,13 +202,18 @@ func renderAny(v any, vars map[string]any, files map[string]string) (any, error)
 	case string:
 		return credtypes.Render(x, vars, files)
 	case map[string]any:
+		// Keys are templates too, as in AWX.
 		out := map[string]any{}
 		for k, e := range x {
+			key, err := credtypes.Render(k, vars, files)
+			if err != nil {
+				return nil, err
+			}
 			r, err := renderAny(e, vars, files)
 			if err != nil {
 				return nil, err
 			}
-			out[k] = r
+			out[key] = r
 		}
 		return out, nil
 	case []any:
