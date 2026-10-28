@@ -263,6 +263,22 @@ func (b *Broker) listen(ctx context.Context) error {
 	}
 }
 
+// RequestHealthCheck asks the agent of an execution node to report its
+// resources again, directly or through the control node it is connected
+// to; its answer updates the instance as its registration does.
+func (b *Broker) RequestHealthCheck(ctx context.Context, node string) error {
+	m := message{Type: "health_check"}
+	b.mu.Lock()
+	a := b.agents[node]
+	b.mu.Unlock()
+	if a != nil {
+		return a.send(ctx, m)
+	}
+	payload, _ := json.Marshal(map[string]any{"node": node, "msg": m})
+	_, err := b.app.DB.Exec(ctx, "SELECT pg_notify($1, $2)", notifyChannel, string(payload))
+	return err
+}
+
 // StartWorker offers a work unit to the agent of an execution node and waits for it to connect.
 func (b *Broker) StartWorker(ctx context.Context, node string, spec WorkSpec) (Worker, error) {
 	u := b.newUnit(node, "", spec)

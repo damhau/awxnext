@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/damhau/awxnext/internal/agent"
+	"github.com/damhau/awxnext/internal/resources"
 )
 
 func waitInstance(t *testing.T, a *client, id int64, state string) resp {
@@ -185,4 +186,72 @@ func TestContainerGroup(t *testing.T) {
 			t.Fatalf("pod spec: %v", pod)
 		}
 	}
+}
+
+// /instances/N/health_check/: an execution node's agent reports its
+// resources again, this control node probes itself, and an agent that does
+// not answer marks its node unavailable.
+func TestInstanceHealthCheck(t *testing.T) {
+	a := adminClient(t)
+	resources.HealthCheckTimeout = time.Second
+	t.Cleanup(func() { resources.HealthCheckTimeout = 15 * time.Second })
+	waitChecked := func(id int64) resp {
+		t.Helper()
+		deadline := time.Now().Add(15 * time.Second)
+		for time.Now().Before(deadline) {
+			r := must(t, a.get(fmt.Sprintf("instances/%d/", id)), 200)
+			if r.Body["health_check_pending"] == false {
+				return r
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+		t.Fatalf("health check of instance %d never ended", id)
+		return resp{}
+	}
+
+	// This control node.
+	ctl := must(t, a.get("instances/?hostname=test-node"), 200).results()[0]
+	ctlID := int64(ctl["id"].(float64))
+	if r := must(t, a.post(fmt.Sprintf("instances/%d/health_check/", ctlID), nil), 200); r.Body["msg"] != "Health check is running for test-node." {
+		t.Errorf("control node: %s", r.Raw)
+	}
+	r := must(t, a.get(fmt.Sprintf("instances/%d/health_check/", ctlID)), 200)
+	if r.Body["errors"] != "" || r.Body["cpu"].(float64) < 1 || r.Body["memory"].(float64) <= 0 || r.Body["last_health_check"] == nil || len(r.Body) != 11 {
+		t.Errorf("control node result: %s", r.Raw)
+	}
+
+	// An execution node whose agent answers.
+	inst := must(t, a.post("instances/", map[string]any{"hostname": uniq("exec"), "node_type": "execution"}), 201).id()
+	tok := must(t, a.post(fmt.Sprintf("instances/%d/agent_token/", inst), nil), 201).Body["token"].(string)
+	ctx, cancel := context.WithCancel(context.Background())
+	stopped := make(chan struct{})
+	go func() {
+		agent.RunAgent(ctx, agent.Config{URL: srv.URL, Token: tok, Runtime: "none", WorkDir: t.TempDir(), Capacity: 7, Version: "test"})
+		close(stopped)
+	}()
+	waitInstance(t, a, inst, "ready")
+	app.DB.Exec(t.Context(), "UPDATE instances SET capacity = 0, errors = 'stale', last_health_check = now() - interval '1 hour' WHERE id = $1", inst)
+	must(t, a.post(fmt.Sprintf("instances/%d/health_check/", inst), nil), 200)
+	if r := waitChecked(inst); r.Body["errors"] != "" || r.Body["capacity"] != float64(7) {
+		t.Errorf("answered health check: %v %v", r.Body["errors"], r.Body["capacity"])
+	}
+
+	// The same node once its agent is gone.
+	cancel()
+	<-stopped
+	waitInstance(t, a, inst, "unavailable")
+	must(t, a.post(fmt.Sprintf("instances/%d/health_check/", inst), nil), 200)
+	if r := must(t, a.post(fmt.Sprintf("instances/%d/health_check/", inst), nil), 200); !strings.Contains(fmt.Sprint(r.Body["msg"]), "already in progress") {
+		t.Errorf("second check while pending: %s", r.Raw)
+	}
+	if r := waitChecked(inst); r.Body["capacity"] != float64(0) || !strings.Contains(fmt.Sprint(r.Body["errors"]), "did not answer") {
+		t.Errorf("unanswered health check: %v %v", r.Body["errors"], r.Body["capacity"])
+	}
+
+	hop := must(t, a.post("instances/", map[string]any{"hostname": uniq("hop"), "node_type": "hop"}), 201).id()
+	must(t, a.post(fmt.Sprintf("instances/%d/health_check/", hop), nil), 400)
+	auditor, auditorID := newUser(t, a)
+	must(t, a.patch(fmt.Sprintf("users/%d/", auditorID), map[string]any{"is_system_auditor": true}), 200)
+	must(t, auditor.get(fmt.Sprintf("instances/%d/health_check/", ctlID)), 200)
+	must(t, auditor.post(fmt.Sprintf("instances/%d/health_check/", ctlID), nil), 403)
 }

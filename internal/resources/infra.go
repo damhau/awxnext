@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/damhau/awxnext/internal/agent"
 	"github.com/damhau/awxnext/internal/api"
@@ -270,6 +271,7 @@ func registerInfrastructure() {
 			{Name: "errors", Type: api.TText, ReadOnly: true, Help: "Any error details from the last health check."},
 			{Name: "last_seen", Type: api.TDateTime, ReadOnly: true, Nullable: true},
 			{Name: "last_health_check", Type: api.TDateTime, ReadOnly: true, Nullable: true},
+			{Name: "health_check_started", Type: api.TDateTime, ReadOnly: true, Nullable: true, Help: "The last time a health check was initiated on this instance."},
 		},
 		View: func(c *Ctx, arg ArgFunc) string {
 			if c.User.Superuser || c.User.Auditor {
@@ -317,10 +319,14 @@ func registerInfrastructure() {
 					pct = float64(capacity-consumed) / float64(capacity) * 100
 				}
 				o["percent_capacity_remaining"] = float64(int(pct*100)) / 100
+				started, serr := time.Parse(time.RFC3339Nano, str(o["health_check_started"]))
+				last, lerr := time.Parse(time.RFC3339Nano, str(o["last_health_check"]))
+				o["health_check_pending"] = serr == nil && (lerr != nil || started.After(last))
 			}
 			return nil
 		},
 	})
+	inst.Actions = append(inst.Actions, &api.Action{Name: "health_check", Methods: []string{"GET", "POST"}, Handler: instanceHealthCheck})
 	inst.Actions = append(inst.Actions, &api.Action{Name: "agent_token", Methods: []string{"POST"}, Handler: func(c *Ctx, w http.ResponseWriter, r *http.Request, obj Obj) {
 		if !c.User.Superuser {
 			api.WriteError(w, api.ErrForbidden)

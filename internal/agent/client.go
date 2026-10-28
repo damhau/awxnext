@@ -131,8 +131,11 @@ func (cfg *Config) session(ctx context.Context, client *http.Client) error {
 		return ws.Write(wctx, websocket.MessageText, b)
 	}
 	host, _ := os.Hostname()
-	if err := send(message{Type: "register", Hostname: host, Version: cfg.Version, Runtime: cfg.Runtime, WorkDir: cfg.WorkDir,
-		CPU: float64(runtime.NumCPU()), Memory: totalMemory(), Capacity: cfg.Capacity}); err != nil {
+	register := func() error {
+		return send(message{Type: "register", Hostname: host, Version: cfg.Version, Runtime: cfg.Runtime, WorkDir: cfg.WorkDir,
+			CPU: float64(runtime.NumCPU()), Memory: TotalMemory(), Capacity: cfg.Capacity})
+	}
+	if err := register(); err != nil {
 		return err
 	}
 	slog.Info("connected to control plane", "url", cfg.URL, "runtime", cfg.Runtime)
@@ -158,6 +161,13 @@ func (cfg *Config) session(ctx context.Context, client *http.Client) error {
 		}
 		var m message
 		if json.Unmarshal(data, &m) != nil {
+			continue
+		}
+		if m.Type == "health_check" {
+			// Report the resources again, as at registration.
+			if err := register(); err != nil {
+				return err
+			}
 			continue
 		}
 		if m.Type == "work" {
@@ -341,7 +351,8 @@ func (t *tailBuffer) String() string {
 	return t.b.String()
 }
 
-func totalMemory() int64 {
+// TotalMemory is the memory of this machine in bytes (0 if unknown).
+func TotalMemory() int64 {
 	f, err := os.Open("/proc/meminfo")
 	if err != nil {
 		return 0

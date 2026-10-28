@@ -24,9 +24,9 @@ The gaps fall in four groups:
    setting now has an effect, or says "No effect in awxnext" and why in its
    help (analytics, subscriptions, OAuth2, custom virtualenvs, and
    `LOG_AGGREGATOR_*` until M6-03). A test fails CI when a setting is neither.
-2. **API endpoints that AWX clients call**: instance health checks (the
-   bulk API, the dashboard, host metrics and the subscription endpoints are
-   done, roadmap M2-02 to M2-05).
+2. **API endpoints that AWX clients call**: done (the bulk API, the
+   dashboard, host metrics, the subscription endpoints and instance health
+   checks, roadmap M2-02 to M2-06).
    Compatibility with the collection, awxkit and the Terraform provider is
    tested nightly since roadmap M2-01 ([compat/](../compat/README.md)); the
    gaps those suites found are roadmap M2-14 to M2-26.
@@ -179,7 +179,7 @@ The gaps fall in four groups:
 | Prometheus metrics | Yes | Partial | No subsystem metrics or `node`/`metric` parameters; OpenTelemetry traces added |
 | Analytics, subscriptions | Yes | By design | No subscriptions, as upstream AWX: the collection's `license` and `subscriptions` modules behave as against it (tested by `compat/targets/`) |
 | Instances: capacity, drain, jobs | Yes | Done | Control nodes use a fixed capacity; `capacity_adjustment` scales instead of interpolating |
-| Instance health check endpoint | Yes | Missing | Health is passive (heartbeats, agent registration) |
+| Instance health check endpoint | Yes | Done | `instances/N/health_check/` (superusers; auditors read): an execution node's agent reports its resources again, or the node is marked unavailable when it does not answer; control nodes probe the database and the projects directory, which AWX does not offer. `health_check_started` and `health_check_pending` on instances |
 | Receptor mesh, peers, hop nodes, topology view | Yes | By design | Dial-back agent instead; install bundle replaced by an agent token |
 | Instance group policies, `max_forks` | Yes | Partial | Stored, not applied |
 | Container groups with `pod_spec_override` | Yes | Done | Push-based shim, no log tailing |
