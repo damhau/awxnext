@@ -57,6 +57,82 @@ func inventoryKind(c *Ctx, id int64) string {
 
 // childOfInventory gives hosts and groups their access rules: visible with the
 // inventory, writable by inventory admins. Smart and constructed inventories have no own hosts/groups.
+// deleteGroupRecursive deletes what AWX's Group.delete_recursive deletes with
+// a group: its hosts left in no group, then each child group left without a
+// parent, recursively, with its hosts left in no group. Children and hosts
+// that also belong elsewhere stay. The caller deletes the group itself.
+func deleteGroupRecursive(c *Ctx, obj Obj) error {
+	id, _ := api.ID(obj["id"])
+	hostGroups := map[int64]map[int64]bool{} // host -> its groups
+	groupHosts := map[int64][]int64{}
+	rows, err := c.DB().Query(c, `SELECT gh.group_id, gh.host_id FROM group_hosts gh JOIN groups g ON g.id = gh.group_id
+		WHERE g.inventory_id = $1`, obj["inventory"])
+	if err != nil {
+		return err
+	}
+	for rows.Next() {
+		var g, h int64
+		rows.Scan(&g, &h)
+		groupHosts[g] = append(groupHosts[g], h)
+		if hostGroups[h] == nil {
+			hostGroups[h] = map[int64]bool{}
+		}
+		hostGroups[h][g] = true
+	}
+	rows.Close()
+	parents := map[int64]map[int64]bool{} // group -> its parents
+	children := map[int64][]int64{}
+	rows, err = c.DB().Query(c, `SELECT gc.parent_id, gc.child_id FROM group_children gc JOIN groups g ON g.id = gc.child_id
+		WHERE g.inventory_id = $1`, obj["inventory"])
+	if err != nil {
+		return err
+	}
+	for rows.Next() {
+		var p, ch int64
+		rows.Scan(&p, &ch)
+		children[p] = append(children[p], ch)
+		if parents[ch] == nil {
+			parents[ch] = map[int64]bool{}
+		}
+		parents[ch][p] = true
+	}
+	rows.Close()
+
+	var hostsGone, groupsGone []int64
+	release := func(g int64) {
+		for _, h := range groupHosts[g] {
+			delete(hostGroups[h], g)
+			if len(hostGroups[h]) == 0 {
+				hostsGone = append(hostsGone, h)
+			}
+		}
+	}
+	release(id)
+	type link struct{ parent, child int64 }
+	var queue []link
+	for _, ch := range children[id] {
+		queue = append(queue, link{id, ch})
+	}
+	for len(queue) > 0 {
+		l := queue[0]
+		queue = queue[1:]
+		delete(parents[l.child], l.parent)
+		if len(parents[l.child]) > 0 {
+			continue
+		}
+		release(l.child)
+		for _, ch := range children[l.child] {
+			queue = append(queue, link{l.child, ch})
+		}
+		groupsGone = append(groupsGone, l.child)
+	}
+	if _, err := c.DB().Exec(c, "DELETE FROM groups WHERE id = ANY($1)", groupsGone); err != nil {
+		return err
+	}
+	_, err = c.DB().Exec(c, "DELETE FROM hosts WHERE id = ANY($1)", hostsGone)
+	return err
+}
+
 func childOfInventory(kindName string) (view func(c *Ctx, arg ArgFunc) string, add func(c *Ctx, data Obj) error,
 	change func(c *Ctx, old, data Obj) error, del func(c *Ctx, obj Obj) error) {
 	view = func(c *Ctx, arg ArgFunc) string {
@@ -329,10 +405,11 @@ func registerInventories() {
 				return fmt.Sprintf("EXISTS (SELECT 1 FROM group_children gc WHERE gc.child_id = %s.id AND gc.parent_id = %s.id)", a, b)
 			}},
 		},
-		View:      gView,
-		CanAdd:    gAdd,
-		CanChange: gChange,
-		CanDelete: gDel,
+		View:         gView,
+		CanAdd:       gAdd,
+		CanChange:    gChange,
+		CanDelete:    gDel,
+		BeforeDelete: deleteGroupRecursive,
 	})
 	groups.SubLists = []*SubList{
 		{

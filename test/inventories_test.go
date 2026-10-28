@@ -248,3 +248,54 @@ func TestAPIRootHasNoOAuth2(t *testing.T) {
 		t.Fatalf("API root: %s", root.Raw)
 	}
 }
+
+// Deleting a group deletes what AWX's Group.delete_recursive deletes: its
+// hosts left in no group, and each child left without a parent, with its
+// hosts left in no group. What also belongs elsewhere stays.
+func TestGroupDeleteRecursive(t *testing.T) {
+	a := adminClient(t)
+	inv := must(t, a.post("inventories/", map[string]any{"name": uniq("inv"), "organization": newOrg(t, a)}), 201).id()
+	group := func(name string) int64 {
+		return must(t, a.post(fmt.Sprintf("inventories/%d/groups/", inv), map[string]any{"name": name}), 201).id()
+	}
+	host := func(name string, groups ...int64) int64 {
+		id := must(t, a.post("hosts/", map[string]any{"name": name, "inventory": inv}), 201).id()
+		for _, g := range groups {
+			must(t, a.post(fmt.Sprintf("groups/%d/hosts/", g), map[string]any{"id": id}), 204)
+		}
+		return id
+	}
+	child := func(parent, ch int64) {
+		must(t, a.post(fmt.Sprintf("groups/%d/children/", parent), map[string]any{"id": ch}), 204)
+	}
+	g, only, shared, grand, other := group("g"), group("only"), group("shared"), group("grand"), group("other")
+	child(g, only)
+	child(g, shared)
+	child(other, shared)
+	child(only, grand)
+	gone := map[string]int64{"in g": host("in-g", g), "in only": host("in-only", only), "in grand": host("in-grand", grand)}
+	stay := map[string]int64{"in g and other": host("in-g-other", g, other), "in only and other": host("in-only-other", only, other),
+		"in shared": host("in-shared", shared), "in no group": host("ungrouped")}
+
+	must(t, a.delete(fmt.Sprintf("groups/%d/", g)), 204)
+	for name, id := range map[string]int64{"g": g, "only child": only, "its child": grand} {
+		if r := a.get(fmt.Sprintf("groups/%d/", id)); r.Status != 404 {
+			t.Errorf("group %s should be deleted: %d", name, r.Status)
+		}
+	}
+	must(t, a.get(fmt.Sprintf("groups/%d/", shared)), 200)
+	must(t, a.get(fmt.Sprintf("groups/%d/", other)), 200)
+	for name, id := range gone {
+		if r := a.get(fmt.Sprintf("hosts/%d/", id)); r.Status != 404 {
+			t.Errorf("host %s should be deleted: %d", name, r.Status)
+		}
+	}
+	for name, id := range stay {
+		if r := a.get(fmt.Sprintf("hosts/%d/", id)); r.Status != 200 {
+			t.Errorf("host %s should stay: %d", name, r.Status)
+		}
+	}
+	if n := must(t, a.get(fmt.Sprintf("groups/%d/children/?id=%d", other, shared)), 200).count(); n != 1 {
+		t.Error("the shared child lost its other parent")
+	}
+}

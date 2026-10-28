@@ -108,7 +108,7 @@ The gaps fall in four groups:
 | Feature | AWX 24.6 | awxnext | Notes |
 |---|---|---|---|
 | Regular, smart and constructed inventories | Yes | Done | Smart filters compiled to SQL and checked when saved |
-| Hosts, groups (nested), variables, facts | Yes | Done | `instance_id` is not set by imports |
+| Hosts, groups (nested), variables, facts | Yes | Done | `instance_id` is not set by imports. Deleting a group deletes its hosts left in no group and its children left without a parent, recursively, as AWX's `delete_recursive` |
 | Inventory script endpoint | Yes | Partial | No `subset=slice` parameter |
 | Inventory instance groups, `prevent_instance_group_fallback` | Yes | Done (API only) | Not in the inventory form |
 | Inventory copy | Yes | Done | Groups, hosts, memberships and instance groups |

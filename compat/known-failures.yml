@@ -12,7 +12,6 @@ collection:
   "bulk_job_launch": "#16 bulk API"
   "credential": "#32 Red Hat Virtualization credential type (after the SSH key passphrase, #87, passes)"
   "credential_input_source": "#38 CyberArk Central Credential Provider lookup"
-  "group": "#90 group delete_recursive"
   "inventory": "#32 Insights credential type"
   "job_launch": "#91 extra_vars text as json.dumps"
   "job_template": "#28 email notifications"
