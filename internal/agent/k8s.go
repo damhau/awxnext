@@ -13,9 +13,11 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
+	"github.com/damhau/awxnext/internal/runnercmd"
 	"gopkg.in/yaml.v3"
 )
 
@@ -37,6 +39,9 @@ type PodRequest struct {
 	ServiceURL string
 	ShimImage  string
 	InstallID  string
+	// MountPaths are AWX_ISOLATION_SHOW_PATHS mounted from the node as
+	// hostPath volumes (AWX_MOUNT_ISOLATED_PATHS_ON_K8S).
+	MountPaths []string
 }
 
 type kubeClient struct {
@@ -176,7 +181,18 @@ func BuildPod(req PodRequest, unitURL, token string) (map[string]any, string, er
 	env = append(env, map[string]any{"name": "AWXNEXT_SHIM_TOKEN", "value": token}, map[string]any{"name": "HOME", "value": "/runner"})
 	worker["env"] = env
 	mounts, _ := worker["volumeMounts"].([]any)
-	worker["volumeMounts"] = append(mounts, map[string]any{"name": "awxnext-shim", "mountPath": "/awxnext-shim"})
+	mounts = append(mounts, map[string]any{"name": "awxnext-shim", "mountPath": "/awxnext-shim"})
+	volumes, _ := spec["volumes"].([]any)
+	for i, p := range req.MountPaths {
+		src, dst, opts, err := runnercmd.Mount(p)
+		if err != nil {
+			return nil, "", err
+		}
+		name := fmt.Sprintf("awxnext-show-%d", i)
+		volumes = append(volumes, map[string]any{"name": name, "hostPath": map[string]any{"path": src}})
+		mounts = append(mounts, map[string]any{"name": name, "mountPath": dst, "readOnly": slices.Contains(strings.Split(opts, ","), "ro")})
+	}
+	worker["volumeMounts"] = mounts
 	switch strings.ToLower(req.Spec.Pull) {
 	case "always":
 		worker["imagePullPolicy"] = "Always"
@@ -196,7 +212,6 @@ func BuildPod(req PodRequest, unitURL, token string) (map[string]any, string, er
 		"name": "awxnext-shim", "image": req.ShimImage, "command": []any{"/awxnext", "install-shim", "/awxnext-shim/awxnext"},
 		"volumeMounts": []any{map[string]any{"name": "awxnext-shim", "mountPath": "/awxnext-shim"}},
 	})
-	volumes, _ := spec["volumes"].([]any)
 	spec["volumes"] = append(volumes, map[string]any{"name": "awxnext-shim", "emptyDir": map[string]any{}})
 	pod["spec"] = spec
 	return pod, ns, nil

@@ -167,7 +167,8 @@ func Process(r io.Reader, artifactsDir string, onMsg func(StreamMessage)) error 
 					msg.RC = &v
 				}
 				onMsg(msg)
-			} else if _, ok := data["event"]; ok {
+			} else if ev, ok := data["event"]; ok && ev != "keepalive" {
+				// Keepalives (AWX_RUNNER_KEEPALIVE_SECONDS) only keep the stream open.
 				onMsg(StreamMessage{Event: data})
 			}
 		}

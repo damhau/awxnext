@@ -36,12 +36,14 @@ const readLimit = 16 << 20
 
 // WorkSpec tells the worker side how to run ansible-runner.
 type WorkSpec struct {
-	Ident            string `json:"ident"`
-	Image            string `json:"image,omitempty"`
-	Pull             string `json:"pull,omitempty"`
-	RegistryHost     string `json:"registry_host,omitempty"`
-	RegistryUser     string `json:"registry_user,omitempty"`
-	RegistryPassword string `json:"registry_password,omitempty"`
+	Ident            string   `json:"ident"`
+	Image            string   `json:"image,omitempty"`
+	Pull             string   `json:"pull,omitempty"`
+	RegistryHost     string   `json:"registry_host,omitempty"`
+	RegistryUser     string   `json:"registry_user,omitempty"`
+	RegistryPassword string   `json:"registry_password,omitempty"`
+	KeepaliveSeconds int      `json:"keepalive_seconds,omitempty"`
+	ShowPaths        []string `json:"show_paths,omitempty"`
 }
 
 type message struct {

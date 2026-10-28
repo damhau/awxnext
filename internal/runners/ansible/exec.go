@@ -63,6 +63,9 @@ func NewRunFor(ctx context.Context, app *api.App, ident string, row jobs.Row) (*
 		app.DB.QueryRow(ctx, "SELECT is_container_group, pod_spec_override, credential_id FROM instance_groups WHERE id = $1", ig).Scan(&container, &podSpec, &credID)
 		if container {
 			req := &agent.PodRequest{JobID: row.ID(), PodSpec: podSpec, ServiceURL: app.Cfg.ServiceURL, ShimImage: app.Cfg.ShimImage}
+			if app.Settings.Bool(ctx, "AWX_MOUNT_ISOLATED_PATHS_ON_K8S") {
+				req.MountPaths = showPaths(ctx, app)
+			}
 			app.DB.QueryRow(ctx, "SELECT value #>> '{}' FROM settings WHERE key = 'INSTALL_UUID'").Scan(&req.InstallID)
 			if credID != nil {
 				cred, err := resources.ResolveCredential(ctx, app, *credID)
@@ -190,13 +193,30 @@ func (l *localWorker) Wait() (string, error) {
 }
 
 func (r *Run) spec(app *api.App) runnercmd.Spec {
+	ctx := context.Background()
 	return runnercmd.Spec{Runtime: r.runtime, RunnerCommand: app.Cfg.RunnerCommand, WorkDir: r.WorkDir, Image: r.Image, Pull: r.Pull,
-		RegistryHost: r.RegistryHost, RegistryUser: r.RegistryUser, RegistryPassword: r.RegistryPassword, Name: r.containerName()}
+		RegistryHost: r.RegistryHost, RegistryUser: r.RegistryUser, RegistryPassword: r.RegistryPassword, Name: r.containerName(),
+		KeepaliveSeconds: app.Settings.Int(ctx, "AWX_RUNNER_KEEPALIVE_SECONDS"), ShowPaths: showPaths(ctx, app)}
+}
+
+// showPaths is AWX_ISOLATION_SHOW_PATHS: host paths mounted into execution
+// environment containers. Jobs on the "none" runtime see the host already.
+func showPaths(ctx context.Context, app *api.App) []string {
+	var out []string
+	list, _ := app.Settings.Get(ctx, "AWX_ISOLATION_SHOW_PATHS").([]any)
+	for _, p := range list {
+		if s, ok := p.(string); ok && s != "" {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 // startWorker starts the worker where the run is placed.
 func (r *Run) startWorker(ctx context.Context, app *api.App) (worker, []string, error) {
-	ws := agent.WorkSpec{Ident: r.Ident, Image: r.Image, Pull: r.Pull, RegistryHost: r.RegistryHost, RegistryUser: r.RegistryUser, RegistryPassword: r.RegistryPassword}
+	spec := r.spec(app)
+	ws := agent.WorkSpec{Ident: r.Ident, Image: r.Image, Pull: r.Pull, RegistryHost: r.RegistryHost, RegistryUser: r.RegistryUser, RegistryPassword: r.RegistryPassword,
+		KeepaliveSeconds: spec.KeepaliveSeconds, ShowPaths: spec.ShowPaths}
 	switch {
 	case r.agentNode != "":
 		if agent.Default == nil {
@@ -213,7 +233,6 @@ func (r *Run) startWorker(ctx context.Context, app *api.App) (worker, []string, 
 		w, err := agent.Default.StartPod(ctx, req)
 		return w, []string{"pod", "ansible-runner", "worker"}, err
 	}
-	spec := r.spec(app)
 	args, cleanup, err := runnercmd.Command(spec)
 	if err != nil {
 		return nil, nil, err

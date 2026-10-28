@@ -111,8 +111,9 @@ Vitest tests.
 container groups and remote nodes. `AWX_ISOLATION_SHOW_PATHS` mounts the
 listed host paths into the execution environment.
 
-**Done when:** a job can read a file from a shown path, and the keepalive
-interval is tested in the shim.
+**Done when:** the container command and job pods mount the shown paths
+(jobs on runtime `none` see the host already), and the keepalive interval is
+tested in the shim.
 
 ### M1-08 Notifications tab on templates, projects, sources and organizations
 **Labels:** bug, ui, notifications · **Size:** M · [#8](https://github.com/damhau/awxnext/issues/8)

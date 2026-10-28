@@ -172,7 +172,7 @@ The gaps fall in four groups:
 | Dashboard endpoints | Yes | Missing | The UI's "Now" page replaces the dashboard |
 | Bulk API | Yes | Missing | |
 | Activity stream | Yes | Partial | No entries for job launches or role assignment API grants |
-| Settings API and UI | Yes | Partial | Settings not read by any code: `AWX_RUNNER_KEEPALIVE_SECONDS`, `AWX_ISOLATION_SHOW_PATHS`, `LOG_AGGREGATOR_*`, analytics |
+| Settings API and UI | Yes | Partial | Settings not read by any code: `LOG_AGGREGATOR_*`, analytics |
 | External log aggregation | Yes | Missing | JSON logs on stderr instead |
 | Prometheus metrics | Yes | Partial | No subsystem metrics or `node`/`metric` parameters; OpenTelemetry traces added |
 | Analytics, subscriptions | Yes | By design | Collection `license`/`subscriptions` modules fail |

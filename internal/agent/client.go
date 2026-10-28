@@ -225,8 +225,7 @@ func (cfg *Config) runUnit(ctx context.Context, client *http.Client, url string)
 	if strings.ContainsAny(spec.Ident, "/\\") || spec.Ident == "" || spec.Ident == ".." {
 		return done(-1, "invalid work ident")
 	}
-	rs := runnercmd.Spec{Runtime: cfg.Runtime, RunnerCommand: cfg.RunnerCommand, Image: spec.Image, Pull: spec.Pull,
-		RegistryHost: spec.RegistryHost, RegistryUser: spec.RegistryUser, RegistryPassword: spec.RegistryPassword, Name: "awxnext_job_" + spec.Ident}
+	rs := runnerSpec(*cfg, spec)
 	switch {
 	case (rs.Runtime == "none" || rs.Runtime == "") && cfg.ExactWorkDir:
 		rs.WorkDir = cfg.WorkDir
@@ -382,4 +381,11 @@ func InstallShim(dest string) error {
 		return err
 	}
 	return out.Close()
+}
+
+// runnerSpec is how an agent or a container group shim runs the work it is given.
+func runnerSpec(cfg Config, spec WorkSpec) runnercmd.Spec {
+	return runnercmd.Spec{Runtime: cfg.Runtime, RunnerCommand: cfg.RunnerCommand, Image: spec.Image, Pull: spec.Pull,
+		RegistryHost: spec.RegistryHost, RegistryUser: spec.RegistryUser, RegistryPassword: spec.RegistryPassword, Name: "awxnext_job_" + spec.Ident,
+		KeepaliveSeconds: spec.KeepaliveSeconds, ShowPaths: spec.ShowPaths}
 }

@@ -16,7 +16,9 @@ import (
 	"github.com/damhau/awxnext/internal/jobs"
 	"github.com/damhau/awxnext/internal/rbac"
 	"github.com/damhau/awxnext/internal/resources"
+	"github.com/damhau/awxnext/internal/runnercmd"
 	"github.com/damhau/awxnext/internal/runners/gitsync"
+	"github.com/damhau/awxnext/internal/settings"
 	"github.com/damhau/awxnext/internal/vars"
 	"gopkg.in/yaml.v3"
 )
@@ -40,6 +42,17 @@ func Register() {
 	})
 	registerInventoryUpdate()
 	registerAdHoc()
+	if d := settings.Lookup("AWX_ISOLATION_SHOW_PATHS"); d != nil {
+		d.Validate = func(v any) error {
+			list, _ := v.([]any)
+			for _, p := range list {
+				if _, _, _, err := runnercmd.Mount(fmt.Sprint(p)); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}
 }
 
 // LoadStartArgs decrypts a job's start_args.

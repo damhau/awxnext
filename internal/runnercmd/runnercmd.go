@@ -12,6 +12,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
+	"strings"
 )
 
 // Spec describes how to start a worker.
@@ -28,6 +30,40 @@ type Spec struct {
 	RegistryHost, RegistryUser, RegistryPassword string
 	// Name identifies the container (used to remove it on cancel).
 	Name string
+	// KeepaliveSeconds makes the worker emit a keepalive every N idle
+	// seconds (AWX_RUNNER_KEEPALIVE_SECONDS), so quiet tasks on remote nodes
+	// and container groups are not cut off by idle timeouts.
+	KeepaliveSeconds int
+	// ShowPaths are host paths mounted into the execution environment
+	// container (AWX_ISOLATION_SHOW_PATHS); see Mount.
+	ShowPaths []string
+}
+
+// Mount parses an AWX_ISOLATION_SHOW_PATHS entry, HOST-DIR[:CONTAINER-DIR[:OPTIONS]],
+// into the host path, the container path (the host path by default) and the
+// mount options (for example ro, or z for SELinux).
+func Mount(p string) (src, dst, opts string, err error) {
+	parts := strings.SplitN(p, ":", 3)
+	src, dst = parts[0], parts[0]
+	if len(parts) > 1 && parts[1] != "" {
+		dst = parts[1]
+	}
+	if len(parts) > 2 {
+		opts = parts[2]
+	}
+	if !filepath.IsAbs(src) || !filepath.IsAbs(dst) {
+		return "", "", "", fmt.Errorf("%q: paths must be absolute (HOST-DIR[:CONTAINER-DIR[:OPTIONS]])", p)
+	}
+	return filepath.Clean(src), filepath.Clean(dst), opts, nil
+}
+
+// workerArgs are the ansible-runner worker arguments after the binary.
+func (s Spec) workerArgs(dir string) []string {
+	args := []string{"worker", "--private-data-dir=" + dir}
+	if s.KeepaliveSeconds > 0 {
+		args = append(args, "--keepalive-seconds="+strconv.Itoa(s.KeepaliveSeconds))
+	}
+	return args
 }
 
 // Command returns the worker command line and a cleanup function.
@@ -42,7 +78,7 @@ func Command(s Spec) ([]string, func(), error) {
 		if s.WorkDir == "" {
 			return nil, noop, errors.New("no private data dir")
 		}
-		return []string{bin, "worker", "--private-data-dir", s.WorkDir}, noop, nil
+		return append([]string{bin}, s.workerArgs(s.WorkDir)...), noop, nil
 	case "podman", "docker":
 		if s.Image == "" {
 			return nil, noop, errors.New("no execution environment image")
@@ -83,7 +119,20 @@ func Command(s Spec) ([]string, func(), error) {
 		if s.Runtime == "podman" {
 			args = append(args, "--userns=keep-id")
 		}
-		args = append(args, s.Image, "ansible-runner", "worker", "--private-data-dir=/runner")
+		for _, p := range s.ShowPaths {
+			src, dst, opts, err := Mount(p)
+			if err != nil {
+				cleanup()
+				return nil, noop, err
+			}
+			v := src + ":" + dst
+			if opts != "" {
+				v += ":" + opts
+			}
+			args = append(args, "-v", v)
+		}
+		args = append(args, s.Image, "ansible-runner")
+		args = append(args, s.workerArgs("/runner")...)
 		return args, cleanup, nil
 	}
 	return nil, noop, fmt.Errorf("unknown container runtime %q", s.Runtime)

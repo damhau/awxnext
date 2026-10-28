@@ -58,6 +58,15 @@ const slowPlaybook = `- hosts: all
       run_once: true
 `
 
+// pausePlaybook is quiet for a few seconds, long enough for keepalives.
+const pausePlaybook = `- hosts: all
+  gather_facts: false
+  tasks:
+    - ansible.builtin.pause:
+        seconds: 3
+      run_once: true
+`
+
 const factsPlaybook = `- hosts: all
   gather_facts: false
   tasks:
@@ -91,6 +100,7 @@ func newLaunchFixture(t *testing.T) *jobFixture {
 	f := &jobFixture{a: a, org: newOrg(t, a), hosts: []string{"h1", "h2", "h3"}}
 	f.repo = gitRepo(t, map[string]string{
 		"site.yml": sitePlaybook, "fail.yml": failPlaybook, "slow.yml": slowPlaybook, "facts.yml": factsPlaybook, "env.yml": envPlaybook,
+		"pause.yml": pausePlaybook,
 	})
 	f.project = must(t, a.post("projects/", map[string]any{"name": uniq("proj"), "organization": f.org, "scm_type": "git", "scm_url": f.repo, "allow_override": true}), 201).id()
 	f.waitProject(t)
@@ -625,4 +635,29 @@ func TestScheduleMaxJobs(t *testing.T) {
 	if n := fire(); n != 1 {
 		t.Fatalf("the schedule launched %d jobs under the limit, want 1", n)
 	}
+}
+
+// AWX_RUNNER_KEEPALIVE_SECONDS reaches the worker, and its keepalives are
+// not stored as events.
+func TestRunnerKeepalive(t *testing.T) {
+	f := newJobFixture(t)
+	a := f.a
+	t.Cleanup(func() { a.patch("settings/jobs/", map[string]any{"AWX_RUNNER_KEEPALIVE_SECONDS": 0}) })
+	must(t, a.patch("settings/jobs/", map[string]any{"AWX_RUNNER_KEEPALIVE_SECONDS": 1}), 200)
+	job := f.launch(t, a, f.template(t, "pause.yml", nil), map[string]any{})
+	// The worker accepts the interval (it fails on unknown options).
+	mustStatus(t, f, job, "successful")
+	for _, q := range []string{"event=keepalive", "counter=0"} {
+		if n := a.get(fmt.Sprintf("jobs/%d/job_events/?%s", job.id(), q)).count(); n != 0 {
+			t.Fatalf("%d keepalives stored as events (%s)", n, q)
+		}
+	}
+}
+
+// AWX_ISOLATION_SHOW_PATHS entries are HOST-DIR[:CONTAINER-DIR[:OPTIONS]] with absolute paths.
+func TestShowPathsSetting(t *testing.T) {
+	a := adminClient(t)
+	t.Cleanup(func() { a.patch("settings/jobs/", map[string]any{"AWX_ISOLATION_SHOW_PATHS": []string{}}) })
+	must(t, a.patch("settings/jobs/", map[string]any{"AWX_ISOLATION_SHOW_PATHS": []string{"relative/dir"}}), 400)
+	must(t, a.patch("settings/jobs/", map[string]any{"AWX_ISOLATION_SHOW_PATHS": []string{"/srv/data", "/etc/pki/ca:/certs:ro"}}), 200)
 }

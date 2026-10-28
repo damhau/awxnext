@@ -95,3 +95,15 @@ func TestTransmitWorkerProcess(t *testing.T) {
 		t.Fatalf("artifacts not unpacked: %v", entries)
 	}
 }
+
+// Keepalives (AWX_RUNNER_KEEPALIVE_SECONDS) keep the stream open and are not events.
+func TestProcessDropsKeepalives(t *testing.T) {
+	in := `{"event": "keepalive", "counter": 0, "uuid": 0}` + "\n" + `{"event": "verbose", "counter": 1, "stdout": "hi"}` + "\n" + `{"eof": true}` + "\n"
+	var got []StreamMessage
+	if err := Process(strings.NewReader(in), t.TempDir(), func(m StreamMessage) { got = append(got, m) }); err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].Event["counter"] != float64(1) {
+		t.Fatalf("messages: %+v", got)
+	}
+}
