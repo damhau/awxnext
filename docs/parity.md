@@ -56,7 +56,7 @@ The gaps fall in four groups:
 1. ~~Implement or remove the settings that do nothing~~ (done, roadmap M1-01 to M1-07).
 2. Notifications tab on templates, projects, inventory sources and organizations (the API exists; the Notifications page points to a tab that is not there).
 3. Custom credential types use only a Jinja subset in injectors (`{{ var }}`, a few filters): types imported from AWX that use `{% if %}` or other filters fail at run time.
-4. Relaunch from the UI never asks for credential passwords, and jobs report `passwords_needed_to_start: []`, so relaunching a job with ASK passwords fails.
+4. ~~Relaunch from the UI never asks for credential passwords~~ (done, roadmap M1-10).
 5. A test harness running the `awx.awx` collection and awxkit against awxnext (phase 7), since compatibility is the main promise.
 
 **P2: missing features people will hit**
@@ -143,7 +143,7 @@ The gaps fall in four groups:
 | Launch fields the template does not prompt for | Yes | Done | Deliberate difference: refused with a 400 instead of ignored (`ignored_fields`); `IGNORE_UNPROMPTED_LAUNCH_FIELDS` gives AWX's behaviour |
 | `ansible_*` variables at launch (extra vars, survey questions, schedules, ad hoc) | Yes | Done | Deliberate difference: refused, as they set how Ansible connects and runs; `ALLOW_ANSIBLE_VARS_AT_LAUNCH` gives AWX's behaviour. Template, inventory and host variables are not affected |
 | Surveys (all types, password encryption) | Yes | Done | Plus choices from the system, conditional questions, answer formats |
-| Relaunch (all, failed hosts) | Yes | Done | UI does not ask for passwords; launch-time labels/IGs not kept |
+| Relaunch (all, failed hosts) | Yes | Done | Launch-time labels/IGs not kept (roadmap M3-02) |
 | `jobs/N/create_schedule/` | Yes | Missing | |
 | Job slicing | Yes | Done | `slice_workflow_jobs` sublist missing |
 | Job events, stdout formats, host summaries, artifacts | Yes | Done | `job_events/N/children/`, `playbook_counts` missing |

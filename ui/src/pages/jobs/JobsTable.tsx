@@ -6,11 +6,11 @@ import type { Job } from '../../api/types'
 import { useOrg } from '../../app/context'
 import { FilterBar } from '../../components/filterbar'
 import { Icon } from '../../components/icons'
-import { useConfirm, useToast } from '../../components/overlay'
+import { useConfirm } from '../../components/overlay'
 import { DataTable, Pager, useListState, type Column } from '../../components/table'
 import { Ago, Elapsed, Empty, Status } from '../../components/ui'
 import { active, jobApi, jobPath, jobsNewestFirst, typeLabel, userName } from '../../lib/format'
-import { relaunchJob } from '../../lib/jobs'
+import { useRelaunch } from '../../components/RelaunchDialog'
 import { compile, statusValue, type KeyTable } from '../../lib/query'
 
 export const jobKeys: KeyTable = {
@@ -37,7 +37,6 @@ export function JobsTable({ fixed = {}, filter = true, compact = false }: { fixe
   const nav = useNavigate()
   const { scope } = useOrg()
   const confirm = useConfirm()
-  const toast = useToast()
   const invalidate = useInvalidate()
   const [selected, setSelected] = useState<Set<number | string>>(new Set())
   const compiled = compile(ls.q, jobKeys)
@@ -46,13 +45,7 @@ export function JobsTable({ fixed = {}, filter = true, compact = false }: { fixe
   const rows = list.data?.results ?? []
   const open = (j: Job) => nav(jobPath(j))
 
-  const relaunch = async (j: Job) => {
-    try {
-      nav(jobPath(await relaunchJob(j)))
-    } catch (e) {
-      toast((e as Error).message, 'error')
-    }
-  }
+  const { relaunch, dialog: relaunchDialog } = useRelaunch()
   const cancel = async (js: Job[]) => {
     const running = js.filter((j) => active(j.status))
     if (!running.length) return
@@ -110,6 +103,7 @@ export function JobsTable({ fixed = {}, filter = true, compact = false }: { fixe
 
   return (
     <div className="stack" style={{ gap: 10 }}>
+      {relaunchDialog}
       {filter && <FilterBar value={ls.q} onChange={ls.setQ} keys={jobKeys} placeholder="name…  try  status:failed  type:workflow  by:priya" />}
       {selected.size > 0 && (
         <div className="bulkbar" role="region" aria-label="Bulk actions">

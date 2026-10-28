@@ -3,6 +3,7 @@ package resources
 import (
 	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 
 	"github.com/damhau/awxnext/internal/api"
@@ -458,6 +459,31 @@ func registerJobTemplates() {
 	jobsRes.Summary = func(c *Ctx, objs []Obj) error {
 		if err := prevSummary(c, objs); err != nil {
 			return err
+		}
+		// The passwords a relaunch asks for, for every job of the page at once.
+		ids := make([]int64, len(objs))
+		for i, o := range objs {
+			ids[i], _ = api.ID(o["id"])
+		}
+		needs := map[int64][]string{}
+		rows, err := c.DB().Query(c, `SELECT j.unified_job_id, cr.inputs, ct.kind FROM unified_job_credentials j
+			JOIN credentials cr ON cr.id = j.credential_id JOIN credential_types ct ON ct.id = cr.credential_type_id
+			WHERE j.unified_job_id = ANY($1)`, ids)
+		if err != nil {
+			return err
+		}
+		for rows.Next() {
+			var jid int64
+			var inputs map[string]any
+			var kind string
+			if err := rows.Scan(&jid, &inputs, &kind); err == nil {
+				needs[jid] = append(needs[jid], askedPasswords(kind, inputs)...)
+			}
+		}
+		rows.Close()
+		for i, o := range objs {
+			sort.Strings(needs[ids[i]])
+			o["passwords_needed_to_start"] = nonNil(needs[ids[i]])
 		}
 		for _, o := range objs {
 			id, _ := api.ID(o["id"])

@@ -10,7 +10,7 @@ import { Icon } from '../../components/icons'
 import { Menu, useConfirm, useToast } from '../../components/overlay'
 import { Ago, Cell, Crumbs, Elapsed, Empty, ErrorNote, KV, Loading, Maybe, Panel, StatusBadge, Tab } from '../../components/ui'
 import { absolute, active, jobApi, jobPath, plural, shortSha, templatePath, typeLabel, userName } from '../../lib/format'
-import { relaunchJob } from '../../lib/jobs'
+import { useRelaunch } from '../../components/RelaunchDialog'
 import { WorkflowJobGraph } from '../automation/workflow'
 import { DEFAULT_MAX_EVENTS, firstFailure, toGrid, toLines, useJobEvents } from './events'
 import { Matrix } from './Matrix'
@@ -51,13 +51,8 @@ function JobView({ type, job }: { type: string; job: Job }) {
     .map(([k, v]) => `${k}=${v}`)
     .join(' ')
 
-  const relaunch = async (body: Record<string, unknown> = {}) => {
-    try {
-      nav(jobPath(await relaunchJob(job, body)))
-    } catch (e) {
-      toast((e as Error).message, 'error')
-    }
-  }
+  const { relaunch: relaunchAs, dialog: relaunchDialog } = useRelaunch()
+  const relaunch = (body: Record<string, unknown> = {}) => relaunchAs(job, body)
   const cancel = async () => {
     if (!(await confirm({ title: `Cancel #${job.id}?`, body: 'The playbook is stopped; hosts may be left part-way through a task.', confirm: 'Cancel job', danger: true }))) return
     await api.post(`${jobApi(type, job.id)}cancel/`, {}).catch((e) => toast((e as Error).message, 'error'))
@@ -70,6 +65,7 @@ function JobView({ type, job }: { type: string; job: Job }) {
 
   return (
     <div className="page ground">
+      {relaunchDialog}
       <section style={{ borderBottom: '1px solid var(--line)', padding: '18px 24px 0' }}>
         <Crumbs items={[{ label: 'Jobs', to: '/jobs' }, { label: `#${job.id}` }]} />
         <div className="row wrap" style={{ gap: 12, marginTop: 6 }}>

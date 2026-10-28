@@ -312,11 +312,18 @@ func writeLaunched(c *Ctx, w http.ResponseWriter, id int64, extra Obj) {
 }
 
 func handleWorkflowRelaunch(c *Ctx, w http.ResponseWriter, r *http.Request, job Obj) {
+	jid, _ := api.ID(job["id"])
 	if r.Method == "GET" {
-		api.WriteJSON(w, 200, Obj{"passwords_needed_to_start": []string{}})
+		// Only a sliced job replays a template that may ask for passwords.
+		needed := []string{}
+		if boolv(job["is_sliced_job"]) {
+			var first int64
+			c.DB().QueryRow(c, "SELECT job_id FROM workflow_job_nodes WHERE workflow_job_id = $1 AND job_id IS NOT NULL ORDER BY id LIMIT 1", jid).Scan(&first)
+			needed = nonNil(passwordsNeeded(c, jobCredentialIDs(c, first)))
+		}
+		api.WriteJSON(w, 200, Obj{"passwords_needed_to_start": needed})
 		return
 	}
-	jid, _ := api.ID(job["id"])
 	ujt, ok := api.ID(job["unified_job_template"])
 	if !ok {
 		api.WriteError(w, api.BadRequest("Cannot relaunch workflow job: its template has been deleted."))
@@ -349,7 +356,14 @@ func handleWorkflowRelaunch(c *Ctx, w http.ResponseWriter, r *http.Request, job 
 			jtNoSurvey[k] = v
 		}
 		jtNoSurvey["survey_enabled"], jtNoSurvey["extra_vars"] = false, ""
-		newID, _, err := LaunchJobTemplate(c, jtNoSurvey, Obj{"extra_vars": ev}, "relaunch", &LaunchOverrides{Trusted: trusted, Credentials: jobCredentialIDs(c, first)})
+		body, err := api.ReadBody(r)
+		if err != nil {
+			api.WriteError(w, err)
+			return
+		}
+		launchBody := passwordFields(normalizeObj(body))
+		launchBody["extra_vars"] = ev
+		newID, _, err := LaunchJobTemplate(c, jtNoSurvey, launchBody, "relaunch", &LaunchOverrides{Trusted: trusted, Credentials: jobCredentialIDs(c, first)})
 		if err != nil {
 			api.WriteError(w, err)
 			return

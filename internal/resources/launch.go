@@ -40,24 +40,42 @@ func passwordsNeeded(c *Ctx, creds []int64) []string {
 		var inputs map[string]any
 		var kind string
 		c.DB().QueryRow(c, `SELECT cr.inputs, ct.kind FROM credentials cr JOIN credential_types ct ON ct.id = cr.credential_type_id WHERE cr.id = $1`, id).Scan(&inputs, &kind)
-		switch kind {
-		case "ssh":
-			for _, f := range []struct{ field, key string }{{"password", "ssh_password"}, {"ssh_key_unlock", "ssh_key_unlock"}, {"become_password", "become_password"}} {
-				if inputs[f.field] == "ASK" {
-					out = append(out, f.key)
-				}
+		out = append(out, askedPasswords(kind, inputs)...)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// askedPasswords lists the credential_passwords keys a credential asks for at launch.
+func askedPasswords(kind string, inputs map[string]any) []string {
+	var out []string
+	switch kind {
+	case "ssh":
+		for _, f := range []struct{ field, key string }{{"password", "ssh_password"}, {"ssh_key_unlock", "ssh_key_unlock"}, {"become_password", "become_password"}} {
+			if inputs[f.field] == "ASK" {
+				out = append(out, f.key)
 			}
-		case "vault":
-			if inputs["vault_password"] == "ASK" {
-				if id := str(inputs["vault_id"]); id != "" {
-					out = append(out, "vault_password."+id)
-				} else {
-					out = append(out, "vault_password")
-				}
+		}
+	case "vault":
+		if inputs["vault_password"] == "ASK" {
+			if id := str(inputs["vault_id"]); id != "" {
+				out = append(out, "vault_password."+id)
+			} else {
+				out = append(out, "vault_password")
 			}
 		}
 	}
-	sort.Strings(out)
+	return out
+}
+
+// passwordFields keeps the credential passwords of a request body.
+func passwordFields(body Obj) Obj {
+	out := Obj{}
+	for k, v := range body {
+		if k == "credential_passwords" || contains(passwordKeys, k) || strings.HasPrefix(k, "vault_password") {
+			out[k] = v
+		}
+	}
 	return out
 }
 
@@ -690,12 +708,8 @@ func handleRelaunch(c *Ctx, w http.ResponseWriter, r *http.Request, job Obj) {
 		return
 	}
 	// The body only brings passwords: everything else is the original job's.
-	launchBody := Obj{"extra_vars": ev}
-	for k, v := range body {
-		if k == "credential_passwords" || contains(passwordKeys, k) || strings.HasPrefix(k, "vault_password") {
-			launchBody[k] = v
-		}
-	}
+	launchBody := passwordFields(body)
+	launchBody["extra_vars"] = ev
 	jtNoSurvey := Obj{}
 	for k, v := range jt {
 		jtNoSurvey[k] = v

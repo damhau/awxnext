@@ -717,3 +717,41 @@ func TestPromptedLabelsAndGroupsArePermissionChecked(t *testing.T) {
 	must(t, u.post(fmt.Sprintf("workflow_job_template_nodes/%d/labels/", node), map[string]any{"id": theirs}), 403)
 	must(t, u.post(fmt.Sprintf("workflow_job_template_nodes/%d/labels/", node), map[string]any{"id": ours}), 204)
 }
+
+// A job whose credential asks for a password at launch reports it, and its
+// relaunch asks for it again (also a sliced job's, through its workflow job).
+func TestRelaunchAsksForPasswords(t *testing.T) {
+	f := newLaunchFixture(t)
+	a := f.a
+	cred := must(t, a.post("credentials/", map[string]any{"name": uniq("ask"), "organization": f.org, "credential_type": credType(t, a, "ssh"),
+		"inputs": map[string]any{"username": "me", "password": "ASK"}}), 201).id()
+	pw := map[string]any{"credential_passwords": map[string]any{"ssh_password": "secret"}}
+	needs := func(path string) string {
+		t.Helper()
+		return fmt.Sprint(must(t, a.get(path), 200).Body["passwords_needed_to_start"])
+	}
+
+	jt := f.template(t, "site.yml", nil)
+	must(t, a.post(fmt.Sprintf("job_templates/%d/credentials/", jt), map[string]any{"id": cred}), 204)
+	job := must(t, a.post(fmt.Sprintf("job_templates/%d/launch/", jt), pw), 201).id()
+	if got := needs(fmt.Sprintf("jobs/%d/", job)); got != "[ssh_password]" {
+		t.Fatalf("job passwords_needed_to_start: %s", got)
+	}
+	if got := needs(fmt.Sprintf("jobs/%d/relaunch/", job)); got != "[ssh_password]" {
+		t.Fatalf("relaunch passwords_needed_to_start: %s", got)
+	}
+	must(t, a.post(fmt.Sprintf("jobs/%d/relaunch/", job), map[string]any{}), 400)
+	must(t, a.post(fmt.Sprintf("jobs/%d/relaunch/", job), pw), 201)
+
+	sliced := f.template(t, "site.yml", map[string]any{"job_slice_count": 2})
+	must(t, a.post(fmt.Sprintf("job_templates/%d/credentials/", sliced), map[string]any{"id": cred}), 204)
+	wf := must(t, a.post(fmt.Sprintf("job_templates/%d/launch/", sliced), pw), 201)
+	if wf.Body["type"] != "workflow_job" {
+		t.Fatalf("a sliced launch gives a workflow job: %v", wf.Body["type"])
+	}
+	if got := needs(fmt.Sprintf("workflow_jobs/%d/relaunch/", wf.id())); got != "[ssh_password]" {
+		t.Fatalf("sliced relaunch passwords_needed_to_start: %s", got)
+	}
+	must(t, a.post(fmt.Sprintf("workflow_jobs/%d/relaunch/", wf.id()), map[string]any{}), 400)
+	must(t, a.post(fmt.Sprintf("workflow_jobs/%d/relaunch/", wf.id()), pw), 201)
+}

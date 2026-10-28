@@ -13,6 +13,7 @@ import { useStored } from '../../lib/storage'
 import { SurveyFields, useSurveyChoices, validateSurvey, type Survey } from './SurveyEditor'
 import { visibleQuestions } from './surveyLogic'
 import { resOf, type Kind } from './TemplateDetail'
+import { passwordLabel } from '../../lib/jobs'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 interface LaunchInfo {
@@ -26,12 +27,6 @@ interface LaunchInfo {
   [k: string]: any
 }
 
-const passwordLabels: Record<string, string> = {
-  ssh_password: 'SSH password',
-  ssh_key_unlock: 'SSH key passphrase',
-  become_password: 'Privilege escalation password',
-  vault_password: 'Vault password',
-}
 
 export function LaunchPage({ operator = false }: { operator?: boolean }) {
   const { kind: k, id } = useParams()
@@ -195,7 +190,7 @@ function LaunchForm({ kind, tpl, info, survey, operator }: { kind: Kind; tpl: Te
   const varsErr = asks('variables') ? varsError(fields.extra_vars) : null
   const missing: string[] = []
   if (asks('inventory') && !inventory && info.inventory_needed_to_start) missing.push('an inventory')
-  for (const p of info.passwords_needed_to_start ?? []) if (!passwords[p]) missing.push(passwordLabels[p] ?? p)
+  for (const p of info.passwords_needed_to_start ?? []) if (!passwords[p]) missing.push(passwordLabel(p))
   const blocking = Object.keys(surveyErrors).length > 0 || !!varsErr || missing.length > 0
 
   // What the run will see.
@@ -377,7 +372,7 @@ function LaunchForm({ kind, tpl, info, survey, operator }: { kind: Kind; tpl: Te
             )}
             {(info.passwords_needed_to_start ?? []).map((p) => (
               <div key={p} className="field">
-                <label htmlFor={p}>{passwordLabels[p] ?? p.replace(/_/g, ' ')}</label>
+                <label htmlFor={p}>{passwordLabel(p)}</label>
                 <input id={p} className="input" type="password" autoComplete="off" value={passwords[p] ?? ''} onChange={(e) => setPasswords((x) => ({ ...x, [p]: e.target.value }))} style={{ maxWidth: 320 }} />
                 <span className="help">A credential of this template asks for it at launch; it is not stored.</span>
               </div>

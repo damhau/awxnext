@@ -22,3 +22,17 @@ export async function relaunchJob(j: Pick<Job, 'id' | 'type' | 'unified_job_temp
   r = await api.post(`${jobApi(j.type, j.id)}relaunch/`, body)
   return { id: r.id, type: r.type ?? j.type }
 }
+
+const passwordLabels: Record<string, string> = {
+  ssh_password: 'SSH password',
+  ssh_key_unlock: 'SSH key passphrase',
+  become_password: 'Privilege escalation password',
+  vault_password: 'Vault password',
+}
+
+/** A credential_passwords key in words: "Vault password (prod)" for vault_password.prod. */
+export function passwordLabel(key: string): string {
+  const [base, vaultId] = key.split(/\.(.*)/)
+  const label = passwordLabels[base] ?? key
+  return vaultId ? `${label} (${vaultId})` : label
+}
