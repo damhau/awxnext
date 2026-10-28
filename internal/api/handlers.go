@@ -24,6 +24,9 @@ const (
 	maxPageSize     = 200
 )
 
+// rootKeys are the API root names AWX gives to resources not listed under their own name.
+var rootKeys = map[string]string{"inventories": "inventory", "constructed_inventories": "constructed_inventory"}
+
 // Router builds the HTTP handler for the API.
 func (a *App) Router() chi.Router {
 	r := chi.NewRouter()
@@ -43,10 +46,16 @@ func (a *App) Router() chi.Router {
 			"login_redirect_override": a.Settings.String(c, "LOGIN_REDIRECT_OVERRIDE"),
 		})
 	}))
-	r.Get("/api/v2/", a.wrap(func(c *Ctx, w http.ResponseWriter, r *http.Request) {
+	// Public with AWX's keys, as in AWX: awxkit reads it before logging in
+	// and finds endpoints by these names.
+	r.Get("/api/v2/", a.wrapPublic(func(c *Ctx, w http.ResponseWriter, r *http.Request) {
 		root := Obj{}
 		for _, res := range Resources() {
-			root[res.Name] = "/api/v2/" + res.Name + "/"
+			key := res.Name
+			if k, ok := rootKeys[res.Name]; ok {
+				key = k
+			}
+			root[key] = "/api/v2/" + res.Name + "/"
 		}
 		for _, rt := range a.Routes {
 			p := strings.TrimPrefix(rt.Pattern, "/api/v2/")

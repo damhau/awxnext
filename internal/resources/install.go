@@ -18,6 +18,22 @@ func Install(app *api.App) {
 	installWebhookRoutes(app)
 	installCallbackRoutes(app)
 	app.Handle("GET", "/api/v2/metrics/", handleAWXMetrics)
+	app.Handle("GET", "/api/v2/applications/", applications)
+	app.Handle("OPTIONS", "/api/v2/applications/", applications)
+}
+
+// applications stands in for AWX's OAuth2 applications, which are not
+// supported (personal tokens replace them): always empty and marked
+// deprecated, so awxkit's export and import skip it.
+func applications(c *Ctx, w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Warning", `299 awxnext "deprecated: OAuth2 applications are not supported, use personal tokens"`)
+	w.Header().Set("Allow", "GET, HEAD, OPTIONS")
+	if r.Method == "OPTIONS" {
+		api.WriteJSON(w, 200, Obj{"name": "Applications", "description": "OAuth2 applications are not supported by awxnext: use personal tokens.",
+			"renders": []string{"application/json"}, "parses": []string{"application/json"}})
+		return
+	}
+	api.WriteJSON(w, 200, Obj{"count": 0, "next": nil, "previous": nil, "results": []any{}})
 }
 
 // Bootstrap seeds data required at startup: managed roles, install uuid, this instance.

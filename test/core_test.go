@@ -19,13 +19,23 @@ func TestRootAndPing(t *testing.T) {
 	if r.Body["version"] != "24.6.1" {
 		t.Fatalf("bad ping: %v", r.Body)
 	}
-	r = must(t, a.get("/api/v2/"), 200)
-	for _, k := range []string{"organizations", "users", "teams", "ping", "me", "settings"} {
-		if _, ok := r.Body[k]; !ok {
-			t.Errorf("api root missing %s", k)
+	// The version root is public (awxkit reads it before logging in) and
+	// uses AWX's keys.
+	r = must(t, (&client{t: t}).get("/api/v2/"), 200)
+	for k, want := range map[string]string{"organizations": "/api/v2/organizations/", "inventory": "/api/v2/inventories/",
+		"constructed_inventory": "/api/v2/constructed_inventories/", "applications": "/api/v2/applications/", "ping": "/api/v2/ping/",
+		"me": "/api/v2/me/", "settings": "/api/v2/settings/"} {
+		if r.Body[k] != want {
+			t.Errorf("api root %s = %v, want %s", k, r.Body[k], want)
 		}
 	}
+	if _, ok := r.Body["inventories"]; ok {
+		t.Errorf("api root lists inventories under its resource name")
+	}
 	must(t, (&client{t: t}).get("organizations/"), 401)
+	if r = must(t, a.get("applications/"), 200); r.count() != 0 {
+		t.Fatalf("applications: %s", r.Raw)
+	}
 }
 
 func TestProductHeaders(t *testing.T) {

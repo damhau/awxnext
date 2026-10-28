@@ -164,7 +164,7 @@ The gaps fall in four groups:
 
 | Feature | AWX 24.6 | awxnext | Notes |
 |---|---|---|---|
-| API root, ping, config, me | Yes | Done | `config` has no license POST/DELETE |
+| API root, ping, config, me | Yes | Done | The version root is public with AWX's keys (`inventory`, `constructed_inventory`); `applications/` is always empty, OAuth2 applications being out of scope. `config` has no license POST/DELETE |
 | Field validation like AWX's serializers | Yes | Done | Null reads as `""` for text and choice fields and as `false` for booleans, then is validated, as the `awx.awx` modules expect |
 | OPTIONS, pagination, filtering, ordering | Yes | Done | Plain filters crossing a relation match the same related row and `chain__` ones each their own, as in AWX; `role_level` needs every permission of the role |
 | Named URLs | Yes | Partial | Common forms only |
