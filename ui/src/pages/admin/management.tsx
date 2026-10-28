@@ -10,6 +10,8 @@ import { DataTable } from '../../components/table'
 import { Ago, Elapsed, Empty, ErrorNote, Loading, PageHead, Panel, RunBars, Status, Tab, Upcoming } from '../../components/ui'
 import { jobPath } from '../../lib/format'
 import { SchedulesTab } from '../automation/SchedulesTab'
+import { NotificationsTab } from '../../components/NotificationsTab'
+import { useSession } from '../../app/context'
 
 type SJT = Template & { job_type: string }
 
@@ -127,6 +129,7 @@ export function ManagementList() {
 
 export function ManagementDetail() {
   const id = Number(useParams().id)
+  const { me } = useSession()
   const t = useObject<SJT>(`system_job_templates/${id}/`)
   const jobs = useList<Job>(`system_job_templates/${id}/jobs/`, { order_by: '-id', page_size: 20 })
   const [launch, setLaunch] = useState(false)
@@ -152,6 +155,7 @@ export function ManagementDetail() {
               Jobs
             </Tab>
             <Tab to={`${base}/schedules`}>Schedules</Tab>
+            <Tab to={`${base}/notifications`}>Notifications</Tab>
           </>
         }
       />
@@ -185,6 +189,7 @@ export function ManagementDetail() {
             }
           />
           <Route path="schedules" element={<SchedulesTab template={{ id, type: 'system_job_template', name: sjt.name }} />} />
+          <Route path="notifications" element={<NotificationsTab resource="system_job_templates" id={sjt.id} editable={me.is_superuser} />} />
         </Routes>
       </div>
       {launch && <LaunchDialog t={sjt} onClose={() => setLaunch(false)} />}

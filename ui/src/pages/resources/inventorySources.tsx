@@ -6,6 +6,7 @@ import { useLive } from '../../api/live'
 import type { Base, Ref } from '../../api/types'
 import { Check, FormError, Lookup, SelectField, TextInput, VarsEditor, useForm, varsError } from '../../components/form'
 import { Icon } from '../../components/icons'
+import { NotificationsDialog } from '../../components/NotificationsTab'
 import { Dialog, Menu, useConfirm, useToast } from '../../components/overlay'
 import { DataTable, type Column } from '../../components/table'
 import { Ago, Empty, RunBars, Status } from '../../components/ui'
@@ -58,6 +59,8 @@ export function InventorySourcesTab({ inv }: { inv: Inventory }) {
   const sources = useSubList<Source>(path, { order_by: 'name', page_size: 100 })
   const [sp, setSp] = useSearchParams()
   const [edit, setEdit] = useState<null | { source?: Source }>(null)
+  // ?source=<id>&notifications=1 (links from a notification) opens that source's notifications.
+  const [notify, setNotify] = useState<number | null>(sp.get('notifications') ? Number(sp.get('source')) || null : null)
   const invalidate = useInvalidate()
   const toast = useToast()
   const confirm = useConfirm()
@@ -168,6 +171,7 @@ export function InventorySourcesTab({ inv }: { inv: Inventory }) {
           )}
           <Menu label={`Actions for ${s.name}`} className="btn sm icon ghost">
             <button onClick={() => setEdit({ source: s })}>Edit…</button>
+            <button onClick={() => setNotify(s.id)}>Notifications…</button>
             <Link to={`/jobs?q=type:inventory_update ${encodeURIComponent(s.name)}`}>Update history</Link>
             {editable && (
               <>
@@ -213,6 +217,18 @@ export function InventorySourcesTab({ inv }: { inv: Inventory }) {
           </Empty>
         }
       />
+      {notify && (
+        <NotificationsDialog
+          title={`Notifications for ${sources.data?.results.find((s) => s.id === notify)?.name ?? 'source'}`}
+          resource="inventory_sources"
+          id={notify}
+          editable={editable}
+          onClose={() => {
+            setNotify(null)
+            if (sp.get('notifications')) setSp({}, { replace: true })
+          }}
+        />
+      )}
       {edit && (
         <SourceDialog
           inv={inv}

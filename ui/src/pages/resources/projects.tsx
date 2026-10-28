@@ -17,6 +17,7 @@ import { shortSha, plural } from '../../lib/format'
 import { compile, statusValue, type KeyTable } from '../../lib/query'
 import { SchedulesTab } from '../automation/SchedulesTab'
 import { applyErrors, FilterBox, ManagedNotice, NameCell, Provenance, refOf, useDelete, useOrgColumn, folderColumn, folderKey } from './common'
+import { NotificationsTab } from '../../components/NotificationsTab'
 
 export interface Project extends Base {
   scm_type: '' | 'git'
@@ -446,6 +447,7 @@ export function ProjectDetail() {
             </Tab>
             <Tab to={`${base}/jobs`}>Syncs</Tab>
             <Tab to={`${base}/schedules`}>Schedules</Tab>
+            <Tab to={`${base}/notifications`}>Notifications</Tab>
             <Tab to={`${base}/access`}>Access</Tab>
           </>
         }
@@ -622,6 +624,15 @@ export function ProjectSchedulesTab() {
   return (
     <div className="page-body">
       <SchedulesTab template={{ id: p.id, type: 'project', name: p.name }} />
+    </div>
+  )
+}
+
+export function ProjectNotificationsTab() {
+  const p = useProject()
+  return (
+    <div className="page-body">
+      <NotificationsTab resource="projects" id={p.id} editable={!!p.summary_fields.user_capabilities?.edit && !p.managed_by} />
     </div>
   )
 }

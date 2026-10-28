@@ -190,7 +190,19 @@ func orderedLinkSub(name, target, table, childCol, ct string) *SubList {
 	}
 }
 
+// notifiedResources maps the content types notifications attach to to their resources.
+var notifiedResources = map[string]string{
+	"jobtemplate":         "job_templates",
+	"workflowjobtemplate": "workflow_job_templates",
+	"project":             "projects",
+	"inventorysource":     "inventory_sources",
+	"organization":        "organizations",
+	"systemjobtemplate":   "system_job_templates",
+}
+
 // notificationSubs exposes notification_templates_{started,success,error[,approvals]} sublists.
+// Attaching a notification needs change on it too, as in AWX: whoever may
+// change a template may not attach every notification they can see.
 func notificationSubs(ct string, approvals bool) []*SubList {
 	events := []string{"started", "success", "error"}
 	if approvals {
@@ -206,6 +218,9 @@ func notificationSubs(ct string, approvals bool) []*SubList {
 				return fmt.Sprintf("t.id IN (SELECT notification_template_id FROM notification_template_links WHERE content_type = %s AND object_id = %s AND event = %s)", arg(ct), arg(pid), arg(ev))
 			},
 			NoCreate: true,
+			CanAttach: func(c *Ctx, parent Obj, cid int64) error {
+				return allowed(api.HasPermID(c, "notification_templates", cid, "change"))
+			},
 			Associate: func(c *Ctx, pid, cid int64) error {
 				_, err := c.DB().Exec(c, `INSERT INTO notification_template_links (content_type, object_id, notification_template_id, event) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING`, ct, pid, cid, ev)
 				return err

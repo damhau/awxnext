@@ -32,7 +32,7 @@ The gaps fall in four groups:
 3. **Deferred by plan**: LDAP, SAML, social, RADIUS and TACACS+ login;
    notification types other than webhook; SVN and archive projects; CyberArk,
    Thycotic, AWS Secrets Manager and Centrify lookups; Helm chart; backup.
-4. **UI holes over a finished API**: attaching notifications, inventory
+4. **UI holes over a finished API**: inventory
    instance groups, credential type management, inventory source schedules,
    `start_at_task`, a few more listed below.
 
@@ -54,7 +54,7 @@ The gaps fall in four groups:
 **P1: wrong or misleading today**
 
 1. ~~Implement or remove the settings that do nothing~~ (done, roadmap M1-01 to M1-07).
-2. Notifications tab on templates, projects, inventory sources and organizations (the API exists; the Notifications page points to a tab that is not there).
+2. ~~Notifications tab on templates, projects, inventory sources and organizations~~ (done, roadmap M1-08).
 3. Custom credential types use only a Jinja subset in injectors (`{{ var }}`, a few filters): types imported from AWX that use `{% if %}` or other filters fail at run time.
 4. ~~Relaunch from the UI never asks for credential passwords~~ (done, roadmap M1-10).
 5. A test harness running the `awx.awx` collection and awxkit against awxnext (phase 7), since compatibility is the main promise.
@@ -87,7 +87,7 @@ The gaps fall in four groups:
 | Local users, superuser and system auditor | Yes | Done | `createsuperuser` CLI also resets a password |
 | Password policy settings | Yes | Missing | |
 | Organizations: max_hosts, default EE, Galaxy credentials, instance groups | Yes | Done | max_hosts also stops inventory source imports |
-| Organization notification attachments | Yes | Done (API only) | No UI |
+| Organization notification attachments | Yes | Done | |
 | Teams | Yes | Done | Plus nested teams |
 | `teams/N/projects/`, `teams/N/credentials/`, `users/N/projects/`, `users/N/access_list/` | Yes | Missing | |
 | Object roles (`/roles/`, `object_roles`, users/teams roles, role fields per type) | Yes | Done | |
@@ -100,7 +100,7 @@ The gaps fall in four groups:
 | LDAP, SAML, GitHub/Google/Azure AD | Yes | Later | |
 | RADIUS, TACACS+ | Yes | Missing | Not in the plan |
 | Session, token and login settings | Yes | Partial | Stored but ignored, see P1 |
-| UI: users, teams, organizations, access tabs | Yes | Done | No organization notifications tab |
+| UI: users, teams, organizations, access tabs | Yes | Done | |
 
 ## Inventories and credentials
 
@@ -118,7 +118,7 @@ The gaps fall in four groups:
 | rhv, insights sources | Yes | Partial | No managed credential type |
 | `file` source, `inventory_import` | Yes | Missing | GitOps inventory `content` covers part of it |
 | overwrite, overwrite_vars, enabled_var, host_filter, update on launch with cache | Yes | Done | |
-| Inventory updates: cancel, stdout, events, notifications, schedules | Yes | Done | UI has no schedules or notifications tab for sources |
+| Inventory updates: cancel, stdout, events, notifications, schedules | Yes | Done | UI has no schedules for sources; notifications are in the source's menu |
 | Bulk host create/delete | Yes | Missing | |
 | Host metrics | Yes | Partial | Collected per job and cleaned up; no API or UI |
 | Managed credential types | Yes | Partial | All but Insights and RHV; Kubernetes CA not injected |
@@ -152,7 +152,7 @@ The gaps fall in four groups:
 | Management-job workflow nodes | Yes | Done | Fixed during the audit |
 | Node instance groups prompt; workflow labels passed to nodes | Yes | Missing | |
 | Schedules: rrule with exclusions, timezones, saved prompts, preview | Yes | Done | No labels/IG prompts |
-| Notifications: webhook, started/success/error/approval events, custom messages | Yes | Done | Attach only through the API |
+| Notifications: webhook, started/success/error/approval events, custom messages | Yes | Done | Attaching needs change on the notification too, as in AWX; `used_by` (awxnext) lists where one is attached |
 | Email | Yes | Later | Roadmap M3-01 |
 | Slack, PagerDuty, Twilio, Grafana, IRC, Mattermost, Rocket.Chat, AWS SNS | Yes | Out of scope | Dropped on 2026-10-27 |
 | GitHub/GitLab/Bitbucket DC webhooks with status posting | Yes | Done | Plus a generic JSONPath-mapped webhook |

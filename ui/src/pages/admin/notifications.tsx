@@ -1,3 +1,4 @@
+import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Link, Route, Routes, useNavigate, useParams } from 'react-router'
 import { api } from '../../api/client'
@@ -6,11 +7,13 @@ import type { Base, Ref } from '../../api/types'
 import { useOrg, usePreselectOrg } from '../../app/context'
 import { AccessTab } from '../../components/access/Access'
 import { useCopy } from '../../components/CopyDialog'
+import { notificationEvents } from '../../components/NotificationsTab'
 import { Check, Field, FormError, Lookup, SelectField, TextArea, TextInput, useForm } from '../../components/form'
 import { Icon } from '../../components/icons'
 import { Menu, useToast } from '../../components/overlay'
 import { DataTable } from '../../components/table'
 import { Ago, Cell, Empty, ErrorNote, KV, Loading, PageHead, Panel, Tab } from '../../components/ui'
+import { typeLabel } from '../../lib/format'
 import { ListPage, useDelete } from './common'
 
 interface WebhookConfig {
@@ -216,11 +219,7 @@ export function NotificationDetail() {
                   </Panel>
                 </div>
                 <div className="narrow">
-                  <Panel title="Where it is used">
-                    <p className="muted small" style={{ margin: 0 }}>
-                      Attach this notification from the Notifications tab of a job template, workflow, project, inventory source or organization, choosing which events trigger it.
-                    </p>
-                  </Panel>
+                  <UsedBy id={id} />
                 </div>
               </div>
             }
@@ -446,5 +445,57 @@ function NTForm({ nt }: { nt?: NT }) {
         </button>
       </div>
     </form>
+  )
+}
+
+type Use = { type: string; id: number; name: string; events: string[]; inventory?: number }
+
+/** Where a use of a notification is changed: the Notifications tab of its object. */
+function usePath(u: Use): string {
+  switch (u.type) {
+    case 'job_template':
+      return `/templates/job/${u.id}/notifications`
+    case 'workflow_job_template':
+      return `/templates/workflow/${u.id}/notifications`
+    case 'project':
+      return `/projects/${u.id}/notifications`
+    case 'inventory_source':
+      return `/inventories/${u.inventory}/sources?source=${u.id}&notifications=1`
+    case 'organization':
+      return `/organizations/${u.id}/notifications`
+    case 'system_job_template':
+      return `/management-jobs/${u.id}/notifications`
+  }
+  return '/'
+}
+
+const eventLabel = (e: string) => notificationEvents.find((x) => x.key === e)?.label.toLowerCase() ?? e
+
+function UsedBy({ id }: { id: number | string | undefined }) {
+  const used = useQuery({ queryKey: [`notification_templates/${id}/used_by/`], queryFn: () => api.get<{ results: Use[] }>(`notification_templates/${id}/used_by/`) })
+  const rows = used.data?.results ?? []
+  return (
+    <Panel title="Where it is used">
+      {used.error ? (
+        <ErrorNote error={used.error} />
+      ) : rows.length ? (
+        <ul className="stack" style={{ gap: 8, margin: 0, padding: 0, listStyle: 'none' }}>
+          {rows.map((u) => (
+            <li key={`${u.type}:${u.id}`}>
+              <Link to={usePath(u)}>{u.name}</Link>
+              <div className="faint small">
+                {typeLabel(u.type)} · on {u.events.map(eventLabel).join(', ')}
+              </div>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        !used.isPending && (
+          <p className="muted small" style={{ margin: 0 }}>
+            Not attached to anything you can see. Attach it from the Notifications tab of a job template, workflow, project, inventory source, organization or management job, choosing which events trigger it.
+          </p>
+        )
+      )}
+    </Panel>
   )
 }

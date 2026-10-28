@@ -166,3 +166,49 @@ subjectOK:
 	must(t, a.post(fmt.Sprintf("users/%d/roles/", uid), map[string]any{"id": objectRole(t, a, "job_templates", jt, "admin_role")}), 204)
 	must(t, user.post(fmt.Sprintf("job_templates/%d/notification_templates_success/", jt), map[string]any{"id": ntID}), 403)
 }
+
+// Attaching a notification needs change on the parent and on the notification
+// (as in AWX); used_by lists where it is attached, among what the user sees.
+func TestNotificationAttachAndUsedBy(t *testing.T) {
+	f := newLaunchFixture(t)
+	a := f.a
+	jt := f.template(t, "site.yml", nil)
+	nt := must(t, a.post("notification_templates/", map[string]any{"name": uniq("hook"), "organization": f.org, "notification_type": "webhook",
+		"notification_configuration": map[string]any{"url": "https://hooks.example.com/x"}}), 201).id()
+	success := fmt.Sprintf("job_templates/%d/notification_templates_success/", jt)
+
+	u, uid := newUser(t, a)
+	must(t, a.post("role_user_assignments/", map[string]any{"role_definition": roleDef(t, "JobTemplate Admin"), "user": uid, "object_id": jt}), 201)
+	must(t, a.post("role_user_assignments/", map[string]any{"role_definition": roleDef(t, "Organization Audit"), "user": uid, "object_id": f.org}), 201)
+	must(t, u.post(success, map[string]any{"id": nt}), 403)
+	must(t, a.post("role_user_assignments/", map[string]any{"role_definition": roleDef(t, "NotificationTemplate Admin"), "user": uid, "object_id": nt}), 201)
+	must(t, u.post(success, map[string]any{"id": nt}), 204)
+	must(t, u.post(fmt.Sprintf("job_templates/%d/notification_templates_error/", jt), map[string]any{"id": nt}), 204)
+	must(t, a.post(fmt.Sprintf("organizations/%d/notification_templates_approvals/", f.org), map[string]any{"id": nt}), 204)
+
+	used := must(t, a.get(fmt.Sprintf("notification_templates/%d/used_by/", nt)), 200)
+	if used.count() != 2 {
+		t.Fatalf("used_by: %s", used.Raw)
+	}
+	got := map[string]string{}
+	for _, r := range used.results() {
+		got[r["type"].(string)] = fmt.Sprint(r["events"])
+	}
+	if got["job_template"] != "[error success]" || got["organization"] != "[approvals]" {
+		t.Fatalf("used_by: %v", got)
+	}
+
+	// A user who sees the notification but not the template does not see the template in used_by.
+	other, oid := newUser(t, a)
+	must(t, a.post("role_user_assignments/", map[string]any{"role_definition": roleDef(t, "NotificationTemplate Admin"), "user": oid, "object_id": nt}), 201)
+	for _, r := range must(t, other.get(fmt.Sprintf("notification_templates/%d/used_by/", nt)), 200).results() {
+		if r["type"] == "job_template" {
+			t.Fatalf("used_by shows a template the user cannot see: %v", r)
+		}
+	}
+
+	must(t, u.post(success, map[string]any{"id": nt, "disassociate": true}), 204)
+	if a.get(success).count() != 0 {
+		t.Fatal("not detached")
+	}
+}

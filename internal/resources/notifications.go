@@ -238,6 +238,50 @@ func registerNotifications() {
 		go deliver(context.Background(), c.App, nid)
 		api.WriteJSON(w, 202, Obj{"notification": nid})
 	}})
+	// used_by (awxnext): the objects this notification is attached to, and for
+	// which events, among those the user can see.
+	nt.Actions = append(nt.Actions, &api.Action{Name: "used_by", Methods: []string{"GET"}, Handler: func(c *Ctx, w http.ResponseWriter, r *http.Request, obj Obj) {
+		id, _ := api.ID(obj["id"])
+		rows, err := c.DB().Query(c, `SELECT content_type, object_id, array_agg(event ORDER BY event) FROM notification_template_links
+			WHERE notification_template_id = $1 GROUP BY 1, 2 ORDER BY 1, 2`, id)
+		if err != nil {
+			api.WriteError(w, err)
+			return
+		}
+		type link struct {
+			ct     string
+			id     int64
+			events []string
+		}
+		var links []link
+		for rows.Next() {
+			var l link
+			if err := rows.Scan(&l.ct, &l.id, &l.events); err == nil {
+				links = append(links, l)
+			}
+		}
+		rows.Close()
+		out := []Obj{}
+		for _, l := range links {
+			res := api.Lookup(notifiedResources[l.ct])
+			if res == nil {
+				continue
+			}
+			if ok, _ := api.CanView(c, res, l.id); !ok {
+				continue
+			}
+			o, err := api.Get(c, res, l.id)
+			if err != nil {
+				continue
+			}
+			item := Obj{"type": res.Type, "id": l.id, "name": o["name"], "events": l.events}
+			if inv, ok := o["inventory"]; ok {
+				item["inventory"] = inv
+			}
+			out = append(out, item)
+		}
+		api.WriteJSON(w, 200, Obj{"count": len(out), "results": out})
+	}})
 
 	notifView := api.Lookup("notification_templates")
 	api.Register(&Resource{

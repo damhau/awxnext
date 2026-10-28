@@ -13,6 +13,7 @@ import { DataTable } from '../../components/table'
 import { Ago, Avatar, Empty, ErrorNote, KV, Loading, PageHead, Panel, Tab } from '../../components/ui'
 import { userName } from '../../lib/format'
 import { ListPage, useDelete } from './common'
+import { NotificationsTab } from '../../components/NotificationsTab'
 
 type Org = Base & { max_hosts: number; default_environment: number | null }
 
@@ -245,6 +246,7 @@ export function OrganizationDetail() {
             <Tab to={`${base}/teams`} n={counts.teams}>
               Teams
             </Tab>
+            <Tab to={`${base}/notifications`}>Notifications</Tab>
             <Tab to={`${base}/access`}>Access</Tab>
           </>
         }
@@ -312,6 +314,7 @@ export function OrganizationDetail() {
           />
           <Route path="members" element={<OrgMembers org={o} />} />
           <Route path="teams" element={<OrgTeams org={o} />} />
+          <Route path="notifications" element={<NotificationsTab resource="organizations" id={o.id} approvals editable={!!o.summary_fields.user_capabilities?.edit} />} />
           <Route path="access" element={<AccessTab resource="organizations" id={id} name={o.name} />} />
         </Routes>
       </div>

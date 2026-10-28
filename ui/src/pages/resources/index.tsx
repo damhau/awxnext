@@ -32,6 +32,7 @@ const m_inventorySources = lazyModule(() => import('./inventorySources'))
 const InventorySourcesTab = m_inventorySources('InventorySourcesTab')
 const m_projects = lazyModule(() => import('./projects'))
 const ProjectAccessTab = m_projects('ProjectAccessTab')
+const ProjectNotificationsTab = m_projects('ProjectNotificationsTab')
 const ProjectDetail = m_projects('ProjectDetail')
 const ProjectDetailsTab = m_projects('ProjectDetailsTab')
 const ProjectForm = m_projects('ProjectForm')
@@ -69,6 +70,7 @@ export function resourceRoutes() {
         <Route index element={<ProjectDetailsTab />} />
         <Route path="jobs" element={<ProjectJobsTab />} />
         <Route path="schedules" element={<ProjectSchedulesTab />} />
+        <Route path="notifications" element={<ProjectNotificationsTab />} />
         <Route path="access" element={<ProjectAccessTab />} />
       </Route>
       <Route path="credentials" element={<CredentialList />} />
