@@ -53,13 +53,13 @@ func init() {
 		{Key: "AWX_COLLECTIONS_ENABLED_ON_PROJECT_SYNC", Category: "jobs", Type: "boolean", Default: true},
 
 		// authentication
-		{Key: "SESSION_COOKIE_AGE", Category: "authentication", Type: "integer", Default: 1800, Label: "Idle Time Force Log Out"},
-		{Key: "SESSIONS_PER_USER", Category: "authentication", Type: "integer", Default: -1},
+		{Key: "SESSION_COOKIE_AGE", Category: "authentication", Type: "integer", Default: 1800, Label: "Idle Time Force Log Out", Help: "Seconds without activity after which a session ends (at least 60)."},
+		{Key: "SESSIONS_PER_USER", Category: "authentication", Type: "integer", Default: -1, Label: "Maximum Number of Simultaneous Logged In Sessions", Help: "Logging in beyond this number ends the user's oldest session. -1: no limit."},
 		{Key: "DISABLE_LOCAL_AUTH", Category: "authentication", Type: "boolean", Default: false, Help: "Disable password login for non-superusers. Superusers keep local login for break-glass access."},
-		{Key: "AUTH_BASIC_ENABLED", Category: "authentication", Type: "boolean", Default: true, Label: "Enable HTTP Basic Auth"},
+		{Key: "AUTH_BASIC_ENABLED", Category: "authentication", Type: "boolean", Default: true, Label: "Enable HTTP Basic Auth", Help: "Accept a username and password in the Authorization header of API calls. The awx.awx collection uses it unless it is given a token."},
 		{Key: "OAUTH2_PROVIDER", Category: "authentication", Type: "nested object", Default: map[string]any{"ACCESS_TOKEN_EXPIRE_SECONDS": 31536000000, "AUTHORIZATION_CODE_EXPIRE_SECONDS": 600, "REFRESH_TOKEN_EXPIRE_SECONDS": 2628000}},
 		{Key: "ALLOW_OAUTH2_FOR_EXTERNAL_USERS", Category: "authentication", Type: "boolean", Default: false},
-		{Key: "LOGIN_REDIRECT_OVERRIDE", Category: "authentication", Type: "string", Default: ""},
+		{Key: "LOGIN_REDIRECT_OVERRIDE", Category: "authentication", Type: "string", Default: "", Label: "Login redirect override URL", Help: "Where the web UI sends users who are not logged in, instead of its login page (for example a single sign-on login URL). Open the UI with ?login=local to reach the local login page anyway."},
 
 		// oidc
 		{Key: "SOCIAL_AUTH_OIDC_KEY", Category: "oidc", Type: "string", Default: "", Label: "OIDC Key", Help: "The OIDC key (Client ID) from your IDP."},
@@ -76,8 +76,8 @@ func init() {
 			Help: `Rules mapping groups to access. Examples: {"group": "awx-admins", "superuser": true}, {"group": "auditors", "auditor": true}, {"group": "ops", "organization": "Ops", "role": "member"}, {"group": "ops-leads", "organization": "Ops", "team": "Leads", "role": "admin"}. Group can be a regex with "group_regex". Mappings are authoritative and re-evaluated on every login.`},
 
 		// ui
-		{Key: "CUSTOM_LOGIN_INFO", Category: "ui", Type: "string", Default: "", Public: true},
-		{Key: "CUSTOM_LOGO", Category: "ui", Type: "string", Default: "", Public: true},
+		{Key: "CUSTOM_LOGIN_INFO", Category: "ui", Type: "string", Default: "", Public: true, Label: "Custom Login Info", Help: "Text shown on the login page, for example who to ask for an account."},
+		{Key: "CUSTOM_LOGO", Category: "ui", Type: "string", Default: "", Public: true, Label: "Custom Logo", Help: "Image shown on the login page: a data URL of a GIF, PNG or JPEG image (data:image/png;base64,…)."},
 		{Key: "MAX_UI_JOB_EVENTS", Category: "ui", Type: "integer", Default: 4000, Public: true},
 		{Key: "UI_LIVE_UPDATES_ENABLED", Category: "ui", Type: "boolean", Default: true, Public: true},
 		{Key: "PENDO_TRACKING_STATE", Category: "ui", Type: "string", Default: "off", Public: true},

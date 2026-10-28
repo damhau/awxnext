@@ -165,14 +165,14 @@ The gaps fall in four groups:
 
 | Feature | AWX 24.6 | awxnext | Notes |
 |---|---|---|---|
-| API root, ping, config, me | Yes | Done | `config` has no license POST/DELETE; custom login info is hard-coded |
+| API root, ping, config, me | Yes | Done | `config` has no license POST/DELETE |
 | OPTIONS, pagination, filtering, ordering | Yes | Done | `chain__` acts as AND; `host_filter` and `role_level` ignored |
 | Named URLs | Yes | Partial | Common forms only |
 | Browsable HTML API | Yes | Missing | JSON only |
 | Dashboard endpoints | Yes | Missing | The UI's "Now" page replaces the dashboard |
 | Bulk API | Yes | Missing | |
 | Activity stream | Yes | Partial | No entries for job launches or role assignment API grants |
-| Settings API and UI | Yes | Partial | Settings not read by any code: `ACTIVITY_STREAM_ENABLED*`, `ORG_ADMINS_CAN_SEE_ALL_USERS`, `MANAGE_ORGANIZATION_AUTH`, `SESSION_COOKIE_AGE`, `SESSIONS_PER_USER`, `AUTH_BASIC_ENABLED`, `LOGIN_REDIRECT_OVERRIDE`, `CUSTOM_LOGO`, `CUSTOM_LOGIN_INFO`, `MAX_UI_JOB_EVENTS`, `UI_LIVE_UPDATES_ENABLED`, `MAX_WEBSOCKET_EVENT_RATE`, `SCHEDULE_MAX_JOBS`, `MAX_FORKS`, `AWX_RUNNER_KEEPALIVE_SECONDS`, `AWX_ISOLATION_SHOW_PATHS`, `LOG_AGGREGATOR_*`, analytics |
+| Settings API and UI | Yes | Partial | Settings not read by any code: `ACTIVITY_STREAM_ENABLED*`, `ORG_ADMINS_CAN_SEE_ALL_USERS`, `MANAGE_ORGANIZATION_AUTH`, `MAX_UI_JOB_EVENTS`, `UI_LIVE_UPDATES_ENABLED`, `MAX_WEBSOCKET_EVENT_RATE`, `SCHEDULE_MAX_JOBS`, `MAX_FORKS`, `AWX_RUNNER_KEEPALIVE_SECONDS`, `AWX_ISOLATION_SHOW_PATHS`, `LOG_AGGREGATOR_*`, analytics |
 | External log aggregation | Yes | Missing | JSON logs on stderr instead |
 | Prometheus metrics | Yes | Partial | No subsystem metrics or `node`/`metric` parameters; OpenTelemetry traces added |
 | Analytics, subscriptions | Yes | By design | Collection `license`/`subscriptions` modules fail |

@@ -39,9 +39,9 @@ func (a *App) Router() chi.Router {
 			"current_version":         "/api/v2/",
 			"available_versions":      Obj{"v2": "/api/v2/"},
 			"oauth2":                  "/api/o/",
-			"custom_logo":             "",
-			"custom_login_info":       "",
-			"login_redirect_override": "",
+			"custom_logo":             a.Settings.String(c, "CUSTOM_LOGO"),
+			"custom_login_info":       a.Settings.String(c, "CUSTOM_LOGIN_INFO"),
+			"login_redirect_override": a.Settings.String(c, "LOGIN_REDIRECT_OVERRIDE"),
 		})
 	}))
 	r.Get("/api/v2/", a.wrap(func(c *Ctx, w http.ResponseWriter, r *http.Request) {

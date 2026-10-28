@@ -493,6 +493,8 @@ table.data tr.folder-row:hover td { background: var(--hover); }
 .login-card { width: 100%; max-width: 380px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-lg); padding: 28px; display: flex; flex-direction: column; gap: 16px; }
 .login-card .brand { color: var(--ink); font-size: 22px; }
 .divider { display: flex; align-items: center; gap: 10px; color: var(--muted-2); font-size: 12px; }
+.login-logo { display: block; max-width: 100%; max-height: 72px; object-fit: contain; align-self: flex-start; }
+.login-info { margin: 0; color: var(--muted); font-size: 12.5px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
 .divider::before, .divider::after { content: ''; flex: 1; border-top: 1px solid var(--line); }
 
 /* ---------- palette ---------- */

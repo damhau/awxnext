@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { api } from '../api/client'
 import { BrandMark } from '../components/ui'
 
@@ -9,6 +9,18 @@ export function Login({ onDone, expired }: { onDone: () => void; expired?: boole
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const backends = useQuery({ queryKey: ['auth-backends'], queryFn: () => api.get<{ oidc?: { login_url: string } }>('auth/'), retry: false })
+  // The API root carries the login page settings, readable before signing in.
+  const root = useQuery({
+    queryKey: ['api-root'],
+    queryFn: () => api.get<{ custom_logo?: string; custom_login_info?: string; login_redirect_override?: string }>('/api/'),
+    retry: false,
+  })
+  const redirect = root.data?.login_redirect_override
+  const local = new URLSearchParams(window.location.search).get('login') === 'local'
+  useEffect(() => {
+    // LOGIN_REDIRECT_OVERRIDE sends users elsewhere to log in; ?login=local keeps this page.
+    if (redirect && !local) window.location.replace(redirect)
+  }, [redirect, local])
   const submit = async (e: FormEvent) => {
     e.preventDefault()
     setBusy(true)
@@ -31,6 +43,7 @@ export function Login({ onDone, expired }: { onDone: () => void; expired?: boole
           <BrandMark />
           <span>awxnext</span>
         </div>
+        {root.data?.custom_logo && <img className="login-logo" src={root.data.custom_logo} alt="" />}
         <div>
           <h1 id="login-title" style={{ fontSize: 18 }}>
             {expired ? 'Your session ended' : 'Sign in'}
@@ -61,6 +74,7 @@ export function Login({ onDone, expired }: { onDone: () => void; expired?: boole
         <button className={`btn ${oidc ? '' : 'primary'} lg block`} disabled={busy || !username || !password}>
           {busy ? 'Signing in…' : 'Sign in'}
         </button>
+        {root.data?.custom_login_info && <p className="login-info">{root.data.custom_login_info}</p>}
       </form>
     </main>
   )

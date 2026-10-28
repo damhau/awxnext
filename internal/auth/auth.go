@@ -13,6 +13,8 @@ import (
 	"math/big"
 	"net/http"
 	"net/url"
+	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -26,8 +28,14 @@ import (
 const (
 	SessionCookie = "awx_sessionid"
 	CSRFCookie    = "csrftoken"
-	sessionAge    = 30 * time.Minute
 )
+
+var logoRe = regexp.MustCompile(`^data:image/(gif|png|jpeg);base64,[A-Za-z0-9+/]+={0,2}$`)
+
+// sessionAge is SESSION_COOKIE_AGE: how long a session lasts without activity.
+func (a *Auth) sessionAge(ctx context.Context) time.Duration {
+	return time.Duration(max(a.app.Settings.Int(ctx, "SESSION_COOKIE_AGE"), 60)) * time.Second
+}
 
 type Auth struct {
 	app  *api.App
@@ -40,6 +48,22 @@ func Install(app *api.App) *Auth {
 	a.oidc.auth = a
 	if d := settings.Lookup("OIDC_MAPPING"); d != nil {
 		d.Validate = func(v any) error { _, err := ParseRules(v); return err }
+	}
+	if d := settings.Lookup("SESSION_COOKIE_AGE"); d != nil {
+		d.Validate = func(v any) error {
+			if n, err := strconv.ParseFloat(fmt.Sprint(v), 64); err == nil && n < 60 {
+				return errors.New("Ensure this value is greater than or equal to 60.")
+			}
+			return nil
+		}
+	}
+	if d := settings.Lookup("CUSTOM_LOGO"); d != nil {
+		d.Validate = func(v any) error {
+			if s, _ := v.(string); s != "" && !logoRe.MatchString(s) {
+				return errors.New("Invalid format for custom logo. Must be a data URL with a base64-encoded GIF, PNG or JPEG image.")
+			}
+			return nil
+		}
 	}
 	api.SetAuthenticator(a.authenticate)
 	app.HandlePublic("GET", "/api/login/", a.loginForm)
@@ -93,6 +117,9 @@ func (a *Auth) authenticate(r *http.Request, w http.ResponseWriter) (*rbac.Princ
 		scheme, cred, _ := strings.Cut(h, " ")
 		switch strings.ToLower(scheme) {
 		case "basic":
+			if !a.app.Settings.Bool(ctx, "AUTH_BASIC_ENABLED") {
+				return nil, api.Detail(401, "HTTP basic authentication is turned off (setting AUTH_BASIC_ENABLED): use a token or log in.")
+			}
 			user, pass, ok := r.BasicAuth()
 			if !ok {
 				return nil, api.Detail(401, "Invalid basic header.")
@@ -138,10 +165,10 @@ func (a *Auth) authenticate(r *http.Request, w http.ResponseWriter) (*rbac.Princ
 				return nil, api.Detail(403, "CSRF Failed: CSRF token missing or incorrect.")
 			}
 		}
-		// Sliding expiration.
-		if time.Until(expires) < sessionAge/2 {
-			a.app.DB.Exec(ctx, "UPDATE sessions SET expires = $2 WHERE id = $1", hashToken(ck.Value), time.Now().Add(sessionAge))
-			setCookie(w, r, SessionCookie, ck.Value, true, sessionAge)
+		// Sliding expiration: a session ends after SESSION_COOKIE_AGE without activity.
+		if age := a.sessionAge(ctx); time.Until(expires) < age/2 {
+			a.app.DB.Exec(ctx, "UPDATE sessions SET expires = $2 WHERE id = $1", hashToken(ck.Value), time.Now().Add(age))
+			setCookie(w, r, SessionCookie, ck.Value, true, age)
 		}
 		return LoadPrincipal(ctx, a.app, uid)
 	}
@@ -195,12 +222,18 @@ func setCookie(w http.ResponseWriter, r *http.Request, name, value string, httpO
 func (a *Auth) StartSession(ctx context.Context, w http.ResponseWriter, r *http.Request, uid int64) error {
 	sid := randomString(48)
 	csrf := randomString(32)
+	age := a.sessionAge(ctx)
 	if _, err := a.app.DB.Exec(ctx, "INSERT INTO sessions (id, user_id, csrf, expires) VALUES ($1, $2, $3, $4)",
-		hashToken(sid), uid, csrf, time.Now().Add(sessionAge)); err != nil {
+		hashToken(sid), uid, csrf, time.Now().Add(age)); err != nil {
 		return err
 	}
+	// SESSIONS_PER_USER: beyond the limit, the oldest sessions end.
+	if n := a.app.Settings.Int(ctx, "SESSIONS_PER_USER"); n > 0 {
+		a.app.DB.Exec(ctx, `DELETE FROM sessions WHERE user_id = $1 AND (expires <= now() OR id NOT IN (
+			SELECT id FROM sessions WHERE user_id = $1 AND expires > now() ORDER BY created DESC LIMIT $2))`, uid, n)
+	}
 	a.app.DB.Exec(ctx, "UPDATE users SET last_login = now() WHERE id = $1", uid)
-	setCookie(w, r, SessionCookie, sid, true, sessionAge)
+	setCookie(w, r, SessionCookie, sid, true, age)
 	setCookie(w, r, CSRFCookie, csrf, false, 365*24*time.Hour)
 	return nil
 }
