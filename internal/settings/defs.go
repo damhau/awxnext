@@ -8,7 +8,7 @@ func init() {
 		{Key: "ACTIVITY_STREAM_ENABLED_FOR_INVENTORY_SYNC", Category: "system", Type: "boolean", Default: false, Label: "Enable Activity Stream for Inventory Sync", Help: "Also record the hosts and groups inventory syncs add and remove. Off by default: a sync can touch thousands of hosts."},
 		{Key: "ORG_ADMINS_CAN_SEE_ALL_USERS", Category: "system", Type: "boolean", Default: true, Label: "All Users Visible to Organization Admins", Help: "On: organization admins see every user and team. Off: only those of their organizations."},
 		{Key: "MANAGE_ORGANIZATION_AUTH", Category: "system", Type: "boolean", Default: true, Label: "Organization Admins Can Manage Users and Teams", Help: "Off: only superusers create, change and delete users and teams and change organization and team roles, for example when an identity provider owns membership."},
-		{Key: "DEFAULT_EXECUTION_ENVIRONMENT", Category: "system", Type: "field", Default: nil, Label: "Global default execution environment"},
+		{Key: "DEFAULT_EXECUTION_ENVIRONMENT", Nullable: true, Category: "system", Type: "field", Default: nil, Label: "Global default execution environment"},
 		{Key: "INSTALL_UUID", Category: "system", Type: "string", Default: "", ReadOnly: true, Public: true},
 		{Key: "CUSTOM_VENV_PATHS", Category: "system", Type: "list", Default: []any{}, CompatOnly: true, Help: "No effect in awxnext: custom virtual environments are replaced by execution environments."},
 		{Key: "REMOTE_HOST_HEADERS", Category: "system", Type: "list", Default: []any{"REMOTE_ADDR", "REMOTE_HOST"}},
@@ -84,9 +84,9 @@ func init() {
 
 		// logging
 		{Key: "LOG_AGGREGATOR_ENABLED", Category: "logging", Type: "boolean", Default: false, CompatOnly: true, Help: "No effect in awxnext yet (roadmap M6-03): logs are written as JSON to stderr."},
-		{Key: "LOG_AGGREGATOR_HOST", Category: "logging", Type: "string", Default: "", CompatOnly: true, Help: "No effect in awxnext yet (roadmap M6-03): logs are written as JSON to stderr."},
-		{Key: "LOG_AGGREGATOR_PORT", Category: "logging", Type: "integer", Default: nil, CompatOnly: true, Help: "No effect in awxnext yet (roadmap M6-03): logs are written as JSON to stderr."},
-		{Key: "LOG_AGGREGATOR_TYPE", Category: "logging", Type: "string", Default: "", CompatOnly: true, Help: "No effect in awxnext yet (roadmap M6-03): logs are written as JSON to stderr."},
+		{Key: "LOG_AGGREGATOR_HOST", Nullable: true, Category: "logging", Type: "string", Default: "", CompatOnly: true, Help: "No effect in awxnext yet (roadmap M6-03): logs are written as JSON to stderr."},
+		{Key: "LOG_AGGREGATOR_PORT", Nullable: true, Category: "logging", Type: "integer", Default: nil, CompatOnly: true, Help: "No effect in awxnext yet (roadmap M6-03): logs are written as JSON to stderr."},
+		{Key: "LOG_AGGREGATOR_TYPE", Nullable: true, Category: "logging", Type: "string", Default: "", CompatOnly: true, Help: "No effect in awxnext yet (roadmap M6-03): logs are written as JSON to stderr."},
 		{Key: "LOG_AGGREGATOR_PROTOCOL", Category: "logging", Type: "string", Default: "https", CompatOnly: true, Help: "No effect in awxnext yet (roadmap M6-03): logs are written as JSON to stderr."},
 		{Key: "LOG_AGGREGATOR_LEVEL", Category: "logging", Type: "string", Default: "INFO", CompatOnly: true, Help: "No effect in awxnext yet (roadmap M6-03): logs are written as JSON to stderr."},
 		{Key: "LOG_AGGREGATOR_LOGGERS", Category: "logging", Type: "list", Default: []any{"awx", "activity_stream", "job_events", "system_tracking", "broadcast_websocket"}, CompatOnly: true, Help: "No effect in awxnext yet (roadmap M6-03): logs are written as JSON to stderr."},

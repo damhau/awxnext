@@ -174,7 +174,7 @@ The gaps fall in four groups:
 | Dashboard endpoints | Yes | Missing | The UI's "Now" page replaces the dashboard |
 | Bulk API | Yes | Missing | |
 | Activity stream | Yes | Partial | No entries for job launches or role assignment API grants |
-| Settings API and UI | Yes | Done | Settings with no effect say so in their help ("No effect in awxnext": analytics, subscriptions, OAuth2, custom virtualenvs, `LOG_AGGREGATOR_*` until M6-03); a test keeps it that way |
+| Settings API and UI | Yes | Done | Settings with no effect say so in their help ("No effect in awxnext": analytics, subscriptions, OAuth2, custom virtualenvs, `LOG_AGGREGATOR_*` until M6-03); a test keeps it that way. Null is refused ("This field may not be null.") except for the settings AWX registers with `allow_null` (`DEFAULT_EXECUTION_ENVIRONMENT`, `LOG_AGGREGATOR_HOST`, `_PORT`, `_TYPE`) |
 | External log aggregation | Yes | Missing | JSON logs on stderr instead |
 | Prometheus metrics | Yes | Partial | No subsystem metrics or `node`/`metric` parameters; OpenTelemetry traces added |
 | Analytics, subscriptions | Yes | By design | Collection `license`/`subscriptions` modules fail |

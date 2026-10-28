@@ -30,6 +30,8 @@ type Def struct {
 	// CompatOnly settings are accepted so AWX clients and imports keep
 	// working, but nothing in awxnext reads them; their help says why.
 	CompatOnly bool
+	// Nullable settings accept null, as those AWX registers with allow_null.
+	Nullable bool
 }
 
 // Category is a group of settings exposed at /api/v2/settings/<slug>/.

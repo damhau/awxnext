@@ -349,6 +349,13 @@ func TestSettings(t *testing.T) {
 		t.Fatalf("settings: %s", r.Raw)
 	}
 	must(t, a.patch("settings/jobs/", map[string]any{"MAX_FORKS": "lots"}), 400)
+	// Null only for the settings AWX allows it on; the rest of the request
+	// changes nothing.
+	r = must(t, a.patch("settings/all/", map[string]any{"AWX_ISOLATION_BASE_PATH": nil, "PROJECT_UPDATE_VVV": true}), 400)
+	if !strings.Contains(r.Raw, "This field may not be null.") || must(t, a.get("settings/all/"), 200).Body["PROJECT_UPDATE_VVV"] != false {
+		t.Errorf("null setting: %s", r.Raw)
+	}
+	must(t, a.patch("settings/all/", map[string]any{"LOG_AGGREGATOR_PORT": nil, "DEFAULT_EXECUTION_ENVIRONMENT": nil}), 200)
 	must(t, a.delete("settings/oidc/"), 204)
 	r = must(t, a.get("settings/oidc/"), 200)
 	if r.Body["OIDC_GROUPS_CLAIM"] != "groups" {

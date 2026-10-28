@@ -64,6 +64,11 @@ func installSettings(app *api.App) {
 				fe.Add(k, "This setting is read-only.")
 				continue
 			}
+			// As AWX: the collection sends null for an omitted value.
+			if v == nil && !d.Nullable {
+				fe.Add(k, "This field may not be null.")
+				continue
+			}
 			if err := validateSetting(d, v); err != nil {
 				fe.Add(k, err.Error())
 			} else if d.Validate != nil {
