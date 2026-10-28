@@ -64,6 +64,7 @@ func installSettings(app *api.App) {
 			api.WriteError(w, err)
 			return
 		}
+		streamWasOn := c.App.Settings.Bool(c, "ACTIVITY_STREAM_ENABLED")
 		changes := Obj{}
 		for k, v := range data {
 			d, ok := allowed[k]
@@ -90,7 +91,8 @@ func installSettings(app *api.App) {
 				return
 			}
 		}
-		if len(changes) > 0 {
+		// Turning the activity stream off is itself recorded.
+		if len(changes) > 0 && (streamWasOn || c.App.Settings.Bool(c, "ACTIVITY_STREAM_ENABLED")) {
 			c.DB().Exec(c, `INSERT INTO activity_stream (actor_id, operation, object1, changes, summary) VALUES ($1, 'update', 'setting', $2, '{}')`, c.User.UserID, changes)
 		}
 		api.WriteJSON(w, 200, settingsValues(c, cat, defs))

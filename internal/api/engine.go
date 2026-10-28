@@ -1186,8 +1186,12 @@ func Delete(c *Ctx, res *Resource, obj Obj) error {
 	})
 }
 
-// Activity records an activity stream entry.
+// Activity records an activity stream entry, unless ACTIVITY_STREAM_ENABLED
+// is off. Version history is recorded separately and does not depend on it.
 func Activity(c *Ctx, op string, res *Resource, obj Obj, changes Obj, res2 *Resource, obj2 Obj, relationship string) error {
+	if !c.App.Settings.Bool(c, "ACTIVITY_STREAM_ENABLED") {
+		return nil
+	}
 	id, _ := ID(obj["id"])
 	summary := Obj{res.Type: []Obj{summaryOf(res, obj)}}
 	var o2 string

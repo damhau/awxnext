@@ -294,6 +294,9 @@ func runInventoryUpdate(ctx context.Context, rc *jobs.RunContext) jobs.Result {
 		rc.Out.Line("Inventory import failed: " + err.Error())
 		return jobs.Result{Status: "failed", Explanation: err.Error(), Update: update}
 	}
+	if err := recordSyncActivity(ctx, app, invID, stats); err != nil {
+		rc.Out.Line("Could not record the changes in the activity stream: " + err.Error())
+	}
 	rc.Out.Line(fmt.Sprintf("Loaded %d groups, %d hosts", stats.Groups, stats.Hosts))
 	if stats.HostsDeleted+stats.GroupsDeleted > 0 {
 		rc.Out.Line(fmt.Sprintf("Removed %d groups, %d hosts no longer in the source", stats.GroupsDeleted, stats.HostsDeleted))
@@ -444,6 +447,15 @@ type ImportOptions struct {
 // ImportStats summarizes an import.
 type ImportStats struct {
 	Hosts, Groups, HostsDeleted, GroupsDeleted int
+	// Added and Removed list the hosts and groups the import created and deleted.
+	Added, Removed []ImportedObject
+}
+
+// ImportedObject is a host or group touched by an import.
+type ImportedObject struct {
+	Type string // "host" or "group"
+	ID   int64
+	Name string
 }
 
 // ImportInventory writes inventory data into an inventory in one transaction,
@@ -553,6 +565,7 @@ func ImportInventory(ctx context.Context, db interface {
 			var name string
 			rows.Scan(&id, &name)
 			hostIDs[name] = id
+			stats.Added = append(stats.Added, ImportedObject{"host", id, name})
 		}
 		rows.Close()
 		if err := rows.Err(); err != nil {
@@ -618,6 +631,7 @@ func ImportInventory(ctx context.Context, db interface {
 			var name string
 			rows.Scan(&id, &name)
 			groupIDs[name] = id
+			stats.Added = append(stats.Added, ImportedObject{"group", id, name})
 		}
 		rows.Close()
 		if err := rows.Err(); err != nil {
@@ -679,22 +693,24 @@ func ImportInventory(ctx context.Context, db interface {
 		if opt.Overwrite {
 			// Hosts and groups this source imported before and no longer lists are
 			// removed, unless another source still provides them.
-			tag, err := tx.Exec(ctx, `DELETE FROM hosts WHERE id IN (
+			gone, err := deleteReturning(ctx, tx, "host", `DELETE FROM hosts WHERE id IN (
 				SELECT host_id FROM host_inventory_sources WHERE inventory_source_id = $1 AND host_id <> ALL($2)
-				AND NOT EXISTS (SELECT 1 FROM host_inventory_sources o WHERE o.host_id = host_inventory_sources.host_id AND o.inventory_source_id <> $1))`,
-				sourceID, allHostIDs)
+				AND NOT EXISTS (SELECT 1 FROM host_inventory_sources o WHERE o.host_id = host_inventory_sources.host_id AND o.inventory_source_id <> $1))
+				RETURNING id, name`, sourceID, allHostIDs)
 			if err != nil {
 				return nil, err
 			}
-			stats.HostsDeleted = int(tag.RowsAffected())
-			tag, err = tx.Exec(ctx, `DELETE FROM groups WHERE id IN (
+			stats.HostsDeleted = len(gone)
+			stats.Removed = append(stats.Removed, gone...)
+			gone, err = deleteReturning(ctx, tx, "group", `DELETE FROM groups WHERE id IN (
 				SELECT group_id FROM group_inventory_sources WHERE inventory_source_id = $1 AND group_id <> ALL($2)
-				AND NOT EXISTS (SELECT 1 FROM group_inventory_sources o WHERE o.group_id = group_inventory_sources.group_id AND o.inventory_source_id <> $1))`,
-				sourceID, allGroupIDs)
+				AND NOT EXISTS (SELECT 1 FROM group_inventory_sources o WHERE o.group_id = group_inventory_sources.group_id AND o.inventory_source_id <> $1))
+				RETURNING id, name`, sourceID, allGroupIDs)
 			if err != nil {
 				return nil, err
 			}
-			stats.GroupsDeleted = int(tag.RowsAffected())
+			stats.GroupsDeleted = len(gone)
+			stats.Removed = append(stats.Removed, gone...)
 			if _, err := tx.Exec(ctx, "DELETE FROM host_inventory_sources WHERE inventory_source_id = $1 AND host_id <> ALL($2)", sourceID, allHostIDs); err != nil {
 				return nil, err
 			}
@@ -715,6 +731,53 @@ func ImportInventory(ctx context.Context, db interface {
 		return nil, err
 	}
 	return stats, nil
+}
+
+// deleteReturning runs a DELETE ... RETURNING id, name and lists what it removed.
+func deleteReturning(ctx context.Context, tx pgx.Tx, typ, sql string, args ...any) ([]ImportedObject, error) {
+	rows, err := tx.Query(ctx, sql, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []ImportedObject
+	for rows.Next() {
+		o := ImportedObject{Type: typ}
+		if err := rows.Scan(&o.ID, &o.Name); err != nil {
+			return nil, err
+		}
+		out = append(out, o)
+	}
+	return out, rows.Err()
+}
+
+// recordSyncActivity records the hosts and groups an inventory sync added and
+// removed, when ACTIVITY_STREAM_ENABLED_FOR_INVENTORY_SYNC is on. It is off
+// by default, as in AWX: a sync can touch thousands of hosts.
+func recordSyncActivity(ctx context.Context, app *api.App, invID int64, stats *ImportStats) error {
+	if !app.Settings.Bool(ctx, "ACTIVITY_STREAM_ENABLED") || !app.Settings.Bool(ctx, "ACTIVITY_STREAM_ENABLED_FOR_INVENTORY_SYNC") {
+		return nil
+	}
+	var ops, types, names []string
+	var ids []int64
+	for _, x := range []struct {
+		op   string
+		objs []ImportedObject
+	}{{"create", stats.Added}, {"delete", stats.Removed}} {
+		for _, o := range x.objs {
+			ops, types, ids, names = append(ops, x.op), append(types, o.Type), append(ids, o.ID), append(names, o.Name)
+		}
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	_, err := app.DB.Exec(ctx, `INSERT INTO activity_stream (operation, object1, object1_id, object2, object2_id, changes, summary, organization_id)
+		SELECT x.op, x.typ, x.id, 'inventory', i.id, jsonb_build_object('name', x.name),
+			jsonb_build_object(x.typ, jsonb_build_array(jsonb_build_object('id', x.id, 'name', x.name)),
+				'inventory', jsonb_build_array(jsonb_build_object('id', i.id, 'name', i.name))), i.organization_id
+		FROM unnest($2::text[], $3::text[], $4::bigint[], $5::text[]) AS x(op, typ, id, name), inventories i WHERE i.id = $1`,
+		invID, ops, types, ids, names)
+	return err
 }
 
 // mergeVars merges imported variables into stored variables text. It reports

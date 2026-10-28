@@ -4,8 +4,8 @@ func init() {
 	for _, d := range []*Def{
 		// system
 		{Key: "TOWER_URL_BASE", Category: "system", Type: "string", Default: "", Label: "Base URL of the service", Help: "Used by services like notifications to render a valid URL to the service."},
-		{Key: "ACTIVITY_STREAM_ENABLED", Category: "system", Type: "boolean", Default: true, Label: "Enable Activity Stream"},
-		{Key: "ACTIVITY_STREAM_ENABLED_FOR_INVENTORY_SYNC", Category: "system", Type: "boolean", Default: false},
+		{Key: "ACTIVITY_STREAM_ENABLED", Category: "system", Type: "boolean", Default: true, Label: "Enable Activity Stream", Help: "Record who changed which object, role and setting. Version history is recorded either way."},
+		{Key: "ACTIVITY_STREAM_ENABLED_FOR_INVENTORY_SYNC", Category: "system", Type: "boolean", Default: false, Label: "Enable Activity Stream for Inventory Sync", Help: "Also record the hosts and groups inventory syncs add and remove. Off by default: a sync can touch thousands of hosts."},
 		{Key: "ORG_ADMINS_CAN_SEE_ALL_USERS", Category: "system", Type: "boolean", Default: true, Label: "All Users Visible to Organization Admins", Help: "On: organization admins see every user and team. Off: only those of their organizations."},
 		{Key: "MANAGE_ORGANIZATION_AUTH", Category: "system", Type: "boolean", Default: true, Label: "Organization Admins Can Manage Users and Teams", Help: "Off: only superusers create, change and delete users and teams and change organization and team roles, for example when an identity provider owns membership."},
 		{Key: "DEFAULT_EXECUTION_ENVIRONMENT", Category: "system", Type: "field", Default: nil, Label: "Global default execution environment"},
