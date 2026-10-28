@@ -1,0 +1,55 @@
+# A throwaway awxnext for the compatibility suites (compat/run.py): its own
+# project, ports and in-memory database, so a run never touches a real install.
+# The suites use it over HTTPS (port 8054) with a self-signed certificate, as
+# AWX's own test environment does; plain HTTP stays on port 8053.
+#
+#   docker compose -f compat/docker-compose.yml up -d --build --wait
+#   uv run --script compat/run.py
+#   docker compose -f compat/docker-compose.yml down
+name: awxnext-compat
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: awxnext
+      POSTGRES_USER: awxnext
+      POSTGRES_PASSWORD: compat
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U awxnext"]
+      interval: 2s
+      retries: 30
+
+  awxnext:
+    build:
+      context: ..
+      target: all-in-one
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      AWXNEXT_DATABASE_URL: postgres://awxnext:compat@postgres:5432/awxnext?sslmode=disable
+      AWXNEXT_SECRET_KEY: compat-only-not-a-secret
+      AWXNEXT_BASE_URL: http://localhost:${COMPAT_PORT:-8053}
+      AWXNEXT_ADMIN_PASSWORD: compat
+    ports:
+      - "${COMPAT_PORT:-8053}:8052"
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8052/api/v2/ping/')"]
+      interval: 2s
+      retries: 60
+
+  tls:
+    image: caddy:2.8
+    depends_on:
+      awxnext:
+        condition: service_healthy
+    command: caddy reverse-proxy --from https://localhost:8443 --to awxnext:8052 --internal-certs
+    ports:
+      - "${COMPAT_TLS_PORT:-8054}:8443"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--no-check-certificate", "-O", "/dev/null", "https://localhost:8443/api/v2/ping/"]
+      interval: 2s
+      retries: 30

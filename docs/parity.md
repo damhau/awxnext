@@ -28,7 +28,8 @@ The gaps fall in four groups:
    metrics, subscriptions/config POST, instance health checks. The `awx.awx`
    collection's `bulk_*`, `license` and `subscriptions` modules would fail.
    Compatibility with the collection, awxkit and the Terraform provider is
-   claimed but not tested anywhere (phase 7).
+   tested nightly since roadmap M2-01 ([compat/](../compat/README.md)); the
+   gaps those suites found are roadmap M2-14 to M2-26.
 3. **Deferred by plan**: LDAP, SAML, social, RADIUS and TACACS+ login;
    notification types other than webhook; SVN and archive projects; CyberArk,
    Thycotic, AWS Secrets Manager and Centrify lookups; Helm chart; backup.
@@ -57,7 +58,7 @@ The gaps fall in four groups:
 2. ~~Notifications tab on templates, projects, inventory sources and organizations~~ (done, roadmap M1-08).
 3. ~~Custom credential types use only a Jinja subset in injectors~~ (done, roadmap M1-09).
 4. ~~Relaunch from the UI never asks for credential passwords~~ (done, roadmap M1-10).
-5. A test harness running the `awx.awx` collection and awxkit against awxnext (phase 7), since compatibility is the main promise.
+5. ~~A test harness running the `awx.awx` collection and awxkit against awxnext~~ (done, roadmap M2-01: also the Terraform provider).
 
 **P2: missing features people will hit**
 
@@ -165,6 +166,7 @@ The gaps fall in four groups:
 | Feature | AWX 24.6 | awxnext | Notes |
 |---|---|---|---|
 | API root, ping, config, me | Yes | Done | The version root is public with AWX's keys (`inventory`, `constructed_inventory`); `applications/` is always empty, OAuth2 applications being out of scope. `config` has no license POST/DELETE |
+| Compatibility suites: `awx.awx` integration targets, `awx` CLI, Terraform provider `ansible/aap` | Yes | Done | Nightly and on demand in CI against a throwaway install over HTTPS ([compat/](../compat/README.md)); each expected failure is listed with its issue in `compat/known-failures.yml` |
 | Field validation like AWX's serializers | Yes | Done | Null reads as `""` for text and choice fields and as `false` for booleans, then is validated, as the `awx.awx` modules expect |
 | OPTIONS, pagination, filtering, ordering | Yes | Done | Plain filters crossing a relation match the same related row and `chain__` ones each their own, as in AWX; `role_level` needs every permission of the role |
 | Named URLs | Yes | Partial | Common forms only |

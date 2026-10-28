@@ -1,0 +1,41 @@
+name: Compatibility
+
+# AWX's own clients against awxnext (compat/run.py): the awx.awx collection's
+# integration targets, the awx CLI and the Terraform provider. Nightly and on
+# demand; the report is attached to the run and shown in its summary.
+on:
+  schedule:
+    - cron: "17 2 * * *"
+  workflow_dispatch:
+    inputs:
+      suite:
+        description: "collection, cli or terraform (empty: all)"
+        required: false
+        default: ""
+
+jobs:
+  compat:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+      # The Terraform provider's acceptance tests are Go tests.
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+      - uses: astral-sh/setup-uv@v5
+      - name: start a throwaway awxnext
+        run: docker compose -f compat/docker-compose.yml up -d --build --wait
+      - name: run the suites
+        run: uv run --script compat/run.py ${{ inputs.suite && format('--suite {0}', inputs.suite) || '' }}
+      - name: server log
+        if: always()
+        run: docker compose -f compat/docker-compose.yml logs --no-color awxnext > compat-report/awxnext.log 2>&1 || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: compat-report
+          path: compat-report

@@ -25,7 +25,7 @@ be matched.
 | Milestone | Goal | Tasks |
 |---|---|---|
 | [M1 Nothing misleading](#m1-nothing-misleading) | What awxnext shows or accepts does what it says | 17 |
-| [M2 AWX clients work unchanged](#m2-awx-clients-work-unchanged) | Collection, awxkit and Terraform run against awxnext, proven in CI | 13 |
+| [M2 AWX clients work unchanged](#m2-awx-clients-work-unchanged) | Collection, awxkit and Terraform run against awxnext, proven in CI | 26 |
 | [M3 Jobs, workflows and notifications](#m3-jobs-workflows-and-notifications) | Email notifications, the rest of AWX's run-time features, typed node outputs | 4 |
 | [M4 Inventories, credentials and projects](#m4-inventories-credentials-and-projects) | Every inventory source, credential type, lookup and project type | 10 |
 | [M5 Authentication](#m5-authentication) | Every login method AWX has, except RADIUS and TACACS+ | 6 |
@@ -392,6 +392,135 @@ login, where calls can be tried out.
 
 **Done when:** a logged-in user can browse and call any endpoint from the
 page.
+
+Found by the compatibility harness (M2-01):
+
+### M2-14 Null for text, choice and boolean fields, as in AWX
+**Labels:** compat, api · **Size:** S · [#81](https://github.com/damhau/awxnext/issues/81)
+
+The `awx.awx` modules send `null` for every option left unset. AWX reads
+null as `""` for text and choice fields and as `false` for booleans, then
+validates the result; awxnext refused it, which broke `demo_data` and every
+target that creates an inventory. Create-only fields compare after that
+coercion.
+
+**Done when:** null inputs are tested on create and update, including a
+required name and a choice without an empty value.
+
+### M2-15 AWX's public Galaxy credential
+**Labels:** compat, credentials · **Size:** S · [#82](https://github.com/damhau/awxnext/issues/82)
+
+The managed `Ansible Galaxy` credential (`https://galaxy.ansible.com/`) that
+organizations add by name, created on the first start and read-only like
+AWX's managed credentials.
+
+**Done when:** it exists on a new install, can be added to an organization,
+and cannot be changed or deleted.
+
+### M2-16 Public API root with AWX's names
+**Labels:** compat, api · **Size:** S · [#83](https://github.com/damhau/awxnext/issues/83)
+
+`/api/v2/` is public, as the `awx` CLI reads it before logging in, and uses
+AWX's keys (`inventory`, `constructed_inventory`, `applications`).
+`/applications/` answers an empty list marked deprecated: OAuth2
+applications stay out of scope.
+
+**Done when:** an anonymous `GET /api/v2/` lists AWX's keys, and `awx
+import` works.
+
+### M2-17 OPTIONS like AWX: `Allow` header, `object_roles`, every list
+**Labels:** compat, api · **Size:** S · [#84](https://github.com/damhau/awxnext/issues/84)
+
+awxkit builds the CLI's `modify`, `delete`, `grant` and `revoke` and its
+export and import from OPTIONS: the `Allow` header, `object_roles`, and an
+OPTIONS answer on every list, `/settings/` included.
+
+**Done when:** those CLI commands and `awx export` pass in the compat suite.
+
+### M2-18 Workflow jobs without `event_processing_finished`
+**Labels:** compat, workflows · **Size:** S · [#85](https://github.com/damhau/awxnext/issues/85)
+
+AWX leaves the field off workflow jobs. awxnext returns it as `false`
+forever, so the collection's wait on a workflow job never ends.
+
+**Done when:** the collection's `job_wait` and `workflow_launch` targets
+pass.
+
+### M2-19 `current_update` and `last_update` on projects and inventory sources
+**Labels:** compat, projects · **Size:** S · [#86](https://github.com/damhau/awxnext/issues/86)
+
+In `summary_fields` and `related`, next to `current_job` and `last_job`. The
+project module waits on `current_update` after creating a project.
+
+**Done when:** the fields have AWX's shape, and the collection's `project`
+target passes.
+
+### M2-20 Encrypted SSH keys need their passphrase
+**Labels:** bug, credentials · **Size:** S · [#87](https://github.com/damhau/awxnext/issues/87)
+
+As in AWX: `ssh_key_unlock` must be set when `ssh_key_data` is encrypted
+(PEM, PKCS#8 or OpenSSH with a cipher), and must not be set when it is not.
+`$encrypted$` is checked against the stored key.
+
+**Done when:** each key format is tested encrypted and not, on create and
+update.
+
+### M2-21 Settings refuse null like AWX
+**Labels:** compat, settings · **Size:** S · [#88](https://github.com/damhau/awxnext/issues/88)
+
+Null for a setting that is not nullable is a 400 (the collection's
+`settings` module sends null for an omitted value).
+
+**Done when:** it changes nothing, and the collection's `settings` target
+passes.
+
+### M2-22 Only superusers create users at `/users/`
+**Labels:** bug, rbac · **Size:** S · [#89](https://github.com/damhau/awxnext/issues/89)
+
+Organization admins create users through `organizations/N/users/`, as in
+AWX, not at `/users/` where they would belong to no organization.
+
+**Done when:** an organization admin gets 403 on `POST /users/` and can
+still create users through their organization.
+
+### M2-23 Deleting a group deletes its children as in AWX
+**Labels:** compat, inventory · **Size:** S · [#90](https://github.com/damhau/awxnext/issues/90)
+
+AWX's `delete_recursive`: the group and its hosts in no other group, then
+each child group left without a parent, recursively.
+
+**Done when:** the cases are tested, including children and hosts shared
+with another group, which stay.
+
+### M2-24 Text that clients match, written as AWX writes it
+**Labels:** compat, api · **Size:** S · [#91](https://github.com/damhau/awxnext/issues/91)
+
+A job's `extra_vars` in Python's `json.dumps` form, `"X" is not a valid
+choice.` for an unknown ad hoc module, and `No Organization matches the
+given query.` for a missing object.
+
+**Done when:** each is tested, and the matching collection targets and
+Terraform tests pass.
+
+### M2-25 `no_truncate` and AWX's other reserved query parameters
+**Labels:** compat, api · **Size:** S · [#92](https://github.com/damhau/awxnext/issues/92)
+
+`awx ... --monitor` lists events with `no_truncate=True`. AWX's reserved
+parameters are never read as field filters.
+
+**Done when:** `awx job_templates launch --monitor` and `awx jobs stdout`
+pass in the compat suite.
+
+### M2-26 Accept unprompted launch fields that change nothing
+**Labels:** compat, jobs · **Size:** S · [#93](https://github.com/damhau/awxnext/issues/93)
+
+The Terraform provider's `aap_job` sends its stored `inventory` and
+`job_slice_count` again on update. A field the template does not prompt for,
+sent with the template's own value, changes nothing and is accepted; a
+different value is still refused (M1-16).
+
+**Done when:** the provider's `aap_job` update tests pass with the default
+settings.
 
 ---
 
@@ -919,5 +1048,6 @@ Taken on 2026-10-27:
 
 Created on 2026-10-27 on `damhau/awxnext`: the type, area and size labels,
 one milestone per section, and one issue per task (#1 to #80), each with a
-**Done when** checklist (one box per lookup for M4-07). This file stays the
-index; when a task changes, change its issue too.
+**Done when** checklist (one box per lookup for M4-07). M2-14 to M2-26
+(#81 to #93) were added on 2026-10-28 from the compatibility harness's first
+runs. This file stays the index; when a task changes, change its issue too.
