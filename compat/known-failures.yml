@@ -8,7 +8,6 @@ collection:
   "credential_input_source": "#38 CyberArk Central Credential Provider lookup"
   "inventory": "#32 Insights credential type"
   "job_template": "#28 email notifications"
-  "module_utils": "#24 named URL of a credential"
   "notification_template": "out of scope: Slack and other notification types (ROADMAP, Proposed out of scope)"
   "project": "#41 archive projects (after current_update, #86, passes)"
   "schedule": "#30 labels on schedules"

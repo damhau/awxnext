@@ -51,6 +51,7 @@ var (
 		{"system", "System"},
 		{"ui", "UI"},
 		{"logging", "Logging"},
+		{"named-url", "Named URL"},
 		{"changed", "Changed"},
 	}
 )

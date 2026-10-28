@@ -332,6 +332,30 @@ func ResolveID(c *Ctx, res *Resource, seg string) (int64, error) {
 	if id, err := strconv.ParseInt(seg, 10, 64); err == nil {
 		return id, nil
 	}
+	if namedGraph[res.Name] != nil {
+		q := &query{}
+		res.baseWhere(q)
+		where, ok := namedURLWhere(res, seg, q.arg)
+		if !ok {
+			return 0, ErrNotFound
+		}
+		q.where = append(q.where, where)
+		var ids []int64
+		rows, err := c.DB().Query(c, "SELECT t.id FROM "+res.Table+" t"+q.whereSQL()+" LIMIT 2", q.args...)
+		if err != nil {
+			return 0, err
+		}
+		for rows.Next() {
+			var id int64
+			rows.Scan(&id)
+			ids = append(ids, id)
+		}
+		rows.Close()
+		if len(ids) != 1 {
+			return 0, ErrNotFound
+		}
+		return ids[0], nil
+	}
 	nameField := "name"
 	if res.field("username") != nil {
 		nameField = "username"
@@ -526,6 +550,7 @@ func (a *App) handleCreate(c *Ctx, w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
+	withNamedURL(c, res, out)
 	writeJSON(w, 201, out)
 }
 
@@ -540,7 +565,19 @@ func (a *App) handleDetail(c *Ctx, w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
+	withNamedURL(c, res, out)
 	writeJSON(w, 200, out)
+}
+
+// withNamedURL adds related.named_url, which AWX gives on a detail and in
+// the answer to a create or an update.
+func withNamedURL(c *Ctx, res *Resource, out Obj) {
+	id, _ := ID(out["id"])
+	if rel, ok := out["related"].(Obj); ok {
+		if nu := NamedURL(c, res, id); nu != "" {
+			rel["named_url"] = nu
+		}
+	}
 }
 
 func (a *App) handleUpdate(c *Ctx, w http.ResponseWriter, r *http.Request) {
@@ -568,6 +605,7 @@ func (a *App) handleUpdate(c *Ctx, w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
+	withNamedURL(c, res, out)
 	writeJSON(w, 200, out)
 }
 

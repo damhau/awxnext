@@ -23,4 +23,5 @@ func init() {
 	registerRoles()
 	registerActivity()
 	registerRelatedLists()
+	registerNamedURLs()
 }
