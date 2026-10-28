@@ -126,7 +126,7 @@ func TestSystemJobs(t *testing.T) {
 	f := newJobFixture(t)
 	a := f.a
 	sjts := must(t, a.get("system_job_templates/"), 200)
-	if sjts.count() != 5 {
+	if sjts.count() != 6 {
 		t.Fatalf("system job templates: %d", sjts.count())
 	}
 	byType := map[string]int64{}

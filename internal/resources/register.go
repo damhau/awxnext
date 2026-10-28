@@ -9,6 +9,7 @@ func init() {
 	registerCredentials()
 	registerInfrastructure()
 	registerInventories()
+	registerHostMetrics()
 	registerUnified()
 	registerProjects()
 	registerInventorySources()

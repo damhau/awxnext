@@ -193,6 +193,9 @@ type Resource struct {
 	AfterUpdate  func(c *Ctx, old, obj Obj) error
 	BeforeDelete func(c *Ctx, obj Obj) error
 	AfterDelete  func(c *Ctx, obj Obj) error
+	// SoftDelete, when set, replaces the deletion of the row (AWX's
+	// soft_delete): the object stays, marked deleted.
+	SoftDelete func(c *Ctx, obj Obj) error
 
 	// Related adds custom related links.
 	Related func(c *Ctx, obj Obj, rel map[string]any)

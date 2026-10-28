@@ -67,6 +67,8 @@ func run(ctx context.Context, rc *jobs.RunContext) jobs.Result {
 		fn = t.simple("DELETE FROM auth_tokens WHERE expires < now()", "Expired OAuth 2 Access Tokens deleted")
 	case "cleanup_host_metrics":
 		fn = t.cleanupHostMetrics
+	case "host_metric_summary_monthly":
+		fn = t.hostMetricSummaryMonthly
 	default:
 		return jobs.Result{Status: "error", Explanation: "Unknown management job type " + row.Str("job_type")}
 	}
@@ -193,6 +195,67 @@ func (t *task) cleanupHostMetrics(ctx context.Context) error {
 		n = tag.RowsAffected()
 	}
 	t.out.Line(fmt.Sprintf("Host metrics %s: %d", t.action(), n))
+	return nil
+}
+
+// summaryMonths is how far back the monthly summary is computed: AWX's
+// CLEANUP_HOST_METRICS_HARD_THRESHOLD.
+const summaryMonths = 36
+
+// hostMetricSummaryMonthly computes host_metric_summary_monthly as AWX's
+// HostMetricSummaryMonthlyTask: for each of the last 36 months, the hosts
+// first automated that month, those soft-deleted that month, and the
+// running total, starting from the hosts counted before. Older months are
+// left as they are. The license capacity is 0, as without a subscription.
+func (t *task) hostMetricSummaryMonthly(ctx context.Context) error {
+	now := time.Now().UTC()
+	current := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
+	first := current.AddDate(0, -(summaryMonths - 1), 0)
+	added, deleted := map[time.Time]int64{}, map[time.Time]int64{}
+	for _, q := range []struct {
+		sql string
+		to  map[time.Time]int64
+	}{
+		{"SELECT date_trunc('month', first_automation AT TIME ZONE 'UTC'), count(*) FROM host_metrics GROUP BY 1", added},
+		{"SELECT date_trunc('month', last_deleted AT TIME ZONE 'UTC'), count(*) FROM host_metrics WHERE deleted AND last_deleted IS NOT NULL GROUP BY 1", deleted},
+	} {
+		rows, err := t.db.Query(ctx, q.sql)
+		if err != nil {
+			return err
+		}
+		for rows.Next() {
+			var m time.Time
+			var n int64
+			if err := rows.Scan(&m, &n); err != nil {
+				rows.Close()
+				return err
+			}
+			q.to[time.Date(m.Year(), m.Month(), 1, 0, 0, 0, 0, time.UTC)] = n
+		}
+		rows.Close()
+	}
+	var consumed int64
+	for m, n := range added {
+		if m.Before(first) {
+			consumed += n
+		}
+	}
+	for m, n := range deleted {
+		if m.Before(first) {
+			consumed -= n
+		}
+	}
+	months := 0
+	for m := first; !m.After(current); m = m.AddDate(0, 1, 0) {
+		consumed += added[m] - deleted[m]
+		if _, err := t.db.Exec(ctx, `INSERT INTO host_metric_summary_monthly (date, license_consumed, hosts_added, hosts_deleted)
+			VALUES ($1, $2, $3, $4) ON CONFLICT (date) DO UPDATE SET license_consumed = EXCLUDED.license_consumed,
+			hosts_added = EXCLUDED.hosts_added, hosts_deleted = EXCLUDED.hosts_deleted`, m, consumed, added[m], deleted[m]); err != nil {
+			return err
+		}
+		months++
+	}
+	t.out.Line(fmt.Sprintf("Host metric summary computed for %d months, %d hosts counted this month", months, consumed))
 	return nil
 }
 

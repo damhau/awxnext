@@ -22,13 +22,17 @@ var SystemJobTypes = []struct {
 	{"cleanup_sessions", "Cleanup Expired Sessions", "Cleans out expired browser sessions", "FREQ=WEEKLY;INTERVAL=1", map[string]any{}},
 	{"cleanup_tokens", "Cleanup Expired OAuth 2 Tokens", "Cleanup expired OAuth 2 access and refresh tokens", "FREQ=WEEKLY;INTERVAL=1", map[string]any{}},
 	{"cleanup_host_metrics", "Cleanup Host Metrics", "Run cleanup host metrics", "FREQ=MONTHLY;INTERVAL=1;BYMONTHDAY=1", map[string]any{"days": "365"}},
+	// A periodic task in AWX (weekly); a management job here, so it can be
+	// scheduled and run on demand.
+	{"host_metric_summary_monthly", "Host Metric Summary Monthly", "Compute the monthly host metric summary", "FREQ=WEEKLY;INTERVAL=1;BYDAY=MO", map[string]any{}},
 }
 
 var systemJobTypeChoices = labelled("cleanup_jobs", "Remove jobs older than a certain number of days",
 	"cleanup_activitystream", "Remove activity stream entries older than a certain number of days",
 	"cleanup_sessions", "Removes expired browser sessions from the database",
 	"cleanup_tokens", "Removes expired OAuth 2 access tokens and refresh tokens",
-	"cleanup_host_metrics", "Removes soft-deleted host metrics older than a certain number of days")
+	"cleanup_host_metrics", "Removes soft-deleted host metrics older than a certain number of days",
+	"host_metric_summary_monthly", "Computes the monthly summary of host metrics")
 
 // SeedSystemJobTemplates creates the management job templates and their default schedules.
 func SeedSystemJobTemplates(ctx context.Context, app *api.App) error {

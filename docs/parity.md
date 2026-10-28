@@ -24,9 +24,9 @@ The gaps fall in four groups:
    setting now has an effect, or says "No effect in awxnext" and why in its
    help (analytics, subscriptions, OAuth2, custom virtualenvs, and
    `LOG_AGGREGATOR_*` until M6-03). A test fails CI when a setting is neither.
-2. **API endpoints that AWX clients call**: host metrics,
-   subscriptions/config POST, instance health checks (the bulk API and the
-   dashboard are done, roadmap M2-02 and M2-03). The `awx.awx` collection's `license` and `subscriptions`
+2. **API endpoints that AWX clients call**: subscriptions/config POST,
+   instance health checks (the bulk API, the dashboard and host metrics are
+   done, roadmap M2-02 to M2-04). The `awx.awx` collection's `license` and `subscriptions`
    modules would fail.
    Compatibility with the collection, awxkit and the Terraform provider is
    tested nightly since roadmap M2-01 ([compat/](../compat/README.md)); the
@@ -65,7 +65,7 @@ The gaps fall in four groups:
 
 6. ~~Bulk API: `bulk/job_launch`, `bulk/host_create`, `bulk/host_delete`~~ (done, roadmap M2-02).
 7. ~~`?host_filter=` on `/hosts/`, `chain__` filters~~ (done, roadmap M1-13).
-8. Host metrics API and page (the data is already collected per job), `host_metric_summary_monthly`.
+8. ~~Host metrics API, `host_metric_summary_monthly`~~ (done, roadmap M2-04); the page is roadmap M7-08.
 9. Instance group policies (percentage, minimum, list) and `max_forks`; `max_concurrent_jobs` outside container groups.
 10. External log aggregation (logstash, splunk, ...) and its test endpoint.
 11. Password policy settings; activity stream entries for job launches and for role grants made through the role assignment API.
@@ -122,7 +122,7 @@ The gaps fall in four groups:
 | overwrite, overwrite_vars, enabled_var, host_filter, update on launch with cache | Yes | Done | |
 | Inventory updates: cancel, stdout, events, notifications, schedules | Yes | Done | UI has no schedules for sources; notifications are in the source's menu |
 | Bulk host create/delete | Yes | Done | `bulk/host_create` (each host created as through `/hosts/`, all or none) and `bulk/host_delete`, with AWX's limits, checks and messages |
-| Host metrics | Yes | Partial | Collected per job and cleaned up; no API or UI |
+| Host metrics | Yes | Partial | Collected per job and cleaned up. `/host_metrics/` (list, filter, soft delete) and `/host_metric_summary_monthly/`, for superusers and auditors, as in AWX; the summary is the `host_metric_summary_monthly` management job (weekly), where AWX runs a periodic task. No UI page yet (roadmap M7-08) |
 | Managed credential types | Yes | Partial | All but Insights and RHV; Kubernetes CA not injected. As in AWX, an encrypted SSH key (OpenSSH with a cipher, PKCS#8 `ENCRYPTED PRIVATE KEY`, PEM `Proc-Type: 4,ENCRYPTED`) needs its passphrase and a passphrase needs an encrypted key, checked against the stored key on update |
 | Custom credential types | Yes | Done | Injectors are Jinja2 (gonja), sandboxed like AWX and checked when saved; `2 ** n` gives a float and `None` prints empty |
 | Lookups: HashiCorp Vault KV and SSH, Azure Key Vault | Yes | Done | Vault TLS cert auth missing; Azure falls back to managed identity |

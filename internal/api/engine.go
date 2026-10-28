@@ -1182,6 +1182,9 @@ func Delete(c *Ctx, res *Resource, obj Obj) error {
 		if err := recordVersion(c, res, obj, "delete", Obj{}); err != nil {
 			return err
 		}
+		if res.SoftDelete != nil {
+			return res.SoftDelete(c, obj)
+		}
 		if _, err := c.DB().Exec(c, "DELETE FROM "+res.Table+" WHERE id = $1", id); err != nil {
 			return translateDBError(res, err)
 		}
