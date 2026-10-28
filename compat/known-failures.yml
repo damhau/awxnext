@@ -4,9 +4,6 @@
 cli: {}
 collection:
   "application": "out of scope: OAuth2 applications (ROADMAP, Proposed out of scope)"
-  "bulk_host_create": "#16 bulk API"
-  "bulk_host_delete": "#16 bulk API"
-  "bulk_job_launch": "#16 bulk API"
   "credential": "#32 Red Hat Virtualization credential type (after the SSH key passphrase, #87, passes)"
   "credential_input_source": "#38 CyberArk Central Credential Provider lookup"
   "inventory": "#32 Insights credential type"

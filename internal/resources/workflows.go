@@ -462,7 +462,9 @@ func registerWorkflows() {
 	// Workflow jobs.
 	wjVisible := func(c *Ctx, arg ArgFunc) string {
 		return "t.unified_job_template_id IN (SELECT t.id FROM unified_job_templates t WHERE t.type IN ('workflow_job_template', 'job_template') AND (" + ujtView(c, arg) + "))" +
-			" OR " + c.User.Predicate(rbacArg(arg), "workflowjobtemplate", "view_workflowjobtemplate", rbac.Scope{ID: "t.unified_job_template_id", Org: "t.organization_id"})
+			" OR " + c.User.Predicate(rbacArg(arg), "workflowjobtemplate", "view_workflowjobtemplate", rbac.Scope{ID: "t.unified_job_template_id", Org: "t.organization_id"}) +
+			// Bulk jobs have no template: as in AWX, the admins of their organization see them (and whoever launched them).
+			" OR (t.is_bulk_job AND " + c.User.Predicate(rbacArg(arg), "organization", "change_organization", rbac.Scope{ID: "t.organization_id", Org: "t.organization_id"}) + ")"
 	}
 	wj := registerJobResource(jobSpec{
 		name: "workflow_jobs", typ: "workflow_job", verbose: "Workflow Job",
@@ -482,6 +484,7 @@ func registerWorkflows() {
 			{Name: "allow_simultaneous", Type: api.TBool, ReadOnly: true},
 			{Name: "job_template", Type: api.TFK, Ref: "job_templates", ReadOnly: true, Nullable: true, Help: "If automatically created for a sliced job run, the job template the workflow job was created from."},
 			{Name: "is_sliced_job", Type: api.TBool, ReadOnly: true},
+			{Name: "is_bulk_job", Type: api.TBool, ReadOnly: true, Help: "Launched by the bulk API, with no workflow job template."},
 			{Name: "inventory", Type: api.TFK, Ref: "inventories", ReadOnly: true, Nullable: true},
 			{Name: "limit", Type: api.TString, ReadOnly: true},
 			{Name: "scm_branch", Type: api.TString, ReadOnly: true},

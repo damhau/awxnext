@@ -24,9 +24,10 @@ The gaps fall in four groups:
    setting now has an effect, or says "No effect in awxnext" and why in its
    help (analytics, subscriptions, OAuth2, custom virtualenvs, and
    `LOG_AGGREGATOR_*` until M6-03). A test fails CI when a setting is neither.
-2. **API endpoints that AWX clients call**: the bulk API, dashboard, host
-   metrics, subscriptions/config POST, instance health checks. The `awx.awx`
-   collection's `bulk_*`, `license` and `subscriptions` modules would fail.
+2. **API endpoints that AWX clients call**: dashboard, host metrics,
+   subscriptions/config POST, instance health checks (the bulk API is done,
+   roadmap M2-02). The `awx.awx` collection's `license` and `subscriptions`
+   modules would fail.
    Compatibility with the collection, awxkit and the Terraform provider is
    tested nightly since roadmap M2-01 ([compat/](../compat/README.md)); the
    gaps those suites found are roadmap M2-14 to M2-26.
@@ -62,7 +63,7 @@ The gaps fall in four groups:
 
 **P2: missing features people will hit**
 
-6. Bulk API: `bulk/job_launch`, `bulk/host_create`, `bulk/host_delete`.
+6. ~~Bulk API: `bulk/job_launch`, `bulk/host_create`, `bulk/host_delete`~~ (done, roadmap M2-02).
 7. ~~`?host_filter=` on `/hosts/`, `chain__` filters~~ (done, roadmap M1-13).
 8. Host metrics API and page (the data is already collected per job), `host_metric_summary_monthly`.
 9. Instance group policies (percentage, minimum, list) and `max_forks`; `max_concurrent_jobs` outside container groups.
@@ -120,7 +121,7 @@ The gaps fall in four groups:
 | `file` source, `inventory_import` | Yes | Missing | GitOps inventory `content` covers part of it |
 | overwrite, overwrite_vars, enabled_var, host_filter, update on launch with cache | Yes | Done | |
 | Inventory updates: cancel, stdout, events, notifications, schedules | Yes | Done | UI has no schedules for sources; notifications are in the source's menu |
-| Bulk host create/delete | Yes | Missing | |
+| Bulk host create/delete | Yes | Done | `bulk/host_create` (each host created as through `/hosts/`, all or none) and `bulk/host_delete`, with AWX's limits, checks and messages |
 | Host metrics | Yes | Partial | Collected per job and cleaned up; no API or UI |
 | Managed credential types | Yes | Partial | All but Insights and RHV; Kubernetes CA not injected. As in AWX, an encrypted SSH key (OpenSSH with a cipher, PKCS#8 `ENCRYPTED PRIVATE KEY`, PEM `Proc-Type: 4,ENCRYPTED`) needs its passphrase and a passphrase needs an encrypted key, checked against the stored key on update |
 | Custom credential types | Yes | Done | Injectors are Jinja2 (gonja), sandboxed like AWX and checked when saved; `2 ** n` gives a float and `None` prints empty |
@@ -172,7 +173,7 @@ The gaps fall in four groups:
 | Named URLs | Yes | Partial | Common forms only |
 | Browsable HTML API | Yes | Missing | JSON only |
 | Dashboard endpoints | Yes | Missing | The UI's "Now" page replaces the dashboard |
-| Bulk API | Yes | Missing | |
+| Bulk API | Yes | Done | `bulk/job_launch` creates a workflow job without a template (`is_bulk_job`), one node per job; node prompts are checked against their template like a workflow node's (AWX ignores unprompted ones), and instance groups per node wait for M3-03. Limits `BULK_JOB_MAX_LAUNCH`, `BULK_HOST_MAX_CREATE`, `BULK_HOST_MAX_DELETE` (settings, jobs category) |
 | Activity stream | Yes | Partial | No entries for job launches or role assignment API grants |
 | Settings API and UI | Yes | Done | Settings with no effect say so in their help ("No effect in awxnext": analytics, subscriptions, OAuth2, custom virtualenvs, `LOG_AGGREGATOR_*` until M6-03); a test keeps it that way. Null is refused ("This field may not be null.") except for the settings AWX registers with `allow_null` (`DEFAULT_EXECUTION_ENVIRONMENT`, `LOG_AGGREGATOR_HOST`, `_PORT`, `_TYPE`) |
 | External log aggregation | Yes | Missing | JSON logs on stderr instead |

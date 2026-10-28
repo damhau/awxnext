@@ -12,6 +12,7 @@ import (
 // Install registers non-resource routes (ping, config, settings, ...).
 func Install(app *api.App) {
 	installSettings(app)
+	installBulk(app)
 	app.HandlePublic("GET", "/api/v2/ping/", ping)
 	app.Handle("GET", "/api/v2/config/", configView)
 	installScheduleRoutes(app)

@@ -324,16 +324,24 @@ func handleWorkflowRelaunch(c *Ctx, w http.ResponseWriter, r *http.Request, job 
 		api.WriteJSON(w, 200, Obj{"passwords_needed_to_start": needed})
 		return
 	}
-	ujt, ok := api.ID(job["unified_job_template"])
-	if !ok {
+	ujt, hasTemplate := api.ID(job["unified_job_template"])
+	switch {
+	case !hasTemplate && boolv(job["is_bulk_job"]):
+		// A bulk job has no template: as in AWX, only superusers relaunch it.
+		if !c.User.Superuser {
+			api.WriteError(w, api.ErrForbidden)
+			return
+		}
+	case !hasTemplate:
 		api.WriteError(w, api.BadRequest("Cannot relaunch workflow job: its template has been deleted."))
 		return
+	default:
+		if ok, err := ujtPerm(c, ujt, "execute"); err != nil || !ok {
+			api.WriteError(w, api.ErrForbidden)
+			return
+		}
 	}
-	if ok, err := ujtPerm(c, ujt, "execute"); err != nil || !ok {
-		api.WriteError(w, api.ErrForbidden)
-		return
-	}
-	if boolv(job["is_sliced_job"]) {
+	if hasTemplate && boolv(job["is_sliced_job"]) {
 		jt, err := api.Get(c, api.Lookup("job_templates"), ujt)
 		if err != nil {
 			api.WriteError(w, api.BadRequest("Job template for this sliced job has been deleted."))
@@ -375,8 +383,8 @@ func handleWorkflowRelaunch(c *Ctx, w http.ResponseWriter, r *http.Request, job 
 	for _, k := range []string{"name", "description", "extra_vars", "limit", "scm_branch", "job_tags", "skip_tags", "allow_simultaneous", "webhook_service"} {
 		values[k] = job[k]
 	}
-	values["type"], values["unified_job_template_id"], values["organization_id"] = "workflow_job", ujt, job["organization"]
-	values["inventory_id"], values["launch_type"] = job["inventory"], "relaunch"
+	values["type"], values["unified_job_template_id"], values["organization_id"] = "workflow_job", nullID(ujt), job["organization"]
+	values["inventory_id"], values["launch_type"], values["is_bulk_job"] = job["inventory"], "relaunch", boolv(job["is_bulk_job"])
 	if !c.User.Anonymous() {
 		values["created_by_id"], values["modified_by_id"] = c.User.UserID, c.User.UserID
 	}
