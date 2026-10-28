@@ -14,6 +14,7 @@ func Install(app *api.App) {
 	installSettings(app)
 	installBulk(app)
 	installDashboard(app)
+	installLicense(app)
 	app.HandlePublic("GET", "/api/v2/ping/", ping)
 	app.Handle("GET", "/api/v2/config/", configView)
 	installScheduleRoutes(app)
@@ -150,7 +151,7 @@ func configView(c *Ctx, w http.ResponseWriter, r *http.Request) {
 		"eula":                 "",
 		"analytics_status":     "off",
 		"analytics_collectors": Obj{},
-		"license_info":         Obj{"license_type": "open", "valid_key": true, "subscription_name": "OPEN", "product_name": "AWX"},
+		"license_info":         openLicense,
 		"become_methods": [][]string{
 			{"sudo", "Sudo"}, {"su", "Su"}, {"pbrun", "Pbrun"}, {"pfexec", "Pfexec"}, {"dzdo", "DZDO"},
 			{"pmrun", "Pmrun"}, {"runas", "Runas"}, {"enable", "Enable"}, {"doas", "Doas"}, {"ksu", "Ksu"},

@@ -135,6 +135,9 @@ class Runner:
         targets = src / "awx_collection" / "tests" / "integration" / "targets"
         for t in targets.iterdir():
             shutil.copytree(t, dest / "roles" / t.name)
+        # Targets for modules the collection ships no test for (compat/targets/).
+        for t in (HERE / "targets").iterdir():
+            shutil.copytree(t, dest / "roles" / t.name)
         self.env["ANSIBLE_COLLECTIONS_PATH"] = str(root)
         self.collection_dir = dest
         return dest

@@ -24,10 +24,9 @@ The gaps fall in four groups:
    setting now has an effect, or says "No effect in awxnext" and why in its
    help (analytics, subscriptions, OAuth2, custom virtualenvs, and
    `LOG_AGGREGATOR_*` until M6-03). A test fails CI when a setting is neither.
-2. **API endpoints that AWX clients call**: subscriptions/config POST,
-   instance health checks (the bulk API, the dashboard and host metrics are
-   done, roadmap M2-02 to M2-04). The `awx.awx` collection's `license` and `subscriptions`
-   modules would fail.
+2. **API endpoints that AWX clients call**: instance health checks (the
+   bulk API, the dashboard, host metrics and the subscription endpoints are
+   done, roadmap M2-02 to M2-05).
    Compatibility with the collection, awxkit and the Terraform provider is
    tested nightly since roadmap M2-01 ([compat/](../compat/README.md)); the
    gaps those suites found are roadmap M2-14 to M2-26.
@@ -166,7 +165,7 @@ The gaps fall in four groups:
 
 | Feature | AWX 24.6 | awxnext | Notes |
 |---|---|---|---|
-| API root, ping, config, me | Yes | Done | The version root is public with AWX's keys (`inventory`, `constructed_inventory`); `applications/` is always empty, OAuth2 applications being out of scope. `config` has no license POST/DELETE |
+| API root, ping, config, me | Yes | Done | The version root is public with AWX's keys (`inventory`, `constructed_inventory`); `applications/` is always empty, OAuth2 applications being out of scope. `POST`/`DELETE config/`, `config/subscriptions/` and `config/attach/` answer as an upstream AWX without a subscription (its `OpenLicense`): nothing can be attached, with AWX's errors |
 | Compatibility suites: `awx.awx` integration targets, `awx` CLI, Terraform provider `ansible/aap` | Yes | Done | Nightly and on demand in CI against a throwaway install over HTTPS ([compat/](../compat/README.md)); each expected failure is listed with its issue in `compat/known-failures.yml` |
 | Field validation like AWX's serializers | Yes | Done | Null reads as `""` for text and choice fields and as `false` for booleans, then is validated, as the `awx.awx` modules expect. Texts clients match are AWX's: a missing object is `No Organization matches the given query.` (Django's 404), an unknown ad hoc module `"X" is not a valid choice.`, and a job's `extra_vars` are written as Python's `json.dumps` (`{"foo": "bar"}`, keys sorted) |
 | OPTIONS, pagination, filtering, ordering | Yes | Done | Plain filters crossing a relation match the same related row and `chain__` ones each their own, as in AWX; `role_level` needs every permission of the role. OPTIONS answers every list, sub-list and action, `/settings/` included, with DRF's `Allow` header (also on GET; HEAD answers like GET), `object_roles`, and `id` among the POST fields of attach lists, so awxkit builds the CLI's `modify`, `delete`, `grant` and `revoke` and `awx export` works. AWX's reserved query parameters (`no_truncate`, `limit`, `validate`…) are not field filters, and `type` takes a comma-separated list of types as AWX's `TypeFilterBackend` |
@@ -178,7 +177,7 @@ The gaps fall in four groups:
 | Settings API and UI | Yes | Done | Settings with no effect say so in their help ("No effect in awxnext": analytics, subscriptions, OAuth2, custom virtualenvs, `LOG_AGGREGATOR_*` until M6-03); a test keeps it that way. Null is refused ("This field may not be null.") except for the settings AWX registers with `allow_null` (`DEFAULT_EXECUTION_ENVIRONMENT`, `LOG_AGGREGATOR_HOST`, `_PORT`, `_TYPE`) |
 | External log aggregation | Yes | Missing | JSON logs on stderr instead |
 | Prometheus metrics | Yes | Partial | No subsystem metrics or `node`/`metric` parameters; OpenTelemetry traces added |
-| Analytics, subscriptions | Yes | By design | Collection `license`/`subscriptions` modules fail |
+| Analytics, subscriptions | Yes | By design | No subscriptions, as upstream AWX: the collection's `license` and `subscriptions` modules behave as against it (tested by `compat/targets/`) |
 | Instances: capacity, drain, jobs | Yes | Done | Control nodes use a fixed capacity; `capacity_adjustment` scales instead of interpolating |
 | Instance health check endpoint | Yes | Missing | Health is passive (heartbeats, agent registration) |
 | Receptor mesh, peers, hop nodes, topology view | Yes | By design | Dial-back agent instead; install bundle replaced by an agent token |

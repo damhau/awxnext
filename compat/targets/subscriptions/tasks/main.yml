@@ -1,0 +1,14 @@
+---
+# The collection ships no test for the subscriptions module. An upstream AWX
+# without a subscription answers {"error": "Invalid Subscription"} (400),
+# which the module reads as the list of subscriptions: it iterates the keys.
+- name: List subscriptions
+  subscriptions:
+    username: compat
+    password: compat
+  register: result
+
+- assert:
+    that:
+      - result is not failed
+      - result.subscriptions == ['error']

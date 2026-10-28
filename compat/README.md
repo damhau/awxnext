@@ -4,7 +4,7 @@
 
 | Suite | What runs | One test is |
 |---|---|---|
-| `collection` | the `awx.awx` integration targets from AWX 24.6.1, each run as a role | a target (module) |
+| `collection` | the `awx.awx` integration targets from AWX 24.6.1, each run as a role, and `targets/` here for modules the collection ships no test for (`license`, `subscriptions`: what an upstream AWX without a subscription answers) | a target (module) |
 | `cli` | smoke steps of the `awx` CLI from awxkit 24.6.1: login, CRUD, lookups by name, roles, launch and monitor, stdout, settings, export/import | a step |
 | `terraform` | the acceptance tests of `ansible/terraform-provider-aap` v1.5.0, after its fixture playbook (`awx.awx` stands in for `ansible.controller`/`ansible.platform`; EDA fixtures are dropped) | a Go test |
 
