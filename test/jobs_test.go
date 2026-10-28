@@ -77,6 +77,13 @@ const envPlaybook = `- hosts: all
 func newJobFixture(t *testing.T) *jobFixture {
 	t.Helper()
 	requireAnsible(t)
+	return newLaunchFixture(t)
+}
+
+// newLaunchFixture sets up a project, an inventory and hosts without needing
+// ansible-runner: enough to test what a launch accepts.
+func newLaunchFixture(t *testing.T) *jobFixture {
+	t.Helper()
 	a := adminClient(t)
 	allowFileURLs(t, a)
 	f := &jobFixture{a: a, org: newOrg(t, a), hosts: []string{"h1", "h2", "h3"}}
@@ -184,10 +191,7 @@ func TestJobRun(t *testing.T) {
 	if info.Body["can_start_without_user_input"] != true {
 		t.Fatalf("launch info: %s", info.Raw)
 	}
-	launched := must(t, a.post(fmt.Sprintf("job_templates/%d/launch/", jt), map[string]any{"limit": "h1"}), 201)
-	if _, ok := launched.Body["ignored_fields"].(map[string]any)["limit"]; !ok {
-		t.Fatalf("limit should be ignored without ask_limit_on_launch: %v", launched.Body["ignored_fields"])
-	}
+	launched := must(t, a.post(fmt.Sprintf("job_templates/%d/launch/", jt), map[string]any{}), 201)
 	job := waitJob(t, a, fmt.Sprintf("jobs/%d/", launched.id()))
 	mustStatus(t, f, job, "successful")
 	out := f.stdout(t, job.id())
@@ -443,4 +447,50 @@ func TestJobAccess(t *testing.T) {
 	if n := must(t, o.get(fmt.Sprintf("unified_jobs/?id=%d", job.id())), 200).count(); n != 0 {
 		t.Fatal("unified_jobs leaks jobs")
 	}
+}
+
+// A launch field the template does not prompt for is refused: AWX ignores it
+// and starts the job anyway, so a limit meant for one host runs everywhere.
+// IGNORE_UNPROMPTED_LAUNCH_FIELDS brings AWX's behaviour back.
+func TestLaunchRefusesUnpromptedFields(t *testing.T) {
+	f := newLaunchFixture(t)
+	a := f.a
+	jt := f.template(t, "site.yml", nil)
+	jobsOf := func() float64 {
+		return must(t, a.get(fmt.Sprintf("job_templates/%d/jobs/", jt)), 200).Body["count"].(float64)
+	}
+
+	r := must(t, a.post(fmt.Sprintf("job_templates/%d/launch/", jt), map[string]any{"limit": "h1"}), 400)
+	if !strings.Contains(r.Raw, "Field is not configured to prompt on launch") {
+		t.Fatalf("limit: %s", r.Raw)
+	}
+	r = must(t, a.post(fmt.Sprintf("job_templates/%d/launch/", jt), map[string]any{"extra_vars": map[string]any{"target": "all", "env": "prod"}}), 400)
+	if !strings.Contains(r.Raw, "Variables env, target are not allowed on launch") {
+		t.Fatalf("extra_vars: %s", r.Raw)
+	}
+	if n := jobsOf(); n != 0 {
+		t.Fatalf("a refused launch created %v jobs", n)
+	}
+	// Empty values change nothing and pass.
+	must(t, a.post(fmt.Sprintf("job_templates/%d/launch/", jt), map[string]any{"limit": "", "extra_vars": map[string]any{}}), 201)
+
+	// Prompted fields are taken.
+	asks := f.template(t, "site.yml", map[string]any{"ask_limit_on_launch": true})
+	job := must(t, a.post(fmt.Sprintf("job_templates/%d/launch/", asks), map[string]any{"limit": "h1"}), 201)
+	if got := must(t, a.get(fmt.Sprintf("jobs/%d/", job.id())), 200).Body["limit"]; got != "h1" {
+		t.Fatalf("prompted limit: %v", got)
+	}
+
+	// Workflow templates too.
+	wf := must(t, a.post("workflow_job_templates/", map[string]any{"name": uniq("wf"), "organization": f.org}), 201).id()
+	must(t, a.post(fmt.Sprintf("workflow_job_templates/%d/launch/", wf), map[string]any{"limit": "h1"}), 400)
+
+	// AWX's behaviour on request: ignored and reported.
+	must(t, a.patch("settings/jobs/", map[string]any{"IGNORE_UNPROMPTED_LAUNCH_FIELDS": true}), 200)
+	t.Cleanup(func() { a.patch("settings/jobs/", map[string]any{"IGNORE_UNPROMPTED_LAUNCH_FIELDS": false}) })
+	r = must(t, a.post(fmt.Sprintf("job_templates/%d/launch/", jt), map[string]any{"limit": "h1"}), 201)
+	if _, ok := r.Body["ignored_fields"].(map[string]any)["limit"]; !ok {
+		t.Fatalf("ignored_fields: %v", r.Body["ignored_fields"])
+	}
+	must(t, a.post(fmt.Sprintf("workflow_job_templates/%d/launch/", wf), map[string]any{"limit": "h1"}), 201)
 }

@@ -118,6 +118,46 @@ func handleLaunch(c *Ctx, w http.ResponseWriter, r *http.Request, jt Obj) {
 	writeLaunched(c, w, jobID, Obj{"ignored_fields": ignored})
 }
 
+// refuseUnprompted fails a launch that sends fields the template does not
+// prompt for. AWX ignores them and starts the job anyway, so a limit meant for
+// one host runs on the whole inventory; IGNORE_UNPROMPTED_LAUNCH_FIELDS brings
+// that behaviour back. Empty values change nothing and are let through.
+func refuseUnprompted(c *Ctx, ignored Obj) error {
+	if len(ignored) == 0 || c.App.Settings.Bool(c, "IGNORE_UNPROMPTED_LAUNCH_FIELDS") {
+		return nil
+	}
+	fe := api.FieldErrors{}
+	for field, v := range ignored {
+		switch x := v.(type) {
+		case nil:
+			continue
+		case string:
+			if x == "" {
+				continue
+			}
+		case []any:
+			if len(x) == 0 {
+				continue
+			}
+		case map[string]any:
+			if len(x) == 0 {
+				continue
+			}
+			if field == "extra_vars" {
+				names := make([]string, 0, len(x))
+				for k := range x {
+					names = append(names, k)
+				}
+				sort.Strings(names)
+				fe.Add(field, fmt.Sprintf("Variables %s are not allowed on launch. Check the Prompt on launch setting on the template to include Extra Variables.", strings.Join(names, ", ")))
+				continue
+			}
+		}
+		fe.Add(field, "Field is not configured to prompt on launch.")
+	}
+	return fe.Err()
+}
+
 func normalizeObj(o Obj) Obj {
 	m, _ := normalize(o).(map[string]any)
 	if m == nil {
@@ -335,6 +375,10 @@ func LaunchJobTemplate(c *Ctx, jt Obj, body Obj, launchType string, ov *LaunchOv
 		} else {
 			ignored["extra_vars"] = launchVars
 		}
+	}
+
+	if err := refuseUnprompted(c, ignored); err != nil {
+		return 0, nil, err
 	}
 
 	// Branch override.

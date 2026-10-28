@@ -141,6 +141,7 @@ The gaps fall in four groups:
 | Content signature validation | Yes | Partial | Field only, nothing verifies |
 | Job template fields, multiple credentials, labels, instance groups, EE | Yes | Done | `MAX_FORKS` not enforced |
 | All 16 `ask_*_on_launch` prompts | Yes | Done | No RBAC check on prompted labels and instance groups |
+| Launch fields the template does not prompt for | Yes | Done | Deliberate difference: refused with a 400 instead of ignored (`ignored_fields`); `IGNORE_UNPROMPTED_LAUNCH_FIELDS` gives AWX's behaviour |
 | Surveys (all types, password encryption) | Yes | Done | Plus choices from the system, conditional questions, answer formats |
 | Relaunch (all, failed hosts) | Yes | Done | UI does not ask for passwords; launch-time labels/IGs not kept |
 | `jobs/N/create_schedule/` | Yes | Missing | |
