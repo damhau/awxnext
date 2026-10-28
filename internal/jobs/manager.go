@@ -554,7 +554,8 @@ func (m *Manager) Cancel(ctx context.Context, id int64) error {
 		}
 		if tag.RowsAffected() > 0 {
 			if ujt := row.Int("unified_job_template_id"); ujt != 0 {
-				m.DB().Exec(ctx, `UPDATE unified_job_templates SET last_job_id = $2, last_job_failed = true, status = 'canceled' WHERE id = $1`, ujt, id)
+				m.DB().Exec(ctx, `UPDATE unified_job_templates SET last_job_id = $2, last_job_failed = true, status = 'canceled',
+					current_job_id = CASE WHEN current_job_id = $2 THEN NULL ELSE current_job_id END WHERE id = $1`, ujt, id)
 			}
 			if final, err := LoadRow(ctx, m.DB(), id); err == nil {
 				row = final

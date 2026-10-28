@@ -150,8 +150,15 @@ func ujtSummary(c *Ctx, objs []Obj) error {
 				continue
 			}
 			sf[k] = Obj{"id": jid, "name": name, "description": desc, "finished": fmtTime(finished), "status": status, "failed": failed}
+			// AWX's aliases (last_update, current_update), linked only on the
+			// templates whose jobs are updates.
+			alias := strings.Replace(k, "_job", "_update", 1)
+			sf[alias] = Obj{"id": jid, "name": name, "description": desc, "status": status, "failed": failed}
 			if r := api.LookupType(typ); r != nil {
 				rel[k] = r.URL(jid)
+				if t := o["type"]; t == "project" || t == "inventory_source" {
+					rel[alias] = r.URL(jid)
+				}
 			}
 		}
 	}

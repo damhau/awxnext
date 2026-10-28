@@ -191,6 +191,46 @@ func TestProjectGitSync(t *testing.T) {
 	}
 }
 
+// AWX's aliases of current_job and last_job. The collection's project module
+// waits on summary_fields.current_update from the response that created the
+// project, so it is set while the update is pending.
+func TestCurrentAndLastUpdate(t *testing.T) {
+	a := adminClient(t)
+	allowFileURLs(t, a)
+	org := newOrg(t, a)
+	repo := gitRepo(t, map[string]string{"site.yml": helloPlaybook})
+	r := must(t, a.post("projects/", map[string]any{"name": uniq("p"), "organization": org, "scm_type": "git", "scm_url": "file://" + repo}), 201)
+	cur, ok := r.Body["summary_fields"].(map[string]any)["current_update"].(map[string]any)
+	if !ok {
+		t.Fatalf("no current_update in the create response: %s", r.Raw)
+	}
+	if r.Body["related"].(map[string]any)["current_update"] != fmt.Sprintf("/api/v2/project_updates/%v/", cur["id"]) || cur["status"] == nil {
+		t.Errorf("current_update: %v %v", cur, r.Body["related"])
+	}
+	waitJob(t, a, fmt.Sprintf("project_updates/%v/", cur["id"]))
+	p := must(t, a.get(fmt.Sprintf("projects/%d/", r.id())), 200)
+	sf, rel := p.Body["summary_fields"].(map[string]any), p.Body["related"].(map[string]any)
+	if _, ok := sf["current_update"]; ok {
+		t.Errorf("current_update after the update: %v", sf["current_update"])
+	}
+	if last, _ := sf["last_update"].(map[string]any); last["id"] != cur["id"] || last["status"] != "successful" || rel["last_update"] == nil {
+		t.Errorf("last_update: %v %v", sf["last_update"], rel["last_update"])
+	}
+
+	// Other templates have the summaries but link only last_job and current_job.
+	f := newLaunchFixture(t)
+	jt := f.template(t, "site.yml", nil)
+	must(t, f.a.patch(fmt.Sprintf("projects/%d/", f.project), map[string]any{"scm_url": "file:///nonexistent-awxnext-repo", "scm_update_on_launch": true}), 200)
+	job := f.launch(t, f.a, jt, nil)
+	j := must(t, a.get(fmt.Sprintf("job_templates/%d/", jt)), 200)
+	if last, _ := j.Body["summary_fields"].(map[string]any)["last_update"].(map[string]any); last["id"] != job.Body["id"] {
+		t.Errorf("job template last_update: %v", last)
+	}
+	if _, ok := j.Body["related"].(map[string]any)["last_update"]; ok {
+		t.Error("job template links last_update")
+	}
+}
+
 func TestProjectAccessAndManual(t *testing.T) {
 	a := adminClient(t)
 	org := newOrg(t, a)

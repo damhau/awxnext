@@ -134,12 +134,12 @@ The gaps fall in four groups:
 
 | Feature | AWX 24.6 | awxnext | Notes |
 |---|---|---|---|
-| Git and manual projects | Yes | Done | Native Go sync, one immutable checkout per commit |
+| Git and manual projects | Yes | Done | Native Go sync, one immutable checkout per commit. A template's `current_job` is set as soon as a job is pending, and `current_update`/`last_update` are in the summaries of every template and the links of projects and inventory sources, as in AWX |
 | SVN, archive | Yes | Later | Insights projects: by design |
 | Branch override, refspec, submodules, delete on update, clean, update on launch with cache | Yes | Done | |
 | Requirements (roles, collections) | Yes | Done | Installed in the EE at run time, cached by content |
 | Content signature validation | Yes | Partial | Field only, nothing verifies |
-| Job template fields, multiple credentials, labels, instance groups, EE | Yes | Done | `MAX_FORKS` not enforced |
+| Job template fields, multiple credentials, labels, instance groups, EE | Yes | Done | `MAX_FORKS` not enforced. The playbook is checked against the project unless the project allows branch override, as in AWX |
 | All 16 `ask_*_on_launch` prompts | Yes | Done | |
 | Launch fields the template does not prompt for | Yes | Done | Deliberate difference: refused with a 400 instead of ignored (`ignored_fields`); `IGNORE_UNPROMPTED_LAUNCH_FIELDS` gives AWX's behaviour |
 | `ansible_*` variables at launch (extra vars, survey questions, schedules, ad hoc) | Yes | Done | Deliberate difference: refused, as they set how Ansible connects and runs; `ALLOW_ANSIBLE_VARS_AT_LAUNCH` gives AWX's behaviour. Template, inventory and host variables are not affected |

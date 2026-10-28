@@ -159,7 +159,12 @@ func TestJobTemplateValidation(t *testing.T) {
 	a := f.a
 	must(t, a.post("job_templates/", map[string]any{"name": uniq("jt"), "inventory": f.inv, "playbook": "site.yml"}), 400)
 	must(t, a.post("job_templates/", map[string]any{"name": uniq("jt"), "project": f.project, "playbook": "site.yml"}), 400)
+	// As in AWX, the playbook is checked only when the template cannot run
+	// another branch of the project, where it could be.
+	must(t, a.patch(fmt.Sprintf("projects/%d/", f.project), map[string]any{"allow_override": false}), 200)
 	must(t, a.post("job_templates/", map[string]any{"name": uniq("jt"), "project": f.project, "inventory": f.inv, "playbook": "missing.yml"}), 400)
+	must(t, a.patch(fmt.Sprintf("projects/%d/", f.project), map[string]any{"allow_override": true}), 200)
+	must(t, a.post("job_templates/", map[string]any{"name": uniq("jt"), "project": f.project, "inventory": f.inv, "playbook": "missing.yml", "scm_branch": "other"}), 201)
 	jt := f.template(t, "site.yml", nil)
 	r := must(t, a.get(fmt.Sprintf("job_templates/%d/", jt)), 200)
 	if org, _ := r.Body["organization"].(float64); int64(org) != f.org {

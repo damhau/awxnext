@@ -36,8 +36,19 @@ func Create(ctx context.Context, db api.DBTX, values map[string]any) (int64, err
 	}
 	var id int64
 	err := db.QueryRow(ctx, "INSERT INTO unified_jobs ("+strings.Join(cols, ", ")+") VALUES ("+strings.Join(phs, ", ")+") RETURNING id", args...).Scan(&id)
+	if err != nil {
+		return 0, err
+	}
+	// As in AWX, a template's current job is set as soon as the job is
+	// pending: the collection's project module waits on current_update from
+	// the response that created the project.
+	if ujt, ok := api.ID(values["unified_job_template_id"]); ok && ujt != 0 && activeStatus[fmt.Sprint(values["status"])] {
+		_, err = db.Exec(ctx, "UPDATE unified_job_templates SET current_job_id = $2, status = $3 WHERE id = $1", ujt, id, values["status"])
+	}
 	return id, err
 }
+
+var activeStatus = map[string]bool{"pending": true, "waiting": true, "running": true}
 
 // Wake signals the dispatcher (on any node) that there is work.
 func Wake(ctx context.Context, db api.DBTX) {

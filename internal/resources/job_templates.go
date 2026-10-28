@@ -123,11 +123,12 @@ func checkPlaybook(c *Ctx, projectID int64, playbook string) error {
 	if err != nil {
 		return api.FieldError("project", "Invalid project.")
 	}
-	files, _ := projectFiles(c, proj)
-	if str(proj["scm_type"]) != "" && str(proj["scm_revision"]) == "" {
-		// Not synced yet: accept and verify at run time.
+	if str(proj["scm_type"]) != "" && (str(proj["scm_revision"]) == "" || proj["allow_override"] == true) {
+		// Not synced yet, or the template may run another branch, where the
+		// playbook can be (AWX checks neither): verified at run time.
 		return nil
 	}
+	files, _ := projectFiles(c, proj)
 	for _, p := range files.Playbooks {
 		if p == playbook {
 			return nil
