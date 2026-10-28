@@ -3,10 +3,13 @@ package api
 import (
 	"fmt"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"github.com/damhau/awxnext/internal/rbac"
 )
 
 // query accumulates SQL arguments and WHERE clauses.
@@ -76,14 +79,52 @@ var reservedParams = map[string]bool{
 	"host_filter": true, "not_in": true,
 }
 
-// applyFilters translates query-string filters into WHERE clauses.
+// filterCond is one field filter: a path, its lookup and the raw value.
+type filterCond struct {
+	parts  []string
+	lookup string
+	raw    string
+}
+
+// applyFilters translates query-string filters into WHERE clauses, as AWX's
+// FieldLookupBackend does: plain filters go into one filter() call, so those
+// that cross the same relation must match the same related row; chain__
+// filters are applied one by one, each free to match a different row;
+// not__ filters exclude; or__ filters are ORed together.
 func (q *query) applyFilters(c *Ctx, res *Resource, params url.Values) error {
 	var ors []string
-	for key, values := range params {
+	var plain []filterCond
+	keys := make([]string, 0, len(params))
+	for key := range params {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys) // stable SQL and argument order
+	for _, key := range keys {
+		values := params[key]
+		if f := res.ParamFilters[key]; f != nil {
+			for _, v := range values {
+				pred, err := f(c, v, q.arg)
+				if err != nil {
+					return filterErr("%s: %v", key, err)
+				}
+				q.where = append(q.where, pred)
+			}
+			continue
+		}
+		if key == "role_level" {
+			for _, v := range values {
+				pred, err := q.roleLevel(c, res, v)
+				if err != nil {
+					return err
+				}
+				q.where = append(q.where, pred)
+			}
+			continue
+		}
 		if reservedParams[key] {
 			continue
 		}
-		negate, isOr := false, false
+		negate, isOr, isChain := false, false, false
 		k := key
 		for {
 			switch {
@@ -96,6 +137,7 @@ func (q *query) applyFilters(c *Ctx, res *Resource, params url.Values) error {
 				k = k[4:]
 				continue
 			case strings.HasPrefix(k, "chain__"):
+				isChain = true
 				k = k[7:]
 				continue
 			}
@@ -108,6 +150,10 @@ func (q *query) applyFilters(c *Ctx, res *Resource, params url.Values) error {
 			parts = parts[:len(parts)-1]
 		}
 		for _, v := range values {
+			if !negate && !isOr && !isChain {
+				plain = append(plain, filterCond{parts, lookup, v})
+				continue
+			}
 			pred, err := q.path(res, "t", parts, lookup, v)
 			if err != nil {
 				return err
@@ -121,6 +167,13 @@ func (q *query) applyFilters(c *Ctx, res *Resource, params url.Values) error {
 				q.where = append(q.where, pred)
 			}
 		}
+	}
+	if len(plain) > 0 {
+		pred, err := q.together(res, "t", plain)
+		if err != nil {
+			return err
+		}
+		q.where = append(q.where, pred)
 	}
 	if len(ors) > 0 {
 		q.where = append(q.where, strings.Join(ors, " OR "))
@@ -144,6 +197,92 @@ func (q *query) applyFilters(c *Ctx, res *Resource, params url.Values) error {
 		}
 	}
 	return nil
+}
+
+// together compiles conditions that must hold at once: those crossing the
+// same relation share one subquery, so they match the same related row.
+func (q *query) together(res *Resource, alias string, conds []filterCond) (string, error) {
+	var preds []string
+	groups := map[string][]filterCond{}
+	var order []string
+	for _, fc := range conds {
+		name := fc.parts[0]
+		f := res.field(name)
+		_, isRel := res.Relations[name]
+		viaFK := f != nil && !f.NoFilter && f.Type == TFK && len(fc.parts) > 1
+		if viaFK || (f == nil && isRel) {
+			if _, seen := groups[name]; !seen {
+				order = append(order, name)
+			}
+			groups[name] = append(groups[name], filterCond{fc.parts[1:], fc.lookup, fc.raw})
+			continue
+		}
+		pred, err := q.path(res, alias, fc.parts, fc.lookup, fc.raw)
+		if err != nil {
+			return "", err
+		}
+		preds = append(preds, pred)
+	}
+	for _, name := range order {
+		var target *Resource
+		var rel Relation
+		f := res.field(name)
+		if f != nil {
+			target = registry[f.Ref]
+		} else {
+			rel = res.Relations[name]
+			target = registry[rel.Target]
+		}
+		if target == nil {
+			return "", filterErr("unknown relation '%s'", name)
+		}
+		inner := q.nextAlias()
+		var sub, direct []filterCond
+		for _, fc := range groups[name] {
+			if len(fc.parts) == 0 {
+				direct = append(direct, fc)
+			} else {
+				sub = append(sub, fc)
+			}
+		}
+		var inside []string
+		// Filtering a relation directly compares ids.
+		for _, fc := range direct {
+			pred, err := q.leaf(inner+".id", &Field{Name: "id", Type: TInt}, fc.lookup, fc.raw)
+			if err != nil {
+				return "", err
+			}
+			inside = append(inside, pred)
+		}
+		if len(sub) > 0 {
+			pred, err := q.together(target, inner, sub)
+			if err != nil {
+				return "", err
+			}
+			inside = append(inside, pred)
+		}
+		where := strings.Join(inside, " AND ")
+		if f != nil {
+			preds = append(preds, fmt.Sprintf("%s.%s IN (SELECT %s.id FROM %s %s WHERE %s)", alias, quoteIdent(f.column()), inner, target.Table, inner, where))
+		} else {
+			preds = append(preds, fmt.Sprintf("EXISTS (SELECT 1 FROM %s %s WHERE (%s) AND (%s))", target.Table, inner, rel.Join(alias, inner), where))
+		}
+	}
+	return "(" + strings.Join(preds, ") AND (") + ")", nil
+}
+
+// roleLevel keeps the objects on which the user holds an AWX role
+// (role_level=use_role): every permission of the managed role that backs it.
+func (q *query) roleLevel(c *Ctx, res *Resource, role string) (string, error) {
+	if res.ContentType == "" {
+		return "", filterErr("Cannot apply role_level filter to this list because its model does not use roles for access control.")
+	}
+	for _, m := range rbac.LegacyRoles(res.ContentType) {
+		if m.LegacyField == role {
+			return c.User.PredicateAll(rbac.ArgFunc(q.arg), res.ContentType, m.Permissions, res.Scope("t")), nil
+		}
+	}
+	return "", filterErr("role_level: %s has no %s", res.Verbose, role)
 }
 
 func (q *query) path(res *Resource, alias string, parts []string, lookup, raw string) (string, error) {

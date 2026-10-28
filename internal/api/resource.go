@@ -175,6 +175,9 @@ type Resource struct {
 	CanChange func(c *Ctx, obj Obj, data Obj) error
 	// CanDelete validates permission to delete.
 	CanDelete func(c *Ctx, obj Obj) error
+	// ParamFilters handle list query parameters of their own (host_filter
+	// on hosts), returning a predicate on alias t.
+	ParamFilters map[string]func(c *Ctx, value string, arg ArgFunc) (string, error)
 	// Perm answers HasPerm for resources without a content type, whose
 	// permissions come from another object (workflow nodes from their
 	// workflow); attaching to their sub-lists checks it.

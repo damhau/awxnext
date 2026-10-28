@@ -62,7 +62,7 @@ The gaps fall in four groups:
 **P2: missing features people will hit**
 
 6. Bulk API: `bulk/job_launch`, `bulk/host_create`, `bulk/host_delete`.
-7. `?host_filter=` on `/hosts/` (silently ignored), `chain__` filters (treated as AND).
+7. ~~`?host_filter=` on `/hosts/`, `chain__` filters~~ (done, roadmap M1-13).
 8. Host metrics API and page (the data is already collected per job), `host_metric_summary_monthly`.
 9. Instance group policies (percentage, minimum, list) and `max_forks`; `max_concurrent_jobs` outside container groups.
 10. External log aggregation (logstash, splunk, ...) and its test endpoint.
@@ -165,7 +165,7 @@ The gaps fall in four groups:
 | Feature | AWX 24.6 | awxnext | Notes |
 |---|---|---|---|
 | API root, ping, config, me | Yes | Done | `config` has no license POST/DELETE |
-| OPTIONS, pagination, filtering, ordering | Yes | Done | `chain__` acts as AND; `host_filter` and `role_level` ignored |
+| OPTIONS, pagination, filtering, ordering | Yes | Done | Plain filters crossing a relation match the same related row and `chain__` ones each their own, as in AWX; `role_level` needs every permission of the role |
 | Named URLs | Yes | Partial | Common forms only |
 | Browsable HTML API | Yes | Missing | JSON only |
 | Dashboard endpoints | Yes | Missing | The UI's "Now" page replaces the dashboard |

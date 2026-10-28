@@ -239,6 +239,10 @@ func registerInventories() {
 		Table:    "hosts",
 		Verbose:  "Host",
 		Ordering: "name",
+		// ?host_filter= takes the smart inventory syntax, as in AWX.
+		ParamFilters: map[string]func(c *Ctx, value string, arg ArgFunc) (string, error){
+			"host_filter": func(c *Ctx, value string, arg ArgFunc) (string, error) { return SmartFilterSQL(value, arg) },
+		},
 		Fields: []*Field{
 			{Name: "inventory", Type: api.TFK, Ref: "inventories", Required: true},
 			{Name: "enabled", Type: api.TBool, Default: true, Help: "Is this host online and available for running jobs?"},

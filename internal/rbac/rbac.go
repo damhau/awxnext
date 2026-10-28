@@ -89,6 +89,32 @@ func (p *Principal) Predicate(arg ArgFunc, contentType, perm string, s Scope) st
 		arg(p.UserID), arg(p.teamsArg()), arg(perm), ScopeSQL(arg, contentType, s))
 }
 
+// PredicateAll is true when the principal holds every one of perms on the
+// scoped object, through any of its assignments.
+func (p *Principal) PredicateAll(arg ArgFunc, contentType string, perms []string, s Scope) string {
+	if p.Superuser {
+		return "TRUE"
+	}
+	if p.Anonymous() {
+		return "FALSE"
+	}
+	need := perms
+	if p.Auditor {
+		need = nil
+		for _, perm := range perms {
+			if !strings.HasPrefix(perm, "view_") {
+				need = append(need, perm)
+			}
+		}
+		if len(need) == 0 {
+			return "TRUE"
+		}
+	}
+	return fmt.Sprintf(`%s::text[] <@ ARRAY(SELECT unnest(rd.permissions) FROM role_assignments ra JOIN role_definitions rd ON rd.id = ra.role_definition_id
+		WHERE (ra.user_id = %s OR ra.team_id = ANY(%s)) AND (%s))`,
+		arg(need), arg(p.UserID), arg(p.teamsArg()), ScopeSQL(arg, contentType, s))
+}
+
 func (p *Principal) teamsArg() []int64 {
 	if p.Teams == nil {
 		return []int64{}
