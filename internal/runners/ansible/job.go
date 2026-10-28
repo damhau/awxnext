@@ -239,7 +239,7 @@ func runJob(ctx context.Context, rc *jobs.RunContext) jobs.Result {
 	if inj.SSHKey != "" {
 		run.WriteFile("env/ssh_key", []byte(inj.SSHKey), 0o600)
 	}
-	run.WriteJSON("env/settings", map[string]any{"suppress_ansible_output": true, "suppress_output_file": true, "pexpect_timeout": 10})
+	run.WriteJSON("env/settings", runnerSettings(ctx, app))
 	run.Kwargs = map[string]any{"ident": fmt.Sprint(id), "playbook": playbook}
 	if err := setImage(ctx, app, run, row); err != nil {
 		return fail(err.Error())
@@ -477,6 +477,18 @@ func markUnsafe(n *yaml.Node) {
 	}
 }
 
+// runnerSettings are ansible-runner's settings for playbook and ad hoc runs.
+// DEFAULT_JOB_IDLE_TIMEOUT stops a run that printed nothing for that long;
+// the runner checks it each time it stops waiting for output, every
+// pexpect_timeout seconds at most.
+func runnerSettings(ctx context.Context, app *api.App) map[string]any {
+	s := map[string]any{"suppress_ansible_output": true, "suppress_output_file": true, "pexpect_timeout": 10}
+	if n := app.Settings.Int(ctx, "DEFAULT_JOB_IDLE_TIMEOUT"); n > 0 {
+		s["idle_timeout"], s["pexpect_timeout"] = n, min(n, 10)
+	}
+	return s
+}
+
 func baseEnv(ctx context.Context, app *api.App, run *Run, row jobs.Row) map[string]string {
 	env := map[string]string{
 		"ANSIBLE_FORCE_COLOR":               "True",
@@ -495,6 +507,14 @@ func baseEnv(ctx context.Context, app *api.App, run *Run, row jobs.Row) map[stri
 	}
 	if env["AWX_HOST"] == "" {
 		env["AWX_HOST"] = app.Cfg.BaseURL
+	}
+	// AWX_ANSIBLE_CALLBACK_PLUGINS: more directories with callback plugins.
+	if dirs, _ := app.Settings.Get(ctx, "AWX_ANSIBLE_CALLBACK_PLUGINS").([]any); len(dirs) > 0 {
+		var paths []string
+		for _, d := range dirs {
+			paths = append(paths, fmt.Sprint(d))
+		}
+		env["ANSIBLE_CALLBACK_PLUGINS"] = strings.Join(paths, ":")
 	}
 	var extra map[string]any
 	app.Settings.Decode(ctx, "AWX_TASK_ENV", &extra)

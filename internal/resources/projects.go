@@ -324,7 +324,7 @@ func projectFiles(c *Ctx, obj Obj) (projectscan.Files, error) {
 	if lp == "" {
 		return projectscan.Files{Playbooks: []string{}, Inventories: []string{}}, nil
 	}
-	return projectscan.Scan(filepath.Join(c.App.Cfg.ProjectsRoot, lp))
+	return projectscan.Scan(filepath.Join(c.App.Cfg.ProjectsRoot, lp), c.App.Settings.Bool(c, "AWX_SHOW_PLAYBOOK_LINKS"))
 }
 
 func asList(v any) []string {

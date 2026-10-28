@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -30,52 +31,88 @@ const maxFileSize = 1 << 20
 // Scan walks dir and classifies files like AWX: a playbook is a YAML file whose
 // top level is a list containing a play (hosts or import_playbook); anything
 // else that looks like an inventory (INI, YAML, JSON, scripts) is offered as
-// an inventory file.
-func Scan(dir string) (Files, error) {
+// an inventory file. Without followLinks only links to files inside dir are
+// listed, so a project cannot make the scan read files elsewhere on the
+// server. With followLinks (AWX_SHOW_PLAYBOOK_LINKS, a superuser's choice)
+// links are followed wherever they point, as in AWX. Real directories are
+// walked before links, so a directory reached both ways is listed under its
+// real path, and each directory is walked once.
+func Scan(dir string, followLinks bool) (Files, error) {
 	files := Files{Playbooks: []string{}, Inventories: []string{}}
-	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+	root, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		return files, nil
+	}
+	inside := func(p string) bool {
+		rel, err := filepath.Rel(root, p)
+		return err == nil && rel != ".." && !strings.HasPrefix(rel, "../")
+	}
+	seen := map[string]bool{root: true}
+	var walk func(real, rel string)
+	walk = func(real, rel string) {
+		entries, err := os.ReadDir(real)
 		if err != nil {
-			return nil
+			return
 		}
-		name := d.Name()
-		if d.IsDir() {
-			if path != dir && (skipDirs[name] || strings.HasPrefix(name, ".")) {
-				return filepath.SkipDir
+		// Two passes over the entries: real files and directories first, then links.
+		for pass, d := range append(slices.Clone(entries), entries...) {
+			name := d.Name()
+			link := d.Type()&fs.ModeSymlink != 0
+			if strings.HasPrefix(name, ".") || link != (pass >= len(entries)) {
+				continue
 			}
-			return nil
-		}
-		rel, _ := filepath.Rel(dir, path)
-		rel = filepath.ToSlash(rel)
-		if strings.HasPrefix(name, ".") {
-			return nil
-		}
-		info, err := d.Info()
-		if err != nil || info.Size() > maxFileSize || !info.Mode().IsRegular() {
-			return nil
-		}
-		ext := strings.ToLower(filepath.Ext(name))
-		switch ext {
-		case ".yml", ".yaml":
-			kind := classifyYAML(path)
-			if kind == "playbook" {
-				files.Playbooks = append(files.Playbooks, rel)
-			} else if kind == "inventory" {
-				files.Inventories = append(files.Inventories, rel)
+			path, relPath := filepath.Join(real, name), name
+			if rel != "" {
+				relPath = rel + "/" + name
 			}
-		case ".ini", ".json", ".cfg":
-			if name != "ansible.cfg" && name != "package.json" && name != "tsconfig.json" {
-				files.Inventories = append(files.Inventories, rel)
+			info, err := d.Info()
+			if err != nil {
+				continue
 			}
-		case "":
-			if looksLikeInventory(path) {
-				files.Inventories = append(files.Inventories, rel)
+			if link {
+				target, err := filepath.EvalSymlinks(path)
+				if err != nil || (!followLinks && !inside(target)) {
+					continue
+				}
+				if info, err = os.Stat(target); err != nil || (info.IsDir() && !followLinks) {
+					continue
+				}
+				path = target
+			}
+			if info.IsDir() {
+				if skipDirs[name] || seen[path] {
+					continue
+				}
+				seen[path] = true
+				walk(path, relPath)
+				continue
+			}
+			if info.Size() > maxFileSize || !info.Mode().IsRegular() {
+				continue
+			}
+			switch strings.ToLower(filepath.Ext(name)) {
+			case ".yml", ".yaml":
+				switch classifyYAML(path) {
+				case "playbook":
+					files.Playbooks = append(files.Playbooks, relPath)
+				case "inventory":
+					files.Inventories = append(files.Inventories, relPath)
+				}
+			case ".ini", ".json", ".cfg":
+				if name != "ansible.cfg" && name != "package.json" && name != "tsconfig.json" {
+					files.Inventories = append(files.Inventories, relPath)
+				}
+			case "":
+				if looksLikeInventory(path) {
+					files.Inventories = append(files.Inventories, relPath)
+				}
 			}
 		}
-		return nil
-	})
+	}
+	walk(root, "")
 	sort.Strings(files.Playbooks)
 	sort.Strings(files.Inventories)
-	return files, err
+	return files, nil
 }
 
 func classifyYAML(path string) string {

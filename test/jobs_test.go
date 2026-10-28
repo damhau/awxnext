@@ -661,3 +661,21 @@ func TestShowPathsSetting(t *testing.T) {
 	must(t, a.patch("settings/jobs/", map[string]any{"AWX_ISOLATION_SHOW_PATHS": []string{"relative/dir"}}), 400)
 	must(t, a.patch("settings/jobs/", map[string]any{"AWX_ISOLATION_SHOW_PATHS": []string{"/srv/data", "/etc/pki/ca:/certs:ro"}}), 200)
 }
+
+// DEFAULT_JOB_IDLE_TIMEOUT stops a job that prints nothing for that long;
+// AWX_ANSIBLE_CALLBACK_PLUGINS adds callback plugin directories.
+func TestJobIdleTimeoutAndCallbackPlugins(t *testing.T) {
+	f := newJobFixture(t)
+	a := f.a
+	t.Cleanup(func() {
+		a.patch("settings/jobs/", map[string]any{"DEFAULT_JOB_IDLE_TIMEOUT": 0, "AWX_ANSIBLE_CALLBACK_PLUGINS": []string{}})
+	})
+	must(t, a.patch("settings/jobs/", map[string]any{"DEFAULT_JOB_IDLE_TIMEOUT": 1, "AWX_ANSIBLE_CALLBACK_PLUGINS": []string{"/opt/callbacks", "/srv/cb"}}), 200)
+	job := f.launch(t, a, f.template(t, "pause.yml", nil), map[string]any{})
+	if job.Body["status"] != "failed" || !strings.Contains(fmt.Sprint(job.Body["job_explanation"]), "timeout") {
+		t.Fatalf("a job silent for 3 s with a 1 s idle timeout: %v, %v", job.Body["status"], job.Body["job_explanation"])
+	}
+	if env, _ := job.Body["job_env"].(map[string]any); env["ANSIBLE_CALLBACK_PLUGINS"] != "/opt/callbacks:/srv/cb" {
+		t.Fatalf("job_env: %v", job.Body["job_env"])
+	}
+}

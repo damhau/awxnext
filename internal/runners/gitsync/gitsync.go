@@ -299,7 +299,7 @@ func runProjectUpdate(ctx context.Context, rc *jobs.RunContext) jobs.Result {
 		}
 		return jobs.Result{Status: "failed", Explanation: err.Error()}
 	}
-	files, err := projectscan.Scan(dir)
+	files, err := projectscan.Scan(dir, app.Settings.Bool(ctx, "AWX_SHOW_PLAYBOOK_LINKS"))
 	if err != nil {
 		return jobs.Result{Status: "error", Explanation: err.Error()}
 	}

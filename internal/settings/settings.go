@@ -27,6 +27,9 @@ type Def struct {
 	Choices [][]any
 	// Validate performs extra validation on write.
 	Validate func(v any) error
+	// CompatOnly settings are accepted so AWX clients and imports keep
+	// working, but nothing in awxnext reads them; their help says why.
+	CompatOnly bool
 }
 
 // Category is a group of settings exposed at /api/v2/settings/<slug>/.

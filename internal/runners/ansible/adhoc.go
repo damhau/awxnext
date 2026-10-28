@@ -99,7 +99,7 @@ func runAdHoc(ctx context.Context, rc *jobs.RunContext) jobs.Result {
 	if inj.SSHKey != "" {
 		run.WriteFile("env/ssh_key", []byte(inj.SSHKey), 0o600)
 	}
-	run.WriteJSON("env/settings", map[string]any{"suppress_ansible_output": true, "suppress_output_file": true, "pexpect_timeout": 10})
+	run.WriteJSON("env/settings", runnerSettings(ctx, app))
 	pattern := row.Str("limit")
 	if pattern == "" {
 		pattern = "all"

@@ -20,11 +20,10 @@ execution nodes and Kubernetes container groups; HA on PostgreSQL alone.
 
 The gaps fall in four groups:
 
-1. **Settings that do nothing.** About 20 settings are accepted, stored and
-   shown in the UI, but no code reads them: session age and limits, the basic
-   auth switch, custom login text and logo, `MAX_FORKS`, `SCHEDULE_MAX_JOBS`,
-   the activity stream switches, all of `LOG_AGGREGATOR_*`, UI and websocket
-   rates. This is the most misleading gap.
+1. **Settings that do nothing** (fixed in roadmap M1, 2026-10-28). Every
+   setting now has an effect, or says "No effect in awxnext" and why in its
+   help (analytics, subscriptions, OAuth2, custom virtualenvs, and
+   `LOG_AGGREGATOR_*` until M6-03). A test fails CI when a setting is neither.
 2. **API endpoints that AWX clients call**: the bulk API, dashboard, host
    metrics, subscriptions/config POST, instance health checks. The `awx.awx`
    collection's `bulk_*`, `license` and `subscriptions` modules would fail.
@@ -54,7 +53,7 @@ The gaps fall in four groups:
 
 **P1: wrong or misleading today**
 
-1. Implement or remove the settings that do nothing (list in [Platform](#platform-and-operations)).
+1. ~~Implement or remove the settings that do nothing~~ (done, roadmap M1-01 to M1-07).
 2. Notifications tab on templates, projects, inventory sources and organizations (the API exists; the Notifications page points to a tab that is not there).
 3. Custom credential types use only a Jinja subset in injectors (`{{ var }}`, a few filters): types imported from AWX that use `{% if %}` or other filters fail at run time.
 4. Relaunch from the UI never asks for credential passwords, and jobs report `passwords_needed_to_start: []`, so relaunching a job with ASK passwords fails.
@@ -172,7 +171,7 @@ The gaps fall in four groups:
 | Dashboard endpoints | Yes | Missing | The UI's "Now" page replaces the dashboard |
 | Bulk API | Yes | Missing | |
 | Activity stream | Yes | Partial | No entries for job launches or role assignment API grants |
-| Settings API and UI | Yes | Partial | Settings not read by any code: `LOG_AGGREGATOR_*`, analytics |
+| Settings API and UI | Yes | Done | Settings with no effect say so in their help ("No effect in awxnext": analytics, subscriptions, OAuth2, custom virtualenvs, `LOG_AGGREGATOR_*` until M6-03); a test keeps it that way |
 | External log aggregation | Yes | Missing | JSON logs on stderr instead |
 | Prometheus metrics | Yes | Partial | No subsystem metrics or `node`/`metric` parameters; OpenTelemetry traces added |
 | Analytics, subscriptions | Yes | By design | Collection `license`/`subscriptions` modules fail |
