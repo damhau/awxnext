@@ -101,6 +101,9 @@ func LaunchWorkflowJobTemplate(c *Ctx, wf Obj, body Obj, launchType string, ov *
 	if err := refuseUnprompted(c, ignored); err != nil {
 		return 0, nil, err
 	}
+	if err := checkPromptedLabelsAndGroups(c, accepted); err != nil {
+		return 0, nil, err
+	}
 	pick := func(f string) any {
 		if v, ok := accepted[f]; ok {
 			return v

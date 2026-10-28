@@ -194,6 +194,9 @@ func HasPerm(c *Ctx, res *Resource, obj Obj, perm string) (bool, error) {
 		return true, nil
 	}
 	if res.ContentType == "" {
+		if res.Perm != nil {
+			return res.Perm(c, obj, perm)
+		}
 		return false, nil
 	}
 	id, _ := ID(obj["id"])

@@ -679,3 +679,41 @@ func TestJobIdleTimeoutAndCallbackPlugins(t *testing.T) {
 		t.Fatalf("job_env: %v", job.Body["job_env"])
 	}
 }
+
+// Labels and instance groups asked for at launch, or attached to templates
+// and workflow nodes, must be ones the user may see and use.
+func TestPromptedLabelsAndGroupsArePermissionChecked(t *testing.T) {
+	f := newLaunchFixture(t)
+	a := f.a
+	other := newOrg(t, a)
+	theirs := must(t, a.post("labels/", map[string]any{"name": uniq("l"), "organization": other}), 201).id()
+	ours := must(t, a.post("labels/", map[string]any{"name": uniq("l"), "organization": f.org}), 201).id()
+	ig := must(t, a.post("instance_groups/", map[string]any{"name": uniq("ig")}), 201).id()
+	u, uid := newUser(t, a)
+	must(t, a.post(fmt.Sprintf("organizations/%d/users/", f.org), map[string]any{"id": uid}), 204)
+	grant := func(res string, id int64, role string) {
+		t.Helper()
+		must(t, a.post(fmt.Sprintf("users/%d/roles/", uid), map[string]any{"id": objectRole(t, a, res, id, role)}), 204)
+	}
+
+	jt := f.template(t, "site.yml", map[string]any{"ask_labels_on_launch": true, "ask_instance_groups_on_launch": true})
+	grant("job_templates", jt, "admin_role")
+	launch := fmt.Sprintf("job_templates/%d/launch/", jt)
+	must(t, u.post(launch, map[string]any{"labels": []int64{theirs}}), 403)
+	must(t, u.post(launch, map[string]any{"instance_groups": []int64{ig}}), 403)
+	must(t, u.post(launch, map[string]any{"labels": []int64{ours}}), 201)
+	grant("instance_groups", ig, "use_role")
+	must(t, u.post(launch, map[string]any{"instance_groups": []int64{ig}}), 201)
+
+	wf := must(t, a.post("workflow_job_templates/", map[string]any{"name": uniq("wf"), "organization": f.org, "ask_labels_on_launch": true}), 201).id()
+	grant("workflow_job_templates", wf, "admin_role")
+	must(t, u.post(fmt.Sprintf("workflow_job_templates/%d/launch/", wf), map[string]any{"labels": []int64{theirs}}), 403)
+	must(t, u.post(fmt.Sprintf("workflow_job_templates/%d/launch/", wf), map[string]any{"labels": []int64{ours}}), 201)
+
+	// Labels attached to templates and workflow nodes.
+	must(t, u.post(fmt.Sprintf("job_templates/%d/labels/", jt), map[string]any{"id": theirs}), 403)
+	must(t, u.post(fmt.Sprintf("job_templates/%d/labels/", jt), map[string]any{"id": ours}), 204)
+	node := must(t, u.post(fmt.Sprintf("workflow_job_templates/%d/workflow_nodes/", wf), map[string]any{"unified_job_template": jt}), 201).id()
+	must(t, u.post(fmt.Sprintf("workflow_job_template_nodes/%d/labels/", node), map[string]any{"id": theirs}), 403)
+	must(t, u.post(fmt.Sprintf("workflow_job_template_nodes/%d/labels/", node), map[string]any{"id": ours}), 204)
+}

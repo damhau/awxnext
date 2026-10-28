@@ -139,7 +139,7 @@ The gaps fall in four groups:
 | Requirements (roles, collections) | Yes | Done | Installed in the EE at run time, cached by content |
 | Content signature validation | Yes | Partial | Field only, nothing verifies |
 | Job template fields, multiple credentials, labels, instance groups, EE | Yes | Done | `MAX_FORKS` not enforced |
-| All 16 `ask_*_on_launch` prompts | Yes | Done | No RBAC check on prompted labels and instance groups |
+| All 16 `ask_*_on_launch` prompts | Yes | Done | |
 | Launch fields the template does not prompt for | Yes | Done | Deliberate difference: refused with a 400 instead of ignored (`ignored_fields`); `IGNORE_UNPROMPTED_LAUNCH_FIELDS` gives AWX's behaviour |
 | `ansible_*` variables at launch (extra vars, survey questions, schedules, ad hoc) | Yes | Done | Deliberate difference: refused, as they set how Ansible connects and runs; `ALLOW_ANSIBLE_VARS_AT_LAUNCH` gives AWX's behaviour. Template, inventory and host variables are not affected |
 | Surveys (all types, password encryption) | Yes | Done | Plus choices from the system, conditional questions, answer formats |

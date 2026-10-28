@@ -118,6 +118,39 @@ func handleLaunch(c *Ctx, w http.ResponseWriter, r *http.Request, jt Obj) {
 	writeLaunched(c, w, jobID, Obj{"ignored_fields": ignored})
 }
 
+// checkPromptedLabelsAndGroups requires the user to see each label and to be
+// allowed to use each instance group a launch asks for.
+func checkPromptedLabelsAndGroups(c *Ctx, accepted Obj) error {
+	if v, ok := accepted["labels"].([]any); ok {
+		for _, l := range v {
+			if err := canUseLabel(c, l); err != nil {
+				return err
+			}
+		}
+	}
+	if v, ok := accepted["instance_groups"].([]any); ok {
+		for _, g := range v {
+			gid, ok := api.ID(g)
+			if !ok {
+				return api.FieldError("instance_groups", "Invalid instance group.")
+			}
+			if err := api.RequirePermID(c, "instance_groups", "instance_groups", gid, "use"); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// canUseLabel requires the label to be visible to the user.
+func canUseLabel(c *Ctx, v any) error {
+	lid, ok := api.ID(v)
+	if !ok {
+		return api.FieldError("labels", "Invalid label.")
+	}
+	return allowed(api.CanView(c, api.Lookup("labels"), lid))
+}
+
 // validForks enforces MAX_FORKS (0: no limit) wherever forks are saved or
 // used to launch.
 func validForks(c *Ctx, v any, _ Obj) error {
@@ -416,6 +449,9 @@ func LaunchJobTemplate(c *Ctx, jt Obj, body Obj, launchType string, ov *LaunchOv
 	}
 
 	if err := refuseUnprompted(c, ignored); err != nil {
+		return 0, nil, err
+	}
+	if err := checkPromptedLabelsAndGroups(c, accepted); err != nil {
 		return 0, nil, err
 	}
 

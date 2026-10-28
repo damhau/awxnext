@@ -175,6 +175,10 @@ type Resource struct {
 	CanChange func(c *Ctx, obj Obj, data Obj) error
 	// CanDelete validates permission to delete.
 	CanDelete func(c *Ctx, obj Obj) error
+	// Perm answers HasPerm for resources without a content type, whose
+	// permissions come from another object (workflow nodes from their
+	// workflow); attaching to their sub-lists checks it.
+	Perm func(c *Ctx, obj Obj, perm string) (bool, error)
 
 	// Hooks.
 	BeforeSave   func(c *Ctx, old Obj, data Obj) error

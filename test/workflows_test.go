@@ -640,3 +640,30 @@ func TestWorkflowManagementJobNode(t *testing.T) {
 		t.Fatalf("days not passed: %v", ev)
 	}
 }
+
+// A workflow's node links and labels change only for those who may change the
+// workflow: viewers could remove links before.
+func TestWorkflowNodeSublistsNeedChange(t *testing.T) {
+	f := newLaunchFixture(t)
+	a := f.a
+	jt := f.template(t, "site.yml", nil)
+	wf := must(t, a.post("workflow_job_templates/", map[string]any{"name": uniq("wf"), "organization": f.org}), 201).id()
+	nodes := fmt.Sprintf("workflow_job_templates/%d/workflow_nodes/", wf)
+	n1 := must(t, a.post(nodes, map[string]any{"unified_job_template": jt}), 201).id()
+	n2 := must(t, a.post(nodes, map[string]any{"unified_job_template": jt}), 201).id()
+	link := fmt.Sprintf("workflow_job_template_nodes/%d/success_nodes/", n1)
+	must(t, a.post(link, map[string]any{"id": n2}), 204)
+
+	viewer, vid := newUser(t, a)
+	must(t, a.post(fmt.Sprintf("users/%d/roles/", vid), map[string]any{"id": objectRole(t, a, "workflow_job_templates", wf, "read_role")}), 204)
+	must(t, viewer.post(link, map[string]any{"id": n2, "disassociate": true}), 403)
+	if a.get(link).count() != 1 {
+		t.Fatal("a viewer removed a link")
+	}
+
+	editor, eid := newUser(t, a)
+	must(t, a.post(fmt.Sprintf("users/%d/roles/", eid), map[string]any{"id": objectRole(t, a, "workflow_job_templates", wf, "admin_role")}), 204)
+	must(t, a.post(fmt.Sprintf("users/%d/roles/", eid), map[string]any{"id": objectRole(t, a, "job_templates", jt, "execute_role")}), 204)
+	must(t, editor.post(link, map[string]any{"id": n2, "disassociate": true}), 204)
+	must(t, editor.post(link, map[string]any{"id": n2}), 204)
+}

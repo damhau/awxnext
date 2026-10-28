@@ -570,6 +570,7 @@ func labelSub(table, column string) *SubList {
 			}
 			return 0, false, nil
 		},
+		CanAttach: func(c *Ctx, parent Obj, lid int64) error { return canUseLabel(c, lid) },
 		Associate: func(c *Ctx, pid, lid int64) error {
 			_, err := c.DB().Exec(c, fmt.Sprintf("INSERT INTO %s (%s, label_id) VALUES ($1, $2) ON CONFLICT DO NOTHING", table, column), pid, lid)
 			return err

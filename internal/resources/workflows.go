@@ -307,6 +307,18 @@ func registerWorkflows() {
 			return nil
 		},
 		CanDelete: func(c *Ctx, obj Obj) error { return wfjtPerm(c, obj["workflow_job_template"], "change") },
+		// A node is changed by whoever may change its workflow.
+		Perm: func(c *Ctx, obj Obj, perm string) (bool, error) {
+			if perm == "view" {
+				id, _ := api.ID(obj["workflow_job_template"])
+				return api.CanView(c, wf, id)
+			}
+			err := wfjtPerm(c, obj["workflow_job_template"], "change")
+			if err == api.ErrForbidden {
+				return false, nil
+			}
+			return err == nil, err
+		},
 		BeforeSave: func(c *Ctx, old, data Obj) error {
 			merged := Obj{}
 			for k, v := range old {
@@ -348,7 +360,7 @@ func registerWorkflows() {
 	for _, kind := range edgeKinds {
 		kind := kind
 		tn.SubLists = append(tn.SubLists, &SubList{
-			Name: kind + "_nodes", Target: "workflow_job_template_nodes", AttachPerm: "none",
+			Name: kind + "_nodes", Target: "workflow_job_template_nodes",
 			Filter: func(arg ArgFunc, pid int64) string {
 				return fmt.Sprintf("t.id IN (SELECT to_node_id FROM workflow_job_template_node_edges WHERE from_node_id = %s AND kind = %s)", arg(pid), arg(kind))
 			},
@@ -385,7 +397,7 @@ func registerWorkflows() {
 	}
 	tn.SubLists = append(tn.SubLists,
 		&SubList{
-			Name: "credentials", Target: "credentials", NoCreate: true, AttachPerm: "none",
+			Name: "credentials", Target: "credentials", NoCreate: true,
 			Filter: func(arg ArgFunc, pid int64) string {
 				return "t.id IN (SELECT credential_id FROM workflow_job_template_node_credentials WHERE node_id = " + arg(pid) + ")"
 			},
