@@ -1,6 +1,7 @@
 package resources
 
 import (
+	"encoding/json"
 	"net/http"
 	"strings"
 	"time"
@@ -16,8 +17,26 @@ func handleAWXMetrics(c *Ctx, w http.ResponseWriter, r *http.Request) {
 		api.WriteError(w, api.ErrForbidden)
 		return
 	}
+	q := r.URL.Query()
 	var b strings.Builder
-	mw := metrics.NewWriter(&b)
+	if q.Get("subsystemonly") != "1" {
+		writeDBMetrics(c, metrics.NewWriter(&b))
+	}
+	// AWX's subsystem metrics of every node, filtered by node and metric.
+	if q.Get("dbonly") != "1" {
+		nodes, err := subsystemSnapshots(c, q["node"])
+		if err != nil {
+			api.WriteError(w, err)
+			return
+		}
+		metrics.WriteSubsystem(&b, nodes, q["metric"])
+	}
+	w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
+	w.Write([]byte(b.String()))
+}
+
+// writeDBMetrics writes AWX's metrics computed from the database.
+func writeDBMetrics(c *Ctx, mw *metrics.Writer) {
 	var installUUID string
 	c.DB().QueryRow(c, "SELECT value #>> '{}' FROM settings WHERE key = 'INSTALL_UUID'").Scan(&installUUID)
 	mw.Sample("awx_system_info", "gauge", "AWX System Information", 1,
@@ -128,6 +147,38 @@ func handleAWXMetrics(c *Ctx, w http.ResponseWriter, r *http.Request) {
 		}
 		rows.Close()
 	}
-	w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
-	w.Write([]byte(b.String()))
+}
+
+// subsystemSnapshots are the subsystem metrics published by the nodes of
+// the cluster (this node's live), keeping those named in only.
+func subsystemSnapshots(c *Ctx, only []string) (map[string]map[string]any, error) {
+	keep := map[string]bool{}
+	for _, n := range only {
+		keep[n] = true
+	}
+	out := map[string]map[string]any{}
+	rows, err := c.DB().Query(c, "SELECT s.node, s.data FROM subsystem_metrics s JOIN instances i ON i.hostname = s.node")
+	if err != nil {
+		return nil, err
+	}
+	for rows.Next() {
+		var node string
+		var data map[string]any
+		if err := rows.Scan(&node, &data); err == nil {
+			out[node] = data
+		}
+	}
+	rows.Close()
+	var live map[string]any
+	b, _ := json.Marshal(metrics.Sub.Snapshot())
+	json.Unmarshal(b, &live)
+	out[c.App.Cfg.NodeName] = live
+	if len(keep) > 0 {
+		for n := range out {
+			if !keep[n] {
+				delete(out, n)
+			}
+		}
+	}
+	return out, nil
 }

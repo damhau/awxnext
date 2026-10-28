@@ -118,6 +118,11 @@ type Manager struct {
 	StartedHooks  []func(ctx context.Context, m *Manager, job Row)
 	FinishedHooks []func(ctx context.Context, m *Manager, job Row)
 	leader        bool
+	// deps counts the dependency work of the current dispatcher pass.
+	deps struct {
+		jobs int
+		secs float64
+	}
 }
 
 func New(app *api.App) *Manager {
@@ -293,10 +298,20 @@ func (m *Manager) Tick(ctx context.Context) {
 	for _, h := range m.TickHooks {
 		h(ctx, m)
 	}
+	// AWX's task manager metrics describe the dispatcher pass.
+	pass := time.Now()
 	if err := m.dispatchPending(ctx); err != nil && ctx.Err() == nil {
 		slog.Error("dispatch failed", "err", err)
 	}
+	reap := time.Now()
 	m.reap(ctx)
+	var running float64
+	m.DB().QueryRow(ctx, "SELECT count(*) FROM unified_jobs WHERE status IN ('waiting', 'running')").Scan(&running)
+	metrics.Sub.Set("task_manager_running_processed", running)
+	metrics.Sub.Set("task_manager_process_running_tasks_seconds", time.Since(reap).Seconds())
+	metrics.Sub.Set("task_manager__schedule_seconds", time.Since(pass).Seconds())
+	metrics.Sub.Add("task_manager__schedule_calls", 1)
+	metrics.Sub.Set("task_manager_recorded_timestamp", float64(time.Now().UnixNano())/1e9)
 }
 
 // --- worker ---
@@ -368,11 +383,18 @@ func (m *Manager) run(parent context.Context, id int64) {
 	m.running[id] = cancel
 	m.mu.Unlock()
 	jobsRunning.With().Add(1)
+	// AWX's dispatcher pool metrics: the jobs this node runs at once.
+	metrics.Sub.Add("dispatcher_pool_scale_up_events", 1)
+	metrics.Sub.Add("dispatcher_pool_active_task_count", 1)
+	if active := metrics.Sub.Get("dispatcher_pool_active_task_count"); active > metrics.Sub.Get("dispatcher_pool_max_worker_count") {
+		metrics.Sub.Set("dispatcher_pool_max_worker_count", active)
+	}
 	defer func() {
 		m.mu.Lock()
 		delete(m.running, id)
 		m.mu.Unlock()
 		jobsRunning.With().Add(-1)
+		metrics.Sub.Add("dispatcher_pool_active_task_count", -1)
 	}()
 	// Shutting down the node does not kill jobs abruptly; they are reaped if the node never returns.
 	_ = parent
@@ -585,11 +607,29 @@ func (m *Manager) cancelLocal(id int64) {
 
 // --- liveness ---
 
+// publishMetrics stores this node's subsystem metrics for /api/v2/metrics/
+// on every node, as AWX sends them to Redis.
+func (m *Manager) publishMetrics(ctx context.Context) {
+	start := time.Now()
+	metrics.Sub.Set("dispatcher_availability", 1)
+	if _, err := m.DB().Exec(ctx, `INSERT INTO subsystem_metrics (node, data, updated) VALUES ($1, $2, now())
+		ON CONFLICT (node) DO UPDATE SET data = EXCLUDED.data, updated = now()`, m.Node, metrics.Sub.Snapshot()); err != nil {
+		return
+	}
+	secs := time.Since(start).Seconds()
+	metrics.Sub.Add("subsystem_metrics_pipe_execute_seconds", secs)
+	metrics.Sub.Add("subsystem_metrics_pipe_execute_calls", 1)
+	metrics.Sub.Add("subsystem_metrics_send_metrics_seconds", secs)
+	// The highest count is per collection interval.
+	metrics.Sub.Set("dispatcher_pool_max_worker_count", metrics.Sub.Get("dispatcher_pool_active_task_count"))
+}
+
 func (m *Manager) heartbeat(ctx context.Context) {
 	t := time.NewTicker(15 * time.Second)
 	defer t.Stop()
 	for {
 		m.DB().Exec(ctx, "UPDATE instances SET last_seen = now(), node_state = 'ready' WHERE hostname = $1", m.Node)
+		m.publishMetrics(ctx)
 		select {
 		case <-ctx.Done():
 			return

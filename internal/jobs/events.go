@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/damhau/awxnext/internal/metrics"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -99,8 +100,12 @@ func (o *Output) Emit(e Event) {
 	o.buf = append(o.buf, e)
 	full := len(o.buf) >= flushSize
 	o.mu.Unlock()
+	// AWX's callback receiver metrics: events received, then held until stored.
+	metrics.Sub.Add("callback_receiver_events_popped_redis", 1)
+	metrics.Sub.Add("callback_receiver_events_in_memory", 1)
 	if o.publish != nil {
 		o.publish(e)
+		metrics.Sub.Add("callback_receiver_events_broadcast", 1)
 	}
 	if full {
 		select {
@@ -150,11 +155,15 @@ func (o *Output) flush() {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
+	start := time.Now()
+	defer metrics.Sub.Add("callback_receiver_events_in_memory", -float64(len(batch)))
 	_, err := o.db.CopyFrom(ctx, pgx.Identifier{"job_events"},
 		[]string{"job_id", "job_created", "created", "modified", "counter", "event", "event_data", "failed", "changed",
 			"uuid", "parent_uuid", "host_id", "host_name", "playbook", "play", "role", "task", "stdout", "start_line", "end_line", "verbosity"},
 		pgx.CopyFromRows(rows))
+	secs := time.Since(start).Seconds()
 	if err != nil {
+		metrics.Sub.Add("callback_receiver_batch_events_errors", 1)
 		slog.Error("writing job events", "job", o.jobID, "err", err)
 		o.mu.Lock()
 		o.err = err
@@ -166,6 +175,10 @@ func (o *Output) flush() {
 	total := o.total
 	o.mu.Unlock()
 	eventsWritten.With().Add(float64(len(batch)))
+	metrics.Sub.Add("callback_receiver_events_insert_db", float64(len(batch)))
+	metrics.Sub.Add("callback_receiver_events_insert_db_seconds", secs)
+	metrics.Sub.Observe("callback_receiver_batch_events_insert_db", float64(len(batch)))
+	metrics.Sub.Set("callback_receiver_event_processing_avg_seconds", secs/float64(len(batch)))
 	o.db.Exec(ctx, "UPDATE unified_jobs SET emitted_events = $2 WHERE id = $1", o.jobID, total)
 	if o.onFlush != nil {
 		maxCounter := 0

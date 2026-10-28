@@ -12,6 +12,7 @@ import (
 	"github.com/damhau/awxnext/internal/api"
 	"github.com/damhau/awxnext/internal/crypto"
 	"github.com/damhau/awxnext/internal/jobs"
+	"github.com/damhau/awxnext/internal/metrics"
 	"github.com/damhau/awxnext/internal/rbac"
 	"github.com/damhau/awxnext/internal/vars"
 )
@@ -367,15 +368,24 @@ func (d *dag) failed() (bool, string) {
 // WorkflowTick advances running workflow jobs and expires approvals. It runs on the dispatcher leader.
 func WorkflowTick(ctx context.Context, m *jobs.Manager) {
 	c := &api.Ctx{Context: ctx, App: m.App, User: rbac.System(), Extra: map[string]any{}}
+	start := time.Now()
 	ids, err := idList(c, "SELECT id FROM unified_jobs WHERE type = 'workflow_job' AND status = 'running' ORDER BY id")
 	if err != nil {
 		return
 	}
+	get := time.Since(start).Seconds()
+	spawn := time.Now()
 	for _, id := range ids {
 		if err := processWorkflow(c, m, id); err != nil && ctx.Err() == nil {
 			slog.Error("workflow processing failed", "workflow_job", id, "err", err)
 		}
 	}
+	// AWX's workflow manager metrics.
+	metrics.Sub.Set("workflow_manager_get_tasks_seconds", get)
+	metrics.Sub.Set("workflow_manager_spawn_workflow_graph_jobs_seconds", time.Since(spawn).Seconds())
+	metrics.Sub.Set("workflow_manager__schedule_seconds", time.Since(start).Seconds())
+	metrics.Sub.Add("workflow_manager__schedule_calls", 1)
+	metrics.Sub.Set("workflow_manager_recorded_timestamp", float64(time.Now().UnixNano())/1e9)
 	expired, err := idList(c, `SELECT id FROM unified_jobs WHERE type = 'workflow_approval' AND status = 'pending' AND approval_timeout > 0
 		AND created + make_interval(secs => approval_timeout) < now()`)
 	if err != nil {

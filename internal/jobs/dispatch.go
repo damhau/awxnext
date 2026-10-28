@@ -7,8 +7,10 @@ import (
 	"log/slog"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/damhau/awxnext/internal/api"
+	"github.com/damhau/awxnext/internal/metrics"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -57,6 +59,7 @@ func Wake(ctx context.Context, db api.DBTX) {
 
 // dispatchPending starts or places pending jobs. Approvals stay pending until decided.
 func (m *Manager) dispatchPending(ctx context.Context) error {
+	get := time.Now()
 	rows, err := m.DB().Query(ctx, "SELECT id FROM unified_jobs WHERE status = 'pending' AND type <> 'workflow_approval' ORDER BY created, id LIMIT 200")
 	if err != nil {
 		return err
@@ -68,20 +71,43 @@ func (m *Manager) dispatchPending(ctx context.Context) error {
 		ids = append(ids, id)
 	}
 	rows.Close()
+	getSecs := time.Since(get).Seconds()
+	pending := time.Now()
+	m.deps.jobs, m.deps.secs = 0, 0
+	var started, blocked, startSecs float64
 	assigned := false
 	for _, id := range ids {
 		row, err := LoadRow(ctx, m.DB(), id)
 		if err != nil {
 			continue
 		}
+		one := time.Now()
 		ok, err := m.dispatchOne(ctx, row)
 		if err != nil {
 			slog.Error("dispatching job", "job", id, "err", err)
 			m.finish(ctx, row, Result{Status: "error", Explanation: err.Error()})
 			continue
 		}
+		if ok {
+			started++
+			startSecs += time.Since(one).Seconds()
+		} else {
+			blocked++
+		}
 		assigned = assigned || ok
 	}
+	// AWX's task and dependency manager metrics; awxnext computes
+	// dependencies in the same pass.
+	now := float64(time.Now().UnixNano()) / 1e9
+	for k, v := range map[string]float64{"task_manager_get_tasks_seconds": getSecs, "task_manager_pending_processed": float64(len(ids)),
+		"task_manager_tasks_started": started, "task_manager_tasks_blocked": blocked, "task_manager_start_task_seconds": startSecs,
+		"task_manager_process_pending_tasks_seconds": time.Since(pending).Seconds(),
+		"dependency_manager_get_tasks_seconds":       getSecs, "dependency_manager_generate_dependencies_seconds": m.deps.secs,
+		"dependency_manager__schedule_seconds": getSecs + m.deps.secs, "dependency_manager_pending_processed": float64(m.deps.jobs),
+		"dependency_manager_recorded_timestamp": now} {
+		metrics.Sub.Set(k, v)
+	}
+	metrics.Sub.Add("dependency_manager__schedule_calls", 1)
 	if assigned {
 		m.Notify(ctx, chWork, "")
 	}
@@ -95,6 +121,7 @@ func (m *Manager) dispatchOne(ctx context.Context, row Row) (bool, error) {
 	}
 	id := row.ID()
 	if !row.Bool("dependencies_processed") {
+		depStart := time.Now()
 		if sp.Dependencies != nil {
 			deps, err := sp.Dependencies(ctx, m, row)
 			if err != nil {
@@ -109,6 +136,8 @@ func (m *Manager) dispatchOne(ctx context.Context, row Row) (bool, error) {
 		if _, err := m.DB().Exec(ctx, "UPDATE unified_jobs SET dependencies_processed = true WHERE id = $1", id); err != nil {
 			return false, err
 		}
+		m.deps.jobs++
+		m.deps.secs += time.Since(depStart).Seconds()
 	}
 	// Wait for dependencies; fail if one of them failed.
 	var blocking int
