@@ -117,7 +117,7 @@ func LaunchWorkflowJobTemplate(c *Ctx, wf Obj, body Obj, launchType string, ov *
 		"unified_job_template_id": id,
 		"organization_id":         wf["organization"],
 		"launch_type":             launchType,
-		"extra_vars":              vars.MustJSON(base),
+		"extra_vars":              vars.PyJSON(base),
 		"inventory_id":            inv,
 		"limit":                   str(pick("limit")),
 		"scm_branch":              str(pick("scm_branch")),
@@ -244,7 +244,7 @@ func workflowLaunchInfo(c *Ctx, wf Obj) Obj {
 		missing = []int64{}
 	}
 	ev, _ := vars.Parse(str(wf["extra_vars"]))
-	defaults := Obj{"extra_vars": maskSurveyPasswords(vars.MustJSON(ev)), "limit": wf["limit"], "scm_branch": wf["scm_branch"],
+	defaults := Obj{"extra_vars": maskSurveyPasswords(vars.PyJSON(ev)), "limit": wf["limit"], "scm_branch": wf["scm_branch"],
 		"job_tags": wf["job_tags"], "skip_tags": wf["skip_tags"], "labels": []Obj{}}
 	if inv, ok := api.ID(wf["inventory"]); ok {
 		var name string

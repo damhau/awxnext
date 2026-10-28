@@ -242,12 +242,39 @@ func refuseUnprompted(c *Ctx, ignored Obj) error {
 	return fe.Err()
 }
 
+// normalizeObj turns the json.Number values of a launch body into int64 for
+// integers and float64 otherwise, as Python reads JSON: a job's extra_vars
+// are written back as AWX writes them, 1 and not 1.0.
 func normalizeObj(o Obj) Obj {
-	m, _ := normalize(o).(map[string]any)
+	m, _ := plainNumbers(o).(map[string]any)
 	if m == nil {
 		return Obj{}
 	}
 	return m
+}
+
+func plainNumbers(v any) any {
+	switch x := v.(type) {
+	case json.Number:
+		if n, err := x.Int64(); err == nil {
+			return n
+		}
+		f, _ := x.Float64()
+		return f
+	case map[string]any:
+		out := make(map[string]any, len(x))
+		for k, e := range x {
+			out[k] = plainNumbers(e)
+		}
+		return out
+	case []any:
+		out := make([]any, len(x))
+		for i, e := range x {
+			out[i] = plainNumbers(e)
+		}
+		return out
+	}
+	return v
 }
 
 func launchInfo(c *Ctx, jt Obj) Obj {
@@ -542,7 +569,7 @@ func LaunchJobTemplate(c *Ctx, jt Obj, body Obj, launchType string, ov *LaunchOv
 		"forks":                    pick("forks"),
 		"limit":                    pick("limit"),
 		"verbosity":                pick("verbosity"),
-		"extra_vars":               vars.MustJSON(base),
+		"extra_vars":               vars.PyJSON(base),
 		"job_tags":                 pick("job_tags"),
 		"skip_tags":                pick("skip_tags"),
 		"start_at_task":            jt["start_at_task"],

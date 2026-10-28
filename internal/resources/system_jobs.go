@@ -58,7 +58,7 @@ func LaunchSystemJob(c *Ctx, sjt Obj, extra map[string]any, launchType string) (
 		"description":             str(sjt["description"]),
 		"unified_job_template_id": id,
 		"job_type":                sjt["job_type"],
-		"extra_vars":              vars.MustJSON(extra),
+		"extra_vars":              vars.PyJSON(extra),
 		"launch_type":             launchType,
 	}
 	if !c.User.Anonymous() {

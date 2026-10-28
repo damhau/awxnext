@@ -5,7 +5,6 @@ cli:
   "job stdout": "#92 no_truncate (follows launch and monitor)"
   "launch and monitor": "#92 no_truncate"
 collection:
-  "ad_hoc_command": "#91 ad hoc module error text"
   "application": "out of scope: OAuth2 applications (ROADMAP, Proposed out of scope)"
   "bulk_host_create": "#16 bulk API"
   "bulk_host_delete": "#16 bulk API"
@@ -13,7 +12,6 @@ collection:
   "credential": "#32 Red Hat Virtualization credential type (after the SSH key passphrase, #87, passes)"
   "credential_input_source": "#38 CyberArk Central Credential Provider lookup"
   "inventory": "#32 Insights credential type"
-  "job_launch": "#91 extra_vars text as json.dumps"
   "job_template": "#28 email notifications"
   "module_utils": "#24 named URL of a credential"
   "notification_template": "out of scope: Slack and other notification types (ROADMAP, Proposed out of scope)"
@@ -27,4 +25,3 @@ terraform:
   "TestAccHostResource": "not an awxnext gap: Terraform wraps the expected message across lines; awxnext returns AWX's text"
   "TestAccHostResourceDeleteWithRetry": "by design (M1-16, #78): extra_vars sent to a template that does not prompt for them; passes with IGNORE_UNPROMPTED_LAUNCH_FIELDS"
   "TestAccInventoryResource": "not an awxnext gap: Terraform wraps the expected message across lines; awxnext returns AWX's text"
-  "TestAccOrganizationDataSourceNonExistentValues": "#91 404 text: No Organization matches the given query."

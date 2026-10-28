@@ -73,7 +73,8 @@ func registerAdHocCommands() {
 				var allowed []string
 				c.App.Settings.Decode(c, "AD_HOC_COMMANDS", &allowed)
 				if !contains(allowed, str(v)) {
-					return fmt.Errorf("Unsupported module for ad hoc commands.")
+					// AWX's choice error, which clients match on the module name.
+					return fmt.Errorf("\"%s\" is not a valid choice.", str(v))
 				}
 				return nil
 			}},

@@ -384,11 +384,30 @@ func (a *App) objectFromPath(c *Ctx, r *http.Request) (*Resource, Obj, error) {
 		return nil, nil, err
 	}
 	id, err := ResolveID(c, res, chi.URLParam(r, "id"))
-	if err != nil {
-		return nil, nil, err
+	if err == nil {
+		var obj Obj
+		obj, err = GetVisible(c, res, id)
+		if err == nil {
+			return res, obj, nil
+		}
 	}
-	obj, err := GetVisible(c, res, id)
-	return res, obj, err
+	if err == ErrNotFound {
+		err = res.notFound()
+	}
+	return nil, nil, err
+}
+
+// notFound is Django's 404 for a missing object, named after AWX's model
+// (job_template: JobTemplate). Clients match it: "No Organization matches
+// the given query."
+func (res *Resource) notFound() error {
+	var model strings.Builder
+	for _, w := range strings.Split(res.Type, "_") {
+		if w != "" {
+			model.WriteString(strings.ToUpper(w[:1]) + w[1:])
+		}
+	}
+	return Detail(404, fmt.Sprintf("No %s matches the given query.", model.String()))
 }
 
 func pageParams(params url.Values) (int, int, error) {

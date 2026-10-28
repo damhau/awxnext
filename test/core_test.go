@@ -218,6 +218,31 @@ func TestOptionsAllowAndRoles(t *testing.T) {
 	}
 }
 
+// Clients compare some answers as text, as AWX writes them.
+func TestAWXTexts(t *testing.T) {
+	a := adminClient(t)
+	for path, want := range map[string]string{
+		"organizations/31415/":               "No Organization matches the given query.",
+		"organizations/Does%20Not%20Exist/":  "No Organization matches the given query.",
+		"job_templates/31415/":               "No JobTemplate matches the given query.",
+		"inventory_sources/31415/":           "No InventorySource matches the given query.",
+		"organizations/31415/teams/":         "No Organization matches the given query.",
+		"workflow_job_template_nodes/31415/": "No WorkflowJobTemplateNode matches the given query.",
+	} {
+		if r := must(t, a.get(path), 404); r.Body["detail"] != want {
+			t.Errorf("GET %s: %v", path, r.Body["detail"])
+		}
+	}
+
+	// A job's extra_vars as Python's json.dumps writes them.
+	f := newLaunchFixture(t)
+	jt := f.template(t, "site.yml", map[string]any{"ask_variables_on_launch": true})
+	r := must(t, a.post(fmt.Sprintf("job_templates/%d/launch/", jt), map[string]any{"extra_vars": map[string]any{"foo": "bar", "n": 1, "x": []any{1.5, "é"}}}), 201)
+	if ev := must(t, a.get(fmt.Sprintf("jobs/%d/", r.id())), 200).Body["extra_vars"]; ev != `{"foo": "bar", "n": 1, "x": [1.5, "\u00e9"]}` {
+		t.Errorf("extra_vars: %v", ev)
+	}
+}
+
 func TestRBACVisibilityAndRoles(t *testing.T) {
 	a := adminClient(t)
 	bob, bobID := newUser(t, a)

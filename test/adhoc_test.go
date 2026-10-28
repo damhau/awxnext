@@ -14,7 +14,10 @@ func TestAdHocCommands(t *testing.T) {
 	t.Cleanup(func() { a.patch("settings/jobs/", map[string]any{"AD_HOC_COMMANDS": orig}) })
 
 	must(t, a.post("ad_hoc_commands/", map[string]any{"inventory": f.inv, "module_name": "shell"}), 400)
-	must(t, a.post("ad_hoc_commands/", map[string]any{"inventory": f.inv, "module_name": "not_allowed", "module_args": "x"}), 400)
+	// AWX's choice error, which the collection matches on the module name.
+	if r := must(t, a.post("ad_hoc_commands/", map[string]any{"inventory": f.inv, "module_name": "Does not exist", "module_args": "x"}), 400); r.Body["module_name"].([]any)[0] != `"Does not exist" is not a valid choice.` {
+		t.Errorf("unknown module: %s", r.Raw)
+	}
 	must(t, a.post("ad_hoc_commands/", map[string]any{"inventory": f.inv, "module_name": "debug", "module_args": "msg={{ lookup('pipe', 'id') }}"}), 400)
 	if r := must(t, a.do("OPTIONS", "ad_hoc_commands/", nil), 200); r.Body["actions"].(map[string]any)["POST"] == nil {
 		t.Fatalf("OPTIONS should allow POST: %v", r.Body)

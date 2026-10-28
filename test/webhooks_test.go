@@ -74,7 +74,7 @@ func TestInboundWebhooks(t *testing.T) {
 	job := waitJob(t, a, fmt.Sprintf("jobs/%d/", jobID))
 	mustStatus(t, f, job, "successful")
 	if job.Body["launch_type"] != "webhook" || job.Body["webhook_guid"] != "d1" || job.Body["webhook_service"] != "github" ||
-		!strings.Contains(job.Body["extra_vars"].(string), `"awx_webhook_event_ref":"abc123"`) {
+		!strings.Contains(job.Body["extra_vars"].(string), `"awx_webhook_event_ref": "abc123"`) {
 		t.Fatalf("webhook job: %v", job.Body)
 	}
 	reqs := rec.wait(t, 2)
