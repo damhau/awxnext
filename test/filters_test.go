@@ -84,3 +84,40 @@ func TestFilterSemantics(t *testing.T) {
 	must(t, a.get("jobs/?role_level=admin_role"), 400)
 	must(t, a.get("inventories/?role_level=bogus_role"), 400)
 }
+
+// AWX's reserved query parameters are not field filters, and type takes a
+// comma-separated list of types as AWX's TypeFilterBackend does.
+func TestReservedParamsAndType(t *testing.T) {
+	a := adminClient(t)
+	f := newLaunchFixture(t)
+	jt := f.template(t, "site.yml", nil)
+	job := must(t, a.post(fmt.Sprintf("job_templates/%d/launch/", jt), nil), 201).id()
+	// awx jobs launch --monitor and awx jobs stdout list events with no_truncate.
+	must(t, a.get(fmt.Sprintf("jobs/%d/job_events/?no_truncate=True&order_by=counter", job)), 200)
+	for _, q := range []string{"no_truncate=1", "limit=web", "validate=True"} {
+		if n := must(t, a.get(fmt.Sprintf("jobs/?id=%d&%s", job, q)), 200).count(); n != 1 {
+			t.Errorf("jobs/?%s filtered: %d", q, n)
+		}
+	}
+
+	types := func(path string) map[string]int {
+		out := map[string]int{}
+		for _, r := range must(t, a.get(path), 200).results() {
+			out[r["type"].(string)]++
+		}
+		return out
+	}
+	got := types(fmt.Sprintf("unified_jobs/?type=job,project_update&page_size=200&id__gte=%d", job-5))
+	if got["job"] == 0 || got["project_update"] == 0 || len(got) != 2 {
+		t.Errorf("unified_jobs/?type=job,project_update: %v", got)
+	}
+	if got := types(fmt.Sprintf("unified_jobs/?type=job&id=%d", job)); got["job"] != 1 || len(got) != 1 {
+		t.Errorf("unified_jobs/?type=job: %v", got)
+	}
+	if n := must(t, a.get(fmt.Sprintf("organizations/?type=organization&id=%d", f.org)), 200).count(); n != 1 {
+		t.Errorf("organizations/?type=organization: %d", n)
+	}
+	if n := must(t, a.get(fmt.Sprintf("organizations/?type=team&id=%d", f.org)), 200).count(); n != 0 {
+		t.Errorf("organizations/?type=team: %d", n)
+	}
+}

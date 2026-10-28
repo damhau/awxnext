@@ -1,9 +1,7 @@
 # Tests of compat/run.py expected to fail, each with the issue that tracks it
 # (or why it is out of scope). A failure missing here, or a test listed here
 # that passes, fails the run: keep this list true.
-cli:
-  "job stdout": "#92 no_truncate (follows launch and monitor)"
-  "launch and monitor": "#92 no_truncate"
+cli: {}
 collection:
   "application": "out of scope: OAuth2 applications (ROADMAP, Proposed out of scope)"
   "bulk_host_create": "#16 bulk API"

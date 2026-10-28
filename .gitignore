@@ -2,3 +2,4 @@
 node_modules/
 ui/dist/
 *.local
+compat-report/

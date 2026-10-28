@@ -3,6 +3,7 @@ package api
 import (
 	"fmt"
 	"net/url"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -72,11 +73,13 @@ var lookups = map[string]bool{
 	"regex": true, "iregex": true,
 }
 
-// Query parameters that are not field filters.
+// Query parameters that are not field filters: AWX's reserved names
+// (django-ansible-base), and awxnext's own. no_truncate asks for the full
+// stdout of events, which awxnext never truncates.
 var reservedParams = map[string]bool{
 	"page": true, "page_size": true, "order_by": true, "order": true, "search": true,
 	"format": true, "role_level": true, "count_disabled": true, "fields": true,
-	"host_filter": true, "not_in": true,
+	"host_filter": true, "not_in": true, "no_truncate": true, "limit": true, "validate": true,
 }
 
 // filterCond is one field filter: a path, its lookup and the raw value.
@@ -118,6 +121,19 @@ func (q *query) applyFilters(c *Ctx, res *Resource, params url.Values) error {
 					return err
 				}
 				q.where = append(q.where, pred)
+			}
+			continue
+		}
+		if key == "type" {
+			// As AWX's TypeFilterBackend: a comma-separated list of types.
+			for _, v := range values {
+				types := strings.Split(v, ",")
+				switch {
+				case res.Discriminator || res.field("type") != nil:
+					q.where = append(q.where, "t.type = ANY("+q.arg(types)+")")
+				case !slices.Contains(types, res.Type):
+					q.where = append(q.where, "FALSE")
+				}
 			}
 			continue
 		}
