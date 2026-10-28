@@ -2,6 +2,9 @@ package test
 
 import (
 	"fmt"
+	"io"
+	"net/http"
+	"strings"
 	"testing"
 )
 
@@ -64,5 +67,29 @@ func TestManagedObjectsAreReadOnly(t *testing.T) {
 	r = must(t, a.get(fmt.Sprintf("teams/?managed_by__startswith=git:&id=%d", team)), 200)
 	if r.count() != 1 {
 		t.Fatal("managed_by not filterable")
+	}
+}
+
+// /api/docs/ is the UI's API page (Swagger UI over the OpenAPI document);
+// other unknown paths under /api/ stay the API's 404.
+func TestAPIDocsPage(t *testing.T) {
+	for _, path := range []string{"/api/docs/", "/api/docs/#/teams"} {
+		res, err := http.Get(srv.URL + path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, _ := io.ReadAll(res.Body)
+		res.Body.Close()
+		if res.StatusCode != 200 || !strings.Contains(res.Header.Get("Content-Type"), "text/html") || !strings.Contains(string(body), "<") {
+			t.Errorf("%s: %d %s", path, res.StatusCode, res.Header.Get("Content-Type"))
+		}
+	}
+	res, err := http.Get(srv.URL + "/api/nothing-here/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if res.StatusCode != 404 || !strings.Contains(res.Header.Get("Content-Type"), "json") {
+		t.Errorf("/api/nothing-here/: %d %s", res.StatusCode, res.Header.Get("Content-Type"))
 	}
 }

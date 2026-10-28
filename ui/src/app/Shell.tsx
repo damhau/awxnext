@@ -175,9 +175,7 @@ function Account() {
       <div className="head">{name}</div>
       <Link to={`/users/${me.id}`}>Profile and tokens</Link>
       <Link to="/run">Operator view</Link>
-      <a href="/api/v2/" target="_blank" rel="noreferrer">
-        API browser <Icon name="external" size={12} />
-      </a>
+      <Link to="/api/docs">API docs</Link>
       <hr />
       <button onClick={logout}>
         <Icon name="logout" size={14} />

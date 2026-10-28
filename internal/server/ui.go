@@ -33,7 +33,8 @@ func uiHandler(dir string) http.Handler {
 			return
 		}
 		p := strings.TrimPrefix(path.Clean(r.URL.Path), "/")
-		if strings.HasPrefix(p, "api/") || p == "api" {
+		// /api/docs/ is the UI's API page (Swagger UI); the rest of /api/ is the API's.
+		if (strings.HasPrefix(p, "api/") || p == "api") && p != "api/docs" && !strings.HasPrefix(p, "api/docs/") {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(404)
 			w.Write([]byte(`{"detail":"Not found."}`))
