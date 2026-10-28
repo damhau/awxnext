@@ -250,6 +250,8 @@ type ListParams struct {
 	// DefaultOrder is an ORDER BY expression (alias t, no parameters) used
 	// when the request does not ask for an order.
 	DefaultOrder string
+	// Decorate adds to the serialized objects of a page (WriteList).
+	Decorate func(out []Obj) error
 }
 
 // List returns a page of raw objects and the total count.

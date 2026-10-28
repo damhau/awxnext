@@ -92,7 +92,7 @@ The gaps fall in four groups:
 | Teams | Yes | Done | Plus nested teams |
 | `teams/N/projects/`, `teams/N/credentials/`, `users/N/projects/`, `users/N/access_list/` | Yes | Done | Under a parent the requester sees, what the requester sees of the target. A user's access list is superusers, the user, and the admins of their organizations and teams |
 | Object roles (`/roles/`, `object_roles`, users/teams roles, role fields per type) | Yes | Done | |
-| `access_list` | Yes | Partial | No `direct_access`/`indirect_access` details |
+| `access_list` | Yes | Done | Each user's `direct_access` (grants on the object, directly or through a team, with the team) and `indirect_access` (organization, folder, system administrator), with the role, its object, the role fields it amounts to and whether the requester can remove it |
 | Role definitions and assignments (DAB RBAC) | Yes | Done | No UI to create custom roles; `role_metadata` and `*_ansible_id` missing |
 | Personal access tokens with read/write scope | Yes | Done | Stored hashed, shown once |
 | OAuth2 applications, `/api/o/` | Deprecated | By design | Not advertised by `/api/` |

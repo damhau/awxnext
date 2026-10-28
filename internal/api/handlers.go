@@ -448,6 +448,9 @@ func WriteList(c *Ctx, w http.ResponseWriter, r *http.Request, res *Resource, lp
 		return
 	}
 	out, err := Serialize(c, res, objs)
+	if err == nil && lp.Decorate != nil {
+		err = lp.Decorate(out)
+	}
 	if err != nil {
 		writeError(w, err)
 		return

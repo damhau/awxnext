@@ -276,7 +276,7 @@ func registerRoles() {
 			return fmt.Sprintf(`t.is_superuser OR EXISTS (SELECT 1 FROM %s o JOIN role_assignments ra ON (%s)
 				WHERE o.id = %s AND (ra.user_id = t.id OR ra.team_id IN (SELECT user_teams(t.id))))`,
 				res.Table, rbac.ScopeSQL(rbac.ArgFunc(arg), res.ContentType, res.Scope("o")), arg(id))
-		}}})
+		}}, Decorate: func(out []Obj) error { return accessDetails(c, res, obj, out) }})
 	})
 
 	registerDAB()
