@@ -5,22 +5,43 @@ import { eventGroup, useLive } from '../../api/live'
 import { stripAnsi } from '../../lib/ansi'
 import { jobApi } from '../../lib/format'
 
-const MAX_EVENTS = 60_000
+/** MAX_UI_JOB_EVENTS when the setting is not loaded. */
+export const DEFAULT_MAX_EVENTS = 4000
 
 export function eventsPath(type: string, id: number | string): string {
   return `${jobApi(type, id)}${type === 'job' ? 'job_events' : 'events'}/`
 }
 
+/** Adds events to the store while it holds fewer than limit (0: no limit); reports whether some did not fit. */
+export function addWithin(store: Map<number, JobEvent>, events: JobEvent[], limit: number): boolean {
+  for (const e of events) {
+    if (limit > 0 && store.size >= limit && !store.has(e.counter)) return true
+    store.set(e.counter, e)
+  }
+  return false
+}
+
+/** The lowest counter missing between the lowest and the highest held, or null when there is no gap. */
+export function firstGap(counters: Iterable<number>): number | null {
+  const sorted = [...counters].sort((a, b) => a - b)
+  for (let i = 1; i < sorted.length; i++) if (sorted[i] !== sorted[i - 1] + 1) return sorted[i - 1] + 1
+  return null
+}
+
 /**
- * All events of a job, in counter order, kept current while it runs: stored
- * events are paged in, live ones arrive over the websocket, and a final fetch
- * after the job finishes fills any gap.
+ * Events of a job, in counter order, kept current while it runs: stored
+ * events are paged in, live ones arrive over the websocket. At most max
+ * events are held (MAX_UI_JOB_EVENTS, 0: all) until loadMore raises it.
+ * Events the server did not send live (MAX_WEBSOCKET_EVENT_RATE) leave gaps
+ * that are fetched from the API, and so is anything missed when the job ends.
  */
-export function useJobEvents(type: string, id: number, running: boolean) {
+export function useJobEvents(type: string, id: number, running: boolean, max = DEFAULT_MAX_EVENTS) {
   const store = useRef(new Map<number, JobEvent>())
   const [version, setVersion] = useState(0)
   const [loading, setLoading] = useState(true)
   const [truncated, setTruncated] = useState(false)
+  const limit = useRef(max)
+  const gapTimer = useRef<number | undefined>(undefined)
   const pending = useRef(0)
   const bump = () => {
     // Coalesce bursts of live events into one render per frame.
@@ -31,17 +52,18 @@ export function useJobEvents(type: string, id: number, running: boolean) {
     })
   }
 
+  // From the first gap if there is one, else after the newest event held.
   const fetchFrom = async (signal?: AbortSignal) => {
-    let after = 0
-    for (const c of store.current.keys()) after = Math.max(after, c)
+    const gap = firstGap(store.current.keys())
+    let after = gap !== null ? gap - 1 : 0
+    if (gap === null) for (const c of store.current.keys()) after = Math.max(after, c)
     for (let page = 0; page < 200; page++) {
       const r = await api.get<Page<JobEvent>>(eventsPath(type, id), { order_by: 'counter', counter__gt: after, page_size: 500 }, signal)
-      for (const e of r.results) store.current.set(e.counter, e)
-      if (r.results.length) after = r.results[r.results.length - 1].counter
-      if (store.current.size >= MAX_EVENTS) {
+      if (addWithin(store.current, r.results, limit.current)) {
         setTruncated(true)
         break
       }
+      if (r.results.length) after = r.results[r.results.length - 1].counter
       if (!r.next) break
     }
     bump()
@@ -49,6 +71,7 @@ export function useJobEvents(type: string, id: number, running: boolean) {
 
   useEffect(() => {
     store.current = new Map()
+    limit.current = max
     setLoading(true)
     setTruncated(false)
     const ctl = new AbortController()
@@ -59,6 +82,14 @@ export function useJobEvents(type: string, id: number, running: boolean) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [type, id])
 
+  // The setting can arrive after the first page.
+  useEffect(() => {
+    if (max === limit.current || (max > 0 && max < limit.current)) return
+    limit.current = max
+    setTruncated(false)
+    fetchFrom().catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [max])
   // When the job stops, pick up anything the socket missed.
   const wasRunning = useRef(running)
   useEffect(() => {
@@ -69,17 +100,37 @@ export function useJobEvents(type: string, id: number, running: boolean) {
 
   useLive(running ? { [eventGroup(type)]: [id] } : null, (m) => {
     const e = m as unknown as JobEvent
-    if (typeof e.counter !== 'number' || store.current.size >= MAX_EVENTS) return
-    store.current.set(e.counter, e)
+    if (typeof e.counter !== 'number') return
+    if (addWithin(store.current, [e], limit.current)) {
+      setTruncated(true)
+      return
+    }
     bump()
+    // At most one gap check a second while events flow.
+    if (gapTimer.current === undefined) {
+      gapTimer.current = window.setTimeout(() => {
+        gapTimer.current = undefined
+        if (firstGap(store.current.keys()) !== null) fetchFrom().catch(() => {})
+      }, 1000)
+    }
   })
+  useEffect(() => () => window.clearTimeout(gapTimer.current), [])
+
+  /** Holds max more events and fetches them. */
+  const loadMore = () => {
+    limit.current += max > 0 ? max : DEFAULT_MAX_EVENTS
+    setTruncated(false)
+    fetchFrom().catch(() => {})
+  }
+  /** Fetches what is new, for when live updates are off. */
+  const refresh = () => fetchFrom().catch(() => {})
 
   const events = useMemo(
     () => [...store.current.values()].sort((a, b) => a.counter - b.counter),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [version],
   )
-  return { events, loading, truncated }
+  return { events, loading, truncated, held: store.current.size, loadMore, refresh }
 }
 
 export type LineKind = 'play' | 'task' | 'fatal' | 'ok' | 'changed' | 'skip' | 'recap' | 'plain'

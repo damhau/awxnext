@@ -121,7 +121,7 @@ type Manager struct {
 }
 
 func New(app *api.App) *Manager {
-	return &Manager{
+	m := &Manager{
 		App:          app,
 		Node:         app.Cfg.NodeName,
 		Hub:          NewHub(),
@@ -129,6 +129,10 @@ func New(app *api.App) *Manager {
 		wakeDispatch: make(chan struct{}, 1),
 		wakeWork:     make(chan struct{}, 1),
 	}
+	if app.Settings != nil {
+		m.Hub.EventRate = func() int { return app.Settings.Int(context.Background(), "MAX_WEBSOCKET_EVENT_RATE") }
+	}
+	return m
 }
 
 func (m *Manager) DB() *pgxpool.Pool { return m.App.DB }

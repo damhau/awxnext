@@ -25,6 +25,7 @@ class Live {
   private retry = 0
   private timer: number | undefined
   private closed = false
+  private enabled = true
   connected = false
   private stateListeners = new Set<(c: boolean) => void>()
 
@@ -49,8 +50,23 @@ class Live {
     this.ws?.close()
   }
 
+  /** UI_LIVE_UPDATES_ENABLED: off closes the socket and keeps it closed. */
+  setEnabled(on: boolean) {
+    if (on === this.enabled) return
+    this.enabled = on
+    if (on) this.ensure()
+    else {
+      window.clearTimeout(this.timer)
+      this.ws?.close()
+    }
+  }
+
+  get liveEnabled() {
+    return this.enabled
+  }
+
   private ensure() {
-    if (this.ws || this.closed) return
+    if (this.ws || this.closed || !this.enabled) return
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:'
     const ws = new WebSocket(`${proto}//${location.host}/websocket/`)
     this.ws = ws
@@ -78,7 +94,7 @@ class Live {
     ws.onclose = () => {
       this.ws = null
       this.setState(false)
-      if (this.closed) return
+      if (this.closed || !this.enabled) return
       const delay = Math.min(30_000, 1000 * 2 ** this.retry++)
       window.clearTimeout(this.timer)
       this.timer = window.setTimeout(() => this.ensure(), delay)

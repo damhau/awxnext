@@ -2,7 +2,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useMemo, useState } from 'react'
 import { Link, Navigate, Route, Routes, useNavigate, useParams } from 'react-router'
 import { api } from '../../api/client'
-import { useList, useObject } from '../../api/hooks'
+import { useList, useObject, useUiSettings } from '../../api/hooks'
 import { useLive } from '../../api/live'
 import type { HostSummary, Job } from '../../api/types'
 import { varsText } from '../../components/form'
@@ -12,7 +12,7 @@ import { Ago, Cell, Crumbs, Elapsed, Empty, ErrorNote, KV, Loading, Maybe, Panel
 import { absolute, active, jobApi, jobPath, plural, shortSha, templatePath, typeLabel, userName } from '../../lib/format'
 import { relaunchJob } from '../../lib/jobs'
 import { WorkflowJobGraph } from '../automation/workflow'
-import { firstFailure, toGrid, toLines, useJobEvents } from './events'
+import { DEFAULT_MAX_EVENTS, firstFailure, toGrid, toLines, useJobEvents } from './events'
 import { Matrix } from './Matrix'
 import { Output } from './Output'
 
@@ -208,7 +208,10 @@ function JobView({ type, job }: { type: string; job: Job }) {
 
 function OutputTab({ type, job, summaries }: { type: string; job: Job; summaries: HostSummary[] }) {
   const running = active(job.status)
-  const { events, loading, truncated } = useJobEvents(type, job.id, running || job.event_processing_finished === false)
+  const ui = useUiSettings()
+  const max = ui.data?.MAX_UI_JOB_EVENTS ?? DEFAULT_MAX_EVENTS
+  const liveOff = ui.data?.UI_LIVE_UPDATES_ENABLED === false
+  const { events, loading, truncated, held, loadMore, refresh } = useJobEvents(type, job.id, running || job.event_processing_finished === false, max)
   const lines = useMemo(() => toLines(events), [events])
   const grid = useMemo(() => toGrid(events, summaries.map((s) => s.host_name)), [events, summaries])
   const failure = useMemo(() => firstFailure(events), [events])
@@ -229,7 +232,23 @@ function OutputTab({ type, job, summaries }: { type: string; job: Job; summaries
         </div>
       )}
       <div className="page-body">
-        {truncated && <div className="notice">This output is very long; the first 60,000 events are shown. Download the full output from the menu.</div>}
+        {truncated && (
+          <div className="notice">
+            Showing the first {held.toLocaleString()} events (setting MAX_UI_JOB_EVENTS).{' '}
+            <button className="link-btn" onClick={loadMore}>
+              Load {(max > 0 ? max : DEFAULT_MAX_EVENTS).toLocaleString()} more
+            </button>{' '}
+            or download the full output.
+          </div>
+        )}
+        {running && liveOff && (
+          <div className="notice">
+            Live updates are turned off (setting UI_LIVE_UPDATES_ENABLED).{' '}
+            <button className="link-btn" onClick={refresh}>
+              Show new output
+            </button>
+          </div>
+        )}
         {loading && lines.length === 0 ? (
           <div className="term">
             <div className="term-empty">Loading output…</div>

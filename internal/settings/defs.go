@@ -39,7 +39,7 @@ func init() {
 		{Key: "GALAXY_IGNORE_CERTS", Category: "jobs", Type: "boolean", Default: false},
 		{Key: "STDOUT_MAX_BYTES_DISPLAY", Category: "jobs", Type: "integer", Default: 1048576},
 		{Key: "EVENT_STDOUT_MAX_BYTES_DISPLAY", Category: "jobs", Type: "integer", Default: 1024},
-		{Key: "MAX_WEBSOCKET_EVENT_RATE", Category: "jobs", Type: "integer", Default: 30},
+		{Key: "MAX_WEBSOCKET_EVENT_RATE", Category: "jobs", Type: "integer", Default: 30, Label: "Job Event Maximum Websocket Messages Per Second", Help: "Job events sent live to each browser per second; the job page fetches the rest from the API. 0: no limit."},
 		{Key: "SCHEDULE_MAX_JOBS", Category: "jobs", Type: "integer", Default: 10, Label: "Maximum Scheduled Jobs", Help: "A schedule creates no job while this many jobs of its template are waiting to run."},
 		{Key: "AWX_ANSIBLE_CALLBACK_PLUGINS", Category: "jobs", Type: "list", Default: []any{}},
 		{Key: "DEFAULT_JOB_TIMEOUT", Category: "jobs", Type: "integer", Default: 0},
@@ -78,8 +78,8 @@ func init() {
 		// ui
 		{Key: "CUSTOM_LOGIN_INFO", Category: "ui", Type: "string", Default: "", Public: true, Label: "Custom Login Info", Help: "Text shown on the login page, for example who to ask for an account."},
 		{Key: "CUSTOM_LOGO", Category: "ui", Type: "string", Default: "", Public: true, Label: "Custom Logo", Help: "Image shown on the login page: a data URL of a GIF, PNG or JPEG image (data:image/png;base64,…)."},
-		{Key: "MAX_UI_JOB_EVENTS", Category: "ui", Type: "integer", Default: 4000, Public: true},
-		{Key: "UI_LIVE_UPDATES_ENABLED", Category: "ui", Type: "boolean", Default: true, Public: true},
+		{Key: "MAX_UI_JOB_EVENTS", Category: "ui", Type: "integer", Default: 4000, Public: true, Label: "Max Job Events Retrieved by UI", Help: "Events the job output page loads at once; more can be loaded on demand, or the output downloaded. 0: all."},
+		{Key: "UI_LIVE_UPDATES_ENABLED", Category: "ui", Type: "boolean", Default: true, Public: true, Label: "Enable Live Updates in the UI", Help: "Off: the web UI opens no websocket; pages show new data when reloaded."},
 		{Key: "PENDO_TRACKING_STATE", Category: "ui", Type: "string", Default: "off", Public: true},
 
 		// logging

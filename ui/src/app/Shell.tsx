@@ -1,8 +1,8 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { Suspense, useEffect, useRef, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router'
-import { useList } from '../api/hooks'
-import { useLive } from '../api/live'
+import { useList, useUiSettings } from '../api/hooks'
+import { live, useLive } from '../api/live'
 import type { RecentJob } from '../api/types'
 import { ErrorBoundary } from '../components/ErrorBoundary'
 import { Icon, type IconName } from '../components/icons'
@@ -32,6 +32,14 @@ function LiveRefresh() {
       })
     }, 400)
   })
+  return null
+}
+
+/** Applies UI_LIVE_UPDATES_ENABLED to the shared websocket. */
+function LiveSwitch() {
+  const ui = useUiSettings()
+  const on = ui.data?.UI_LIVE_UPDATES_ENABLED !== false
+  useEffect(() => live.setEnabled(on), [on])
   return null
 }
 
@@ -215,6 +223,7 @@ export function Shell() {
   return (
     <div className="shell">
       <LiveRefresh />
+      <LiveSwitch />
       <header className="topbar">
         <Link to="/" className="brand" aria-label="awxnext home">
           <BrandMark />

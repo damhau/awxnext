@@ -23,6 +23,22 @@ export function useObject<T>(path: string | null, opts: Partial<UseQueryOptions<
   })
 }
 
+export interface UiSettings {
+  /** Events the job output page loads at once (0: all). */
+  MAX_UI_JOB_EVENTS?: number
+  /** Off: no websocket, pages update when reloaded. */
+  UI_LIVE_UPDATES_ENABLED?: boolean
+}
+
+/** The "ui" settings category, readable by every signed-in user. */
+export function useUiSettings() {
+  return useQuery<UiSettings>({
+    queryKey: ['settings/ui/', 'object'],
+    queryFn: ({ signal }) => api.get<UiSettings>('settings/ui/', undefined, signal),
+    staleTime: 5 * 60_000,
+  })
+}
+
 export function useOptions(path: string | null) {
   return useQuery<OptionsMeta>({
     queryKey: [path, 'options'],

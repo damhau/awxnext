@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 // Hub fans out job status changes and events to websocket subscribers on this
@@ -15,9 +16,33 @@ type Hub struct {
 	subs map[string]map[chan []byte]bool
 	// relayed tracks the last event counter relayed per group from other nodes.
 	relayed sync.Map
+	// EventRate is MAX_WEBSOCKET_EVENT_RATE: job events sent to each client
+	// per second (0: no limit). The UI fetches what it misses from the API.
+	EventRate func() int
+	lmu       sync.Mutex
+	budgets   map[chan []byte]*budget
 }
 
-func NewHub() *Hub { return &Hub{subs: map[string]map[chan []byte]bool{}} }
+func NewHub() *Hub {
+	return &Hub{subs: map[string]map[chan []byte]bool{}, budgets: map[chan []byte]*budget{}}
+}
+
+// budget counts the job events sent to one client in the current second.
+type budget struct {
+	start time.Time
+	n     int
+}
+
+func (b *budget) allow(now time.Time, rate int) bool {
+	if now.Sub(b.start) >= time.Second {
+		b.start, b.n = now, 0
+	}
+	if b.n >= rate {
+		return false
+	}
+	b.n++
+	return true
+}
 
 // Subscribe registers ch for a group (e.g. "jobs-status_changed", "job_events-42").
 func (h *Hub) Subscribe(group string, ch chan []byte) {
@@ -31,6 +56,9 @@ func (h *Hub) Subscribe(group string, ch chan []byte) {
 
 // Unsubscribe removes ch from all groups.
 func (h *Hub) Unsubscribe(ch chan []byte) {
+	h.lmu.Lock()
+	delete(h.budgets, ch)
+	h.lmu.Unlock()
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	for g, set := range h.subs {
@@ -112,7 +140,39 @@ func (h *Hub) sendEvent(jobType string, jobID int64, e Event) {
 		msg[jobType] = jobID
 	}
 	b, _ := json.Marshal(msg)
-	h.Publish(group, b)
+	h.publishEvents(group, b)
+}
+
+// publishEvents delivers a job event to local subscribers, each within its
+// EventRate budget.
+func (h *Hub) publishEvents(group string, msg []byte) {
+	rate := 0
+	if h.EventRate != nil {
+		rate = h.EventRate()
+	}
+	if rate <= 0 {
+		h.Publish(group, msg)
+		return
+	}
+	now := time.Now()
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	h.lmu.Lock()
+	defer h.lmu.Unlock()
+	for ch := range h.subs[group] {
+		b := h.budgets[ch]
+		if b == nil {
+			b = &budget{}
+			h.budgets[ch] = b
+		}
+		if !b.allow(now, rate) {
+			continue
+		}
+		select {
+		case ch <- msg:
+		default:
+		}
+	}
 }
 
 // relayEvents forwards events stored by another node to local subscribers.

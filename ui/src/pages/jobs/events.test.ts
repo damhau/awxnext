@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { JobEvent } from '../../api/types'
-import { peers, projectPath, toGrid, toLines } from './events'
+import { addWithin, firstGap, peers, projectPath, toGrid, toLines } from './events'
 
 let counter = 0
 function ev(event: string, fields: Partial<JobEvent> & { task_uuid?: string; ignore_errors?: boolean } = {}): JobEvent {
@@ -94,5 +94,33 @@ describe('toLines', () => {
 describe('projectPath', () => {
   it('cuts the job work directory', () => {
     expect(projectPath('/var/lib/awxnext/jobs/27/work/project/deploy/site.yml:20')).toBe('deploy/site.yml:20')
+  })
+})
+
+describe('addWithin', () => {
+  it('holds at most the limit and says when events were left out', () => {
+    counter = 0
+    const store = new Map<number, JobEvent>()
+    expect(addWithin(store, [ev('a'), ev('b'), ev('c')], 2)).toBe(true)
+    expect([...store.keys()]).toEqual([1, 2])
+    // An event already held is replaced even at the limit.
+    expect(addWithin(store, [{ ...store.get(2)!, stdout: 'new' }], 2)).toBe(false)
+    expect(store.get(2)!.stdout).toBe('new')
+  })
+
+  it('has no limit at 0', () => {
+    counter = 0
+    const store = new Map<number, JobEvent>()
+    expect(addWithin(store, [ev('a'), ev('b'), ev('c')], 0)).toBe(false)
+    expect(store.size).toBe(3)
+  })
+})
+
+describe('firstGap', () => {
+  it('finds the first counter missing between the lowest and the highest held', () => {
+    expect(firstGap([1, 2, 3])).toBeNull()
+    expect(firstGap([5, 6, 7])).toBeNull()
+    expect(firstGap([3, 1, 2, 7, 9])).toBe(4)
+    expect(firstGap([])).toBeNull()
   })
 })
