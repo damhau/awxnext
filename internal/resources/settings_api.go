@@ -18,6 +18,18 @@ func installSettings(app *api.App) {
 		}
 		api.WriteJSON(w, 200, Obj{"count": len(results), "next": nil, "previous": nil, "results": results})
 	})
+	// awxkit reads it to build `awx settings`.
+	app.Handle("OPTIONS", "/api/v2/settings/", func(c *Ctx, w http.ResponseWriter, r *http.Request) {
+		field := func(label, help string) Obj {
+			return Obj{"type": "string", "label": label, "help_text": help, "filterable": false}
+		}
+		api.WriteJSON(w, 200, Obj{"name": "Setting Category List", "description": "", "renders": []string{"application/json"}, "parses": []string{"application/json"},
+			"actions": Obj{"GET": Obj{
+				"url":  field("Url", "URL of the category's settings."),
+				"slug": field("Slug", "Name of the category in URLs."),
+				"name": field("Name", "Name of the category."),
+			}}})
+	})
 	app.Handle("GET", "/api/v2/settings/{cat}/", func(c *Ctx, w http.ResponseWriter, r *http.Request) {
 		defs, err := settingsCategory(c, chi.URLParam(r, "cat"), false)
 		if err != nil {

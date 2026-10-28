@@ -145,6 +145,79 @@ func TestOptionsMetadata(t *testing.T) {
 	}
 }
 
+// awxkit builds the CLI from OPTIONS: modify and delete from the Allow header
+// of OPTIONS <list>/1/ (whether 1 exists or not), grant and revoke from
+// object_roles, and export skips a list whose Allow header lacks POST.
+func TestOptionsAllowAndRoles(t *testing.T) {
+	a := adminClient(t)
+	org := newOrg(t, a)
+	for path, want := range map[string]string{
+		"organizations/":                            "GET, POST, HEAD, OPTIONS",
+		"organizations/999999/":                     "GET, PUT, PATCH, DELETE, HEAD, OPTIONS",
+		fmt.Sprintf("organizations/%d/", org):       "GET, PUT, PATCH, DELETE, HEAD, OPTIONS",
+		fmt.Sprintf("organizations/%d/teams/", org): "GET, POST, HEAD, OPTIONS",
+		"activity_stream/":                          "GET, HEAD, OPTIONS",
+		"settings/":                                 "GET, HEAD, OPTIONS",
+		"settings/all/":                             "GET, PUT, PATCH, DELETE, HEAD, OPTIONS",
+	} {
+		r := must(t, a.do("OPTIONS", path, nil), 200)
+		if got := r.Header.Get("Allow"); got != want {
+			t.Errorf("OPTIONS %s: Allow %q, want %q", path, got, want)
+		}
+	}
+	if got := must(t, a.get("organizations/"), 200).Header.Get("Allow"); got != "GET, POST, HEAD, OPTIONS" {
+		t.Errorf("GET organizations/: Allow %q", got)
+	}
+	if r := must(t, a.do("HEAD", fmt.Sprintf("organizations/%d/", org), nil), 200); r.Raw != "" {
+		t.Errorf("HEAD has a body: %s", r.Raw)
+	}
+
+	for path, want := range map[string][]string{
+		"organizations/":   {"admin_role", "member_role", "read_role"},
+		"teams/":           {"admin_role", "member_role", "read_role"},
+		"job_templates/1/": {"admin_role", "execute_role", "read_role"},
+	} {
+		roles := map[string]bool{}
+		for _, x := range must(t, a.do("OPTIONS", path, nil), 200).Body["object_roles"].([]any) {
+			roles[x.(string)] = true
+		}
+		for _, w := range want {
+			if !roles[w] {
+				t.Errorf("OPTIONS %s: object_roles %v lacks %s", path, roles, w)
+			}
+		}
+	}
+	if _, ok := must(t, a.do("OPTIONS", "activity_stream/", nil), 200).Body["object_roles"]; ok {
+		t.Error("object_roles on a type without roles")
+	}
+	if get := must(t, a.do("OPTIONS", "settings/", nil), 200).Body["actions"].(map[string]any)["GET"].(map[string]any); get["slug"] == nil {
+		t.Errorf("OPTIONS settings/: %v", get)
+	}
+
+	// What awxkit's export reads on related lists.
+	if r := must(t, a.do("OPTIONS", fmt.Sprintf("organizations/%d/object_roles/", org), nil), 200); r.Header.Get("Allow") != "GET, HEAD, OPTIONS" {
+		t.Errorf("OPTIONS object_roles/: Allow %q", r.Header.Get("Allow"))
+	}
+	post := must(t, a.do("OPTIONS", "users/1/roles/", nil), 200).Body["actions"].(map[string]any)["POST"].(map[string]any)
+	if len(post) != 2 || post["id"] == nil || post["disassociate"] == nil {
+		t.Errorf("OPTIONS users/1/roles/ POST: %v", post)
+	}
+	if post := must(t, a.do("OPTIONS", fmt.Sprintf("organizations/%d/users/", org), nil), 200).Body["actions"].(map[string]any)["POST"].(map[string]any); post["id"] == nil || post["username"] == nil {
+		t.Errorf("OPTIONS organizations/N/users/ POST: %v", post)
+	}
+	wf := must(t, a.post("workflow_job_templates/", map[string]any{"name": uniq("wf"), "organization": org}), 201).id()
+	r := must(t, a.do("OPTIONS", fmt.Sprintf("workflow_job_templates/%d/survey_spec/", wf), nil), 200)
+	if _, ok := r.Body["description"]; !ok || r.Body["actions"].(map[string]any)["POST"] == nil || !strings.Contains(r.Header.Get("Allow"), "POST") {
+		t.Errorf("OPTIONS survey_spec/: %s %s", r.Header.Get("Allow"), r.Raw)
+	}
+	role := must(t, a.get(fmt.Sprintf("organizations/%d/object_roles/", org)), 200).results()[0]
+	for k := range role["related"].(map[string]any) {
+		if k != "organization" && k != "users" && k != "teams" {
+			t.Errorf("role related %s: awxkit takes the first link other than users and teams as the role's object", k)
+		}
+	}
+}
+
 func TestRBACVisibilityAndRoles(t *testing.T) {
 	a := adminClient(t)
 	bob, bobID := newUser(t, a)

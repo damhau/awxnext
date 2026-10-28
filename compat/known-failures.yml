@@ -2,15 +2,8 @@
 # (or why it is out of scope). A failure missing here, or a test listed here
 # that passes, fails the run: keep this list true.
 cli:
-  "cleanup": "#84 OPTIONS Allow header (no delete action)"
-  "delete": "#84 OPTIONS Allow header (no delete action)"
-  "export": "#84 OPTIONS Allow header (export skips endpoints)"
-  "grant role": "#84 OPTIONS object_roles (no role choices)"
   "job stdout": "#92 no_truncate (follows launch and monitor)"
   "launch and monitor": "#92 no_truncate"
-  "modify": "#84 OPTIONS Allow header (no modify action)"
-  "revoke role": "#84 OPTIONS object_roles (no role choices)"
-  "settings": "#84 OPTIONS /settings/"
 collection:
   "ad_hoc_command": "#91 ad hoc module error text"
   "application": "out of scope: OAuth2 applications (ROADMAP, Proposed out of scope)"
@@ -19,9 +12,7 @@ collection:
   "bulk_job_launch": "#16 bulk API"
   "credential": "#87 encrypted SSH key passphrase"
   "credential_input_source": "#38 CyberArk Central Credential Provider lookup"
-  "export": "#84 OPTIONS Allow header (export skips endpoints)"
   "group": "#90 group delete_recursive"
-  "import": "#84 OPTIONS Allow header (import gets no POST fields)"
   "inventory": "#32 Insights credential type"
   "job_launch": "#91 extra_vars text as json.dumps"
   "job_template": "#28 email notifications"

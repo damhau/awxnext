@@ -126,6 +126,7 @@ type resp struct {
 	Status int
 	Body   map[string]any
 	Raw    string
+	Header http.Header
 }
 
 func (r resp) results() []map[string]any {
@@ -169,7 +170,7 @@ func (c *client) do(method, path string, body any) resp {
 	}
 	defer res.Body.Close()
 	raw, _ := io.ReadAll(res.Body)
-	r := resp{Status: res.StatusCode, Raw: string(raw)}
+	r := resp{Status: res.StatusCode, Raw: string(raw), Header: res.Header}
 	if len(raw) > 0 && raw[0] == '{' {
 		json.Unmarshal(raw, &r.Body)
 	}

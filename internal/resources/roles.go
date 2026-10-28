@@ -178,7 +178,9 @@ func registerRoles() {
 			{Name: "content_type", Type: api.TString, ReadOnly: true, Hidden: true},
 			{Name: "object_id", Type: api.TInt, ReadOnly: true, Hidden: true},
 			{Name: "role_field", Type: api.TString, ReadOnly: true, Hidden: true},
-			{Name: "role_definition", Type: api.TFK, Ref: "role_definitions", ReadOnly: true, Hidden: true},
+			// Not a link: awxkit takes a role's object from its first related link
+			// other than users and teams, and AWX's roles link nothing else.
+			{Name: "role_definition", Type: api.TInt, Column: "role_definition_id", ReadOnly: true, Hidden: true},
 		},
 		SearchFields: []string{"role_field", "content_type"},
 		View:         roleVisible,

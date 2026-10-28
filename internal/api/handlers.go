@@ -15,8 +15,10 @@ import (
 	"time"
 
 	"github.com/damhau/awxnext/internal/metrics"
+	"github.com/damhau/awxnext/internal/rbac"
 	"github.com/damhau/awxnext/internal/tracing"
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 )
 
 const (
@@ -35,6 +37,7 @@ func (a *App) Router() chi.Router {
 	r.Use(instrument)
 	r.Use(a.recoverer)
 	r.Use(trailingSlash)
+	r.Use(middleware.GetHead) // HEAD answers like GET, without a body, as in AWX
 
 	r.Get("/api/", a.wrapPublic(func(c *Ctx, w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, Obj{
@@ -69,22 +72,32 @@ func (a *App) Router() chi.Router {
 	r.Get("/api/v2/openapi.json", a.wrapPublic(a.handleOpenAPI))
 	r.Get("/api/v2/schema/", a.wrapPublic(a.handleOpenAPI))
 
+	methods := map[string][]string{}
+	for _, rt := range a.Routes {
+		methods[rt.Pattern] = append(methods[rt.Pattern], rt.Method)
+	}
 	for _, rt := range a.Routes {
 		h := a.wrap(rt.Handler)
 		if rt.Public {
 			h = a.wrapPublic(rt.Handler)
 		}
-		r.Method(rt.Method, rt.Pattern, h)
+		r.Method(rt.Method, rt.Pattern, withAllow(allowHeader(methods[rt.Pattern]...), h))
 	}
 
-	r.Get("/api/v2/{res}/", a.wrap(a.handleList))
-	r.Post("/api/v2/{res}/", a.wrap(a.handleCreate))
-	r.Options("/api/v2/{res}/", a.wrap(a.handleOptions))
-	r.Get("/api/v2/{res}/{id}/", a.wrap(a.handleDetail))
-	r.Put("/api/v2/{res}/{id}/", a.wrap(a.handleUpdate))
-	r.Patch("/api/v2/{res}/{id}/", a.wrap(a.handleUpdate))
-	r.Delete("/api/v2/{res}/{id}/", a.wrap(a.handleDelete))
-	r.Options("/api/v2/{res}/{id}/", a.wrap(a.handleOptions))
+	list := func(h func(c *Ctx, w http.ResponseWriter, r *http.Request)) http.HandlerFunc {
+		return resourceAllow(true, a.wrap(h))
+	}
+	detail := func(h func(c *Ctx, w http.ResponseWriter, r *http.Request)) http.HandlerFunc {
+		return resourceAllow(false, a.wrap(h))
+	}
+	r.Get("/api/v2/{res}/", list(a.handleList))
+	r.Post("/api/v2/{res}/", list(a.handleCreate))
+	r.Options("/api/v2/{res}/", list(a.handleOptions))
+	r.Get("/api/v2/{res}/{id}/", detail(a.handleDetail))
+	r.Put("/api/v2/{res}/{id}/", detail(a.handleUpdate))
+	r.Patch("/api/v2/{res}/{id}/", detail(a.handleUpdate))
+	r.Delete("/api/v2/{res}/{id}/", detail(a.handleDelete))
+	r.Options("/api/v2/{res}/{id}/", detail(a.handleOptions))
 	r.HandleFunc("/api/v2/{res}/{id}/{sub}/", a.wrap(a.handleSub))
 	a.historyRoutes(r)
 	return r
@@ -247,6 +260,62 @@ func (a *App) wrapPublic(h func(c *Ctx, w http.ResponseWriter, r *http.Request))
 		p, _ := authenticate(r, w)
 		h(a.newCtx(r, p), w, r)
 	}
+}
+
+// allowHeader lists methods as DRF's Allow header does: in its order, with
+// HEAD for GET, and OPTIONS. awxkit reads it to build the CLI's modify and
+// delete, and export and import skip a list whose header lacks POST.
+func allowHeader(methods ...string) string {
+	has := map[string]bool{"OPTIONS": true}
+	for _, m := range methods {
+		has[m] = true
+	}
+	has["HEAD"] = has["HEAD"] || has["GET"]
+	var out []string
+	for _, m := range []string{"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"} {
+		if has[m] {
+			out = append(out, m)
+		}
+	}
+	return strings.Join(out, ", ")
+}
+
+func withAllow(allow string, h http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Allow", allow)
+		h(w, r)
+	}
+}
+
+// resourceAllow sets the Allow header of a resource's list or detail, which
+// is the same whatever the object or the user's permissions, as in DRF.
+func resourceAllow(isList bool, h http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if res, err := resourceFromPath(r); err == nil {
+			w.Header().Set("Allow", allowHeader(res.methods(isList)...))
+		}
+		h(w, r)
+	}
+}
+
+// methods lists what a resource's list or detail answers.
+func (res *Resource) methods(isList bool) []string {
+	m := []string{"GET"}
+	switch {
+	case res.ReadOnly:
+	case isList:
+		if !res.NoCreate {
+			m = append(m, "POST")
+		}
+	default:
+		if !res.NoUpdate {
+			m = append(m, "PUT", "PATCH")
+		}
+		if !res.NoDelete {
+			m = append(m, "DELETE")
+		}
+	}
+	return m
 }
 
 func resourceFromPath(r *http.Request) (*Resource, error) {
@@ -503,6 +572,9 @@ func (a *App) handleSub(c *Ctx, w http.ResponseWriter, r *http.Request) {
 		if act.Name != name {
 			continue
 		}
+		if len(act.Methods) > 0 {
+			w.Header().Set("Allow", allowHeader(act.Methods...))
+		}
 		allowed := len(act.Methods) == 0
 		for _, m := range act.Methods {
 			if m == r.Method {
@@ -510,7 +582,15 @@ func (a *App) handleSub(c *Ctx, w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if r.Method == "OPTIONS" && !allowed {
-			writeJSON(w, 200, Obj{"name": title(name), "actions": Obj{}})
+			// As DRF answers a view without a serializer: awxkit's export reads the
+			// POST fields of survey_spec here.
+			actions := Obj{}
+			for _, m := range act.Methods {
+				if m == "GET" || m == "POST" || m == "PUT" {
+					actions[m] = Obj{}
+				}
+			}
+			writeJSON(w, 200, Obj{"name": title(name), "description": "", "renders": []string{"application/json"}, "parses": []string{"application/json"}, "actions": actions})
 			return
 		}
 		if !allowed {
@@ -536,6 +616,17 @@ func (a *App) handleSub(c *Ctx, w http.ResponseWriter, r *http.Request) {
 			a.handleSubList(c, w, r, res, obj, s)
 			return
 		}
+	}
+	if name == "copy" {
+		w.Header().Set("Allow", allowHeader("GET", "POST"))
+	} else {
+		w.Header().Set("Allow", allowHeader("GET"))
+	}
+	served := name == "activity_stream" && !res.NoActivity ||
+		(name == "object_roles" || name == "access_list") && res.ContentType != "" && objectRoleHandlers[name] != nil
+	if t := registry[readOnlySubs[name]]; t != nil && served && r.Method == "OPTIONS" {
+		writeJSON(w, 200, metadata(c, t, true, false))
+		return
 	}
 	switch name {
 	case "activity_stream":
@@ -569,6 +660,10 @@ func (a *App) handleSub(c *Ctx, w http.ResponseWriter, r *http.Request) {
 	writeError(w, ErrNotFound)
 }
 
+// readOnlySubs are the built-in sub-lists answered by OPTIONS, with the
+// resource they list.
+var readOnlySubs = map[string]string{"object_roles": "roles", "access_list": "users", "activity_stream": "activity_stream"}
+
 // objectRoleHandlers are installed by the RBAC API (avoids an import cycle).
 var objectRoleHandlers = map[string]func(c *Ctx, w http.ResponseWriter, r *http.Request, res *Resource, obj Obj){}
 
@@ -584,6 +679,11 @@ func (a *App) handleSubList(c *Ctx, w http.ResponseWriter, r *http.Request, res 
 		return
 	}
 	pid, _ := ID(parent["id"])
+	if s.ReadOnly {
+		w.Header().Set("Allow", allowHeader("GET"))
+	} else {
+		w.Header().Set("Allow", allowHeader("GET", "POST"))
+	}
 	switch r.Method {
 	case "GET":
 		if s.BeforeList != nil {
@@ -599,7 +699,23 @@ func (a *App) handleSubList(c *Ctx, w http.ResponseWriter, r *http.Request, res 
 		WriteList(c, w, r, target, lp)
 		return
 	case "OPTIONS":
-		writeJSON(w, 200, metadata(c, target, true, !s.ReadOnly && (!s.NoCreate || s.Associate != nil)))
+		md := metadata(c, target, true, !s.ReadOnly && (!s.NoCreate || s.Associate != nil))
+		// An attach list takes the id of an existing object, which AWX lists in
+		// POST and awxkit's export looks for; role lists take AWX's RoleMetadata.
+		if !s.ReadOnly && s.Associate != nil {
+			actions := md["actions"].(Obj)
+			post, _ := actions["POST"].(Obj)
+			if post == nil || target.Name == "roles" {
+				post = Obj{}
+			}
+			post["id"] = Obj{"type": "integer", "label": "ID", "help_text": "Database ID for this " + strings.ToLower(target.Verbose) + ".", "required": false, "filterable": true}
+			if target.Name == "roles" {
+				post["id"] = Obj{"type": "integer", "label": "ID", "help_text": "Database ID for this role."}
+				post["disassociate"] = Obj{"type": "integer", "label": "Disassociate", "help_text": "Provide to remove this role."}
+			}
+			actions["POST"] = post
+		}
+		writeJSON(w, 200, md)
 		return
 	case "POST":
 	default:
@@ -890,7 +1006,7 @@ func metadata(c *Ctx, res *Resource, isList, writable bool) Obj {
 	if isList {
 		name += " List"
 	}
-	return Obj{
+	out := Obj{
 		"name":                  name,
 		"description":           "",
 		"renders":               []string{"application/json", "text/html"},
@@ -901,6 +1017,18 @@ func metadata(c *Ctx, res *Resource, isList, writable bool) Obj {
 		"related_search_fields": related,
 		"max_page_size":         maxPageSize,
 	}
+	// The object's role fields, as AWX lists them: awxkit's grant and revoke
+	// take their --role choices from here.
+	if res.ContentType != "" {
+		var roles []string
+		for _, m := range rbac.LegacyRoles(res.ContentType) {
+			roles = append(roles, m.LegacyField)
+		}
+		if len(roles) > 0 {
+			out["object_roles"] = roles
+		}
+	}
+	return out
 }
 
 // knownSub reports whether name is a sublist, action or built-in sub-path of res.
