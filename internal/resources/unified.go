@@ -5,6 +5,7 @@ import (
 	"html"
 	"net/http"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -214,10 +215,18 @@ type jobSpec struct {
 	// canCancel, when set, grants cancel more broadly than canManage (e.g. project update role).
 	canCancel func(c *Ctx, job Obj) (bool, error)
 	extra     []*Field
+	// omit lists shared fields this job type does not have in AWX.
+	omit []string
 }
 
 func registerJobResource(js jobSpec) *Resource {
-	fields := append(jobFields(js.templateField, js.templateRes), js.extra...)
+	var fields []*Field
+	for _, f := range jobFields(js.templateField, js.templateRes) {
+		if !slices.Contains(js.omit, f.Name) {
+			fields = append(fields, f)
+		}
+	}
+	fields = append(fields, js.extra...)
 	res := api.Register(&Resource{
 		Name:          js.name,
 		Type:          js.typ,

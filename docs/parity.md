@@ -147,7 +147,7 @@ The gaps fall in four groups:
 | Relaunch (all, failed hosts) | Yes | Done | Launch-time labels/IGs not kept (roadmap M3-02) |
 | `jobs/N/create_schedule/` | Yes | Missing | |
 | Job slicing | Yes | Done | `slice_workflow_jobs` sublist missing |
-| Job events, stdout formats, host summaries, artifacts | Yes | Done | `job_events/N/children/`, `playbook_counts` missing |
+| Job events, stdout formats, host summaries, artifacts | Yes | Done | `job_events/N/children/`, `playbook_counts` missing. `event_processing_finished` is true once a job has ended, including a job that never ran (a failed dependency, canceled while pending), and workflow jobs don't have it, as in AWX: clients wait on it |
 | Ad hoc commands | Yes | Done | UI dialog lacks EE and passwords |
 | Workflows: edges, convergence, nested, approvals, artifacts, prompts | Yes | Done | Plus `when` conditions and loops |
 | Management-job workflow nodes | Yes | Done | Fixed during the audit |

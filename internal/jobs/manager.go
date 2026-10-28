@@ -480,7 +480,9 @@ func (m *Manager) finish(ctx context.Context, row Row, res Result) {
 		res.Status = "error"
 	}
 	failed := res.Status != "successful"
-	q := `UPDATE unified_jobs SET status = $2, failed = $3, finished = now(), modified = now(),
+	// Its events are all stored by now (or it never ran), as AWX reads
+	// event_processing_finished once a job has ended.
+	q := `UPDATE unified_jobs SET status = $2, failed = $3, finished = now(), modified = now(), event_processing_finished = true,
 		elapsed = coalesce(extract(epoch FROM now() - started), 0), job_explanation = $4, result_traceback = $5`
 	args := []any{id, res.Status, failed, res.Explanation, res.Traceback}
 	for k, v := range res.Update {
@@ -545,8 +547,8 @@ func (m *Manager) Cancel(ctx context.Context, id int64) error {
 		if err != nil {
 			return err
 		}
-		tag, err := m.DB().Exec(ctx, `UPDATE unified_jobs SET status = 'canceled', canceled_on = now(), finished = now(), failed = true
-			WHERE id = $1 AND status IN ('new', 'pending', 'waiting')`, id)
+		tag, err := m.DB().Exec(ctx, `UPDATE unified_jobs SET status = 'canceled', canceled_on = now(), finished = now(), failed = true,
+			event_processing_finished = true WHERE id = $1 AND status IN ('new', 'pending', 'waiting')`, id)
 		if err != nil {
 			return err
 		}

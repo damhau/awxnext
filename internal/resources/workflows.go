@@ -468,6 +468,8 @@ func registerWorkflows() {
 		name: "workflow_jobs", typ: "workflow_job", verbose: "Workflow Job",
 		templateField: "workflow_job_template", templateRes: "workflow_job_templates",
 		visible: wjVisible,
+		// AWX leaves it off workflow jobs, and the collection waits on it when present.
+		omit: []string{"event_processing_finished"},
 		canManage: func(c *Ctx, job Obj) (bool, error) {
 			ujt, ok := api.ID(job["unified_job_template"])
 			if !ok {

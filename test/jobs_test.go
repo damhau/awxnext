@@ -401,6 +401,22 @@ func TestJobFailureRelaunchCancelTimeout(t *testing.T) {
 	}
 }
 
+// A job that ends without running has all of its (no) events stored: the
+// collection waits on event_processing_finished, as AWX reads it.
+func TestEventProcessingFinishedWithoutRunning(t *testing.T) {
+	f := newLaunchFixture(t)
+	a := f.a
+	jt := f.template(t, "site.yml", nil)
+	must(t, a.patch(fmt.Sprintf("projects/%d/", f.project), map[string]any{"scm_url": "file:///nonexistent-awxnext-repo", "scm_update_on_launch": true}), 200)
+	job := f.launch(t, a, jt, nil)
+	if job.Body["status"] != "failed" || !strings.HasPrefix(fmt.Sprint(job.Body["job_explanation"]), "Previous Task Failed") {
+		t.Fatalf("job: %v %v", job.Body["status"], job.Body["job_explanation"])
+	}
+	if job.Body["event_processing_finished"] != true {
+		t.Errorf("event_processing_finished of a job that never ran: %v", job.Body["event_processing_finished"])
+	}
+}
+
 func TestJobFactCacheAndProjectUpdateOnLaunch(t *testing.T) {
 	f := newJobFixture(t)
 	a := f.a

@@ -204,6 +204,13 @@ func TestWorkflowRun(t *testing.T) {
 	if done.Body["status"] != "successful" {
 		t.Fatalf("workflow: %v (%v)", done.Body["status"], done.Body["job_explanation"])
 	}
+	// As in AWX: the collection waits on event_processing_finished when present.
+	if v, ok := done.Body["event_processing_finished"]; ok {
+		t.Errorf("workflow job has event_processing_finished: %v", v)
+	}
+	if v := must(t, a.get(fmt.Sprintf("workflow_approvals/%d/", apID)), 200).Body["event_processing_finished"]; v != true {
+		t.Errorf("approval event_processing_finished: %v", v)
+	}
 	status := map[int64]string{}
 	dnr := map[int64]bool{}
 	var showJobs []int64
