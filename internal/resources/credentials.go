@@ -327,7 +327,7 @@ func registerCredentials() {
 			if !given && old != nil {
 				return nil
 			}
-			schema, _, _, err := credentialType(c, typeID)
+			schema, _, namespace, err := credentialType(c, typeID)
 			if err != nil {
 				return err
 			}
@@ -351,6 +351,21 @@ func registerCredentials() {
 			}
 			if err := inputErrors(credtypes.ValidateInputs(schema, inputs)); err != nil {
 				return err
+			}
+			// As AWX checks its managed types: an encrypted key needs its
+			// passphrase, and a passphrase needs an encrypted key.
+			if namespace != "" && schema.Field("ssh_key_unlock") != nil {
+				key := str(inputs["ssh_key_data"])
+				if crypto.IsEncrypted(key) {
+					key, _ = c.App.Crypto.Decrypt(key)
+				}
+				unlock := str(inputs["ssh_key_unlock"])
+				switch encrypted := credtypes.KeyEncrypted(key); {
+				case encrypted && unlock == "":
+					return inputErrors(map[string][]string{"ssh_key_unlock": {"must be set when SSH key is encrypted."}})
+				case !encrypted && key != "" && unlock != "":
+					return inputErrors(map[string][]string{"ssh_key_unlock": {"should not be set when SSH key is not encrypted."}})
+				}
 			}
 			secrets := schema.SecretFields()
 			for k, v := range inputs {

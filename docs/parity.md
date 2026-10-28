@@ -122,7 +122,7 @@ The gaps fall in four groups:
 | Inventory updates: cancel, stdout, events, notifications, schedules | Yes | Done | UI has no schedules for sources; notifications are in the source's menu |
 | Bulk host create/delete | Yes | Missing | |
 | Host metrics | Yes | Partial | Collected per job and cleaned up; no API or UI |
-| Managed credential types | Yes | Partial | All but Insights and RHV; Kubernetes CA not injected |
+| Managed credential types | Yes | Partial | All but Insights and RHV; Kubernetes CA not injected. As in AWX, an encrypted SSH key (OpenSSH with a cipher, PKCS#8 `ENCRYPTED PRIVATE KEY`, PEM `Proc-Type: 4,ENCRYPTED`) needs its passphrase and a passphrase needs an encrypted key, checked against the stored key on update |
 | Custom credential types | Yes | Done | Injectors are Jinja2 (gonja), sandboxed like AWX and checked when saved; `2 ** n` gives a float and `None` prints empty |
 | Lookups: HashiCorp Vault KV and SSH, Azure Key Vault | Yes | Done | Vault TLS cert auth missing; Azure falls back to managed identity |
 | Lookups: CyberArk, Conjur, Thycotic, AWS Secrets Manager, Centrify | Yes | Later | |

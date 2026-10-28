@@ -296,6 +296,11 @@ func ValidateInputs(s *Schema, values map[string]any) map[string][]string {
 	for id, deps := range s.Dependencies {
 		if v, ok := values[id].(string); ok && v != "" {
 			for _, d := range deps {
+				// A boolean is set either way, as in AWX (the Network type's
+				// authorize_password depends on the authorize checkbox).
+				if _, isBool := values[d].(bool); isBool {
+					continue
+				}
 				if dv, ok := values[d].(string); !ok || dv == "" {
 					add(id, fmt.Sprintf("cannot be set unless %q is set", d))
 				}

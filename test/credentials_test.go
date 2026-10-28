@@ -22,7 +22,11 @@ func credType(t *testing.T, a *client, namespace string) int64 {
 	return int64(r.results()[0]["id"].(float64))
 }
 
-const testKey = "-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEAAAAA\n-----END OPENSSH PRIVATE KEY-----\n"
+// testKey has the header of an OpenSSH key without a passphrase (cipher "none").
+const testKey = "-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAAB\n-----END OPENSSH PRIVATE KEY-----\n"
+
+// testKeyEncrypted is a legacy PEM key encrypted with a passphrase.
+const testKeyEncrypted = "-----BEGIN RSA PRIVATE KEY-----\nProc-Type: 4,ENCRYPTED\nDEK-Info: AES-256-CBC,00112233445566778899AABBCCDDEEFF\n\nb3BhcXVl\n-----END RSA PRIVATE KEY-----\n"
 
 func TestManagedCredentialTypes(t *testing.T) {
 	a := adminClient(t)
@@ -159,6 +163,36 @@ func TestCredentialSecrets(t *testing.T) {
 	must(t, a.post("credentials/", map[string]any{"name": uniq("x"), "organization": org, "credential_type": machine, "inputs": map[string]any{"nope": "x"}}), 400)
 	must(t, a.post("credentials/", map[string]any{"name": uniq("x"), "organization": org, "credential_type": machine, "inputs": map[string]any{"ssh_key_data": "not a key"}}), 400)
 	must(t, a.post("credentials/", map[string]any{"name": uniq("x"), "organization": org, "credential_type": machine, "inputs": map[string]any{"ssh_key_unlock": "pw"}}), 400)
+	// As in AWX: an encrypted key needs its passphrase, and a passphrase an
+	// encrypted key, also when the key is kept with $encrypted$.
+	cr := func(in map[string]any) resp {
+		return a.post("credentials/", map[string]any{"name": uniq("k"), "organization": org, "credential_type": machine, "inputs": in})
+	}
+	r = must(t, cr(map[string]any{"ssh_key_data": testKeyEncrypted}), 400)
+	if !strings.Contains(r.Raw, "must be set when SSH key is encrypted.") {
+		t.Errorf("encrypted key without passphrase: %s", r.Raw)
+	}
+	r = must(t, cr(map[string]any{"ssh_key_data": testKey, "ssh_key_unlock": "pw"}), 400)
+	if !strings.Contains(r.Raw, "should not be set when SSH key is not encrypted.") {
+		t.Errorf("passphrase for a key without one: %s", r.Raw)
+	}
+	must(t, cr(map[string]any{"ssh_key_data": testKeyEncrypted, "ssh_key_unlock": "ASK"}), 201)
+	enc := must(t, cr(map[string]any{"ssh_key_data": testKeyEncrypted, "ssh_key_unlock": "pw"}), 201).id()
+	must(t, a.patch(fmt.Sprintf("credentials/%d/", enc), map[string]any{"inputs": map[string]any{"ssh_key_data": "$encrypted$"}}), 400)
+	must(t, a.patch(fmt.Sprintf("credentials/%d/", enc), map[string]any{"inputs": map[string]any{"ssh_key_data": "$encrypted$", "ssh_key_unlock": "$encrypted$"}}), 200)
+	must(t, a.patch(fmt.Sprintf("credentials/%d/", id), map[string]any{"inputs": map[string]any{"ssh_key_data": "$encrypted$", "ssh_key_unlock": "pw"}}), 400)
+	// A boolean dependency is set either way.
+	net := credType(t, a, "net")
+	must(t, a.post("credentials/", map[string]any{"name": uniq("n"), "organization": org, "credential_type": net,
+		"inputs": map[string]any{"username": "joe", "authorize": true, "authorize_password": "authorize-me"}}), 201)
+	must(t, a.post("credentials/", map[string]any{"name": uniq("n"), "organization": org, "credential_type": net,
+		"inputs": map[string]any{"username": "joe", "authorize_password": "authorize-me"}}), 400)
+	// Custom types are not checked, as in AWX.
+	custom := must(t, a.post("credential_types/", map[string]any{"name": uniq("ct"), "kind": "cloud", "inputs": map[string]any{"fields": []any{
+		map[string]any{"id": "ssh_key_data", "label": "Key", "type": "string", "secret": true, "multiline": true},
+		map[string]any{"id": "ssh_key_unlock", "label": "Passphrase", "type": "string", "secret": true},
+	}}}), 201).id()
+	must(t, a.post("credentials/", map[string]any{"name": uniq("k"), "organization": org, "credential_type": custom, "inputs": map[string]any{"ssh_key_data": testKeyEncrypted}}), 201)
 	// ASK is allowed for prompt-at-launch fields.
 	must(t, a.post("credentials/", map[string]any{"name": uniq("x"), "organization": org, "credential_type": machine, "inputs": map[string]any{"password": "ASK"}}), 201)
 	// Activity stream and history never expose ciphertext.
