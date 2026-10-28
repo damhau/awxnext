@@ -179,6 +179,7 @@ The gaps fall in four groups:
 | Receptor mesh, peers, hop nodes, topology view | Yes | By design | Dial-back agent instead; install bundle replaced by an agent token |
 | Instance group policies, `max_forks` | Yes | Partial | Stored, not applied |
 | Container groups with `pod_spec_override` | Yes | Done | Push-based shim, no log tailing |
+| Job isolation | Yes | Partial | AWX always runs jobs in containers. awxnext's `none` runtime runs them as processes of the server's user: the server's environment is hidden from them, other jobs' files are not (roadmap M6-13) |
 | Websockets | Yes | Partial | Three groups never published |
 | Event processing | Yes | Done | Batched COPY into daily partitions, archived after N days |
 | HA, task and dependency manager | Yes | Done | PostgreSQL only, no Redis |

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"syscall"
@@ -87,6 +88,21 @@ func main() {
 }
 
 func serve(ctx context.Context, cfg *config.Config) error {
+	if err := server.Harden(); err != nil {
+		slog.Warn("could not hide the server's environment from other processes of its user", "err", err)
+	}
+	switch cfg.ContainerRuntime {
+	case "none", "process", "":
+		slog.Warn("jobs run as processes of the server's user (AWXNEXT_CONTAINER_RUNTIME=none): a playbook can read the files of other running jobs and change project checkouts; use this runtime for one trusted team only")
+	}
+	if cfg.SecretKey == "change-me" {
+		slog.Warn("AWXNEXT_SECRET_KEY is the example value of the Compose file; set your own before storing credentials")
+	}
+	if u, err := url.Parse(cfg.DatabaseURL); err == nil {
+		if pw, _ := u.User.Password(); pw == "awxnext" {
+			slog.Warn("the database password is the example value of the Compose file; set AWXNEXT_DB_PASSWORD when creating the database")
+		}
+	}
 	stopTracing, err := tracing.Setup(ctx, api.ProductVersion, cfg.NodeName)
 	if err != nil {
 		return fmt.Errorf("tracing: %w", err)

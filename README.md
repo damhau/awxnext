@@ -13,9 +13,13 @@ importer and the web UI are in place; see [docs/PLAN.md](docs/PLAN.md) for what'
 
 ```sh
 cd deploy/compose
+export AWXNEXT_SECRET_KEY=$(openssl rand -hex 32) AWXNEXT_DB_PASSWORD=$(openssl rand -hex 16)
 AWXNEXT_ADMIN_PASSWORD=admin docker compose up -d --build
 docker compose exec awxnext seed-demo --jobs    # optional demo content
 ```
+
+Keep the secret key: it decrypts the stored credentials. The database password only
+applies when the database volume is first created.
 
 Open http://localhost:8052 and sign in as `admin`. The Compose install uses the
 `all-in-one` image, where jobs run inside the awxnext container with ansible-runner
@@ -55,6 +59,17 @@ on :8052. `uv run --no-project scripts/seed-demo.py --jobs` fills it with demo c
 Vault Transit: `AWXNEXT_KMS_VAULT_ADDR`, `_KEY`, `_MOUNT`, and `_TOKEN`, `_ROLE_ID`/`_SECRET_ID`
 or `_K8S_ROLE`. Azure Key Vault: `AWXNEXT_KMS_AZURE_VAULT_URL`, `_KEY`, `_TENANT_ID`, `_CLIENT_ID`,
 and `_CLIENT_SECRET`, workload identity, or `_MANAGED_IDENTITY=1`.
+
+### Job isolation and the `none` runtime
+
+With `AWXNEXT_CONTAINER_RUNTIME=none`, the default of the all-in-one image, jobs are not
+containers but processes of the server's own user. The server keeps its environment
+(secret key, database URL, key provider tokens) unreadable to them, but a playbook can
+still read the files of other jobs running at the same time, change project checkouts,
+and reach the database over the network. Use `none` for one trusted team, with your own
+secret key and database password. Otherwise run jobs in containers (`podman`, `docker`),
+on remote execution nodes or in container groups. The server logs a warning at start
+when it uses `none` or the Compose example secrets.
 
 ### Encryption keys
 

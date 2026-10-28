@@ -1,8 +1,13 @@
 # Small install / local testing: PostgreSQL + AWX Next (all-in-one image,
 # jobs run inside the awxnext container with ansible-runner).
 #
+#   AWXNEXT_SECRET_KEY=<random> AWXNEXT_DB_PASSWORD=<random> \
 #   AWXNEXT_ADMIN_PASSWORD=<password> docker compose up -d --build
 #   open http://localhost:8052 (user admin)
+#
+# Set your own secret key and database password on the first start: jobs run
+# inside the awxnext container and can reach the database. The database
+# password only applies when its volume is created (letters and digits).
 #
 # Demo content (organizations, templates, a workflow, some finished jobs):
 #   docker compose exec awxnext seed-demo --jobs
@@ -12,7 +17,7 @@ services:
     environment:
       POSTGRES_DB: awxnext
       POSTGRES_USER: awxnext
-      POSTGRES_PASSWORD: awxnext
+      POSTGRES_PASSWORD: ${AWXNEXT_DB_PASSWORD:-awxnext}
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -28,7 +33,7 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      AWXNEXT_DATABASE_URL: postgres://awxnext:awxnext@postgres:5432/awxnext?sslmode=disable
+      AWXNEXT_DATABASE_URL: postgres://awxnext:${AWXNEXT_DB_PASSWORD:-awxnext}@postgres:5432/awxnext?sslmode=disable
       # Change this! Losing it makes stored credentials unreadable (see 'awxnext keys export').
       AWXNEXT_SECRET_KEY: ${AWXNEXT_SECRET_KEY:-change-me}
       AWXNEXT_BASE_URL: ${AWXNEXT_BASE_URL:-http://localhost:8052}
