@@ -507,6 +507,24 @@ func TestLaunchRefusesUnpromptedFields(t *testing.T) {
 	}
 	// Empty values change nothing and pass.
 	must(t, a.post(fmt.Sprintf("job_templates/%d/launch/", jt), map[string]any{"limit": "", "extra_vars": map[string]any{}}), 201)
+	// So do the template's own values, which the Terraform provider sends
+	// again when it updates a job; they are still reported as ignored.
+	own := f.template(t, "site.yml", map[string]any{"extra_vars": "env: prod\n", "limit": "h1"})
+	ig := must(t, a.post("instance_groups/", map[string]any{"name": uniq("ig")}), 201).id()
+	must(t, a.post(fmt.Sprintf("job_templates/%d/instance_groups/", own), map[string]any{"id": ig}), 204)
+	same := map[string]any{"inventory": f.inv, "job_slice_count": 1, "limit": "h1", "forks": 0, "diff_mode": false,
+		"credentials": []any{}, "instance_groups": []any{ig}, "extra_vars": map[string]any{"env": "prod"}}
+	r = must(t, a.post(fmt.Sprintf("job_templates/%d/launch/", own), same), 201)
+	if ignoredFields := r.Body["ignored_fields"].(map[string]any); ignoredFields["inventory"] == nil || ignoredFields["job_slice_count"] == nil {
+		t.Errorf("ignored_fields: %v", ignoredFields)
+	}
+	other := must(t, a.post("instance_groups/", map[string]any{"name": uniq("ig")}), 201).id()
+	for field, v := range map[string]any{"inventory": f.inv + 1000, "job_slice_count": 2, "limit": "h2", "instance_groups": []any{other},
+		"extra_vars": map[string]any{"env": "dev"}} {
+		if r := a.post(fmt.Sprintf("job_templates/%d/launch/", own), map[string]any{field: v}); r.Status != 400 || !strings.Contains(r.Raw, field) {
+			t.Errorf("a different %s was not refused: %d %s", field, r.Status, r.Raw)
+		}
+	}
 
 	// Prompted fields are taken.
 	asks := f.template(t, "site.yml", map[string]any{"ask_limit_on_launch": true})

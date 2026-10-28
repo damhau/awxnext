@@ -205,13 +205,18 @@ func isAnsibleVar(name string) bool { return strings.HasPrefix(strings.ToLower(n
 // refuseUnprompted fails a launch that sends fields the template does not
 // prompt for. AWX ignores them and starts the job anyway, so a limit meant for
 // one host runs on the whole inventory; IGNORE_UNPROMPTED_LAUNCH_FIELDS brings
-// that behaviour back. Empty values change nothing and are let through.
-func refuseUnprompted(c *Ctx, ignored Obj) error {
+// that behaviour back. Empty values and the template's own values change
+// nothing and are let through (still listed in ignored_fields): the Terraform
+// provider sends a job's values again when it updates the job.
+func refuseUnprompted(c *Ctx, tpl Obj, ignored Obj) error {
 	if len(ignored) == 0 || c.App.Settings.Bool(c, "IGNORE_UNPROMPTED_LAUNCH_FIELDS") {
 		return nil
 	}
 	fe := api.FieldErrors{}
 	for field, v := range ignored {
+		if field != "extra_vars" && sameAsTemplate(c, tpl, field, v) {
+			continue
+		}
 		switch x := v.(type) {
 		case nil:
 			continue
@@ -228,9 +233,15 @@ func refuseUnprompted(c *Ctx, ignored Obj) error {
 				continue
 			}
 			if field == "extra_vars" {
+				own, _ := vars.Parse(str(tpl["extra_vars"]))
 				names := make([]string, 0, len(x))
-				for k := range x {
-					names = append(names, k)
+				for k, val := range x {
+					if prev, ok := own[k]; !ok || vars.MustJSON(prev) != vars.MustJSON(val) {
+						names = append(names, k)
+					}
+				}
+				if len(names) == 0 {
+					continue
 				}
 				sort.Strings(names)
 				fe.Add(field, fmt.Sprintf("Variables %s are not allowed on launch. Check the Prompt on launch setting on the template to include Extra Variables.", strings.Join(names, ", ")))
@@ -240,6 +251,58 @@ func refuseUnprompted(c *Ctx, ignored Obj) error {
 		fe.Add(field, "Field is not configured to prompt on launch.")
 	}
 	return fe.Err()
+}
+
+// sameAsTemplate reports whether an unprompted launch field only repeats the
+// template's own value.
+func sameAsTemplate(c *Ctx, tpl Obj, field string, v any) bool {
+	id, _ := api.ID(tpl["id"])
+	switch field {
+	case "credentials":
+		return sameIDs(v, templateCredentials(c, id))
+	case "labels":
+		return sameIDs(v, templateLabels(c, id))
+	case "instance_groups":
+		var have []int64
+		rows, err := c.DB().Query(c, "SELECT instance_group_id FROM instance_group_links WHERE content_type = $1 AND object_id = $2",
+			strings.ReplaceAll(str(tpl["type"]), "_", ""), id)
+		if err != nil {
+			return false
+		}
+		for rows.Next() {
+			var ig int64
+			rows.Scan(&ig)
+			have = append(have, ig)
+		}
+		rows.Close()
+		return sameIDs(v, have)
+	case "inventory", "execution_environment":
+		a, aok := api.ID(v)
+		b, bok := api.ID(tpl[field])
+		return aok && bok && a == b
+	}
+	return vars.MustJSON(v) == vars.MustJSON(tpl[field])
+}
+
+// sameIDs compares a launch list (ids or objects with an id) with ids, as sets.
+func sameIDs(v any, have []int64) bool {
+	list, ok := v.([]any)
+	if !ok || len(list) != len(have) {
+		return false
+	}
+	set := map[int64]bool{}
+	for _, h := range have {
+		set[h] = true
+	}
+	for _, x := range list {
+		if m, ok := x.(map[string]any); ok {
+			x = m["id"]
+		}
+		if id, ok := api.ID(x); !ok || !set[id] {
+			return false
+		}
+	}
+	return true
 }
 
 // normalizeObj turns the json.Number values of a launch body into int64 for
@@ -493,7 +556,7 @@ func LaunchJobTemplate(c *Ctx, jt Obj, body Obj, launchType string, ov *LaunchOv
 		}
 	}
 
-	if err := refuseUnprompted(c, ignored); err != nil {
+	if err := refuseUnprompted(c, jt, ignored); err != nil {
 		return 0, nil, err
 	}
 	if err := checkPromptedLabelsAndGroups(c, accepted); err != nil {

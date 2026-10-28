@@ -98,7 +98,7 @@ func LaunchWorkflowJobTemplate(c *Ctx, wf Obj, body Obj, launchType string, ov *
 			ignored["extra_vars"] = ev
 		}
 	}
-	if err := refuseUnprompted(c, ignored); err != nil {
+	if err := refuseUnprompted(c, wf, ignored); err != nil {
 		return 0, nil, err
 	}
 	if err := checkPromptedLabelsAndGroups(c, accepted); err != nil {

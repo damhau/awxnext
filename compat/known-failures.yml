@@ -17,8 +17,6 @@ collection:
   "schedule": "#30 labels on schedules"
   "workflow_job_template": "#28 email notifications"
 terraform:
-  "TestAccAAPJob_UpdateWithNewInventoryIdPromptOnLaunch": "#93 unprompted launch fields equal to the template's"
-  "TestAccAAPJob_UpdateWithTrigger": "#93 unprompted launch fields equal to the template's"
   "TestAccGroupResource": "not an awxnext gap: Terraform wraps the expected message across lines; awxnext returns AWX's text"
   "TestAccHostResource": "not an awxnext gap: Terraform wraps the expected message across lines; awxnext returns AWX's text"
   "TestAccHostResourceDeleteWithRetry": "by design (M1-16, #78): extra_vars sent to a template that does not prompt for them; passes with IGNORE_UNPROMPTED_LAUNCH_FIELDS"
