@@ -158,13 +158,7 @@ func createSuperuser(ctx context.Context, cfg *config.Config, args []string) err
 	if err != nil {
 		return err
 	}
-	hash, err := auth.HashPassword(*password)
-	if err != nil {
-		return err
-	}
-	_, err = app.DB.Exec(ctx, `INSERT INTO users (username, email, password, is_superuser) VALUES ($1, $2, $3, true)
-		ON CONFLICT (username) DO UPDATE SET password = EXCLUDED.password, is_superuser = true, is_active = true`,
-		*username, *email, hash)
+	err = auth.EnsureSuperuser(ctx, app, *username, *email, *password)
 	if err == nil {
 		fmt.Printf("superuser %q ready\n", *username)
 	}

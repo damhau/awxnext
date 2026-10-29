@@ -103,6 +103,16 @@ func Install(app *api.App) *Auth {
 	if d := settings.Lookup("OIDC_MAPPING"); d != nil {
 		d.Validate = func(v any) error { _, err := ParseRules(v); return err }
 	}
+	for _, k := range []string{"LOCAL_PASSWORD_MIN_LENGTH", "LOCAL_PASSWORD_MIN_DIGITS", "LOCAL_PASSWORD_MIN_UPPER", "LOCAL_PASSWORD_MIN_SPECIAL"} {
+		if d := settings.Lookup(k); d != nil {
+			d.Validate = func(v any) error {
+				if n, err := strconv.ParseFloat(fmt.Sprint(v), 64); err == nil && n < 0 {
+					return errors.New("Ensure this value is greater than or equal to 0.")
+				}
+				return nil
+			}
+		}
+	}
 	if d := settings.Lookup("SOCIAL_AUTH_ORGANIZATION_MAP"); d != nil {
 		d.Validate = func(v any) error { _, err := ParseOrgMap(v); return err }
 	}

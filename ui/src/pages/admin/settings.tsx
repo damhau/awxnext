@@ -90,7 +90,7 @@ function useCategory(cat: string) {
 /** Groups related settings under readable headings. */
 function sectionOf(cat: string, key: string): string {
   if (cat === 'oidc') return key.startsWith('SOCIAL_AUTH_') ? 'Provider' : key === 'OIDC_MAPPING' ? 'Group mapping' : 'Claims and tokens'
-  if (cat === 'authentication') return key.endsWith('_MAP') ? 'Organization and team maps' : 'Sessions and accounts'
+  if (cat === 'authentication') return key.endsWith('_MAP') ? 'Organization and team maps' : key.startsWith('LOCAL_PASSWORD_') ? 'Local passwords' : 'Sessions and accounts'
   if (cat === 'ldap') return ldapServer(key)
   if (cat === 'saml') return /_MAP$|_ATTR$|FLAGS/.test(key) ? 'Organizations, teams and flags' : /IDPS|SECURITY|EXTRA_DATA/.test(key) ? 'Identity providers' : 'Service provider'
   if (cat === 'jobs') {
@@ -104,7 +104,7 @@ function sectionOf(cat: string, key: string): string {
 
 const sectionOrder: Record<string, string[]> = {
   oidc: ['Provider', 'Claims and tokens', 'Group mapping'],
-  authentication: ['Sessions and accounts', 'Organization and team maps'],
+  authentication: ['Sessions and accounts', 'Local passwords', 'Organization and team maps'],
   ldap: ldapServerOrder,
   saml: ['Service provider', 'Identity providers', 'Organizations, teams and flags'],
   jobs: ['General', 'Timeouts', 'Content', 'Execution'],

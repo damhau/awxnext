@@ -86,6 +86,7 @@ The gaps fall in four groups:
 
 | Feature | AWX 24.6 | awxnext | Notes |
 |---|---|---|---|
+| Password rules (`LOCAL_PASSWORD_MIN_LENGTH`, `_MIN_DIGITS`, `_MIN_UPPER`, `_MIN_SPECIAL`) | Yes | Done | Roadmap M5-06. Checked as AWX checks them, in its order and words, when a user's password is set through the API (create and update; `$encrypted$` keeps the password) and by `createsuperuser` (which AWX's Django command does not check); special means neither a letter nor a digit. Readable by every user, so the user form shows the rules and checks the password as it is typed. The container's entrypoint starts the server even when `AWXNEXT_ADMIN_PASSWORD` breaks the rules, saying so |
 | Local users, superuser and system auditor | Yes | Done | `createsuperuser` CLI also resets a password. As in AWX, only superusers create users at `/users/`; organization admins create them through `organizations/N/users/` (the UI's new-user form asks for the organization), where they join it |
 | Password policy settings | Yes | Missing | |
 | Organizations: max_hosts, default EE, Galaxy credentials, instance groups | Yes | Done | max_hosts also stops inventory source imports. AWX's public `Ansible Galaxy` credential exists from the start, read-only |

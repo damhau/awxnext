@@ -12,6 +12,7 @@ import { Dialog, useConfirm, useToast } from '../../components/overlay'
 import { DataTable } from '../../components/table'
 import { Ago, Avatar, Empty, ErrorNote, KV, Loading, PageHead, Panel, Tab } from '../../components/ui'
 import { absolute, userName } from '../../lib/format'
+import { checkPassword, describeRules, passwordRules } from '../../lib/passwordPolicy'
 import { ListPage, OneTimeSecret, useDelete } from './common'
 
 type User = Base & Me & { last_login: string | null; is_active?: boolean; ldap_dn?: string; external_account?: string | null; auth?: unknown[] }
@@ -109,6 +110,11 @@ function UserForm({ user }: { user?: User }) {
   const [error, setError] = useState<unknown>(null)
   const [busy, setBusy] = useState(false)
   const mismatch = f.values.password !== f.values.confirm
+  // The password rules are readable by every user (LOCAL_PASSWORD_MIN_*).
+  const authSettings = useQuery({ queryKey: ['settings', 'authentication'], queryFn: () => api.get<Record<string, unknown>>('settings/authentication/'), staleTime: 60_000 })
+  const rules = passwordRules(authSettings.data)
+  const weak = f.values.password ? checkPassword(f.values.password, rules) : null
+  const rulesText = describeRules(rules)
   const save = async () => {
     setBusy(true)
     setError(null)
@@ -161,8 +167,8 @@ function UserForm({ user }: { user?: User }) {
               type="password"
               value={f.values.password}
               onChange={(v) => f.set('password', v)}
-              error={f.errors.password}
-              help={user ? 'Leave empty to keep the current password.' : undefined}
+              error={f.errors.password ?? weak ?? undefined}
+              help={[user ? 'Leave empty to keep the current password.' : '', rulesText].filter(Boolean).join(' ') || undefined}
             />
             <TextInput label="Confirm password" type="password" optional={!!user} value={f.values.confirm} onChange={(v) => f.set('confirm', v)} error={mismatch && f.values.confirm ? 'The passwords differ.' : undefined} />
           </>
@@ -195,7 +201,7 @@ function UserForm({ user }: { user?: User }) {
       {external && <div className="notice">This account signs in through single sign-on; its username and password are managed by the identity provider.</div>}
       <FormError error={error} />
       <div className="form-actions">
-        <button className="btn primary" disabled={busy || !f.values.username.trim() || mismatch || (!user && !f.values.password && !external) || (needsOrg && !f.values.organization)}>
+        <button className="btn primary" disabled={busy || !f.values.username.trim() || mismatch || !!weak || (!user && !f.values.password && !external) || (needsOrg && !f.values.organization)}>
           {busy ? 'Saving…' : user ? 'Save changes' : 'Create user'}
         </button>
         <button type="button" className="btn ghost" onClick={() => nav(user ? `/users/${user.id}` : '/users')}>

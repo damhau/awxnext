@@ -61,8 +61,9 @@ func registerUsers() {
 			{Name: "is_superuser", Type: api.TBool, Default: false, Label: "Superuser status", Help: "Designates that this user has all permissions without explicitly assigning them."},
 			{Name: "is_system_auditor", Type: api.TBool, Default: false},
 			{Name: "password", Type: api.TString, WriteOnly: true, Default: "", Help: "Field used to change the password.", Validate: func(c *Ctx, v any, data Obj) error {
-				if s := str(v); s != "" && len(s) < 1 {
-					return fmt.Errorf("Password too short.")
+				// AWX's LOCAL_PASSWORD_MIN_* rules; "$encrypted$" keeps the password.
+				if s := str(v); s != "" && s != crypto.Placeholder {
+					return auth.PasswordPolicy(func(k string) int { return c.App.Settings.Int(c, k) }, s)
 				}
 				return nil
 			}},
