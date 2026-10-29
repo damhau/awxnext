@@ -8,6 +8,8 @@ import { useOrg, usePreselectOrg } from '../../app/context'
 import { Check, FormError, Lookup, MultiLookup, SelectField, TextArea, TextInput, VarsEditor, varsError, varsText } from '../../components/form'
 import { PageHead, Panel } from '../../components/ui'
 import { buildTree, flatten, useFolders } from '../../lib/folders'
+import { cleanOutputs, type OutputDecl } from '../../lib/outputs'
+import { OutputsEditor } from './OutputsEditor'
 import { resOf, type Kind } from './TemplateDetail'
 
 /** A field with an "Ask at launch" toggle beside its label. */
@@ -77,6 +79,7 @@ export function TemplateForm({ kind, tpl }: { kind: Kind; tpl?: Template }) {
     host_config_key: tpl?.host_config_key ?? '',
     webhook_service: tpl?.webhook_service ?? '',
     webhook_credential: sf.webhook_credential ?? null,
+    outputs: ((tpl?.outputs as OutputDecl[] | undefined) ?? []).map((o) => ({ ...o })),
     ask: Object.fromEntries(Object.keys(tpl ?? {}).filter((k) => k.startsWith('ask_') && k.endsWith('_on_launch')).map((k) => [k, !!tpl![k]])) as Record<string, boolean>,
     comment: '',
   }))
@@ -137,6 +140,7 @@ export function TemplateForm({ kind, tpl }: { kind: Kind; tpl?: Template }) {
         use_fact_cache: v.use_fact_cache,
         force_handlers: v.force_handlers,
         host_config_key: v.host_config_key,
+        outputs: cleanOutputs(v.outputs),
       })
     } else {
       body.organization = v.organization?.id ?? null
@@ -309,6 +313,14 @@ export function TemplateForm({ kind, tpl }: { kind: Kind; tpl?: Template }) {
           )}
         </div>
       </Panel>
+
+      {kind === 'job' && (
+        <Panel title="Outputs">
+          <div className="form-grid">
+            <OutputsEditor value={v.outputs} onChange={(x) => set('outputs', x)} error={errors.outputs} />
+          </div>
+        </Panel>
+      )}
 
       <Panel title="Organize and trigger">
         <div className="form-grid">

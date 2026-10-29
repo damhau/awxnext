@@ -8,6 +8,7 @@ import (
 
 	"github.com/damhau/awxnext/internal/api"
 	"github.com/damhau/awxnext/internal/crypto"
+	"github.com/damhau/awxnext/internal/outputs"
 	"github.com/damhau/awxnext/internal/rbac"
 )
 
@@ -178,6 +179,12 @@ func registerJobTemplates() {
 			{Name: "webhook_credential", Type: api.TFK, Ref: "credentials", Nullable: true},
 			{Name: "prevent_instance_group_fallback", Type: api.TBool, Default: false},
 			{Name: "survey_spec", Type: api.TJSON, ReadOnly: true, Hidden: true, NoFilter: true},
+			{Name: "outputs", Type: api.TJSON, Default: []any{}, NoFilter: true,
+				Help: "Variables the playbook publishes with set_stats, each with a name, a type (string, integer, float, boolean, list or object) and whether it is required. A job whose outputs are missing or of the wrong type fails.",
+				Validate: func(c *Ctx, v any, data Obj) error {
+					_, err := outputs.Parse(v)
+					return err
+				}},
 			folderField(),
 		}, askFieldDefs()...), ujtFields()...),
 		Relations: map[string]api.Relation{
@@ -268,6 +275,10 @@ func registerJobTemplates() {
 			}
 			if old == nil {
 				data["status"] = "never updated"
+			}
+			if v, ok := data["outputs"]; ok {
+				d, _ := outputs.Parse(v) // checked by the field
+				data["outputs"] = outputs.Encode(d)
 			}
 			return nil
 		},

@@ -16,6 +16,7 @@ import { SchedulesTab } from '../automation/SchedulesTab'
 import { WorkflowVisualizer } from '../automation/workflow'
 import { JobsTable } from '../jobs/JobsTable'
 import { ancestors, buildTree, useFolders } from '../../lib/folders'
+import type { OutputDecl } from '../../lib/outputs'
 import { History } from './History'
 import { SurveyEditor } from './SurveyEditor'
 import { TemplateForm } from './TemplateForm'
@@ -207,6 +208,22 @@ function Details({ kind, tpl }: { kind: Kind; tpl: Template }) {
                   ['Slices', tpl.job_slice_count > 1 ? tpl.job_slice_count : null],
                   ['Tags', <Maybe v={tpl.job_tags} mono />],
                   ['Skip tags', tpl.skip_tags ? <span className="mono">{tpl.skip_tags}</span> : null],
+                  [
+                    'Outputs',
+                    (tpl.outputs as OutputDecl[] | undefined)?.length ? (
+                      <span className="row wrap" style={{ gap: 4 }}>
+                        {(tpl.outputs as OutputDecl[]).map((o) => (
+                          <span key={o.name} className="chip" title={o.required ? 'required' : 'optional'}>
+                            {o.name}
+                            <span className="faint">
+                              {o.type}
+                              {o.required ? '' : '?'}
+                            </span>
+                          </span>
+                        ))}
+                      </span>
+                    ) : null,
+                  ],
                   [
                     'Labels',
                     sf.labels?.results.length ? (

@@ -327,6 +327,16 @@ func registerWorkflows() {
 			for k, v := range data {
 				merged[k] = v
 			}
+			exprs := map[string]string{}
+			for _, f := range []string{"when", "loop"} {
+				if v, ok := data[f]; ok {
+					exprs[f] = str(v)
+				}
+			}
+			wfID, _ := api.ID(merged["workflow_job_template"])
+			if err := checkOutputRefs(c, wfID, exprs); err != nil {
+				return err
+			}
 			ujt, ok := api.ID(merged["unified_job_template"])
 			if !ok {
 				for _, f := range schedulePrompts {

@@ -75,7 +75,7 @@ The gaps fall in four groups:
 **P3: completeness**
 
 15. Relaunch keeps launch-time labels and instance groups; workflow labels passed to nodes; labels and instance group prompts on schedules and nodes.
-16. Typed workflow node outputs (the remaining phase 6 item).
+16. ~~Typed workflow node outputs~~ (done, roadmap M3-04).
 17. ~~Named URLs for credentials and other multi-hop formats, `related.named_url`~~ (done, roadmap M2-10).
 18. Websocket groups `jobs-summary`, `schedules-changed` and `control-limit_reached_<user>` (subscribable, never published).
 19. UI: `start_at_task`, `prevent_instance_group_fallback` and instance groups on templates and inventories, webhook key display, credential types page, inventory source schedules tab, execution environment and passwords in the ad hoc dialog, node credentials and labels in the workflow editor, EE contents view (promised in PLAN.md).
@@ -150,7 +150,7 @@ The gaps fall in four groups:
 | Job slicing | Yes | Done | |
 | Job events, stdout formats, host summaries, artifacts | Yes | Done | `job_events/N/children/` and `playbook_counts` (also on job lists). `event_processing_finished` is true once a job has ended, including a job that never ran (a failed dependency, canceled while pending), and workflow jobs don't have it, as in AWX: clients wait on it |
 | Ad hoc commands | Yes | Done | UI dialog lacks EE and passwords |
-| Workflows: edges, convergence, nested, approvals, artifacts, prompts | Yes | Done | Plus `when` conditions and loops |
+| Workflows: edges, convergence, nested, approvals, artifacts, prompts | Yes | Done | Plus `when` conditions, loops and typed outputs (job templates declare the `set_stats` outputs their jobs must publish; see [workflows.md](workflows.md#typed-outputs)) |
 | Management-job workflow nodes | Yes | Done | Fixed during the audit |
 | Node instance groups prompt; workflow labels passed to nodes | Yes | Missing | |
 | Schedules: rrule with exclusions, timezones, saved prompts, preview | Yes | Done | No labels/IG prompts |
@@ -200,7 +200,7 @@ The gaps fall in four groups:
 - GitOps sources applying YAML declarations atomically, with dry-run plans, pruning and locked managed objects.
 - Importer reading an AWX database and re-encrypting its credentials.
 - Envelope encryption of secrets with local, Vault Transit or Azure Key Vault master keys, rotation and escrow.
-- Workflow `when` conditions and loops; survey choices from inventories, git refs and the API, conditional questions, answer formats.
+- Workflow `when` conditions, loops and typed node outputs; survey choices from inventories, git refs and the API, conditional questions, answer formats.
 - Operator catalog (`/run`), launch page with "what will happen" and each variable's source, host × task grid, "why it failed" summary, ⌘K palette, query-language filters.
 - Native git sync with per-commit checkouts and content-addressed requirements cache.
 - Push-based execution for remote nodes and container groups; job event archive.

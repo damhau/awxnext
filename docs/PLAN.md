@@ -87,7 +87,7 @@ Performance targets vs AWX: job event ingestion via batched `COPY` into a time-p
 3. **Ops** — schedules (rrule), ad-hoc commands, webhook notifications, activity stream, system jobs (cleanup).
 4. **Workflows** — workflow templates, visual editor, approval nodes, convergence, git webhooks (GitHub/GitLab), provisioning callbacks, job slicing.
 5. **Enterprise** — instance groups / capacity, remote agent, metrics (`/metrics`, `/api/v2/metrics`), OpenTelemetry, importer from existing AWX, GitOps reconciler.
-6. **Advanced UX** — workflow loops/outputs/conditions, dynamic surveys, operator self-service catalog. *Done:* node conditions and loops ([workflows.md](workflows.md)), survey choices from inventories, git refs and the API, conditional questions and answer formats ([surveys.md](surveys.md)), the operator catalog at `/run`, copy on every copyable object. *Left:* typed node outputs.
+6. **Advanced UX** — workflow loops/outputs/conditions, dynamic surveys, operator self-service catalog. *Done:* node conditions and loops ([workflows.md](workflows.md)), survey choices from inventories, git refs and the API, conditional questions and answer formats ([surveys.md](surveys.md)), the operator catalog at `/run`, copy on every copyable object, typed node outputs ([workflows.md](workflows.md#typed-outputs)).
 7. **Hardening** — benchmarks vs AWX, Helm chart, docs, e2e tests with `awx.awx` collection.
 
 ## Repo layout

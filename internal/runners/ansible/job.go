@@ -14,6 +14,7 @@ import (
 	"github.com/damhau/awxnext/internal/api"
 	"github.com/damhau/awxnext/internal/crypto"
 	"github.com/damhau/awxnext/internal/jobs"
+	"github.com/damhau/awxnext/internal/outputs"
 	"github.com/damhau/awxnext/internal/rbac"
 	"github.com/damhau/awxnext/internal/resources"
 	"github.com/damhau/awxnext/internal/runnercmd"
@@ -254,6 +255,13 @@ func runJob(ctx context.Context, rc *jobs.RunContext) jobs.Result {
 	update["job_cwd"] = run.Path("project")
 	update["job_env"] = env
 
+	// The outputs the template declares, as they are when the job starts.
+	var declared []outputs.Decl
+	var raw []byte
+	if app.DB.QueryRow(ctx, "SELECT outputs FROM unified_job_templates WHERE id = $1 AND type = 'job_template'", row.Int("unified_job_template_id")).Scan(&raw) == nil {
+		declared = outputs.Load(raw)
+	}
+
 	oc, err := run.Execute(ctx, app, rc.Out)
 	if oc != nil && oc.Stats != nil {
 		if serr := recordHostSummaries(ctx, app, row, oc.Stats); serr != nil {
@@ -281,6 +289,16 @@ func runJob(ctx context.Context, rc *jobs.RunContext) jobs.Result {
 		res.Status = "failed"
 	default:
 		res.Status = "error"
+	}
+	if res.Status == "successful" && len(declared) > 0 {
+		art, _ := update["artifacts"].(map[string]any)
+		typed, err := outputs.Check(declared, art)
+		if err != nil {
+			rc.Out.Emit(jobs.Event{Event: "system_warning", Stdout: err.Error()})
+			res.Status, res.Explanation = "failed", err.Error()
+		} else {
+			update["artifacts"] = typed
+		}
 	}
 	return res
 }

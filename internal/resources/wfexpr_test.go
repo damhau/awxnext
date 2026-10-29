@@ -1,8 +1,12 @@
 package resources
 
 import (
+	"fmt"
 	"reflect"
 	"testing"
+
+	"github.com/expr-lang/expr/ast"
+	"github.com/expr-lang/expr/parser"
 )
 
 func TestWorkflowExpressions(t *testing.T) {
@@ -40,5 +44,26 @@ func TestWorkflowExpressions(t *testing.T) {
 	}
 	if checkExpr("deploy_env ==") == nil {
 		t.Error("syntax error not reported")
+	}
+}
+
+func TestArtifactRefs(t *testing.T) {
+	for src, want := range map[string]string{
+		"nodes.build.artifacts.tag == 'v1'":                       "[{build tag}]",
+		"nodes['smoke-test'].artifacts['ok'] and replicas > 2":    "[{smoke-test ok}]",
+		"(nodes.build?.artifacts?.tag ?? '') != ''":               "[{build tag}]",
+		"nodes.build.artifacts.cfg.region == nodes.a.artifacts.r": "[{build cfg} {a r}]",
+		"nodes.build.status == 'successful' and artifacts.tag":    "[]",
+		"len(nodes.build.items)":                                  "[]",
+	} {
+		tree, err := parser.Parse(src)
+		if err != nil {
+			t.Fatal(err)
+		}
+		refs := refCollector{}
+		ast.Walk(&tree.Node, &refs)
+		if got := fmt.Sprint([]artifactRef(refs)); got != want {
+			t.Errorf("%s: %s, want %s", src, got, want)
+		}
 	}
 }

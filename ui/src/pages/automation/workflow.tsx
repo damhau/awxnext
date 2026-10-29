@@ -12,6 +12,7 @@ import { Dialog, useConfirm, useToast } from '../../components/overlay'
 import { Empty, Loading, StatusDot } from '../../components/ui'
 import { duration, statusKind, statusLabel, templatePath } from '../../lib/format'
 import { useHotkeys } from '../../lib/hotkeys'
+import { addToCondition, outputSuggestions, type OutputDecl, type OutputSuggestion } from '../../lib/outputs'
 import './automation.css'
 import { edgePath, layout, type Box, type EdgeKind, type GraphNode, type Layout } from './layout'
 import { itemLabel, loopProgress, type Iteration, type LoopProgress } from './loops'
@@ -72,6 +73,25 @@ function nodeName(n: WfNode): string {
 
 function nodeType(n: WfNode): string {
   return n.summary_fields?.unified_job_template?.type ?? ''
+}
+
+/** Outputs of earlier steps, as chips that put their reference in a condition or a loop. */
+function OutputChips({ items, onPick }: { items: OutputSuggestion[]; onPick: (ref: string) => void }) {
+  if (!items.length) return null
+  return (
+    <div className="row wrap" style={{ gap: 4, marginTop: -6 }}>
+      <span className="small muted">Outputs of earlier steps:</span>
+      {items.map((s) => (
+        <button key={s.ref} type="button" className="chip" style={{ cursor: 'pointer' }} title={`Insert ${s.ref}`} onClick={() => onPick(s.ref)}>
+          {s.step}.{s.output.name}
+          <span className="faint">
+            {s.output.type}
+            {s.output.required ? '' : '?'}
+          </span>
+        </button>
+      ))}
+    </div>
+  )
 }
 
 /** Identifiers the API generated (UUIDs) carry no meaning worth showing on the graph. */
@@ -557,6 +577,16 @@ function NodePanel({
   const outgoing = KINDS.flatMap((k) => (node[`${k}_nodes`] as number[]).map((to) => ({ kind: k, to })))
   const incoming = nodes.flatMap((n) => KINDS.filter((k) => (n[`${k}_nodes`] as number[]).includes(node.id)).map((k) => ({ kind: k, from: n })))
   const linkable = nodes.filter((n) => n.id !== node.id && !outgoing.some((o) => o.to === n.id))
+  // Outputs declared by the templates of earlier steps, offered in the condition and the loop.
+  const jtIds = [...new Set(nodes.filter((n) => nodeType(n) === 'job_template' && n.unified_job_template).map((n) => n.unified_job_template!))].sort((a, b) => a - b)
+  const declared = useQuery({
+    queryKey: ['job_templates/', 'outputs', jtIds.join(',')],
+    enabled: jtIds.length > 0,
+    queryFn: () => getAll<{ id: number; outputs?: OutputDecl[] }>('job_templates/', { id__in: jtIds.join(',') }),
+  })
+  const outputsOf = (t: number) => declared.data?.find((x) => x.id === t)?.outputs
+  const whenOutputs = outputSuggestions(node.id, nodes, outputsOf)
+  const loopOutputs = outputSuggestions(node.id, nodes, outputsOf, true)
 
   const save = async () => {
     setBusy(true)
@@ -680,10 +710,12 @@ function NodePanel({
             </>
           }
         />
+        {!ro && <OutputChips items={whenOutputs} onPick={(ref) => setWhen((w) => addToCondition(w, ref))} />}
         {!isApproval && <Check label="Repeat for each item of a list" checked={loopOn} onChange={(v) => !ro && setLoopOn(v)} help="Runs the template once per item. The step fails if any item fails." />}
         {!isApproval && loopOn && (
           <div className="stack" style={{ gap: 12, paddingLeft: 24 }}>
             <TextInput label="Items" value={loop} onChange={setLoop} mono disabled={ro} placeholder="regions   or   ['eu', 'us']" error={errors.loop} help="A variable or expression giving a list." />
+            {!ro && <OutputChips items={loopOutputs} onPick={setLoop} />}
             <div className="row" style={{ gap: 12, alignItems: 'flex-start' }}>
               <TextInput label="Item variable" value={loopVar} onChange={setLoopVar} mono optional disabled={ro} placeholder="item" error={errors.loop_var} help="loop_index holds its position." />
               <TextInput label="At most at once" type="number" value={loopConcurrency} onChange={setLoopConcurrency} optional disabled={ro} placeholder="all" error={errors.loop_concurrency} help="1 runs the items one by one." />
