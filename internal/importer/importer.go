@@ -303,16 +303,21 @@ func (i *imp) users() error {
 			ldapDNs[id(r["user_id"])] = str(r["ldap_dn"])
 		}
 	}
-	// SAML users keep logging in through SAML: python-social-auth's uid is
-	// "<idp>:<permanent id>".
-	samlUIDs := map[int64]string{}
+	// Users of python-social-auth's SAML and GitHub backends keep logging
+	// in with them: the provider and uid (for SAML "<idp>:<permanent id>").
+	type social struct{ provider, uid string }
+	socials := map[int64]social{}
 	if i.has("social_auth_usersocialauth") {
-		sr, err := i.query(`SELECT user_id, uid FROM social_auth_usersocialauth WHERE provider = 'saml' ORDER BY id`)
+		sr, err := i.query(`SELECT user_id, provider, uid FROM social_auth_usersocialauth ORDER BY id`)
 		if err != nil {
 			return err
 		}
 		for _, r := range sr {
-			samlUIDs[id(r["user_id"])] = str(r["uid"])
+			if p := str(r["provider"]); importedProviders[p] {
+				if _, seen := socials[id(r["user_id"])]; !seen {
+					socials[id(r["user_id"])] = social{p, str(r["uid"])}
+				}
+			}
 		}
 	}
 	for _, r := range rows {
@@ -328,8 +333,8 @@ func (i *imp) users() error {
 			"is_active": boolv(r["is_active"]), "is_system_auditor": auditors[old], "last_login": r["last_login"], "created": r["date_joined"], "modified": r["date_joined"]}
 		if dn := ldapDNs[old]; dn != "" {
 			v["external_source"], v["external_id"], v["password"] = "ldap", dn, ""
-		} else if uid := samlUIDs[old]; uid != "" {
-			v["external_source"], v["external_id"], v["password"] = "saml", uid, ""
+		} else if s, ok := socials[old]; ok {
+			v["external_source"], v["external_id"], v["password"] = s.provider, s.uid, ""
 		}
 		if _, err := i.insert("users", "users", old, v); err != nil {
 			return err
@@ -1420,3 +1425,8 @@ func (i *imp) settings() error {
 	}
 	return nil
 }
+
+// importedProviders are the python-social-auth backends whose users keep
+// logging in with them.
+var importedProviders = map[string]bool{"saml": true, "github": true, "github-org": true, "github-team": true, "github-enterprise": true,
+	"github-enterprise-org": true, "github-enterprise-team": true}

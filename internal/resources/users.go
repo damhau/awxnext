@@ -169,7 +169,8 @@ func registerUsers() {
 			o["password"] = "$encrypted$"
 			o["external_account"] = nil
 			o["auth"] = []any{}
-			if src := str(o["external_source"]); src != "ldap" && src != "saml" {
+			uid := str(o["ldap_dn"]) // external_id
+			if str(o["external_source"]) != "ldap" {
 				o["ldap_dn"] = ""
 			}
 			switch src := str(o["external_source"]); src {
@@ -179,11 +180,14 @@ func registerUsers() {
 			case "saml":
 				// AWX's SAML users are enterprise users, with their social auth.
 				o["external_account"] = "enterprise"
-				o["auth"] = []any{Obj{"provider": "saml", "uid": str(o["ldap_dn"])}}
-				o["ldap_dn"] = ""
-			default:
+				o["auth"] = []any{Obj{"provider": "saml", "uid": uid}}
+			case "oidc":
 				o["external_account"] = "social"
 				o["auth"] = []any{Obj{"provider": src}}
+			default:
+				// python-social-auth's backends: GitHub's, Google, Azure AD.
+				o["external_account"] = "social"
+				o["auth"] = []any{Obj{"provider": src, "uid": uid}}
 			}
 		},
 		Capabilities: func(c *Ctx, obj Obj, p map[string]bool) map[string]bool {

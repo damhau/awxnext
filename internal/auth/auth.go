@@ -39,10 +39,11 @@ func (a *Auth) sessionAge(ctx context.Context) time.Duration {
 }
 
 type Auth struct {
-	app  *api.App
-	oidc *OIDC
-	ldap *LDAP
-	saml *SAML
+	app    *api.App
+	oidc   *OIDC
+	ldap   *LDAP
+	saml   *SAML
+	social *Social
 }
 
 // Install wires authentication into the API.
@@ -51,6 +52,24 @@ func Install(app *api.App) *Auth {
 	a.oidc.auth = a
 	a.ldap = &LDAP{auth: a}
 	a.saml = &SAML{auth: a}
+	a.social = newSocial(a)
+	for _, v := range settings.GitHubVariants {
+		backend := v.Backend
+		if d := settings.Lookup(v.Prefix + "CALLBACK_URL"); d != nil {
+			d.Computed = func(get func(string) any) any { return samlBase(app, get) + "/sso/complete/" + backend + "/" }
+		}
+		for _, k := range []string{"URL", "API_URL"} {
+			if d := settings.Lookup(v.Prefix + k); d != nil {
+				d.Validate = validateOptionalURL
+			}
+		}
+		if d := settings.Lookup(v.Prefix + "ORGANIZATION_MAP"); d != nil {
+			d.Validate = func(v any) error { _, err := ParseOrgMap(v); return err }
+		}
+		if d := settings.Lookup(v.Prefix + "TEAM_MAP"); d != nil {
+			d.Validate = func(v any) error { _, err := ParseTeamMap(v); return err }
+		}
+	}
 	for key, check := range samlValidators() {
 		if d := settings.Lookup(key); d != nil {
 			d.Validate = check
@@ -103,6 +122,7 @@ func Install(app *api.App) *Auth {
 	app.HandlePublic("GET", "/api/v2/auth/", a.authBackends)
 	a.oidc.Routes()
 	a.saml.Routes()
+	a.social.Routes()
 	tokensOnce.Do(registerTokens)
 	return a
 }
@@ -382,6 +402,7 @@ func (a *Auth) authBackends(c *api.Ctx, w http.ResponseWriter, r *http.Request) 
 		out["oidc"] = api.Obj{"login_url": "/sso/login/oidc/", "complete_url": a.app.Cfg.BaseURL + "/sso/complete/oidc/"}
 	}
 	a.saml.backends(c, out)
+	a.social.backendsList(c, out)
 	api.WriteJSON(w, 200, out)
 }
 
@@ -477,4 +498,16 @@ func RequestURL(base, path string, q url.Values) string {
 		u += "?" + q.Encode()
 	}
 	return u
+}
+
+// validateOptionalURL accepts an empty value or an http(s) URL.
+func validateOptionalURL(v any) error {
+	s, _ := v.(string)
+	if strings.TrimSpace(s) == "" {
+		return nil
+	}
+	if u, err := url.Parse(s); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		return errors.New("Enter a valid URL.")
+	}
+	return nil
 }

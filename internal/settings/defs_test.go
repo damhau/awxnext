@@ -46,9 +46,16 @@ func TestEverySettingHasAnEffect(t *testing.T) {
 
 	for _, d := range InCategory("all") {
 		used := strings.Contains(goSrc.String(), `"`+d.Key+`"`) || regexp.MustCompile(`\b`+d.Key+`\b`).MatchString(uiSrc.String())
-		// The six LDAP servers' settings are read as prefix + "SUFFIX".
-		if m := regexp.MustCompile(`^AUTH_LDAP_(?:[1-5]_)?(.+)$`).FindStringSubmatch(d.Key); m != nil {
-			used = used || strings.Contains(goSrc.String(), `"`+m[1]+`"`)
+		// The six LDAP servers' and the six GitHub logins' settings are read
+		// as prefix + "SUFFIX".
+		prefixes := append([]string{}, LDAPServers...)
+		for _, v := range GitHubVariants {
+			prefixes = append(prefixes, v.Prefix)
+		}
+		for _, p := range prefixes {
+			if strings.HasPrefix(d.Key, p) {
+				used = used || strings.Contains(goSrc.String(), `"`+strings.TrimPrefix(d.Key, p)+`"`)
+			}
 		}
 		switch {
 		case d.CompatOnly && used:

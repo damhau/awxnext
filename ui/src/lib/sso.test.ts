@@ -15,6 +15,16 @@ describe('single sign-on buttons', () => {
     expect(logins[0].href).toBe('/sso/login/oidc/?next=%2Fjobs%3Fpage%3D2')
     expect(logins[1].href).toBe('/sso/login/saml/?idp=adfs&next=%2Fjobs%3Fpage%3D2')
   })
+  it('lists the OAuth2 logins by name, before SAML', () => {
+    const logins = ssoLogins(
+      { 'saml:okta': { login_url: '/sso/login/saml/?idp=okta', name: 'okta' }, 'github-org': { login_url: '/sso/login/github-org/', name: 'GitHub Organization' } },
+      '/',
+    )
+    expect(logins.map((l) => [l.label, l.href])).toEqual([
+      ['Continue with GitHub Organization', '/sso/login/github-org/?next=%2F'],
+      ['Continue with okta (SAML)', '/sso/login/saml/?idp=okta&next=%2F'],
+    ])
+  })
   it('is empty without backends', () => {
     expect(ssoLogins(undefined, '/')).toEqual([])
     expect(ssoLogins({}, '/')).toEqual([])

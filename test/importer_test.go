@@ -97,8 +97,9 @@ func awxData(org, alicePW string) string {
 	return fmt.Sprintf(`
 INSERT INTO auth_user VALUES (1,'admin','','','','x',true,true,NULL,%[1]s),(2,'alice-%[2]s','Alice','A','alice@example.com','%[3]s',false,true,NULL,%[1]s),
   (3,'bob-%[2]s','Bob','B','bob@example.com','!unusable',false,true,NULL,%[1]s),
-  (4,'sam-%[2]s','Sam','S','sam@example.com','!unusable',false,true,NULL,%[1]s);
-INSERT INTO social_auth_usersocialauth VALUES (1,'saml','okta:sam@example.com','{}',4,%[1]s,%[1]s);
+  (4,'sam-%[2]s','Sam','S','sam@example.com','!unusable',false,true,NULL,%[1]s),
+  (5,'gina-%[2]s','Gina','G','gina@example.com','!unusable',false,true,NULL,%[1]s);
+INSERT INTO social_auth_usersocialauth VALUES (1,'saml','okta:sam@example.com','{}',4,%[1]s,%[1]s),(2,'github-org','583231','{}',5,%[1]s,%[1]s);
 INSERT INTO main_profile VALUES (1,%[1]s,%[1]s,'',2),(2,%[1]s,%[1]s,'uid=bob,ou=people,dc=example,dc=com',3);
 INSERT INTO conf_setting VALUES (7,%[1]s,%[1]s,'AUTH_LDAP_BIND_PASSWORD','"`+awxBindPassword+`"',NULL),
   (8,%[1]s,%[1]s,'AUTH_LDAP_SERVER_URI','"ldap://127.0.0.1:1"',NULL),
@@ -235,6 +236,10 @@ func TestImportAWX(t *testing.T) {
 	sam := a.get("users/?username=sam-" + org).results()[0]
 	if sam["external_account"] != "enterprise" || fmt.Sprint(sam["auth"]) != "[map[provider:saml uid:okta:sam@example.com]]" {
 		t.Errorf("sam is not a SAML user: %v", sam)
+	}
+	if gina := a.get("users/?username=gina-" + org).results()[0]; gina["external_account"] != "social" ||
+		fmt.Sprint(gina["auth"]) != "[map[provider:github-org uid:583231]]" {
+		t.Errorf("gina is not a GitHub user: %v", gina)
 	}
 	ldapSettings := must(t, a.get("settings/ldap/"), 200).Body
 	if ldapSettings["AUTH_LDAP_SERVER_URI"] != "ldap://127.0.0.1:1" || ldapSettings["AUTH_LDAP_BIND_PASSWORD"] != "$encrypted$" ||

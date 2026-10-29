@@ -25,12 +25,18 @@ const blurbs: Record<string, string> = {
   oidc: 'Single sign-on with an OpenID Connect provider, and how its groups map to access.',
   ldap: 'Up to six LDAP servers, tried in order before local accounts, and how their groups map to access.',
   saml: 'Single sign-on with SAML identity providers: the service provider awxnext is, the providers, and how their attributes map to access.',
+  github: 'Login with GitHub accounts.',
+  'github-org': 'Login with GitHub accounts that are members of an organization.',
+  'github-team': 'Login with GitHub accounts that are members of a team.',
+  'github-enterprise': 'Login with GitHub Enterprise accounts.',
+  'github-enterprise-org': 'Login with GitHub Enterprise accounts that are members of an organization.',
+  'github-enterprise-team': 'Login with GitHub Enterprise accounts that are members of a team.',
   logging: 'Shipping logs to an external aggregator.',
   ui: 'Login page and live updates.',
   changed: 'Every setting that differs from its default.',
 }
 
-const order = ['system', 'jobs', 'authentication', 'oidc', 'ldap', 'saml', 'logging', 'ui', 'changed']
+const order = ['system', 'jobs', 'authentication', 'oidc', 'ldap', 'saml', 'github', 'github-org', 'github-team', 'github-enterprise', 'github-enterprise-org', 'github-enterprise-team', 'logging', 'ui', 'changed']
 
 const isSecret = (key: string) => /SECRET|PASSWORD/.test(key)
 
