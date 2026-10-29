@@ -477,6 +477,8 @@ type ImportOptions struct {
 	Overwrite, OverwriteVars bool
 	EnabledVar, EnabledValue string
 	HostFilter               string
+	// GroupFilter keeps only the groups it matches (their hosts stay).
+	GroupFilter string
 	// InstanceIDVar names the host variable holding the cloud's id for a
 	// host: hosts are matched by it before their name, so a host renamed in
 	// the cloud is renamed rather than duplicated.
@@ -505,12 +507,20 @@ type ImportedObject struct {
 func ImportInventory(ctx context.Context, db interface {
 	Begin(context.Context) (pgx.Tx, error)
 }, invID, sourceID int64, d *InventoryData, opt ImportOptions) (*ImportStats, error) {
-	var filter *regexp.Regexp
+	// Filters match from the start of a name, as Python's re.match in AWX.
+	var filter, groupFilter *regexp.Regexp
 	if opt.HostFilter != "" {
 		var err error
-		if filter, err = regexp.Compile(opt.HostFilter); err != nil {
+		if filter, err = regexp.Compile("^(?:" + opt.HostFilter + ")"); err != nil {
 			return nil, fmt.Errorf("invalid host_filter: %w", err)
 		}
+	}
+	if opt.GroupFilter != "" {
+		var err error
+		if groupFilter, err = regexp.Compile("^(?:" + opt.GroupFilter + ")"); err != nil {
+			return nil, fmt.Errorf("invalid group filter: %w", err)
+		}
+		dropGroups(d, func(name string) bool { return !groupFilter.MatchString(name) })
 	}
 	hostOK := func(h string) bool { return filter == nil || filter.MatchString(h) }
 	tx, err := db.Begin(ctx)
@@ -961,14 +971,22 @@ func hostInstanceID(hv map[string]any, names string) string {
 // dropEmptyGroups removes groups without hosts, children or variables, in
 // one pass as AWX does.
 func dropEmptyGroups(d *InventoryData) {
+	dropGroups(d, func(name string) bool {
+		g := d.Groups[name]
+		return len(g.Children) == 0 && len(g.Hosts) == 0 && len(g.Vars) == 0
+	})
+}
+
+// dropGroups removes the groups drop selects (in name order) and the links
+// to them.
+func dropGroups(d *InventoryData, drop func(name string) bool) {
 	names := make([]string, 0, len(d.Groups))
 	for n := range d.Groups {
 		names = append(names, n)
 	}
 	sort.Strings(names)
 	for _, n := range names {
-		g := d.Groups[n]
-		if len(g.Children) > 0 || len(g.Hosts) > 0 || len(g.Vars) > 0 {
+		if n == "all" || n == "ungrouped" || !drop(n) {
 			continue
 		}
 		delete(d.Groups, n)

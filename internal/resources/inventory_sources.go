@@ -49,7 +49,7 @@ var InventoryPlugins = map[string]struct{ Plugin, File, CredNamespace string }{
 	"openshift_virtualization": {"kubevirt.core.kubevirt", "kubevirt.yml", "kubernetes_bearer_token"},
 }
 
-var inventorySourceChoices = labelled("scm", "Sourced from a Project", "constructed", "Template additional groups and hostvars at runtime",
+var inventorySourceChoices = labelled("file", "File, Directory or Script", "scm", "Sourced from a Project", "constructed", "Template additional groups and hostvars at runtime",
 	"ec2", "Amazon EC2", "gce", "Google Compute Engine", "azure_rm", "Microsoft Azure Resource Manager", "vmware", "VMware vCenter",
 	"satellite6", "Red Hat Satellite 6", "openstack", "OpenStack", "rhv", "Red Hat Virtualization", "controller", "Red Hat Ansible Automation Platform",
 	"insights", "Red Hat Insights", "terraform", "Terraform State", "openshift_virtualization", "OpenShift Virtualization")
@@ -170,6 +170,10 @@ func registerInventorySources() {
 			c.DB().QueryRow(c, "SELECT organization_id, kind FROM inventories WHERE id = $1", inv).Scan(&org, &kind)
 			data["organization"] = org
 			source := str(merged["source"])
+			// File sources record `awxnext inventory-import` runs; nothing syncs them.
+			if source == "file" && (old == nil || str(old["source"]) != "file") {
+				return api.FieldError("source", "File sources are created by the awxnext inventory-import command.")
+			}
 			if kind == "smart" {
 				return api.FieldError("inventory", "Cannot create Inventory Source for Smart Inventory")
 			}
@@ -246,8 +250,14 @@ func registerInventorySources() {
 	src.Actions = []*api.Action{
 		{Name: "update", Methods: []string{"GET", "POST"}, Handler: func(c *Ctx, w http.ResponseWriter, r *http.Request, obj Obj) {
 			err := requireInventoryPerm(c, obj["inventory"], "update")
+			file := str(obj["source"]) == "file"
 			if r.Method == "GET" {
-				api.WriteJSON(w, 200, Obj{"can_update": err == nil})
+				api.WriteJSON(w, 200, Obj{"can_update": err == nil && !file})
+				return
+			}
+			if file {
+				// As AWX: a file source cannot be updated.
+				api.WriteJSON(w, 405, Obj{"detail": `Method "POST" not allowed.`})
 				return
 			}
 			if err != nil {
@@ -282,10 +292,17 @@ func registerInventorySources() {
 			}
 			perr := requireInventoryPerm(c, inv["id"], "update")
 			var out []Obj
+			started, refused := 0, 0
 			for _, s := range srcs {
 				sid, _ := api.ID(s["id"])
-				entry := Obj{"inventory_source": sid, "can_update": perr == nil}
-				if r.Method == "POST" && perr == nil {
+				file := str(s["source"]) == "file"
+				entry := Obj{"inventory_source": sid, "can_update": perr == nil && !file}
+				if r.Method == "POST" && perr == nil && file {
+					entry["status"] = "Could not start because `can_update` returned False"
+					refused++
+				}
+				if r.Method == "POST" && perr == nil && !file {
+					started++
 					jid, err := LaunchInventoryUpdate(c, s, "manual")
 					if err != nil {
 						api.WriteError(w, err)
@@ -303,6 +320,10 @@ func registerInventorySources() {
 				}
 				if len(out) == 0 {
 					api.WriteError(w, api.BadRequest("No inventory sources to update."))
+					return
+				}
+				if started == 0 && refused > 0 {
+					api.WriteJSON(w, 400, out)
 					return
 				}
 				api.WriteJSON(w, 202, out)

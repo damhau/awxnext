@@ -12,7 +12,7 @@ import { DataTable, type Column } from '../../components/table'
 import { Ago, Empty, RunBars, Status } from '../../components/ui'
 import { applyErrors, refOf } from './common'
 import { useSubList, type Inventory } from './inventories'
-import { enabledDefault, enabledHelp } from '../../lib/sourceDefaults'
+import { enabledDefault, enabledHelp, isImportedFile, sourceChoices } from '../../lib/sourceDefaults'
 
 export interface Source extends Base {
   inventory: number
@@ -41,6 +41,7 @@ export interface Source extends Base {
 
 /** Human names and the credential type kind each cloud source uses. */
 export const sourceInfo: Record<string, { label: string; credential?: string; credentialKind?: string; hint?: string }> = {
+  file: { label: 'Imported file', hint: 'Recorded by the awxnext inventory-import command; it cannot be synced from here.' },
   scm: { label: 'Sourced from a project', hint: 'An inventory file or plugin config in a project repository.' },
   ec2: { label: 'Amazon EC2', credential: 'Amazon Web Services', credentialKind: 'cloud' },
   gce: { label: 'Google Compute Engine', credential: 'Google Compute Engine', credentialKind: 'cloud' },
@@ -165,7 +166,7 @@ export function InventorySourcesTab({ inv }: { inv: Inventory }) {
       className: 'end',
       render: (s) => (
         <div className="row" style={{ justifyContent: 'flex-end', gap: 4 }}>
-          {s.summary_fields.user_capabilities?.start !== false && (
+          {s.summary_fields.user_capabilities?.start !== false && !isImportedFile(s.source) && (
             <button className="btn sm" onClick={() => sync(s)} disabled={s.status === 'running' || s.status === 'pending'}>
               <Icon name="refresh" size={14} /> Sync
             </button>
@@ -193,7 +194,7 @@ export function InventorySourcesTab({ inv }: { inv: Inventory }) {
         <p className="muted grow" style={{ margin: 0 }}>
           Sources import hosts and groups from a project or a cloud API. A sync runs <span className="mono">ansible-inventory</span> in an execution environment.
         </p>
-        {!!sources.data?.count && (
+        {!!sources.data?.results.some((s) => !isImportedFile(s.source)) && (
           <button className="btn" onClick={syncAll}>
             <Icon name="refresh" size={14} /> Sync all
           </button>
@@ -246,7 +247,7 @@ export function InventorySourcesTab({ inv }: { inv: Inventory }) {
 
 function SourceDialog({ inv, source, onClose }: { inv: Inventory; source?: Source; onClose: () => void }) {
   const options = useOptions('inventory_sources/')
-  const choices = (options.data?.actions?.POST?.source?.choices ?? Object.keys(sourceInfo).map((k) => [k, sourceInfo[k].label])) as [string, string][]
+  const choices = sourceChoices((options.data?.actions?.POST?.source?.choices ?? Object.keys(sourceInfo).map((k) => [k, sourceInfo[k].label])) as [string, string][], source?.source)
   const f = useForm({
     name: source?.name ?? '',
     description: source?.description ?? '',

@@ -118,7 +118,7 @@ The gaps fall in four groups:
 | Cloud sources: ec2, gce, azure_rm, vmware, openstack, satellite6, controller, terraform, openshift_virtualization | Yes | Done | AWX's per-source defaults apply: the enabled variable and value when the source sets none, the host `instance_id` variable (hosts are matched by it before their name, so a host renamed in the cloud keeps its record), and leaving out empty groups (roadmap M4-03). Values ansible-core 2.19+ marks unsafe are stored as plain values |
 | Project file (scm) source | Yes | Done | `source_vars` become environment variables for the source's scripts and plugins, as Python's `str()` of each value, except names already set and `HOME`, `USER`, `_`, `TERM`, `PATH` (roadmap M4-04) |
 | rhv, insights sources | Yes | Done | With AWX's Red Hat Virtualization (INI file and environment) and Insights credential types (roadmap M4-01) |
-| `file` source, `inventory_import` | Yes | Missing | GitOps inventory `content` covers part of it |
+| `file` source, `inventory_import` | Yes | Done | `awxnext inventory-import` takes `awx-manage inventory_import`'s options (`--inventory-name`/`--inventory-id`, `--source`, `--overwrite`, `--overwrite-vars`, `--enabled-var`/`--enabled-value`, `--group-filter`, `--host-filter`, `--exclude-empty-groups`, `--instance-id-var`, `-v`) and records each run as an update of a `file` source, which the API does not create or update (roadmap M4-05). It runs `ansible-inventory` on the machine running the command rather than in the default execution environment's image |
 | overwrite, overwrite_vars, enabled_var, host_filter, update on launch with cache | Yes | Done | |
 | Inventory updates: cancel, stdout, events, notifications, schedules | Yes | Done | UI has no schedules for sources; notifications are in the source's menu |
 | Bulk host create/delete | Yes | Done | `bulk/host_create` (each host created as through `/hosts/`, all or none) and `bulk/host_delete`, with AWX's limits, checks and messages |
@@ -188,7 +188,7 @@ The gaps fall in four groups:
 | Websockets | Yes | Partial | Three groups never published |
 | Event processing | Yes | Done | Batched COPY into daily partitions, archived after N days |
 | HA, task and dependency manager | Yes | Done | PostgreSQL only, no Redis |
-| `awx-manage` commands | Yes | Partial | No `inventory_import` or instance provisioning commands |
+| `awx-manage` commands | Yes | Partial | `inventory_import` as `awxnext inventory-import`; no instance provisioning commands |
 | Backup/restore, operator, Helm | Yes | Missing | Docker image and Compose only; key escrow commands |
 | UI: dashboard, approvals bell, instances, management jobs | Yes | Done | Redesigned dashboard; no topology |
 | UI: dark mode, translations, about dialog | Yes | Missing | |

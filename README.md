@@ -88,6 +88,16 @@ The API follows AWX `/api/v2` so the `awx` CLI, the `awx.awx` collection and the
 provider work against it. Additions: `/api/v2/folders/`, `/<resource>/<id>/history/`
 (diff and revert), `/api/v2/openapi.json`, `/api/v2/settings/oidc/test/` (mapping dry-run).
 
+### Importing an inventory file
+
+`awxnext inventory-import` is `awx-manage inventory_import`, with the same options. It runs
+`ansible-inventory` on the machine running the command and records the import as an update
+of a `file` source of the inventory:
+
+```bash
+awxnext inventory-import --inventory-name Production --source /etc/ansible/hosts --overwrite
+```
+
 ## Development
 
 ```sh

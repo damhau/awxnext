@@ -22,6 +22,7 @@ import (
 	"github.com/damhau/awxnext/internal/crypto"
 	"github.com/damhau/awxnext/internal/importer"
 	"github.com/damhau/awxnext/internal/kms"
+	"github.com/damhau/awxnext/internal/runners/ansible"
 	"github.com/damhau/awxnext/internal/server"
 	"github.com/damhau/awxnext/internal/tracing"
 )
@@ -38,6 +39,7 @@ Commands:
   keys import FILE  restore escrowed data keys, wrapped with the configured master key
   keys rewrap       re-wrap data keys from the AWXNEXT_OLD_* master key to the current one
   import-awx        import the configuration of an AWX installation from its database
+  inventory-import  import an inventory file, directory or script (as awx-manage inventory_import)
   agent             run a remote execution node agent (dials back to the control plane)
   shim              run one job inside a container group pod (started by the control plane)
   install-shim DEST copy this binary to DEST (job pod init container)
@@ -67,6 +69,8 @@ func main() {
 		err = keys(ctx, cfg, os.Args[2:])
 	case "import-awx":
 		err = importAWX(ctx, cfg, os.Args[2:])
+	case "inventory-import":
+		err = inventoryImport(ctx, cfg, os.Args[1:])
 	case "agent":
 		err = runAgent(ctx, os.Args[2:])
 	case "shim":
@@ -269,6 +273,33 @@ func runShim(ctx context.Context, args []string) error {
 		return errors.New("--url and AWXNEXT_SHIM_TOKEN are required")
 	}
 	return agent.RunShim(ctx, cfg, *url)
+}
+
+// inventoryImport is awx-manage inventory_import: the same options, the
+// import recorded as a `file` inventory source with an update.
+func inventoryImport(ctx context.Context, cfg *config.Config, argv []string) error {
+	fs := flag.NewFlagSet("inventory-import", flag.ExitOnError)
+	o := ansible.FileImport{Args: append([]string{"awxnext"}, argv...)}
+	fs.StringVar(&o.InventoryName, "inventory-name", "", "name of inventory to sync")
+	fs.Int64Var(&o.InventoryID, "inventory-id", 0, "id of inventory to sync")
+	fs.BoolVar(&o.Overwrite, "overwrite", false, "overwrite the destination hosts and groups")
+	fs.BoolVar(&o.OverwriteVars, "overwrite-vars", false, "overwrite (rather than merge) variables")
+	fs.Bool("keep-vars", false, "DEPRECATED legacy option, has no effect")
+	fs.StringVar(&o.Source, "source", "", "inventory directory, file, or script to load")
+	fs.StringVar(&o.EnabledVar, "enabled-var", "", `host variable used to set/clear enabled flag when host is online/offline, may be specified as "foo.bar" to traverse nested dicts`)
+	fs.StringVar(&o.EnabledValue, "enabled-value", "", "value of host variable specified by --enabled-var that indicates host is enabled/online")
+	fs.StringVar(&o.GroupFilter, "group-filter", "", "regular expression to filter group name(s); only matches are imported")
+	fs.StringVar(&o.HostFilter, "host-filter", "", "regular expression to filter host name(s); only matches are imported")
+	fs.BoolVar(&o.ExcludeEmptyGroups, "exclude-empty-groups", false, "when set, exclude all groups that have no child groups, hosts, or variables")
+	fs.StringVar(&o.InstanceIDVar, "instance-id-var", "", `host variable that specifies the unique, immutable instance ID, may be specified as "foo.bar" to traverse nested dicts`)
+	fs.IntVar(&o.Verbosity, "v", 0, "verbosity (0-3)")
+	fs.Parse(argv[1:])
+	app, err := server.Setup(ctx, cfg)
+	if err != nil {
+		return err
+	}
+	_, err = ansible.ImportFile(ctx, app, o, os.Stdout)
+	return err
 }
 
 func importAWX(ctx context.Context, cfg *config.Config, args []string) error {

@@ -25,3 +25,13 @@ export function enabledHelp(source: string): string {
   const base = 'Host variable deciding whether a host is enabled, e.g. status.power_state.'
   return d ? `${base} Empty uses ${d.variable} = ${d.value}.` : base
 }
+
+/** File sources are created by `awxnext inventory-import` and never synced. */
+export function isImportedFile(source: string): boolean {
+  return source === 'file'
+}
+
+/** The source types a form offers: not file, unless the source being edited is one. */
+export function sourceChoices(choices: [string, string][], current?: string): [string, string][] {
+  return choices.filter(([k]) => !isImportedFile(k) || k === current)
+}
