@@ -42,6 +42,7 @@ type Auth struct {
 	app  *api.App
 	oidc *OIDC
 	ldap *LDAP
+	saml *SAML
 }
 
 // Install wires authentication into the API.
@@ -49,6 +50,18 @@ func Install(app *api.App) *Auth {
 	a := &Auth{app: app, oidc: NewOIDC(app)}
 	a.oidc.auth = a
 	a.ldap = &LDAP{auth: a}
+	a.saml = &SAML{auth: a}
+	for key, check := range samlValidators() {
+		if d := settings.Lookup(key); d != nil {
+			d.Validate = check
+		}
+	}
+	for key, path := range map[string]string{"SOCIAL_AUTH_SAML_CALLBACK_URL": "/sso/complete/saml/", "SOCIAL_AUTH_SAML_METADATA_URL": "/sso/metadata/saml/"} {
+		if d := settings.Lookup(key); d != nil {
+			path := path
+			d.Computed = func(get func(string) any) any { return samlBase(app, get) + path }
+		}
+	}
 	for suffix, check := range ldapValidators() {
 		for _, prefix := range settings.LDAPServers {
 			if d := settings.Lookup(prefix + suffix); d != nil {
@@ -89,6 +102,7 @@ func Install(app *api.App) *Auth {
 	app.Handle("GET", "/api/v2/me/", a.me)
 	app.HandlePublic("GET", "/api/v2/auth/", a.authBackends)
 	a.oidc.Routes()
+	a.saml.Routes()
 	tokensOnce.Do(registerTokens)
 	return a
 }
@@ -367,6 +381,7 @@ func (a *Auth) authBackends(c *api.Ctx, w http.ResponseWriter, r *http.Request) 
 	if a.oidc.Enabled(c) {
 		out["oidc"] = api.Obj{"login_url": "/sso/login/oidc/", "complete_url": a.app.Cfg.BaseURL + "/sso/complete/oidc/"}
 	}
+	a.saml.backends(c, out)
 	api.WriteJSON(w, 200, out)
 }
 

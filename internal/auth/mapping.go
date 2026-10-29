@@ -53,8 +53,12 @@ type MappingResult struct {
 	// Keep lists mapped roles left as they are: kept if the user has them
 	// from an earlier login, not granted otherwise (AWX's null expressions
 	// and remove options set to false).
-	Keep   []Grant  `json:"kept"`
-	Errors []string `json:"errors"`
+	Keep []Grant `json:"kept"`
+	// KeepRoles keeps every assignment of these role definitions from
+	// earlier logins, except those in Revoke (SAML's remove options).
+	KeepRoles []string `json:"-"`
+	Revoke    []Grant  `json:"-"`
+	Errors    []string `json:"errors"`
 }
 
 // Mapping is how an external login maps to access: awxnext's rules over
@@ -279,12 +283,12 @@ func ApplyMapping(ctx context.Context, tx api.DBTX, userID int64, source string,
 		}
 		desired[key{rdID, ct, obj}] = true
 	}
-	kept := map[key]bool{}
-	for _, g := range res.Keep {
+	// existingKey finds the assignment key of a grant without creating anything.
+	existingKey := func(g Grant) (key, bool) {
 		var rdID, obj int64
 		var rdCT *string
 		if tx.QueryRow(ctx, "SELECT id, content_type FROM role_definitions WHERE name = $1", g.RoleDefinition).Scan(&rdID, &rdCT) != nil || rdCT == nil {
-			continue
+			return key{}, false
 		}
 		var err error
 		if g.Team != "" {
@@ -292,8 +296,24 @@ func ApplyMapping(ctx context.Context, tx api.DBTX, userID int64, source string,
 		} else {
 			err = tx.QueryRow(ctx, "SELECT id FROM organizations WHERE name = $1", g.Organization).Scan(&obj)
 		}
-		if err == nil {
-			kept[key{rdID, *rdCT, obj}] = true
+		return key{rdID, *rdCT, obj}, err == nil
+	}
+	kept, revoked := map[key]bool{}, map[key]bool{}
+	for _, g := range res.Keep {
+		if k, ok := existingKey(g); ok {
+			kept[k] = true
+		}
+	}
+	for _, g := range res.Revoke {
+		if k, ok := existingKey(g); ok {
+			revoked[k] = true
+		}
+	}
+	keepRole := map[int64]bool{}
+	for _, name := range res.KeepRoles {
+		var rdID int64
+		if tx.QueryRow(ctx, "SELECT id FROM role_definitions WHERE name = $1", name).Scan(&rdID) == nil {
+			keepRole[rdID] = true
 		}
 	}
 	rows, err := tx.Query(ctx, "SELECT id, role_definition_id, content_type, object_id FROM role_assignments WHERE user_id = $1 AND source = $2", userID, source)
@@ -311,7 +331,7 @@ func ApplyMapping(ctx context.Context, tx api.DBTX, userID int64, source string,
 		}
 		k := key{rd, ct, obj}
 		existing[k] = true
-		if !desired[k] && !kept[k] {
+		if !desired[k] && !kept[k] && !(keepRole[k.rd] && !revoked[k]) {
 			stale = append(stale, id)
 		}
 	}

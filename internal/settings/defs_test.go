@@ -30,8 +30,9 @@ func TestEverySettingHasAnEffect(t *testing.T) {
 		})
 	}
 	goFile := func(p string) bool {
-		return strings.HasSuffix(p, ".go") && !strings.HasSuffix(p, "_test.go") && !strings.HasSuffix(p, filepath.Join("settings", "defs.go")) &&
-			!strings.HasSuffix(p, filepath.Join("settings", "ldap.go"))
+		// The settings package defines the keys; settings.go is its only code.
+		inSettings := filepath.Base(filepath.Dir(p)) == "settings" && filepath.Base(p) != "settings.go"
+		return strings.HasSuffix(p, ".go") && !strings.HasSuffix(p, "_test.go") && !inSettings
 	}
 	uiFile := func(p string) bool {
 		return (strings.HasSuffix(p, ".ts") || strings.HasSuffix(p, ".tsx")) && !strings.Contains(p, ".test.")

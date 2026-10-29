@@ -303,6 +303,18 @@ func (i *imp) users() error {
 			ldapDNs[id(r["user_id"])] = str(r["ldap_dn"])
 		}
 	}
+	// SAML users keep logging in through SAML: python-social-auth's uid is
+	// "<idp>:<permanent id>".
+	samlUIDs := map[int64]string{}
+	if i.has("social_auth_usersocialauth") {
+		sr, err := i.query(`SELECT user_id, uid FROM social_auth_usersocialauth WHERE provider = 'saml' ORDER BY id`)
+		if err != nil {
+			return err
+		}
+		for _, r := range sr {
+			samlUIDs[id(r["user_id"])] = str(r["uid"])
+		}
+	}
 	for _, r := range rows {
 		old := id(r["id"])
 		var existing int64
@@ -316,6 +328,8 @@ func (i *imp) users() error {
 			"is_active": boolv(r["is_active"]), "is_system_auditor": auditors[old], "last_login": r["last_login"], "created": r["date_joined"], "modified": r["date_joined"]}
 		if dn := ldapDNs[old]; dn != "" {
 			v["external_source"], v["external_id"], v["password"] = "ldap", dn, ""
+		} else if uid := samlUIDs[old]; uid != "" {
+			v["external_source"], v["external_id"], v["password"] = "saml", uid, ""
 		}
 		if _, err := i.insert("users", "users", old, v); err != nil {
 			return err

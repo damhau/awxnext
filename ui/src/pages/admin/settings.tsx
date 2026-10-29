@@ -24,12 +24,13 @@ const blurbs: Record<string, string> = {
   authentication: 'Sessions, basic auth and local accounts.',
   oidc: 'Single sign-on with an OpenID Connect provider, and how its groups map to access.',
   ldap: 'Up to six LDAP servers, tried in order before local accounts, and how their groups map to access.',
+  saml: 'Single sign-on with SAML identity providers: the service provider awxnext is, the providers, and how their attributes map to access.',
   logging: 'Shipping logs to an external aggregator.',
   ui: 'Login page and live updates.',
   changed: 'Every setting that differs from its default.',
 }
 
-const order = ['system', 'jobs', 'authentication', 'oidc', 'ldap', 'logging', 'ui', 'changed']
+const order = ['system', 'jobs', 'authentication', 'oidc', 'ldap', 'saml', 'logging', 'ui', 'changed']
 
 const isSecret = (key: string) => /SECRET|PASSWORD/.test(key)
 
@@ -83,6 +84,7 @@ function sectionOf(cat: string, key: string): string {
   if (cat === 'oidc') return key.startsWith('SOCIAL_AUTH_') ? 'Provider' : key === 'OIDC_MAPPING' ? 'Group mapping' : 'Claims and tokens'
   if (cat === 'authentication') return key.endsWith('_MAP') ? 'Organization and team maps' : 'Sessions and accounts'
   if (cat === 'ldap') return ldapServer(key)
+  if (cat === 'saml') return /_MAP$|_ATTR$|FLAGS/.test(key) ? 'Organizations, teams and flags' : /IDPS|SECURITY|EXTRA_DATA/.test(key) ? 'Identity providers' : 'Service provider'
   if (cat === 'jobs') {
     if (/TIMEOUT/.test(key)) return 'Timeouts'
     if (/GALAXY|COLLECTIONS|ROLES/.test(key)) return 'Content'
@@ -96,6 +98,7 @@ const sectionOrder: Record<string, string[]> = {
   oidc: ['Provider', 'Claims and tokens', 'Group mapping'],
   authentication: ['Sessions and accounts', 'Organization and team maps'],
   ldap: ldapServerOrder,
+  saml: ['Service provider', 'Identity providers', 'Organizations, teams and flags'],
   jobs: ['General', 'Timeouts', 'Content', 'Execution'],
 }
 

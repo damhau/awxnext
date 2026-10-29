@@ -32,6 +32,9 @@ type Def struct {
 	CompatOnly bool
 	// Nullable settings accept null, as those AWX registers with allow_null.
 	Nullable bool
+	// Computed read-only settings derive their value from other settings,
+	// such as AWX's SAML callback URL from the base URL.
+	Computed func(get func(key string) any) any
 }
 
 // Category is a group of settings exposed at /api/v2/settings/<slug>/.
@@ -48,6 +51,7 @@ var (
 		{"authentication", "Authentication"},
 		{"oidc", "OIDC"},
 		{"ldap", "LDAP"},
+		{"saml", "SAML"},
 		{"jobs", "Jobs"},
 		{"system", "System"},
 		{"ui", "UI"},
@@ -145,6 +149,9 @@ func (s *Store) Get(ctx context.Context, key string) any {
 		}
 	}
 	if d := defs[key]; d != nil {
+		if d.Computed != nil {
+			return d.Computed(func(k string) any { return s.Get(ctx, k) })
+		}
 		return d.Default
 	}
 	return nil

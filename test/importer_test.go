@@ -29,6 +29,7 @@ const awxSchema = `
 CREATE TABLE django_content_type (id int PRIMARY KEY, app_label text, model text);
 CREATE TABLE conf_setting (id int PRIMARY KEY, created timestamptz, modified timestamptz, key text, value jsonb, user_id int);
 CREATE TABLE main_profile (id int PRIMARY KEY, created timestamptz, modified timestamptz, ldap_dn text, user_id int);
+CREATE TABLE social_auth_usersocialauth (id int PRIMARY KEY, provider text, uid text, extra_data jsonb, user_id int, created timestamptz, modified timestamptz);
 CREATE TABLE auth_user (id int PRIMARY KEY, username text, first_name text, last_name text, email text, password text,
   is_superuser bool, is_active bool, last_login timestamptz, date_joined timestamptz);
 CREATE TABLE main_rbac_roles (id int PRIMARY KEY, role_field text, singleton_name text, implicit_parents text, content_type_id int, object_id int);
@@ -95,7 +96,9 @@ func awxData(org, alicePW string) string {
 	ts := "'2024-01-01T00:00:00Z'"
 	return fmt.Sprintf(`
 INSERT INTO auth_user VALUES (1,'admin','','','','x',true,true,NULL,%[1]s),(2,'alice-%[2]s','Alice','A','alice@example.com','%[3]s',false,true,NULL,%[1]s),
-  (3,'bob-%[2]s','Bob','B','bob@example.com','!unusable',false,true,NULL,%[1]s);
+  (3,'bob-%[2]s','Bob','B','bob@example.com','!unusable',false,true,NULL,%[1]s),
+  (4,'sam-%[2]s','Sam','S','sam@example.com','!unusable',false,true,NULL,%[1]s);
+INSERT INTO social_auth_usersocialauth VALUES (1,'saml','okta:sam@example.com','{}',4,%[1]s,%[1]s);
 INSERT INTO main_profile VALUES (1,%[1]s,%[1]s,'',2),(2,%[1]s,%[1]s,'uid=bob,ou=people,dc=example,dc=com',3);
 INSERT INTO conf_setting VALUES (7,%[1]s,%[1]s,'AUTH_LDAP_BIND_PASSWORD','"`+awxBindPassword+`"',NULL),
   (8,%[1]s,%[1]s,'AUTH_LDAP_SERVER_URI','"ldap://127.0.0.1:1"',NULL),
@@ -228,6 +231,10 @@ func TestImportAWX(t *testing.T) {
 	// AWX's LDAP users stay LDAP users; its login settings come along.
 	if bob["external_account"] != "ldap" || bob["ldap_dn"] != "uid=bob,ou=people,dc=example,dc=com" {
 		t.Errorf("bob is not an LDAP user: %v", bob)
+	}
+	sam := a.get("users/?username=sam-" + org).results()[0]
+	if sam["external_account"] != "enterprise" || fmt.Sprint(sam["auth"]) != "[map[provider:saml uid:okta:sam@example.com]]" {
+		t.Errorf("sam is not a SAML user: %v", sam)
 	}
 	ldapSettings := must(t, a.get("settings/ldap/"), 200).Body
 	if ldapSettings["AUTH_LDAP_SERVER_URI"] != "ldap://127.0.0.1:1" || ldapSettings["AUTH_LDAP_BIND_PASSWORD"] != "$encrypted$" ||

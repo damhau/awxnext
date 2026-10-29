@@ -2,13 +2,15 @@ import { useQuery } from '@tanstack/react-query'
 import { useEffect, useState, type FormEvent } from 'react'
 import { api } from '../api/client'
 import { BrandMark } from '../components/ui'
+import { ssoLogins, type Backend } from '../lib/sso'
 
 export function Login({ onDone, expired }: { onDone: () => void; expired?: boolean }) {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
-  const [error, setError] = useState('')
+  // A failed single sign-on comes back with ?error=.
+  const [error, setError] = useState(() => new URLSearchParams(window.location.search).get('error') ?? '')
   const [busy, setBusy] = useState(false)
-  const backends = useQuery({ queryKey: ['auth-backends'], queryFn: () => api.get<{ oidc?: { login_url: string } }>('auth/'), retry: false })
+  const backends = useQuery({ queryKey: ['auth-backends'], queryFn: () => api.get<Record<string, Backend>>('auth/'), retry: false })
   // The API root carries the login page settings, readable before signing in.
   const root = useQuery({
     queryKey: ['api-root'],
@@ -34,8 +36,10 @@ export function Login({ onDone, expired }: { onDone: () => void; expired?: boole
       setBusy(false)
     }
   }
-  const oidc = backends.data?.oidc
-  const next = encodeURIComponent(window.location.pathname + window.location.search)
+  const params = new URLSearchParams(window.location.search)
+  params.delete('error')
+  const query = params.toString()
+  const sso = ssoLogins(backends.data, window.location.pathname === '/login' ? '/' : window.location.pathname + (query ? `?${query}` : ''))
   return (
     <main className="login">
       <form className="login-card" onSubmit={submit} aria-labelledby="login-title">
@@ -50,11 +54,13 @@ export function Login({ onDone, expired }: { onDone: () => void; expired?: boole
           </h1>
           {expired && <p className="subtitle">Sign in again to continue where you were.</p>}
         </div>
-        {oidc && (
+        {sso.length > 0 && (
           <>
-            <a className="btn primary lg block" href={`${oidc.login_url}?next=${next}`}>
-              Continue with single sign-on
-            </a>
+            {sso.map((s, i) => (
+              <a key={s.key} className={`btn ${i === 0 ? 'primary' : ''} lg block`} href={s.href}>
+                {s.label}
+              </a>
+            ))}
             <div className="divider">or with a local account</div>
           </>
         )}
@@ -71,7 +77,7 @@ export function Login({ onDone, expired }: { onDone: () => void; expired?: boole
             {error}
           </div>
         )}
-        <button className={`btn ${oidc ? '' : 'primary'} lg block`} disabled={busy || !username || !password}>
+        <button className={`btn ${sso.length ? '' : 'primary'} lg block`} disabled={busy || !username || !password}>
           {busy ? 'Signing in…' : 'Sign in'}
         </button>
         {root.data?.custom_login_info && <p className="login-info">{root.data.custom_login_info}</p>}

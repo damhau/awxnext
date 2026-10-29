@@ -169,13 +169,18 @@ func registerUsers() {
 			o["password"] = "$encrypted$"
 			o["external_account"] = nil
 			o["auth"] = []any{}
-			if str(o["external_source"]) != "ldap" {
+			if src := str(o["external_source"]); src != "ldap" && src != "saml" {
 				o["ldap_dn"] = ""
 			}
 			switch src := str(o["external_source"]); src {
 			case "":
 			case "ldap":
 				o["external_account"] = "ldap"
+			case "saml":
+				// AWX's SAML users are enterprise users, with their social auth.
+				o["external_account"] = "enterprise"
+				o["auth"] = []any{Obj{"provider": "saml", "uid": str(o["ldap_dn"])}}
+				o["ldap_dn"] = ""
 			default:
 				o["external_account"] = "social"
 				o["auth"] = []any{Obj{"provider": src}}
