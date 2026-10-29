@@ -31,9 +31,9 @@ The gaps fall in four groups:
    tested nightly since roadmap M2-01 ([compat/](../compat/README.md)); the
    gaps those suites found are roadmap M2-14 to M2-26.
 3. **Deferred by plan**: LDAP, SAML, social, RADIUS and TACACS+ login;
-   notification types other than email and webhook; archive projects; Helm
-   chart; backup (CyberArk, Thycotic, AWS Secrets Manager and Centrify lookups
-   are done, roadmap M4-07).
+   notification types other than email and webhook; Helm chart; backup
+   (CyberArk, Thycotic, AWS Secrets Manager and Centrify lookups are done,
+   roadmap M4-07; archive projects, roadmap M4-10).
 4. **UI holes over a finished API**: inventory
    instance groups, credential type management, inventory source schedules,
    `start_at_task`, a few more listed below.
@@ -138,7 +138,7 @@ The gaps fall in four groups:
 | Feature | AWX 24.6 | awxnext | Notes |
 |---|---|---|---|
 | Git and manual projects | Yes | Done | Native Go sync, one immutable checkout per commit. A template's `current_job` is set as soon as a job is pending, and `current_update`/`last_update` are in the summaries of every template and the links of projects and inventory sources, as in AWX |
-| Archive projects | Yes | Later | Roadmap M4-10. Subversion projects: out of scope by decision (2026-10-29); Insights projects: by design |
+| Archive projects | Yes | Done | Roadmap M4-10. Downloaded in Go over HTTP or HTTPS with the credential's username and password (basic auth, not sent on to another host after a redirect). The revision is the archive's SHA-1, zip or tar (gzip, bzip2, xz) is told by content, and a single top-level directory is removed. Each checksum is unpacked once into its own directory, as git revisions are, so a changed archive never leaves stale files (AWX keeps them unless `scm_clean`). Deliberate differences: members outside the project fail the sync, links that leave it are skipped, and a single top-level file is kept (AWX unpacks nothing). Subversion projects: out of scope by decision (2026-10-29); Insights projects: by design |
 | Branch override, refspec, submodules, delete on update, clean, update on launch with cache | Yes | Done | |
 | Requirements (roles, collections) | Yes | Done | Installed in the EE at run time, cached by content |
 | Content signature validation | Yes | Done | Each sync checks the `ansible-sign` GPG signature and checksum manifest (`MANIFEST.in` as distlib reads it) as AWX's verification play does, and fails without moving the project's revision. Deliberate difference: `.git` entries never count, so `prune .git` is not needed. As in AWX, job checkouts are not verified |

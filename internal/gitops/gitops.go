@@ -215,7 +215,7 @@ func checkout(ctx context.Context, app *api.App, project *int64) (string, string
 	if credID != nil {
 		src.CredentialID = *credID
 	}
-	sha, dir, err := gitsync.Sync(ctx, app, src, func(string) {})
+	sha, dir, err := gitsync.SyncProject(ctx, app, scmType, src, func(string) {})
 	return dir, sha, err
 }
 

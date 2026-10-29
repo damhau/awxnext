@@ -15,6 +15,7 @@ require (
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/nikolalohinski/gonja/v2 v2.9.1
 	github.com/teambition/rrule-go v1.8.2
+	github.com/ulikunitz/xz v0.5.17
 	go.opentelemetry.io/otel v1.35.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.35.0
 	go.opentelemetry.io/otel/sdk v1.35.0

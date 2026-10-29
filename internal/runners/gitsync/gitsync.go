@@ -291,7 +291,8 @@ func runProjectUpdate(ctx context.Context, rc *jobs.RunContext) jobs.Result {
 		ctx, cancel = context.WithTimeout(ctx, time.Duration(t)*time.Second)
 		defer cancel()
 	}
-	if row.Str("scm_type") != "git" {
+	scmType := row.Str("scm_type")
+	if scmType == "" {
 		rc.Out.Line("Manual projects do not need to be updated.")
 		return jobs.Result{Status: "successful"}
 	}
@@ -306,7 +307,7 @@ func runProjectUpdate(ctx context.Context, rc *jobs.RunContext) jobs.Result {
 		Clean:           row.Bool("scm_clean"),
 	}
 	rc.Out.Line(fmt.Sprintf("Updating project from %s", redact(src.URL)))
-	sha, dir, err := Sync(ctx, app, src, rc.Out.Line)
+	sha, dir, err := SyncProject(ctx, app, scmType, src, rc.Out.Line)
 	if err != nil {
 		rc.Out.Emit(jobs.Event{Event: "error", Stdout: "ERROR: " + err.Error(), Failed: true})
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {

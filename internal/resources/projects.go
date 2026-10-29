@@ -3,6 +3,7 @@ package resources
 import (
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -92,7 +93,7 @@ func registerProjects() {
 		},
 		Fields: append([]*Field{
 			{Name: "organization", Type: api.TFK, Ref: "organizations", Required: true, Help: "The organization used to determine access to this template."},
-			{Name: "scm_type", Type: api.TChoice, Default: "", Choices: labelled("", "Manual", "git", "Git"), Label: "Source Control Type", Help: "Specifies the source control system used to store the project."},
+			{Name: "scm_type", Type: api.TChoice, Default: "", Choices: labelled("", "Manual", "git", "Git", "archive", "Remote Archive"), Label: "Source Control Type", Help: "Specifies the source control system used to store the project."},
 			{Name: "scm_url", Type: api.TString, Default: "", MaxLength: 1024, Label: "Source Control URL", Help: "The location where the project is stored."},
 			{Name: "scm_branch", Type: api.TString, Default: "", MaxLength: 256, Label: "Source Control Branch", Help: "Specific branch, tag or commit to checkout."},
 			{Name: "scm_refspec", Type: api.TString, Default: "", MaxLength: 1024, Label: "Source Control Refspec", Help: "For git projects, an additional refspec to fetch."},
@@ -135,6 +136,19 @@ func registerProjects() {
 				if strings.Contains(u, "@") && strings.HasPrefix(u, "http") && strings.Contains(strings.SplitN(u, "@", 2)[0], ":") {
 					return api.FieldError("scm_url", "Password in SCM URLs is not allowed; use a Source Control credential.")
 				}
+			case "archive":
+				u := str(merged["scm_url"])
+				if u == "" {
+					return api.FieldError("scm_url", "SCM URL is required.")
+				}
+				if p, err := url.Parse(u); err != nil || (p.Scheme != "http" && p.Scheme != "https") || p.Host == "" {
+					return api.FieldError("scm_url", "Unsupported archive URL. Use http:// or https://.")
+				} else if _, set := p.User.Password(); set {
+					return api.FieldError("scm_url", "Password in SCM URLs is not allowed; use a Source Control credential.")
+				}
+				if str(data["scm_branch"]) != "" {
+					return api.FieldError("scm_branch", "SCM branch cannot be used with archive projects.")
+				}
 			case "":
 				if _, ok := data["local_path"]; ok || old == nil {
 					lp := str(merged["local_path"])
@@ -146,6 +160,14 @@ func registerProjects() {
 							return api.FieldError("local_path", fmt.Sprintf("Invalid path choice %q: not a directory in %s.", lp, c.App.Cfg.ProjectsRoot))
 						}
 					}
+				}
+			}
+			if typ := str(merged["scm_type"]); typ != "git" {
+				if str(data["scm_refspec"]) != "" {
+					return api.FieldError("scm_refspec", "SCM refspec can only be used with git projects.")
+				}
+				if data["scm_track_submodules"] == true {
+					return api.FieldError("scm_track_submodules", "SCM track_submodules can only be used with git projects.")
 				}
 			}
 			if err := requireCredentialKind(c, "credential", data["credential"], "scm"); err != nil {

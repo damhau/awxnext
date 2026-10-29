@@ -708,8 +708,8 @@ func (i *imp) projects() error {
 	}
 	for _, r := range rows {
 		scm := str(r["scm_type"])
-		if scm != "" && scm != "git" {
-			i.warn("project %q skipped: %s projects are not supported (git and manual only)", r["name"], scm)
+		if scm != "" && scm != "git" && scm != "archive" {
+			i.warn("project %q skipped: %s projects are not supported (git, archive and manual only)", r["name"], scm)
 			continue
 		}
 		if scm == "" {
@@ -729,7 +729,7 @@ func (i *imp) projects() error {
 			return err
 		}
 		i.mapID("ujt", id(r["id"]), nid)
-		if scm == "git" {
+		if scm != "" {
 			i.tx.Exec(i.ctx, "UPDATE unified_job_templates SET local_path = $2 WHERE id = $1", nid, resources.ProjectLocalPath(nid, str(r["name"])))
 		}
 	}

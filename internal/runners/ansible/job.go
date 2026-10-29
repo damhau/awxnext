@@ -100,7 +100,7 @@ func jobDependencies(ctx context.Context, m *jobs.Manager, row jobs.Row) ([]int6
 	if err != nil {
 		return nil, nil
 	}
-	if proj["scm_type"] != "git" {
+	if proj["scm_type"] == "" {
 		return nil, nil
 	}
 	needed := proj["scm_revision"] == ""
@@ -327,6 +327,28 @@ func checkoutProject(ctx context.Context, app *api.App, row jobs.Row) (string, s
 			return "", "", errors.New("The manual project has no local path.")
 		}
 		return dir, "", nil
+	}
+	if scmType == "archive" {
+		// An archive has no branches: jobs run the revision last synced, or,
+		// on a node that does not have it, what the URL serves now, as AWX's
+		// job-run sync downloads it again.
+		if revision == "" {
+			return "", "", errors.New("The project has not been synced yet.")
+		}
+		dir := gitsync.RevisionDir(app.Cfg.ProjectsRoot, pid, revision)
+		if st, err := os.Stat(dir); err == nil && st.IsDir() {
+			return dir, revision, nil
+		}
+		src := gitsync.Source{ProjectID: pid, URL: url}
+		if credID != nil {
+			src.CredentialID = *credID
+		}
+		var log []string
+		sha, dir, err := gitsync.SyncArchive(ctx, app, src, func(s string) { log = append(log, s) })
+		if err != nil {
+			return "", "", fmt.Errorf("Project download failed: %v\n%s", err, strings.Join(log, "\n"))
+		}
+		return dir, sha, nil
 	}
 	want := row.Str("scm_branch")
 	if want == "" || want == branch {

@@ -18,9 +18,10 @@ import { compile, statusValue, type KeyTable } from '../../lib/query'
 import { SchedulesTab } from '../automation/SchedulesTab'
 import { applyErrors, FilterBox, ManagedNotice, NameCell, Provenance, refOf, useDelete, useOrgColumn, folderColumn, folderKey } from './common'
 import { NotificationsTab } from '../../components/NotificationsTab'
+import { scmTypeLabel, scmTypeOptions, sourceBody, type ScmType } from '../../lib/projectSource'
 
 export interface Project extends Base {
-  scm_type: '' | 'git'
+  scm_type: ScmType
   scm_url: string
   scm_branch: string
   scm_refspec: string
@@ -215,7 +216,7 @@ function ProjectFormInner({ p }: { p?: Project }) {
     description: p?.description ?? '',
     organization: refOf(p?.summary_fields.organization, p?.organization) ?? (org as Ref | null),
     folder: (p?.summary_fields.folder as Ref | undefined) ?? null,
-    scm_type: (p?.scm_type ?? 'git') as '' | 'git',
+    scm_type: (p?.scm_type ?? 'git') as ScmType,
     scm_url: p?.scm_url ?? '',
     scm_branch: p?.scm_branch ?? '',
     scm_refspec: p?.scm_refspec ?? '',
@@ -236,6 +237,7 @@ function ProjectFormInner({ p }: { p?: Project }) {
   const [busy, setBusy] = useState(false)
   const v = f.values
   const git = v.scm_type === 'git'
+  const scm = v.scm_type !== ''
   const submit = async (e: FormEvent) => {
     e.preventDefault()
     setBusy(true)
@@ -249,27 +251,14 @@ function ProjectFormInner({ p }: { p?: Project }) {
       default_environment: v.default_environment?.id ?? null,
       timeout: Number(v.timeout) || 0,
     }
-    if (git) {
-      Object.assign(body, {
-        scm_url: v.scm_url,
-        scm_branch: v.scm_branch,
-        scm_refspec: v.scm_refspec,
-        credential: v.credential?.id ?? null,
-        signature_validation_credential: v.signature_validation_credential?.id ?? null,
-        scm_clean: v.scm_clean,
-        scm_delete_on_update: v.scm_delete_on_update,
-        scm_track_submodules: v.scm_track_submodules,
-        scm_update_on_launch: v.scm_update_on_launch,
-        scm_update_cache_timeout: Number(v.scm_update_cache_timeout) || 0,
-        allow_override: v.allow_override,
-      })
-    } else {
-      Object.assign(body, { local_path: v.local_path, scm_url: '', credential: null, signature_validation_credential: null })
-    }
+    Object.assign(
+      body,
+      sourceBody(v.scm_type, { ...v, credential: v.credential?.id ?? null, signature_validation_credential: v.signature_validation_credential?.id ?? null }),
+    )
     try {
       const saved = p ? await api.patch<Project>(`projects/${p.id}/`, body) : await api.post<Project>('projects/', body)
       invalidate('projects')
-      toast(p ? `Saved ${saved.name}` : git ? `Created ${saved.name}; first sync started` : `Created ${saved.name}`)
+      toast(p ? `Saved ${saved.name}` : scm ? `Created ${saved.name}; first sync started` : `Created ${saved.name}`)
       nav(`/projects/${saved.id}`)
     } catch (err) {
       setError(applyErrors(err, f.setErrors))
@@ -310,22 +299,30 @@ function ProjectFormInner({ p }: { p?: Project }) {
         </div>
         <div className="form-section">
           <h2>Source</h2>
-          <Segmented legend="Where the content lives" value={v.scm_type} onChange={(x) => f.set('scm_type', x)} options={[['git', 'Git repository'], ['', 'Directory on the controller']]} />
-          {git ? (
+          <Segmented legend="Where the content lives" value={v.scm_type} onChange={(x) => f.set('scm_type', x)} options={scmTypeOptions} />
+          {scm ? (
             <>
               <div className="form-grid">
                 <TextInput
-                  label="Repository URL"
+                  label={git ? 'Repository URL' : 'Archive URL'}
                   mono
                   value={v.scm_url}
                   onChange={(x) => f.set('scm_url', x)}
                   error={f.errors.scm_url}
-                  placeholder="https://github.com/acme/playbooks.git"
-                  help="HTTPS or SSH (git@host:org/repo.git)."
+                  placeholder={git ? 'https://github.com/acme/playbooks.git' : 'https://github.com/acme/playbooks/archive/refs/tags/v1.0.tar.gz'}
+                  help={
+                    git
+                      ? 'HTTPS or SSH (git@host:org/repo.git).'
+                      : "A zip or tar (gzip, bzip2 or xz) over HTTP or HTTPS. A single top-level directory is removed; the revision is the archive's SHA-1."
+                  }
                   full
                 />
-                <TextInput label="Branch, tag or commit" optional mono value={v.scm_branch} onChange={(x) => f.set('scm_branch', x)} error={f.errors.scm_branch} help="Empty uses the default branch." />
-                <TextInput label="Refspec" optional mono value={v.scm_refspec} onChange={(x) => f.set('scm_refspec', x)} help="Extra refs to fetch, e.g. refs/pull/*:refs/remotes/origin/pull/*." />
+                {git && (
+                  <>
+                    <TextInput label="Branch, tag or commit" optional mono value={v.scm_branch} onChange={(x) => f.set('scm_branch', x)} error={f.errors.scm_branch} help="Empty uses the default branch." />
+                    <TextInput label="Refspec" optional mono value={v.scm_refspec} onChange={(x) => f.set('scm_refspec', x)} help="Extra refs to fetch, e.g. refs/pull/*:refs/remotes/origin/pull/*." />
+                  </>
+                )}
                 <Lookup
                   label="Source control credential"
                   optional
@@ -334,7 +331,7 @@ function ProjectFormInner({ p }: { p?: Project }) {
                   value={v.credential}
                   onChange={(x) => f.set('credential', x)}
                   error={f.errors.credential}
-                  help="Needed for private repositories."
+                  help={git ? 'Needed for private repositories.' : 'Its username and password are sent with basic auth.'}
                 />
                 <Lookup
                   label="Signature validation credential"
@@ -350,7 +347,12 @@ function ProjectFormInner({ p }: { p?: Project }) {
               <div className="form-section">
                 <h2>Sync behaviour</h2>
                 <div className="form-grid">
-                  <Check label="Sync before each job" checked={v.scm_update_on_launch} onChange={(x) => f.set('scm_update_on_launch', x)} help="Jobs always run the latest commit." />
+                  <Check
+                    label="Sync before each job"
+                    checked={v.scm_update_on_launch}
+                    onChange={(x) => f.set('scm_update_on_launch', x)}
+                    help={git ? 'Jobs always run the latest commit.' : 'Jobs always run what the URL serves.'}
+                  />
                   {v.scm_update_on_launch && (
                     <TextInput
                       label="Cache timeout (seconds)"
@@ -360,10 +362,14 @@ function ProjectFormInner({ p }: { p?: Project }) {
                       help="Reuse a sync newer than this instead of fetching again."
                     />
                   )}
-                  <Check label="Allow branch override" checked={v.allow_override} onChange={(x) => f.set('allow_override', x)} help="Templates and launches may pick another branch." />
-                  <Check label="Discard local changes" checked={v.scm_clean} onChange={(x) => f.set('scm_clean', x)} />
-                  <Check label="Fresh clone on every sync" checked={v.scm_delete_on_update} onChange={(x) => f.set('scm_delete_on_update', x)} help="Slower; use when the checkout gets into a bad state." />
-                  <Check label="Track submodules" checked={v.scm_track_submodules} onChange={(x) => f.set('scm_track_submodules', x)} help="Follow the latest commit of each submodule branch." />
+                  {git && (
+                    <>
+                      <Check label="Allow branch override" checked={v.allow_override} onChange={(x) => f.set('allow_override', x)} help="Templates and launches may pick another branch." />
+                      <Check label="Discard local changes" checked={v.scm_clean} onChange={(x) => f.set('scm_clean', x)} />
+                      <Check label="Fresh clone on every sync" checked={v.scm_delete_on_update} onChange={(x) => f.set('scm_delete_on_update', x)} help="Slower; use when the checkout gets into a bad state." />
+                      <Check label="Track submodules" checked={v.scm_track_submodules} onChange={(x) => f.set('scm_track_submodules', x)} help="Follow the latest commit of each submodule branch." />
+                    </>
+                  )}
                 </div>
               </div>
             </>
@@ -395,7 +401,7 @@ function ProjectFormInner({ p }: { p?: Project }) {
         </div>
         <FormError error={error} />
         <div className="form-actions">
-          <button className="btn primary" disabled={busy || !v.name || !v.organization || (git && !v.scm_url)}>
+          <button className="btn primary" disabled={busy || !v.name || !v.organization || (scm && !v.scm_url)}>
             {busy ? 'Saving…' : p ? 'Save' : 'Create project'}
           </button>
           <button type="button" className="btn ghost" onClick={() => nav(-1)}>
@@ -488,9 +494,9 @@ export function ProjectDetailsTab() {
           <Panel title="Source">
             <KV
               items={[
-                ['Type', p.scm_type === 'git' ? 'Git' : 'Directory on the controller'],
-                p.scm_type ? ['Repository', <span className="mono">{p.scm_url}</span>] : ['Directory', <span className="mono">{p.local_path}</span>],
-                p.scm_type ? ['Branch', <span className="mono">{p.scm_branch || 'default branch'}</span>] : [null, null],
+                ['Type', scmTypeLabel(p.scm_type)],
+                p.scm_type ? [p.scm_type === 'git' ? 'Repository' : 'Archive URL', <span className="mono">{p.scm_url}</span>] : ['Directory', <span className="mono">{p.local_path}</span>],
+                p.scm_type === 'git' ? ['Branch', <span className="mono">{p.scm_branch || 'default branch'}</span>] : [null, null],
                 p.scm_type ? ['Revision', p.scm_revision ? <span className="mono" title={p.scm_revision}>{p.scm_revision}</span> : <span className="faint">not synced yet</span>] : [null, null],
                 p.scm_refspec ? ['Refspec', <span className="mono">{p.scm_refspec}</span>] : [null, null],
                 p.scm_type ? ['Credential', p.summary_fields.credential ? <Link to={`/credentials/${p.credential}`}>{p.summary_fields.credential.name}</Link> : <span className="faint">none (public)</span>] : [null, null],
