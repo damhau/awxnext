@@ -20,8 +20,8 @@ import (
 	"github.com/damhau/awxnext/internal/tmpl"
 )
 
-// Notification types: v1 delivers webhooks only.
-var notificationTypeChoices = labelled("webhook", "Webhook")
+// Notification types: email and webhook (other AWX types are out of scope).
+var notificationTypeChoices = labelled("email", "Email", "webhook", "Webhook")
 
 // webhookFields describes the webhook notification_configuration.
 var webhookFields = map[string]string{
@@ -33,8 +33,16 @@ var messageEvents = []string{"started", "success", "error"}
 
 const defaultMessage = "{{ job_friendly_name }} #{{ job.id }} '{{ job.name }}' {{ job.status }}: {{ url }}"
 
-// validateNotificationConfig checks a webhook configuration and encrypts its password.
-func validateNotificationConfig(c *Ctx, cfg map[string]any, old map[string]any) (map[string]any, error) {
+// validateNotificationConfig checks a configuration for its type and encrypts its password.
+func validateNotificationConfig(c *Ctx, typ string, cfg map[string]any, old map[string]any) (map[string]any, error) {
+	if typ == "email" {
+		return validateEmailConfig(c, cfg, old)
+	}
+	return validateWebhookConfig(c, cfg, old)
+}
+
+// validateWebhookConfig checks a webhook configuration and encrypts its password.
+func validateWebhookConfig(c *Ctx, cfg map[string]any, old map[string]any) (map[string]any, error) {
 	out := map[string]any{}
 	for k, v := range cfg {
 		typ, ok := webhookFields[k]
@@ -99,8 +107,9 @@ func validateNotificationConfig(c *Ctx, cfg map[string]any, old map[string]any) 
 	return out, nil
 }
 
-// validateMessages checks custom messages: templates must parse and webhook bodies render to JSON.
-func validateMessages(v any) error {
+// validateMessages checks custom messages as AWX does: templates must parse,
+// subjects must be one line, and webhook bodies must render to JSON.
+func validateMessages(v any, typ string) error {
 	if v == nil {
 		return nil
 	}
@@ -138,11 +147,14 @@ func validateMessages(v any) error {
 				if t != nil && !ok || (k != "message" && k != "body") {
 					return api.FieldError("messages", fmt.Sprintf("Invalid entry %s.%s.", name, k))
 				}
+				if k == "message" && strings.Contains(s, "\n") {
+					return api.FieldError("messages", fmt.Sprintf("Messages cannot contain newlines (found newline in %s event)", name))
+				}
 				out, err := tmpl.Render(s, sample)
 				if err != nil {
 					return api.FieldError("messages", fmt.Sprintf("Unable to render message for %s: %v", name, err))
 				}
-				if k == "body" && strings.TrimSpace(s) != "" {
+				if k == "body" && typ == "webhook" && strings.TrimSpace(s) != "" {
 					var js any
 					if err := json.Unmarshal([]byte(out), &js); err != nil {
 						return api.FieldError("messages", fmt.Sprintf("Webhook body for %s should be valid JSON: %v", name, err))
@@ -177,21 +189,36 @@ func registerNotifications() {
 			{Name: "organization", Type: api.TFK, Ref: "organizations", Required: true},
 			{Name: "notification_type", Type: api.TChoice, Required: true, Choices: notificationTypeChoices},
 			{Name: "notification_configuration", Type: api.TJSON, Default: map[string]any{}},
-			{Name: "messages", Type: api.TJSON, Nullable: true, Validate: func(c *Ctx, v any, data Obj) error { return validateMessages(v) },
-				Help: "Optional custom messages for notification template."},
+			{Name: "messages", Type: api.TJSON, Nullable: true, Help: "Optional custom messages for notification template."},
 			folderField(),
 		},
 		BeforeSave: func(c *Ctx, old, data Obj) error {
+			typ := str(data["notification_type"])
+			if typ == "" && old != nil {
+				typ = str(old["notification_type"])
+			}
+			typeChanged := old != nil && data["notification_type"] != nil && typ != str(old["notification_type"])
+			if msgs, given := data["messages"]; given || typeChanged {
+				if !given {
+					msgs = old["messages"]
+				}
+				if err := validateMessages(msgs, typ); err != nil {
+					return err
+				}
+			}
 			cfg, given := data["notification_configuration"]
-			if !given && old != nil {
+			if !given && old != nil && !typeChanged {
 				return nil
+			}
+			if !given {
+				cfg = old["notification_configuration"]
 			}
 			m, _ := cfg.(map[string]any)
 			var oldCfg map[string]any
 			if old != nil {
 				oldCfg, _ = old["notification_configuration"].(map[string]any)
 			}
-			out, err := validateNotificationConfig(c, m, oldCfg)
+			out, err := validateNotificationConfig(c, typ, m, oldCfg)
 			if err != nil {
 				return err
 			}
@@ -230,7 +257,11 @@ func registerNotifications() {
 		id, _ := api.ID(obj["id"])
 		base := c.App.Cfg.BaseURL
 		subject := fmt.Sprintf("Tower Notification Test %d %s", id, base)
-		nid, err := createNotification(c, c.App.DB, id, nil, subject, Obj{"body": fmt.Sprintf("Ansible Tower Test Notification %d %s", id, base)})
+		var body any = Obj{"body": fmt.Sprintf("Ansible Tower Test Notification %d %s", id, base)}
+		if str(obj["notification_type"]) == "email" {
+			body = fmt.Sprintf(emailTestBody, id, base)
+		}
+		nid, err := createNotification(c, c.App.DB, id, nil, subject, body)
 		if err != nil {
 			api.WriteError(w, err)
 			return
@@ -332,20 +363,33 @@ func createNotification(ctx context.Context, db api.DBTX, ntID int64, jobID *int
 		return 0, err
 	}
 	b, _ := json.Marshal(body)
+	recipients := str(cfg["url"])
+	if typ == "email" {
+		recipients = emailRecipients(cfg)
+	}
 	var id int64
 	err := db.QueryRow(ctx, `INSERT INTO notifications (notification_template_id, unified_job_id, notification_type, recipients, subject, body)
-		VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`, ntID, jobID, typ, str(cfg["url"]), subject, string(b)).Scan(&id)
+		VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`, ntID, jobID, typ, recipients, subject, string(b)).Scan(&id)
 	return id, err
 }
 
 // deliver sends a notification and records the outcome.
 func deliver(ctx context.Context, app *api.App, id int64) {
+	var typ, subject string
 	var cfg map[string]any
 	var body json.RawMessage
-	err := app.DB.QueryRow(ctx, `SELECT t.notification_configuration, n.body FROM notifications n
-		JOIN notification_templates t ON t.id = n.notification_template_id WHERE n.id = $1`, id).Scan(&cfg, &body)
+	err := app.DB.QueryRow(ctx, `SELECT n.notification_type, t.notification_configuration, n.subject, n.body FROM notifications n
+		JOIN notification_templates t ON t.id = n.notification_template_id WHERE n.id = $1`, id).Scan(&typ, &cfg, &subject, &body)
 	if err == nil {
-		err = sendWebhook(ctx, app, cfg, body)
+		if typ == "email" {
+			var text string
+			if json.Unmarshal(body, &text) != nil {
+				text = string(body)
+			}
+			err = sendEmail(ctx, app, cfg, subject, text)
+		} else {
+			err = sendWebhook(ctx, app, cfg, body)
+		}
 	}
 	status, errText, sent := "successful", "", 1
 	if err != nil {
@@ -521,19 +565,27 @@ func notifyApproval(c *Ctx, approvalID int64, status string) {
 	}
 	rows.Close()
 	workflowURL := JobUIURL(c.App, wfJob)
+	meta, _ := json.MarshalIndent(map[string]any{"id": approvalID, "name": name, "url": workflowURL, "status": status,
+		"friendly_name": "Workflow Approval", "workflow_job": wfJob}, "", "    ")
 	tctx := map[string]any{"approval_status": status, "approval_node_name": name, "workflow_url": workflowURL,
 		"job": map[string]any{"id": approvalID, "name": name, "status": status, "type": "workflow_approval"}, "job_friendly_name": "Workflow Approval",
-		"url": workflowURL}
+		"url": workflowURL, "job_metadata": string(meta)}
 	for _, ntID := range ids {
+		var typ string
 		var messages map[string]any
-		c.App.DB.QueryRow(c, "SELECT messages FROM notification_templates WHERE id = $1", ntID).Scan(&messages)
+		c.App.DB.QueryRow(c, "SELECT notification_type, messages FROM notification_templates WHERE id = $1", ntID).Scan(&typ, &messages)
 		subjectT, bodyT := approvalMessages[status], ""
+		if typ == "email" {
+			bodyT = approvalEmailBodies[status]
+		}
 		if wa, ok := messages["workflow_approval"].(map[string]any); ok {
 			if msg, ok := wa[status].(map[string]any); ok {
 				if s := str(msg["message"]); s != "" {
 					subjectT = s
 				}
-				bodyT = str(msg["body"])
+				if b := str(msg["body"]); b != "" {
+					bodyT = b
+				}
 			}
 		}
 		subject, err := tmpl.Render(subjectT, tctx)
@@ -541,7 +593,9 @@ func notifyApproval(c *Ctx, approvalID int64, status string) {
 			subject = "Unable to render message: " + err.Error()
 		}
 		var body any = map[string]any{"body": subject, "approval_status": status, "approval_node_name": name, "workflow_url": workflowURL, "id": approvalID}
-		if strings.TrimSpace(bodyT) != "" {
+		if typ == "email" {
+			body = renderEmailBody(bodyT, tctx)
+		} else if strings.TrimSpace(bodyT) != "" {
 			var parsed any
 			rendered, err := tmpl.Render(bodyT, tctx)
 			if err == nil {
@@ -591,21 +645,29 @@ func notifyJob(ctx context.Context, m *jobs.Manager, row jobs.Row, event string)
 	tctx, meta := notificationContext(c, row)
 	jobID := row.ID()
 	for _, ntID := range ids {
+		var typ string
 		var messages map[string]any
-		m.DB().QueryRow(ctx, "SELECT messages FROM notification_templates WHERE id = $1", ntID).Scan(&messages)
+		m.DB().QueryRow(ctx, "SELECT notification_type, messages FROM notification_templates WHERE id = $1", ntID).Scan(&typ, &messages)
 		subjectT, bodyT := defaultMessage, ""
+		if typ == "email" {
+			bodyT = emailDefaultBody
+		}
 		if msg, ok := messages[event].(map[string]any); ok {
 			if s := str(msg["message"]); s != "" {
 				subjectT = s
 			}
-			bodyT = str(msg["body"])
+			if b := str(msg["body"]); b != "" {
+				bodyT = b
+			}
 		}
 		subject, err := tmpl.Render(subjectT, tctx)
 		if err != nil {
 			subject = "Unable to render message: " + err.Error()
 		}
 		var body any = meta
-		if strings.TrimSpace(bodyT) != "" {
+		if typ == "email" {
+			body = renderEmailBody(bodyT, tctx)
+		} else if strings.TrimSpace(bodyT) != "" {
 			rendered, err := tmpl.Render(bodyT, tctx)
 			var parsed any
 			if err == nil {
@@ -637,4 +699,14 @@ func JobFinishedNotifications(ctx context.Context, m *jobs.Manager, row jobs.Row
 		event = "success"
 	}
 	notifyJob(ctx, m, row, event)
+}
+
+// renderEmailBody renders an email body template; a template that fails to
+// render sends its error instead, as a subject does.
+func renderEmailBody(src string, tctx map[string]any) string {
+	out, err := tmpl.Render(src, tctx)
+	if err != nil {
+		return "Unable to render message: " + err.Error()
+	}
+	return out
 }

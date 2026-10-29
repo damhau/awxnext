@@ -57,7 +57,7 @@ Importer reading the AWX database directly, plus the AWX `SECRET_KEY` to re-encr
 |---|---|---|
 | Secret lookups | HashiCorp Vault (KV v1/v2), Azure Key Vault | CyberArk, AWS SM, GCP, Thycotic… |
 | Projects | Git only (+ manual) | SVN, archive, Insights |
-| Notifications | Webhook only | Slack, email, PagerDuty, Teams… |
+| Notifications | Webhook only (email added in roadmap M3-01) | Slack, PagerDuty, Teams… |
 | Auth | OIDC, groups read from JWT claim → team/org mapping; local admin for bootstrap/break-glass | LDAP, SAML, social |
 
 ## Architecture

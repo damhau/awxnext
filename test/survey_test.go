@@ -128,4 +128,12 @@ func TestSurveyDynamicChoicesAndConditions(t *testing.T) {
 		t.Fatalf("shown question's answer: %s", ev)
 	}
 	waitJob(t, a, fmt.Sprintf("jobs/%d/", ok.id()))
+
+	// Deleting the survey answers 200 with no body, as AWX does (the collection checks it).
+	if r := must(t, a.delete(specURL), 200); r.Raw != "" {
+		t.Fatalf("delete body: %q", r.Raw)
+	}
+	if r := a.get(specURL); fmt.Sprint(r.Body) != "map[]" {
+		t.Fatalf("survey after delete: %s", r.Raw)
+	}
 }

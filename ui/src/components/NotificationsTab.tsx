@@ -107,7 +107,7 @@ export function NotificationsTab({ resource, id, approvals, editable }: { resour
         keyboard={false}
         empty={
           <Empty title={q ? 'No match' : 'No notifications yet'} action={q ? undefined : <Link to="/notifications/new" className="btn primary">New notification</Link>}>
-            {q ? 'No notification matches this filter.' : 'Create a webhook first, then come back to choose its events.'}
+            {q ? 'No notification matches this filter.' : 'Create a notification first, then come back to choose its events.'}
           </Empty>
         }
       />

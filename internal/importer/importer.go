@@ -1093,6 +1093,12 @@ func (i *imp) schedules() error {
 	return nil
 }
 
+// notificationKeys are the configuration keys kept for each supported type.
+var notificationKeys = map[string][]string{
+	"webhook": {"url", "username", "password", "http_method", "headers", "disable_ssl_verification"},
+	"email":   {"host", "port", "username", "password", "use_tls", "use_ssl", "sender", "recipients", "timeout"},
+}
+
 func (i *imp) notifications() error {
 	rows, err := i.query(`SELECT t.id, t.name, t.description, t.organization_id, t.notification_type, t.notification_configuration, t.created, t.modified,
 		t.created_by_id, t.modified_by_id, ` + i.col("main_notificationtemplate", "messages", "NULL") + ` FROM main_notificationtemplate t ORDER BY t.id`)
@@ -1101,8 +1107,10 @@ func (i *imp) notifications() error {
 	}
 	for _, r := range rows {
 		old := id(r["id"])
-		if str(r["notification_type"]) != "webhook" {
-			i.warn("notification template %q skipped: %s notifications are not supported (webhook only)", r["name"], r["notification_type"])
+		typ := str(r["notification_type"])
+		keys, ok := notificationKeys[typ]
+		if !ok {
+			i.warn("notification template %q skipped: %s notifications are not supported (email and webhook only)", r["name"], typ)
 			continue
 		}
 		org := i.ref("organizations", r["organization_id"])
@@ -1111,7 +1119,7 @@ func (i *imp) notifications() error {
 		}
 		cfg := jsonMap(r["notification_configuration"])
 		clean := map[string]any{}
-		for _, k := range []string{"url", "username", "password", "http_method", "headers", "disable_ssl_verification"} {
+		for _, k := range keys {
 			if v, ok := cfg[k]; ok && v != nil {
 				clean[k] = v
 			}
@@ -1123,7 +1131,7 @@ func (i *imp) notifications() error {
 			}
 			clean["password"] = enc
 		}
-		if m, _ := clean["http_method"].(string); m == "" {
+		if m, _ := clean["http_method"].(string); m == "" && typ == "webhook" {
 			clean["http_method"] = "POST"
 		}
 		cb, _ := json.Marshal(clean)
@@ -1133,7 +1141,7 @@ func (i *imp) notifications() error {
 			msgs = string(b)
 		}
 		if _, err := i.insert("notification_templates", "notification_templates", old, merge(i.audit(r), map[string]any{
-			"name": r["name"], "description": str(r["description"]), "organization_id": org, "notification_type": "webhook",
+			"name": r["name"], "description": str(r["description"]), "organization_id": org, "notification_type": typ,
 			"notification_configuration": string(cb), "messages": msgs})); err != nil {
 			return err
 		}

@@ -31,7 +31,7 @@ The gaps fall in four groups:
    tested nightly since roadmap M2-01 ([compat/](../compat/README.md)); the
    gaps those suites found are roadmap M2-14 to M2-26.
 3. **Deferred by plan**: LDAP, SAML, social, RADIUS and TACACS+ login;
-   notification types other than webhook; SVN and archive projects; CyberArk,
+   notification types other than email and webhook; SVN and archive projects; CyberArk,
    Thycotic, AWS Secrets Manager and Centrify lookups; Helm chart; backup.
 4. **UI holes over a finished API**: inventory
    instance groups, credential type management, inventory source schedules,
@@ -154,7 +154,7 @@ The gaps fall in four groups:
 | Management-job workflow nodes | Yes | Done | Fixed during the audit |
 | Node instance groups prompt; workflow labels passed to nodes | Yes | Missing | |
 | Schedules: rrule with exclusions, timezones, saved prompts, preview | Yes | Done | No labels/IG prompts |
-| Notifications: webhook, started/success/error/approval events, custom messages | Yes | Done | Attaching needs change on the notification too, as in AWX; `used_by` (awxnext) lists where one is attached |
+| Notifications: email and webhook, started/success/error/approval events, custom messages | Yes | Done | Email over SMTP in clear, with STARTTLS or TLS from the start, with a login when a username and password are set, AWX's fields, defaults and messages (roadmap M3-01). The server's certificate is verified against the system's CAs; sender and recipient addresses are checked when saved. Attaching needs change on the notification too, as in AWX; `used_by` (awxnext) lists where one is attached |
 | Email | Yes | Later | Roadmap M3-01 |
 | Slack, PagerDuty, Twilio, Grafana, IRC, Mattermost, Rocket.Chat, AWS SNS | Yes | Out of scope | Dropped on 2026-10-27 |
 | GitHub/GitLab/Bitbucket DC webhooks with status posting | Yes | Done | Plus a generic JSONPath-mapped webhook |

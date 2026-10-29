@@ -712,7 +712,7 @@ func handleSurveySpec(c *Ctx, w http.ResponseWriter, r *http.Request, obj Obj) {
 	if r.Method == "DELETE" {
 		c.DB().Exec(c, "UPDATE unified_job_templates SET survey_spec = '{}' WHERE id = $1", id)
 		api.RecordVersion(c, res, id, "update", Obj{"survey_spec": "deleted"})
-		w.WriteHeader(204)
+		w.WriteHeader(200) // AWX answers 200 with no body; the collection checks it
 		return
 	}
 	data, err := api.ReadBody(r)

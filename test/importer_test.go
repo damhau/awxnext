@@ -129,7 +129,8 @@ INSERT INTO main_schedule VALUES (1,'nightly','',true,'DTSTART;TZID=UTC:20240101
   (2,'Cleanup Job Schedule','',true,'DTSTART:20240101T000000Z RRULE:FREQ=WEEKLY;BYDAY=SA','{"days":"30"}',50,%[1]s,%[1]s,NULL,NULL,NULL,NULL,NULL),
   (3,'broken','',true,'garbage','{}',20,%[1]s,%[1]s,1,1,NULL,NULL,NULL);
 INSERT INTO main_notificationtemplate VALUES (7,'hook','',1,'webhook','{"url":"https://example.com/hook","username":"u","password":"%[6]s","http_method":"POST","headers":{},"disable_ssl_verification":false}',NULL,%[1]s,%[1]s,1,1),
-  (8,'slack','',1,'slack','{"token":"x","channels":["#a"]}',NULL,%[1]s,%[1]s,1,1);
+  (8,'slack','',1,'slack','{"token":"x","channels":["#a"]}',NULL,%[1]s,%[1]s,1,1),
+  (9,'mail','',1,'email','{"host":"smtp.example.com","port":587,"username":"","password":"","use_tls":true,"use_ssl":false,"sender":"awx@example.com","recipients":["ops@example.com"],"timeout":30}',NULL,%[1]s,%[1]s,1,1);
 INSERT INTO main_unifiedjobtemplate_notification_templates_for_success (unifiedjobtemplate_id, notificationtemplate_id) VALUES (20,7);
 INSERT INTO main_organization_notification_templates_for_error (organization_id, notificationtemplate_id) VALUES (1,7);
 INSERT INTO main_rbac_roles VALUES (100,'admin_role',NULL,'[]',1,1),(101,'member_role',NULL,'[]',1,1),(102,'member_role',NULL,'[101]',2,1),
@@ -270,9 +271,13 @@ func TestImportAWX(t *testing.T) {
 	if len(wf) != 1 {
 		t.Fatalf("workflows: %v", wf)
 	}
-	nodes := a.get(fmt.Sprintf("workflow_job_templates/%d/workflow_nodes/?order_by=id", int64(wf[0]["id"].(float64)))).results()
-	if len(nodes) != 2 || fmt.Sprint(nodes[0]["success_nodes"]) != fmt.Sprintf("[%v]", nodes[1]["id"]) ||
-		nodes[1]["summary_fields"].(map[string]any)["unified_job_template"].(map[string]any)["unified_job_type"] != "workflow_approval" {
+	// Imported rows keep their AWX ids only when free, so nodes are found by identifier.
+	nodes := map[string]map[string]any{}
+	for _, n := range a.get(fmt.Sprintf("workflow_job_templates/%d/workflow_nodes/", int64(wf[0]["id"].(float64)))).results() {
+		nodes[n["identifier"].(string)] = n
+	}
+	if first, gate := nodes["first"], nodes["gate"]; len(nodes) != 2 || first == nil || gate == nil || fmt.Sprint(first["success_nodes"]) != fmt.Sprintf("[%v]", gate["id"]) ||
+		gate["summary_fields"].(map[string]any)["unified_job_template"].(map[string]any)["unified_job_type"] != "workflow_approval" {
 		t.Fatalf("workflow nodes: %v", nodes)
 	}
 
@@ -286,9 +291,13 @@ func TestImportAWX(t *testing.T) {
 		t.Fatalf("management schedule: %v", cs)
 	}
 
-	nts := a.get(fmt.Sprintf("notification_templates/?organization=%d", orgID)).results()
-	if len(nts) != 1 || nts[0]["notification_configuration"].(map[string]any)["password"] != "$encrypted$" {
+	nts := a.get(fmt.Sprintf("notification_templates/?organization=%d&order_by=name", orgID)).results()
+	if len(nts) != 2 || nts[0]["notification_configuration"].(map[string]any)["password"] != "$encrypted$" {
 		t.Fatalf("notification templates: %v", nts)
+	}
+	if mail := nts[1]; mail["notification_type"] != "email" || fmt.Sprint(mail["notification_configuration"]) !=
+		"map[host:smtp.example.com password: port:587 recipients:[ops@example.com] sender:awx@example.com timeout:30 use_ssl:false use_tls:true username:]" {
+		t.Fatalf("email notification template: %v", mail)
 	}
 	var pw string
 	app.DB.QueryRow(ctx, "SELECT notification_configuration->>'password' FROM notification_templates WHERE id = $1", nts[0]["id"]).Scan(&pw)
