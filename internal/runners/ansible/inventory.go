@@ -230,6 +230,19 @@ func runInventoryUpdate(ctx context.Context, rc *jobs.RunContext) jobs.Result {
 	for k, v := range inj.Env {
 		env[k] = v
 	}
+	// As AWX: a project source's variables become environment variables for
+	// its scripts and plugins, without replacing ones already set.
+	if source == "scm" {
+		sv, err := vars.Parse(row.Str("source_vars"))
+		if err != nil {
+			return fail("Source variables: " + err.Error())
+		}
+		for k, v := range sv {
+			if _, set := env[k]; !set && !blockedInventoryEnv[k] {
+				env[k] = vars.PyStr(v)
+			}
+		}
+	}
 	if err := run.WriteJSON("env/envvars", env); err != nil {
 		return jobs.Result{Status: "error", Explanation: err.Error()}
 	}
@@ -454,6 +467,10 @@ func ParseInventoryJSON(b []byte) (*InventoryData, error) {
 	}
 	return d, nil
 }
+
+// blockedInventoryEnv are AWX's INV_ENV_VARIABLE_BLOCKED: names source
+// variables cannot set.
+var blockedInventoryEnv = map[string]bool{"HOME": true, "USER": true, "_": true, "TERM": true, "PATH": true}
 
 // ImportOptions control how imported data merges with existing inventory content.
 type ImportOptions struct {

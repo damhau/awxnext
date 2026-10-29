@@ -116,7 +116,7 @@ The gaps fall in four groups:
 | Inventory labels | Yes | Done | `inventories/N/labels/` and `summary_fields.labels` |
 | Asynchronous inventory delete | Yes | Done | 202 and `pending_deletion`, then hosts are deleted in batches in the background; a second delete and launches on it are refused, as in AWX |
 | Cloud sources: ec2, gce, azure_rm, vmware, openstack, satellite6, controller, terraform, openshift_virtualization | Yes | Done | AWX's per-source defaults apply: the enabled variable and value when the source sets none, the host `instance_id` variable (hosts are matched by it before their name, so a host renamed in the cloud keeps its record), and leaving out empty groups (roadmap M4-03). Values ansible-core 2.19+ marks unsafe are stored as plain values |
-| Project file (scm) source | Yes | Partial | `source_vars` not exported as environment |
+| Project file (scm) source | Yes | Done | `source_vars` become environment variables for the source's scripts and plugins, as Python's `str()` of each value, except names already set and `HOME`, `USER`, `_`, `TERM`, `PATH` (roadmap M4-04) |
 | rhv, insights sources | Yes | Done | With AWX's Red Hat Virtualization (INI file and environment) and Insights credential types (roadmap M4-01) |
 | `file` source, `inventory_import` | Yes | Missing | GitOps inventory `content` covers part of it |
 | overwrite, overwrite_vars, enabled_var, host_filter, update on launch with cache | Yes | Done | |

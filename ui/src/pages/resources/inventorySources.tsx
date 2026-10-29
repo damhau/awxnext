@@ -386,7 +386,17 @@ function SourceDialog({ inv, source, onClose }: { inv: Inventory; source?: Sourc
             value={v.source_vars}
             onChange={(x) => f.set('source_vars', x)}
             error={f.errors.source_vars}
-            help={v.source === 'scm' ? 'Override variables passed to the inventory plugin.' : <>Options of the inventory plugin, e.g. <code>regions: [eu-west-1]</code> or <code>keyed_groups</code>.</>}
+            help={
+              v.source === 'scm' ? (
+                <>
+                  Set as environment variables for the inventory script or plugin, e.g. <code>REGION: eu-west-1</code>.
+                </>
+              ) : (
+                <>
+                  Options of the inventory plugin, e.g. <code>regions: [eu-west-1]</code> or <code>keyed_groups</code>.
+                </>
+              )
+            }
           />
           <div className="row wrap" style={{ gap: 20 }}>
             <Check label="Overwrite hosts and groups" checked={v.overwrite} onChange={(x) => f.set('overwrite', x)} help="Remove what the source no longer reports." />
