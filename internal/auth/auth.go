@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"html"
+	"log/slog"
 	"math/big"
 	"net/http"
 	"net/url"
@@ -40,12 +41,21 @@ func (a *Auth) sessionAge(ctx context.Context) time.Duration {
 type Auth struct {
 	app  *api.App
 	oidc *OIDC
+	ldap *LDAP
 }
 
 // Install wires authentication into the API.
 func Install(app *api.App) *Auth {
 	a := &Auth{app: app, oidc: NewOIDC(app)}
 	a.oidc.auth = a
+	a.ldap = &LDAP{auth: a}
+	for suffix, check := range ldapValidators() {
+		for _, prefix := range settings.LDAPServers {
+			if d := settings.Lookup(prefix + suffix); d != nil {
+				d.Validate = check
+			}
+		}
+	}
 	if d := settings.Lookup("OIDC_MAPPING"); d != nil {
 		d.Validate = func(v any) error { _, err := ParseRules(v); return err }
 	}
@@ -130,7 +140,7 @@ func (a *Auth) authenticate(r *http.Request, w http.ResponseWriter) (*rbac.Princ
 			if !ok {
 				return nil, api.Detail(401, "Invalid basic header.")
 			}
-			uid, err := a.checkPassword(ctx, user, pass)
+			uid, err := a.checkPassword(ctx, user, pass, true)
 			if err != nil {
 				return nil, err
 			}
@@ -188,7 +198,29 @@ var verified sync.Map // sha256(hash|password) -> expiry time.Time
 
 const verifiedTTL = time.Minute
 
-func (a *Auth) checkPassword(ctx context.Context, username, password string) (int64, error) {
+// ldapVerified caches successful LDAP logins for Basic auth, as verified
+// does for local passwords; a session login always asks LDAP and maps again.
+var ldapVerified sync.Map // sha256(ldap|username|password) -> ldapHit
+
+type ldapHit struct {
+	uid int64
+	exp time.Time
+}
+
+func (a *Auth) checkPassword(ctx context.Context, username, password string, cached bool) (int64, error) {
+	// AWX tries its LDAP backends before local accounts.
+	lkey := hashToken("ldap|" + username + "|" + password)
+	if v, ok := ldapVerified.Load(lkey); ok && cached && time.Now().Before(v.(ldapHit).exp) {
+		return v.(ldapHit).uid, nil
+	}
+	if uid, ok, err := a.ldap.Authenticate(ctx, username, password); ok {
+		if err != nil {
+			slog.Warn("ldap login", "user", username, "error", err)
+			return 0, api.Detail(401, "Invalid username/password.")
+		}
+		ldapVerified.Store(lkey, ldapHit{uid: uid, exp: time.Now().Add(verifiedTTL)})
+		return uid, nil
+	}
 	var uid int64
 	var hash string
 	var active bool
@@ -292,7 +324,7 @@ func (a *Auth) login(c *api.Ctx, w http.ResponseWriter, r *http.Request) {
 		username, _ = data["username"].(string)
 		password, _ = data["password"].(string)
 	}
-	uid, err := a.checkPassword(c, username, password)
+	uid, err := a.checkPassword(c, username, password, false)
 	if err != nil {
 		api.WriteError(w, err)
 		return

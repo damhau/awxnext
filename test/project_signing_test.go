@@ -18,9 +18,13 @@ import (
 // signKey is a GPG key like the one a project maintainer signs with.
 type signKey struct{ e *openpgp.Entity }
 
+// signConfig dates keys and signatures an hour back: a key "created in the
+// future" is expired to OpenPGP, and a host clock can step back.
+var signConfig = &packet.Config{Algorithm: packet.PubKeyAlgoEdDSA, Time: func() time.Time { return time.Now().Add(-time.Hour) }}
+
 func newSignKey(t *testing.T) signKey {
 	t.Helper()
-	e, err := openpgp.NewEntity("awxnext test", "", "signer@example.com", &packet.Config{Algorithm: packet.PubKeyAlgoEdDSA})
+	e, err := openpgp.NewEntity("awxnext test", "", "signer@example.com", signConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,7 +56,7 @@ func (k signKey) signed(t *testing.T, files map[string]string) map[string]string
 		manifest.WriteString(hex.EncodeToString(h[:]) + "  " + f + "\n")
 	}
 	var sig bytes.Buffer
-	if err := openpgp.ArmoredDetachSign(&sig, k.e, strings.NewReader(manifest.String()), nil); err != nil {
+	if err := openpgp.ArmoredDetachSign(&sig, k.e, strings.NewReader(manifest.String()), signConfig); err != nil {
 		t.Fatal(err)
 	}
 	out := map[string]string{".ansible-sign/sha256sum.txt": manifest.String(), ".ansible-sign/sha256sum.txt.sig": sig.String()}

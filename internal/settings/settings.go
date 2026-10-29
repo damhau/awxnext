@@ -47,6 +47,7 @@ var (
 		{"all", "All"},
 		{"authentication", "Authentication"},
 		{"oidc", "OIDC"},
+		{"ldap", "LDAP"},
 		{"jobs", "Jobs"},
 		{"system", "System"},
 		{"ui", "UI"},

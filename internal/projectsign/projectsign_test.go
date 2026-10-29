@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ProtonMail/go-crypto/openpgp"
 	"github.com/ProtonMail/go-crypto/openpgp/armor"
@@ -130,7 +131,8 @@ func TestParseManifest(t *testing.T) {
 // returns the armored public key.
 func sign(t *testing.T, dir string, files map[string]string, armored bool) string {
 	t.Helper()
-	cfg := &packet.Config{Algorithm: packet.PubKeyAlgoEdDSA}
+	// An hour back: a key "created in the future" is expired to OpenPGP.
+	cfg := &packet.Config{Algorithm: packet.PubKeyAlgoEdDSA, Time: func() time.Time { return time.Now().Add(-time.Hour) }}
 	e, err := openpgp.NewEntity("awxnext test", "", "test@example.com", cfg)
 	if err != nil {
 		t.Fatal(err)

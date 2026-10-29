@@ -18,6 +18,7 @@ import (
 	"github.com/damhau/awxnext/internal/rbac"
 	"github.com/damhau/awxnext/internal/resources"
 	"github.com/damhau/awxnext/internal/schedule"
+	"github.com/damhau/awxnext/internal/settings"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -83,6 +84,7 @@ func Run(ctx context.Context, app *api.App, opt Options) (*Report, error) {
 		{"projects", i.projects}, {"inventory sources", i.inventorySources}, {"job templates", i.jobTemplates},
 		{"workflows", i.workflows}, {"system job templates", i.systemJobTemplates}, {"template relations", i.templateRelations},
 		{"schedules", i.schedules}, {"notification templates", i.notifications}, {"roles", i.roles},
+		{"settings", i.settings},
 	}
 	for _, s := range steps {
 		opt.Log("importing %s", s.name)
@@ -97,7 +99,11 @@ func Run(ctx context.Context, app *api.App, opt Options) (*Report, error) {
 	if opt.DryRun {
 		return i.rep, nil
 	}
-	return i.rep, tx.Commit(ctx)
+	if err := tx.Commit(ctx); err != nil {
+		return i.rep, err
+	}
+	app.Settings.Invalidate()
+	return i.rep, nil
 }
 
 func (i *imp) warn(format string, args ...any) {
@@ -286,6 +292,17 @@ func (i *imp) users() error {
 			auditors[id(r["user_id"])] = true
 		}
 	}
+	// LDAP users keep logging in through LDAP: their DN is in AWX's profile.
+	ldapDNs := map[int64]string{}
+	if i.has("main_profile") {
+		pr, err := i.query(`SELECT user_id, ldap_dn FROM main_profile WHERE ldap_dn <> ''`)
+		if err != nil {
+			return err
+		}
+		for _, r := range pr {
+			ldapDNs[id(r["user_id"])] = str(r["ldap_dn"])
+		}
+	}
 	for _, r := range rows {
 		old := id(r["id"])
 		var existing int64
@@ -294,9 +311,13 @@ func (i *imp) users() error {
 			i.warn("user %q already exists; kept the existing account", r["username"])
 			continue
 		}
-		if _, err := i.insert("users", "users", old, map[string]any{"username": r["username"], "first_name": str(r["first_name"]),
+		v := map[string]any{"username": r["username"], "first_name": str(r["first_name"]),
 			"last_name": str(r["last_name"]), "email": str(r["email"]), "password": str(r["password"]), "is_superuser": boolv(r["is_superuser"]),
-			"is_active": boolv(r["is_active"]), "is_system_auditor": auditors[old], "last_login": r["last_login"], "created": r["date_joined"], "modified": r["date_joined"]}); err != nil {
+			"is_active": boolv(r["is_active"]), "is_system_auditor": auditors[old], "last_login": r["last_login"], "created": r["date_joined"], "modified": r["date_joined"]}
+		if dn := ldapDNs[old]; dn != "" {
+			v["external_source"], v["external_id"], v["password"] = "ldap", dn, ""
+		}
+		if _, err := i.insert("users", "users", old, v); err != nil {
 			return err
 		}
 	}
@@ -1317,6 +1338,71 @@ func (i *imp) finish() error {
 				return err
 			}
 		}
+	}
+	return nil
+}
+
+// loginCategories are the settings categories carried over from AWX: its
+// login settings, under AWX's names.
+var loginCategories = map[string]bool{"authentication": true, "ldap": true, "oidc": true, "saml": true, "github": true, "github-org": true,
+	"github-team": true, "github-enterprise": true, "github-enterprise-org": true, "github-enterprise-team": true, "google-oauth2": true,
+	"azuread-oauth2": true}
+
+// settings imports AWX's login settings (conf_setting), decrypting AWX's
+// encrypted values and encrypting secrets with awxnext's key. A setting
+// awxnext already has is kept.
+func (i *imp) settings() error {
+	if !i.has("conf_setting") {
+		return nil
+	}
+	rows, err := i.query(`SELECT id, key, value::text AS value FROM conf_setting WHERE user_id IS NULL ORDER BY id`)
+	if err != nil {
+		return err
+	}
+	for _, r := range rows {
+		key := str(r["key"])
+		d := settings.Lookup(key)
+		if d == nil || !loginCategories[d.Category] || d.ReadOnly {
+			if d == nil && (strings.HasPrefix(key, "AUTH_LDAP") || strings.HasPrefix(key, "SOCIAL_AUTH_") || strings.HasPrefix(key, "RADIUS_") ||
+				strings.HasPrefix(key, "TACACSPLUS_")) {
+				i.warn("setting %s skipped: not supported", key)
+			}
+			continue
+		}
+		var v any
+		if err := json.Unmarshal([]byte(str(r["value"])), &v); err != nil {
+			i.warn("setting %s skipped: %v", key, err)
+			continue
+		}
+		if s, ok := v.(string); ok && (d.Secret || strings.HasPrefix(s, "$encrypted$")) && s != "" {
+			sid := id(r["id"])
+			plain, err := DecryptAWX(i.opt.SecretKey, &sid, "value", s)
+			if err != nil {
+				return fmt.Errorf("setting %s: %w", key, err)
+			}
+			v = plain
+			if d.Secret {
+				if v, err = i.app.Crypto.Encrypt(plain); err != nil {
+					return err
+				}
+			}
+		} else if d.Validate != nil {
+			if err := d.Validate(v); err != nil {
+				i.warn("setting %s skipped: %v", key, err)
+				continue
+			}
+		}
+		var exists bool
+		i.tx.QueryRow(i.ctx, "SELECT EXISTS (SELECT 1 FROM settings WHERE key = $1)", key).Scan(&exists)
+		if exists {
+			i.warn("setting %s is already set in awxnext; kept", key)
+			continue
+		}
+		b, _ := json.Marshal(v)
+		if _, err := i.tx.Exec(i.ctx, "INSERT INTO settings (key, value, modified) VALUES ($1, $2, now())", key, b); err != nil {
+			return err
+		}
+		i.rep.Counts["settings"]++
 	}
 	return nil
 }

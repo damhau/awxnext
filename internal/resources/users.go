@@ -2,6 +2,7 @@ package resources
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/damhau/awxnext/internal/api"
 	"github.com/damhau/awxnext/internal/auth"
@@ -66,6 +67,7 @@ func registerUsers() {
 				return nil
 			}},
 			{Name: "is_active", Type: api.TBool, Default: true, Help: "Inactive users cannot sign in."},
+			{Name: "ldap_dn", Column: "external_id", Type: api.TString, ReadOnly: true, Help: "The DN of an LDAP user."},
 			{Name: "external_source", Type: api.TString, ReadOnly: true, Help: "The identity provider the user signs in with (oidc), empty for local accounts."},
 			{Name: "last_login", Type: api.TDateTime, ReadOnly: true, Nullable: true},
 		},
@@ -137,6 +139,13 @@ func registerUsers() {
 			return nil
 		},
 		BeforeSave: func(c *Ctx, old, data Obj) error {
+			if old != nil && str(old["external_source"]) != "" {
+				// As in AWX, external accounts keep no password.
+				delete(data, "password")
+				if err := ldapManaged(c, old, data); err != nil {
+					return err
+				}
+			}
 			if pw, ok := data["password"]; ok {
 				s := str(pw)
 				// "$encrypted$" is what reads return: sending it back keeps the password.
@@ -158,10 +167,16 @@ func registerUsers() {
 		},
 		Serialize: func(c *Ctx, o Obj) {
 			o["password"] = "$encrypted$"
-			o["ldap_dn"] = ""
 			o["external_account"] = nil
 			o["auth"] = []any{}
-			if src := str(o["external_source"]); src != "" {
+			if str(o["external_source"]) != "ldap" {
+				o["ldap_dn"] = ""
+			}
+			switch src := str(o["external_source"]); src {
+			case "":
+			case "ldap":
+				o["external_account"] = "ldap"
+			default:
 				o["external_account"] = "social"
 				o["auth"] = []any{Obj{"provider": src}}
 			}
@@ -210,4 +225,30 @@ func registerUsers() {
 			},
 		},
 	})
+}
+
+// ldapManaged refuses changes to the fields LDAP sets for its users: the
+// username, the default server's attribute map and its superuser flag, as
+// AWX's user serializer does while LDAP is configured.
+func ldapManaged(c *Ctx, old, data Obj) error {
+	if str(old["external_source"]) != "ldap" || strings.TrimSpace(c.App.Settings.String(c, "AUTH_LDAP_SERVER_URI")) == "" {
+		return nil
+	}
+	managed := map[string]bool{"username": true}
+	if m, ok := c.App.Settings.Get(c, "AUTH_LDAP_USER_ATTR_MAP").(map[string]any); ok {
+		for k := range m {
+			managed[k] = true
+		}
+	}
+	if m, ok := c.App.Settings.Get(c, "AUTH_LDAP_USER_FLAGS_BY_GROUP").(map[string]any); ok {
+		for k := range m {
+			managed[k] = true
+		}
+	}
+	for _, f := range []string{"username", "first_name", "last_name", "email", "is_superuser"} {
+		if v, ok := data[f]; ok && managed[f] && fmt.Sprint(v) != fmt.Sprint(old[f]) {
+			return api.FieldError(f, fmt.Sprintf("Unable to change %s on user managed by LDAP.", f))
+		}
+	}
+	return nil
 }

@@ -30,7 +30,7 @@ The gaps fall in four groups:
    Compatibility with the collection, awxkit and the Terraform provider is
    tested nightly since roadmap M2-01 ([compat/](../compat/README.md)); the
    gaps those suites found are roadmap M2-14 to M2-26.
-3. **Deferred by plan**: LDAP, SAML, social, RADIUS and TACACS+ login;
+3. **Deferred by plan**: SAML, social, RADIUS and TACACS+ login (LDAP is done, roadmap M5-02);
    notification types other than email and webhook; Helm chart; backup
    (CyberArk, Thycotic, AWS Secrets Manager and Centrify lookups are done,
    roadmap M4-07; archive projects, roadmap M4-10).
@@ -100,7 +100,8 @@ The gaps fall in four groups:
 | Session login, CSRF, basic auth, `/me/` | Yes | Done | |
 | OIDC login | Yes | Done | Ahead of AWX: rules re-applied at every login, bearer JWTs, dry-run endpoint |
 | Organization and team maps (`SOCIAL_AUTH_ORGANIZATION_MAP`, `SOCIAL_AUTH_TEAM_MAP`, per-login maps) | Yes | Done | Roadmap M5-01. AWX's validation and its social pipeline's results: expressions null (no change), true, false, usernames, emails and `/regex/` (flags i, m, matched from the start), `remove_admins`, `remove_users` and `remove`, `organization_alias`; a team map adds to the team only. Applied with the group rules at each login, in the dry run too. As in AWX, a login with its own maps (GitHub, Google, Azure AD, SAML) uses them even when unset; OIDC uses the global maps. Deliberate differences: only memberships a login gave are removed, never manual ones, and organizations and teams are created when someone is mapped into them, not at every login. The per-login map settings come with their logins (M5-03 to M5-05) |
-| LDAP, SAML, GitHub/Google/Azure AD | Yes | Later | |
+| LDAP login (six servers) | Yes | Done | Roadmap M5-02. AWX's `AUTH_LDAP_*` and `AUTH_LDAP_1_*` to `AUTH_LDAP_5_*` settings, validated as AWX does, tried in order before local accounts (session login and Basic auth, cached a minute for Basic auth). django-auth-ldap 4.6's behaviour: user search (or union of searches) bound as the bind DN or anonymously, or DN template; the password checked with the user's own bind; StartTLS and LDAPS; required and denied groups; the 12 group types (nested ones searched bottom up, posix by `memberUid` and `gidNumber`); `USER_ATTR_MAP`; `USER_FLAGS_BY_GROUP` (`is_superuser`, `is_system_auditor`); organization (admins, auditors, users) and team maps by group DN, re-applied at each login. Usernames are matched case-insensitively and created in lower case. `ldap_dn` and `external_account` on users, and the fields LDAP sets cannot be changed, as in AWX. The importer brings AWX's login settings (secrets decrypted) and its LDAP users. Connection options used: `OPT_NETWORK_TIMEOUT`, `OPT_X_TLS_REQUIRE_CERT`, `OPT_X_TLS_CACERTFILE`; referrals are not followed. Deliberate differences: a local account is never taken over, even with another letter case, and DNs in maps are compared as DNs rather than as lower-case strings |
+| SAML, GitHub/Google/Azure AD | Yes | Later | Roadmap M5-03 to M5-05 |
 | RADIUS, TACACS+ | Yes | Missing | Not in the plan |
 | Session, token and login settings | Yes | Partial | Stored but ignored, see P1 |
 | UI: users, teams, organizations, access tabs | Yes | Done | |
@@ -201,7 +202,7 @@ The gaps fall in four groups:
 - Version history with diffs and one-click revert on every object.
 - Folders inside organizations, with roles inherited by everything below; nested teams.
 - GitOps sources applying YAML declarations atomically, with dry-run plans, pruning and locked managed objects.
-- Importer reading an AWX database and re-encrypting its credentials.
+- Importer reading an AWX database and re-encrypting its credentials and login settings.
 - Envelope encryption of secrets with local, Vault Transit or Azure Key Vault master keys, rotation and escrow.
 - Workflow `when` conditions, loops and typed node outputs; survey choices from inventories, git refs and the API, conditional questions, answer formats.
 - Operator catalog (`/run`), launch page with "what will happen" and each variable's source, host × task grid, "why it failed" summary, ⌘K palette, query-language filters.

@@ -11,6 +11,7 @@ import { useConfirm, useToast } from '../../components/overlay'
 import { Empty, ErrorNote, Loading, PageHead, Panel } from '../../components/ui'
 import { humanize } from './common'
 import { grantReason, grantTarget, testerClaims, type MappedGrant } from '../../lib/mapping'
+import { ldapPrefix, ldapServer, ldapServerOn, ldapServerOrder } from '../../lib/ldapSettings'
 
 interface Category {
   slug: string
@@ -22,12 +23,13 @@ const blurbs: Record<string, string> = {
   jobs: 'Job defaults, timeouts, ad hoc modules, Galaxy and isolation.',
   authentication: 'Sessions, basic auth and local accounts.',
   oidc: 'Single sign-on with an OpenID Connect provider, and how its groups map to access.',
+  ldap: 'Up to six LDAP servers, tried in order before local accounts, and how their groups map to access.',
   logging: 'Shipping logs to an external aggregator.',
   ui: 'Login page and live updates.',
   changed: 'Every setting that differs from its default.',
 }
 
-const order = ['system', 'jobs', 'authentication', 'oidc', 'logging', 'ui', 'changed']
+const order = ['system', 'jobs', 'authentication', 'oidc', 'ldap', 'logging', 'ui', 'changed']
 
 const isSecret = (key: string) => /SECRET|PASSWORD/.test(key)
 
@@ -80,6 +82,7 @@ function useCategory(cat: string) {
 function sectionOf(cat: string, key: string): string {
   if (cat === 'oidc') return key.startsWith('SOCIAL_AUTH_') ? 'Provider' : key === 'OIDC_MAPPING' ? 'Group mapping' : 'Claims and tokens'
   if (cat === 'authentication') return key.endsWith('_MAP') ? 'Organization and team maps' : 'Sessions and accounts'
+  if (cat === 'ldap') return ldapServer(key)
   if (cat === 'jobs') {
     if (/TIMEOUT/.test(key)) return 'Timeouts'
     if (/GALAXY|COLLECTIONS|ROLES/.test(key)) return 'Content'
@@ -92,6 +95,7 @@ function sectionOf(cat: string, key: string): string {
 const sectionOrder: Record<string, string[]> = {
   oidc: ['Provider', 'Claims and tokens', 'Group mapping'],
   authentication: ['Sessions and accounts', 'Organization and team maps'],
+  ldap: ldapServerOrder,
   jobs: ['General', 'Timeouts', 'Content', 'Execution'],
 }
 
@@ -157,7 +161,36 @@ function CategoryForm({ cat, editable }: { cat: string; editable: boolean }) {
   }
   return (
     <div className="stack settings-form" style={{ gap: 20 }}>
-      {[...sections.entries()].map(([title, list]) => (
+      {[...sections.entries()].map(([title, list]) => {
+        const fieldsGrid = (
+          <div className="form-grid">
+            {list.map((f) => (
+              <SettingField
+                key={f.key}
+                k={f.key}
+                meta={f.meta}
+                value={draft[f.key]}
+                saved={values.data![f.key]}
+                onChange={(v) => set(f.key, v)}
+                disabled={!f.writable}
+                error={errors[f.key]}
+                prefix={cat === 'ldap' ? ldapPrefix(f.key) : undefined}
+              />
+            ))}
+          </div>
+        )
+        if (cat === 'ldap') {
+          const on = ldapServerOn(draft, title)
+          return (
+            <details key={title} className="form-section" open={on || title === 'Default server' || list.some((f) => errors[f.key])}>
+              <summary>
+                <h2 style={{ display: 'inline' }}>{title}</h2> <span className="faint small">{on ? '' : 'off'}</span>
+              </summary>
+              {fieldsGrid}
+            </details>
+          )
+        }
+        return (
         <section key={title || 'main'} className="form-section">
           {title && <h2>{title}</h2>}
           {title === 'Group mapping' ? (
@@ -180,7 +213,8 @@ function CategoryForm({ cat, editable }: { cat: string; editable: boolean }) {
             </div>
           )}
         </section>
-      ))}
+        )
+      })}
       <FormError error={error} />
       {editable && (
         <div className="form-actions settings-actions">
@@ -273,6 +307,8 @@ function SettingField({
         </Field>
       )
     case 'list':
+      // LDAP searches are [base, scope, filter], or a list of them.
+      if (/^AUTH_LDAP_(\d_)?(USER|GROUP)_SEARCH$/.test(k)) return <JsonField id={id} label={label} help={help} error={error} value={value} onChange={onChange} disabled={disabled} />
       return <ListField id={id} label={label} help={help} error={error} value={value} onChange={onChange} disabled={disabled} />
     case 'nested object':
     case 'dict':

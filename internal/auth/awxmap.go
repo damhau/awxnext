@@ -70,7 +70,12 @@ var (
 	mapRegexRe  = regexp.MustCompile(`^/(.*)/([im]+)?$`)
 )
 
-func parseExpr(v any) (mapExpr, error) {
+// parseExpr reads an expression of a social map: strings are literals or
+// /regex/.
+func parseExpr(v any) (mapExpr, error) { return parseExprAs(v, false) }
+
+// parseExprAs reads an expression; for LDAP maps (dn) strings are group DNs.
+func parseExprAs(v any, dn bool) (mapExpr, error) {
 	switch x := v.(type) {
 	case nil:
 		return mapExpr{}, nil
@@ -90,7 +95,7 @@ func parseExpr(v any) (mapExpr, error) {
 			return mapExpr{}, nil
 		}
 		e := mapExpr{set: true}
-		return e, e.add(x)
+		return e, e.addAs(x, dn)
 	case []any:
 		e := mapExpr{set: true}
 		for _, item := range x {
@@ -102,7 +107,7 @@ func parseExpr(v any) (mapExpr, error) {
 					return mapExpr{}, fmt.Errorf("Expected None, True, False, a string or list of strings but got %s instead.", pyType(item))
 				}
 			}
-			if err := e.add(s); err != nil {
+			if err := e.addAs(s, dn); err != nil {
 				return mapExpr{}, err
 			}
 		}
@@ -111,8 +116,16 @@ func parseExpr(v any) (mapExpr, error) {
 	return mapExpr{}, fmt.Errorf("Expected None, True, False, a string or list of strings but got %s instead.", pyType(v))
 }
 
-// add appends a literal, or a regex written /pattern/flags.
-func (e *mapExpr) add(s string) error {
+// addAs appends a group DN (dn), or a literal or a regex written
+// /pattern/flags.
+func (e *mapExpr) addAs(s string, dn bool) error {
+	if dn {
+		if err := validateLDAPDN(s, false); err != nil {
+			return err
+		}
+		e.literals = append(e.literals, s)
+		return nil
+	}
 	m := mapRegexRe.FindStringSubmatch(s)
 	if m == nil {
 		e.literals = append(e.literals, s)
@@ -157,11 +170,13 @@ func pyName(v any) string {
 
 func pyType(v any) string { return "<class '" + pyName(v) + "'>" }
 
-// orgEntry is one organization of an organization map.
+// orgEntry is one organization of an organization map; LDAP maps also
+// have auditors.
 type orgEntry struct {
-	name, alias               string
-	admins, users             mapExpr
-	removeAdmins, removeUsers bool
+	name, alias                               string
+	admins, users, auditors                   mapExpr
+	removeAdmins, removeUsers, removeAuditors bool
+	ldap                                      bool
 }
 
 // teamEntry is one team of a team map.
@@ -239,7 +254,13 @@ func optBool(entry map[string]any, key string, def bool) (bool, error) {
 // ParseOrgMap reads an AWX organization map, with AWX's validation: each
 // organization takes admins, users, remove_admins, remove_users and
 // organization_alias.
-func ParseOrgMap(v any) ([]orgEntry, error) {
+func ParseOrgMap(v any) ([]orgEntry, error) { return parseOrgMap(v, false) }
+
+// ParseLDAPOrgMap reads an AWX LDAP organization map: admins, auditors and
+// users are group DNs, with remove_admins, remove_auditors and remove_users.
+func ParseLDAPOrgMap(v any) ([]orgEntry, error) { return parseOrgMap(v, true) }
+
+func parseOrgMap(v any, ldap bool) ([]orgEntry, error) {
 	obj, err := asObject(v, "organization map")
 	if err != nil {
 		return nil, err
@@ -251,15 +272,25 @@ func ParseOrgMap(v any) ([]orgEntry, error) {
 		if !ok {
 			return nil, fmt.Errorf("%s: Expected a dictionary of items but got type \"%s\".", name, pyName(obj[name]))
 		}
-		if err := checkKeys(entry, "admins", "users", "remove_admins", "remove_users", "organization_alias"); err != nil {
+		keys := []string{"admins", "users", "remove_admins", "remove_users", "organization_alias"}
+		if ldap {
+			keys = []string{"admins", "auditors", "users", "remove_admins", "remove_auditors", "remove_users"}
+		}
+		if err := checkKeys(entry, keys...); err != nil {
 			return nil, fmt.Errorf("%s: %v", name, err)
 		}
-		o := orgEntry{name: name}
-		if o.admins, err = parseExpr(entry["admins"]); err != nil {
+		o := orgEntry{name: name, ldap: ldap}
+		if o.admins, err = parseExprAs(entry["admins"], ldap); err != nil {
 			return nil, fmt.Errorf("%s: admins: %v", name, err)
 		}
-		if o.users, err = parseExpr(entry["users"]); err != nil {
+		if o.users, err = parseExprAs(entry["users"], ldap); err != nil {
 			return nil, fmt.Errorf("%s: users: %v", name, err)
+		}
+		if o.auditors, err = parseExprAs(entry["auditors"], ldap); err != nil {
+			return nil, fmt.Errorf("%s: auditors: %v", name, err)
+		}
+		if o.removeAuditors, err = optBool(entry, "remove_auditors", true); err != nil {
+			return nil, fmt.Errorf("%s: %v", name, err)
 		}
 		// AWX's pipeline defaults both to its "remove" option, which the
 		// field does not accept, so to true.
@@ -279,7 +310,12 @@ func ParseOrgMap(v any) ([]orgEntry, error) {
 
 // ParseTeamMap reads an AWX team map: each team takes organization
 // (required), users and remove.
-func ParseTeamMap(v any) ([]teamEntry, error) {
+func ParseTeamMap(v any) ([]teamEntry, error) { return parseTeamMap(v, false) }
+
+// ParseLDAPTeamMap reads an AWX LDAP team map, whose users are group DNs.
+func ParseLDAPTeamMap(v any) ([]teamEntry, error) { return parseTeamMap(v, true) }
+
+func parseTeamMap(v any, ldap bool) ([]teamEntry, error) {
 	obj, err := asObject(v, "team map")
 	if err != nil {
 		return nil, err
@@ -299,7 +335,7 @@ func ParseTeamMap(v any) ([]teamEntry, error) {
 			return nil, fmt.Errorf("%s: organization: This field is required.", name)
 		}
 		t := teamEntry{name: name, organization: org}
-		if t.users, err = parseExpr(entry["users"]); err != nil {
+		if t.users, err = parseExprAs(entry["users"], ldap); err != nil {
 			return nil, fmt.Errorf("%s: users: %v", name, err)
 		}
 		if t.remove, err = optBool(entry, "remove", true); err != nil {
@@ -342,6 +378,9 @@ func (m AWXMaps) Evaluate(match Matcher, res *MappingResult) {
 		from := fmt.Sprintf("organization map %q", o.name)
 		decide(o.admins, o.removeAdmins, Grant{RoleDefinition: "Organization Admin", Organization: org, Map: from + " admins", Create: true})
 		decide(o.users, o.removeUsers, Grant{RoleDefinition: "Organization Member", Organization: org, Map: from + " users", Create: true})
+		if o.ldap {
+			decide(o.auditors, o.removeAuditors, Grant{RoleDefinition: "Organization Audit", Organization: org, Map: from + " auditors", Create: true})
+		}
 	}
 	for _, t := range m.Teams {
 		decide(t.users, t.remove, Grant{RoleDefinition: "Team Member", Organization: t.organization, Team: t.name,

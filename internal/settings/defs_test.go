@@ -30,7 +30,8 @@ func TestEverySettingHasAnEffect(t *testing.T) {
 		})
 	}
 	goFile := func(p string) bool {
-		return strings.HasSuffix(p, ".go") && !strings.HasSuffix(p, "_test.go") && !strings.HasSuffix(p, filepath.Join("settings", "defs.go"))
+		return strings.HasSuffix(p, ".go") && !strings.HasSuffix(p, "_test.go") && !strings.HasSuffix(p, filepath.Join("settings", "defs.go")) &&
+			!strings.HasSuffix(p, filepath.Join("settings", "ldap.go"))
 	}
 	uiFile := func(p string) bool {
 		return (strings.HasSuffix(p, ".ts") || strings.HasSuffix(p, ".tsx")) && !strings.Contains(p, ".test.")
@@ -44,6 +45,10 @@ func TestEverySettingHasAnEffect(t *testing.T) {
 
 	for _, d := range InCategory("all") {
 		used := strings.Contains(goSrc.String(), `"`+d.Key+`"`) || regexp.MustCompile(`\b`+d.Key+`\b`).MatchString(uiSrc.String())
+		// The six LDAP servers' settings are read as prefix + "SUFFIX".
+		if m := regexp.MustCompile(`^AUTH_LDAP_(?:[1-5]_)?(.+)$`).FindStringSubmatch(d.Key); m != nil {
+			used = used || strings.Contains(goSrc.String(), `"`+m[1]+`"`)
+		}
 		switch {
 		case d.CompatOnly && used:
 			t.Errorf("%s is marked CompatOnly but code reads it: remove the mark and its \"No effect\" help", d.Key)

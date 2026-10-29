@@ -20,11 +20,15 @@ import (
 const (
 	awxCredSecret   = "$encrypted$UTF8$AESCBC$Z0FBQUFBQnEzN2RVVUZyN0FpRVJqX3ZoODJUaVdGYTlWaTZIcklNMF9keDVWWFlQMk1mVEl3QU1WUFpTR2dVRUNZWXE0amx5RUMyMzQwa1dKY04tZVNpeDRvdEdPVzJ5TkE9PQ=="
 	awxSurveySecret = "$encrypted$UTF8$AESCBC$Z0FBQUFBQnEzN2RWREdoTnlEZFZRWU5rOUtsOVIzR3ZneV9wQmpmbU5QdnRLUUIwWWVjdG1KWlZfM0N6d3dRNFU3ODVqbGZlRVp4aW5ENl9XUnltcUdLbHUyRFEzVmFHNEE9PQ=="
+	// AUTH_LDAP_BIND_PASSWORD "svc-pw", as AWX stores conf_setting 7.
+	awxBindPassword = "$encrypted$UTF8$AESCBC$Z0FBQUFBQnE0MS1YcTRRbnJyX1dxZXZqZVZUZWppbnBSX2NZY1R3SkZOQVVCcTVoOVVyZGRTWno0cGdXaFVVdjJJXzRlVkV4TDNaMzhwTWp5MU9GSXVaU3c3TWg3a0kxNUE9PQ=="
 	awxNotifySecret = "$encrypted$UTF8$AESCBC$Z0FBQUFBQnEzN2RWcVBOQ2lxODhwMHRjaTdSTDNyUDNxWmxDbU1kNHgzWGtLMDlySkh3R2ZjWnhFYlF1VzVZVVJMc1FFM25tNTN2UzdwSHdyUUs1Y3RoeDdBX0lHUUZIcUE9PQ=="
 )
 
 const awxSchema = `
 CREATE TABLE django_content_type (id int PRIMARY KEY, app_label text, model text);
+CREATE TABLE conf_setting (id int PRIMARY KEY, created timestamptz, modified timestamptz, key text, value jsonb, user_id int);
+CREATE TABLE main_profile (id int PRIMARY KEY, created timestamptz, modified timestamptz, ldap_dn text, user_id int);
 CREATE TABLE auth_user (id int PRIMARY KEY, username text, first_name text, last_name text, email text, password text,
   is_superuser bool, is_active bool, last_login timestamptz, date_joined timestamptz);
 CREATE TABLE main_rbac_roles (id int PRIMARY KEY, role_field text, singleton_name text, implicit_parents text, content_type_id int, object_id int);
@@ -92,6 +96,16 @@ func awxData(org, alicePW string) string {
 	return fmt.Sprintf(`
 INSERT INTO auth_user VALUES (1,'admin','','','','x',true,true,NULL,%[1]s),(2,'alice-%[2]s','Alice','A','alice@example.com','%[3]s',false,true,NULL,%[1]s),
   (3,'bob-%[2]s','Bob','B','bob@example.com','!unusable',false,true,NULL,%[1]s);
+INSERT INTO main_profile VALUES (1,%[1]s,%[1]s,'',2),(2,%[1]s,%[1]s,'uid=bob,ou=people,dc=example,dc=com',3);
+INSERT INTO conf_setting VALUES (7,%[1]s,%[1]s,'AUTH_LDAP_BIND_PASSWORD','"`+awxBindPassword+`"',NULL),
+  (8,%[1]s,%[1]s,'AUTH_LDAP_SERVER_URI','"ldap://127.0.0.1:1"',NULL),
+  (9,%[1]s,%[1]s,'AUTH_LDAP_USER_SEARCH','["ou=people,dc=example,dc=com", "SCOPE_SUBTREE", "(uid=%%(user)s)"]',NULL),
+  (10,%[1]s,%[1]s,'AUTH_LDAP_ORGANIZATION_MAP','{"Default": {"users": true, "remove_users": false}}',NULL),
+  (11,%[1]s,%[1]s,'SOCIAL_AUTH_TEAM_MAP','{"Web": {"organization": "Default", "users": "/^a/"}}',NULL),
+  (12,%[1]s,%[1]s,'RADIUS_SERVER','"radius.example.com"',NULL),
+  (13,%[1]s,%[1]s,'TOWER_URL_BASE','"https://awx.example.com"',NULL),
+  (14,%[1]s,%[1]s,'AUTH_LDAP_GROUP_TYPE_PARAMS','{"colour": "blue"}',NULL),
+  (15,%[1]s,%[1]s,'AUTH_LDAP_START_TLS','true',2);
 INSERT INTO main_organization VALUES (1,'%[2]s','imported',%[1]s,%[1]s,1,1,5,NULL);
 INSERT INTO main_team VALUES (1,'Ops','',1,%[1]s,%[1]s,1,1);
 INSERT INTO main_credentialtype VALUES (1,'Machine','','ssh','{}','{}',%[1]s,%[1]s,NULL,NULL,true,'ssh'),
@@ -186,9 +200,13 @@ func TestImportAWX(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() {
+		a.delete("settings/ldap/")
+		a.patch("settings/authentication/", map[string]any{"SOCIAL_AUTH_TEAM_MAP": nil})
+	})
 	warnings := strings.Join(rep.Warnings, "\n")
 	for _, w := range []string{`user "admin" already exists`, "svn projects are not supported", "slack notifications are not supported",
-		`schedule "broken" imported disabled`} {
+		`schedule "broken" imported disabled`, "setting RADIUS_SERVER skipped: not supported", "setting AUTH_LDAP_GROUP_TYPE_PARAMS skipped: Invalid key(s): \"colour\"."} {
 		if !strings.Contains(warnings, w) {
 			t.Errorf("missing warning %q in:\n%s", w, warnings)
 		}
@@ -206,6 +224,25 @@ func TestImportAWX(t *testing.T) {
 	bob := a.get("users/?username=bob-" + org).results()[0]
 	if bob["is_system_auditor"] != true {
 		t.Fatalf("bob should be an auditor: %v", bob)
+	}
+	// AWX's LDAP users stay LDAP users; its login settings come along.
+	if bob["external_account"] != "ldap" || bob["ldap_dn"] != "uid=bob,ou=people,dc=example,dc=com" {
+		t.Errorf("bob is not an LDAP user: %v", bob)
+	}
+	ldapSettings := must(t, a.get("settings/ldap/"), 200).Body
+	if ldapSettings["AUTH_LDAP_SERVER_URI"] != "ldap://127.0.0.1:1" || ldapSettings["AUTH_LDAP_BIND_PASSWORD"] != "$encrypted$" ||
+		fmt.Sprint(ldapSettings["AUTH_LDAP_USER_SEARCH"]) != "[ou=people,dc=example,dc=com SCOPE_SUBTREE (uid=%(user)s)]" ||
+		ldapSettings["AUTH_LDAP_START_TLS"] != false || ldapSettings["AUTH_LDAP_ORGANIZATION_MAP"] == nil {
+		t.Errorf("ldap settings: %v", ldapSettings)
+	}
+	if pw, err := app.Crypto.Decrypt(app.Settings.String(ctx, "AUTH_LDAP_BIND_PASSWORD")); err != nil || pw != "svc-pw" {
+		t.Errorf("bind password: %q %v", pw, err)
+	}
+	if m := must(t, a.get("settings/authentication/"), 200).Body["SOCIAL_AUTH_TEAM_MAP"]; m == nil {
+		t.Error("SOCIAL_AUTH_TEAM_MAP not imported")
+	}
+	if must(t, a.get("settings/system/"), 200).Body["TOWER_URL_BASE"] == "https://awx.example.com" {
+		t.Error("a system setting was imported")
 	}
 
 	if strings.Contains(warnings, `credential "aws lookup" skipped`) {
