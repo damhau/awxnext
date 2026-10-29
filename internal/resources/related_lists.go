@@ -133,8 +133,17 @@ func handleCreateSchedule(c *Ctx, w http.ResponseWriter, r *http.Request, job Ob
 	needsPasswords := len(passwordsNeeded(c, creds)) > 0
 	var prompts Obj
 	var promptCreds []int64
+	// The labels and instance groups chosen at launch, when the template prompts for them.
+	choices := Obj{}
 	if jt != nil {
 		prompts, promptCreds = jobLaunchPrompts(c, job, jt)
+		jtID, _ := api.ID(jt["id"])
+		addLaunchChoices(c, choices, jid, jtID)
+		for _, f := range []string{"labels", "instance_groups"} {
+			if !boolv(jt[promptable[f]]) {
+				delete(choices, f)
+			}
+		}
 	}
 	if r.Method == "GET" {
 		shown := Obj{}
@@ -154,6 +163,19 @@ func handleCreateSchedule(c *Ctx, w http.ResponseWriter, r *http.Request, job Ob
 				list = append(list, Obj{"id": id, "name": name, "description": desc})
 			}
 			shown["credentials"] = list
+		}
+		for f, table := range map[string]string{"labels": "labels", "instance_groups": "instance_groups"} {
+			ids, _ := choices[f].([]any)
+			if len(ids) == 0 {
+				continue
+			}
+			list := []Obj{}
+			for _, id := range ids {
+				var name string
+				c.DB().QueryRow(c, "SELECT name FROM "+table+" WHERE id = $1", id).Scan(&name)
+				list = append(list, Obj{"id": id, "name": name})
+			}
+			shown[f] = list
 		}
 		api.WriteJSON(w, 200, Obj{"can_schedule": jt != nil && !needsPasswords, "prompts": shown})
 		return
@@ -202,6 +224,18 @@ func handleCreateSchedule(c *Ctx, w http.ResponseWriter, r *http.Request, job Ob
 		sid, _ := api.ID(obj["id"])
 		for _, cid := range promptCreds {
 			if _, err := c.DB().Exec(c, "INSERT INTO schedule_credentials (schedule_id, credential_id) VALUES ($1, $2) ON CONFLICT DO NOTHING", sid, cid); err != nil {
+				return err
+			}
+		}
+		labels, _ := choices["labels"].([]any)
+		for _, lid := range labels {
+			if _, err := c.DB().Exec(c, "INSERT INTO schedule_labels (schedule_id, label_id) VALUES ($1, $2) ON CONFLICT DO NOTHING", sid, lid); err != nil {
+				return err
+			}
+		}
+		groups, _ := choices["instance_groups"].([]any)
+		for i, gid := range groups {
+			if _, err := c.DB().Exec(c, "INSERT INTO schedule_instance_groups (schedule_id, instance_group_id, position) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING", sid, gid, i); err != nil {
 				return err
 			}
 		}

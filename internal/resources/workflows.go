@@ -440,7 +440,8 @@ func registerWorkflows() {
 				return err
 			},
 		},
-		labelSub("workflow_job_template_node_labels", "node_id"),
+		promptLabelSub("workflow_job_template_node_labels", "node_id"),
+		groupSub("workflow_job_template_node_instance_groups", "node_id", false),
 	)
 	tn.Actions = []*api.Action{{Name: "create_approval_template", Methods: []string{"POST"}, Handler: handleCreateApprovalTemplate}}
 
@@ -622,7 +623,13 @@ func registerWorkflows() {
 	jn.SubLists = append(jn.SubLists, &SubList{Name: "credentials", Target: "credentials", ReadOnly: true,
 		Filter: func(arg ArgFunc, pid int64) string {
 			return "t.id IN (SELECT credential_id FROM workflow_job_node_credentials WHERE node_id = " + arg(pid) + ")"
-		}})
+		}},
+		&SubList{Name: "labels", Target: "labels", ReadOnly: true,
+			Filter: func(arg ArgFunc, pid int64) string {
+				return "t.id IN (SELECT label_id FROM workflow_job_node_labels WHERE node_id = " + arg(pid) + ")"
+			}},
+		groupSub("workflow_job_node_instance_groups", "node_id", true),
+	)
 
 	// Approvals.
 	ap := registerJobResource(jobSpec{
@@ -829,6 +836,7 @@ func copyWorkflowNodes(c *Ctx, src, dst Obj) error {
 		for _, q := range []string{
 			"INSERT INTO workflow_job_template_node_credentials (node_id, credential_id) SELECT $2, credential_id FROM workflow_job_template_node_credentials WHERE node_id = $1",
 			"INSERT INTO workflow_job_template_node_labels (node_id, label_id) SELECT $2, label_id FROM workflow_job_template_node_labels WHERE node_id = $1",
+			"INSERT INTO workflow_job_template_node_instance_groups (node_id, instance_group_id, position) SELECT $2, instance_group_id, position FROM workflow_job_template_node_instance_groups WHERE node_id = $1",
 		} {
 			if _, err := c.DB().Exec(c, q, id, nid); err != nil {
 				return err

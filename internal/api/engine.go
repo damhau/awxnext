@@ -597,6 +597,11 @@ func decodeBody(r *strings.Reader) (Obj, error) {
 
 // coerce validates and converts an incoming value for a field.
 func coerce(c *Ctx, f *Field, v any) (any, error) {
+	// As DRF's related fields: an empty string is null (the awx.awx modules
+	// clear a reference with "").
+	if s, ok := v.(string); ok && s == "" && f.Type == TFK {
+		v = nil
+	}
 	if v == nil {
 		if f.Nullable || (f.Type == TFK && !f.Required) || f.Type == TJSON {
 			return nil, nil

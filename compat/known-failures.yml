@@ -9,8 +9,6 @@ collection:
   "inventory": "#32 Insights credential type"
   "notification_template": "out of scope: Slack and other notification types (ROADMAP, Proposed out of scope)"
   "project": "#41 archive projects (after current_update, #86, passes)"
-  "schedule": "#30 labels on schedules"
-  "workflow_job_template": "#30 instance groups on workflow nodes (after email notifications, #28, pass)"
 terraform:
   "TestAccGroupResource": "not an awxnext gap: Terraform wraps the expected message across lines; awxnext returns AWX's text"
   "TestAccHostResource": "not an awxnext gap: Terraform wraps the expected message across lines; awxnext returns AWX's text"

@@ -9,6 +9,7 @@ import { useInvalidate } from '../../api/hooks'
 import { typeLabel } from '../../lib/format'
 import { describeSource, type ChoicesFrom } from '../templates/surveyLogic'
 import './automation.css'
+import { SavedLabelsAndGroupsFields, useSavedLabelsAndGroups } from './SavedLabelsAndGroups'
 import { browserZone, DAY_NAMES, DAYS, defaultModel, describe, MONTHS, parseRRule, toRRule, type Day, type Freq, type RuleModel } from './rrule'
 
 const FREQS: [Freq, string, string][] = [
@@ -481,6 +482,7 @@ export function ScheduleDialog({
   const [busy, setBusy] = useState(false)
   const { template: tpl, survey, loading } = useTemplatePrompts(template?.type, template?.id)
   const surveyVars = useMemo(() => new Set(survey.map((q) => q.variable)), [survey])
+  const rel = useSavedLabelsAndGroups(editing ? `schedules/${schedule!.id}/` : null, tpl)
 
   // Extra vars that are not survey answers go to the free-form editor.
   useEffect(() => {
@@ -512,16 +514,18 @@ export function ScheduleDialog({
     if (wantsDays && days !== '') extra.days = Number(days)
     body.extra_data = extra
     try {
-      if (editing) await api.patch(`schedules/${schedule!.id}/`, body)
-      else if (template) await api.post(`${templateResource(template.type)}/${template.id}/schedules/`, body)
+      let id: number
+      if (editing) id = (await api.patch<Any>(`schedules/${schedule!.id}/`, body)).id
+      else if (template) id = (await api.post<Any>(`${templateResource(template.type)}/${template.id}/schedules/`, body)).id
       else throw new Error('Choose what the schedule runs.')
+      await rel.save(`schedules/${id}/`)
       invalidate('schedules', templateResource(template?.type ?? ''), 'unified_job_templates')
       toast(editing ? `Schedule “${name}” saved` : `Schedule “${name}” created`)
       onClose()
     } catch (e) {
       if (e instanceof ApiError && Object.keys(e.fields).length) {
         setErrors(e.fields)
-        const shown = new Set(['name', 'description', 'rrule', 'extra_data', 'extra_vars', ...PROMPTS.map((p) => p.field)])
+        const shown = new Set(['name', 'description', 'rrule', 'extra_data', 'extra_vars', 'labels', 'instance_groups', ...PROMPTS.map((p) => p.field)])
         if (Object.keys(e.fields).some((k) => !shown.has(k))) setFormError(e)
       } else setFormError(e)
     } finally {
@@ -572,7 +576,7 @@ export function ScheduleDialog({
       <RRuleEditor value={rrule} onChange={setRrule} error={errors.rrule} />
       <Check label="Enabled" checked={enabled} onChange={setEnabled} help="Disabled schedules keep their rule but do not launch anything." />
 
-      {template && (allowed.length > 0 || survey.length > 0 || askVars || wantsDays) && (
+      {template && (allowed.length > 0 || survey.length > 0 || askVars || wantsDays || rel.askLabels || rel.askGroups) && (
         <section className="form-section">
           <h2>Launch with</h2>
           <p className="small muted" style={{ margin: 0 }}>
@@ -596,6 +600,7 @@ export function ScheduleDialog({
             {wantsDays && (
               <TextInput label="Keep data for (days)" type="number" value={days} onChange={setDays} error={errors.extra_vars || errors.extra_data} help="Older records are removed." />
             )}
+            <SavedLabelsAndGroupsFields rel={rel} orgId={tpl?.organization} errors={errors} />
           </div>
           {survey.length > 0 && (
             <div className="form-grid">

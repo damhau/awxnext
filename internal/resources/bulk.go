@@ -378,10 +378,10 @@ func launchBulkJob(c *Ctx, body Obj) (int64, error) {
 	seen := map[string]bool{}
 	denied := map[string][]string{}
 	type node struct {
-		ujt           int64
-		identifier    string
-		data          Obj
-		creds, labels []int64
+		ujt                   int64
+		identifier            string
+		data                  Obj
+		creds, labels, groups []int64
 	}
 	nodes := make([]node, len(jobsIn))
 	for i, j := range jobsIn {
@@ -416,10 +416,7 @@ func launchBulkJob(c *Ctx, body Obj) (int64, error) {
 			}
 			n.data["extra_data"] = ev
 		}
-		if _, ok := jm["instance_groups"]; ok {
-			jfe.Add("instance_groups", "Instance groups cannot be set on workflow nodes yet (roadmap M3-03).")
-		}
-		for _, f := range []string{"credentials", "labels"} {
+		for _, f := range []string{"credentials", "labels", "instance_groups"} {
 			list, ok := jm[f].([]any)
 			if !ok {
 				continue
@@ -430,10 +427,13 @@ func launchBulkJob(c *Ctx, body Obj) (int64, error) {
 					jfe.Add(f, "A valid integer is required.")
 					continue
 				}
-				if f == "credentials" {
+				switch f {
+				case "credentials":
 					n.creds = append(n.creds, id)
-				} else {
+				case "labels":
 					n.labels = append(n.labels, id)
+				default:
+					n.groups = append(n.groups, id)
 				}
 			}
 		}
@@ -456,7 +456,7 @@ func launchBulkJob(c *Ctx, body Obj) (int64, error) {
 			denied[plural] = append(denied[plural], strconv.FormatInt(ujt, 10))
 			continue
 		}
-		if err := checkBulkNode(c, typ, ujt, n.data, n.creds, n.labels); err != nil {
+		if err := checkBulkNode(c, typ, ujt, n.data, n.creds, n.labels, n.groups); err != nil {
 			var ae *api.Error
 			if !errors.As(err, &ae) {
 				return 0, err
@@ -552,6 +552,11 @@ func launchBulkJob(c *Ctx, body Obj) (int64, error) {
 					return err
 				}
 			}
+			for i, gid := range n.groups {
+				if _, err := c.DB().Exec(c, "INSERT INTO workflow_job_node_instance_groups (node_id, instance_group_id, position) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING", nodeID, gid, i); err != nil {
+					return err
+				}
+			}
 		}
 		jobs.Wake(c, c.DB())
 		return nil
@@ -561,7 +566,7 @@ func launchBulkJob(c *Ctx, body Obj) (int64, error) {
 
 // checkBulkNode checks a bulk job's prompts as a workflow node's: the
 // template must prompt for them, and the objects they name must be usable.
-func checkBulkNode(c *Ctx, typ string, ujt int64, data Obj, creds, labels []int64) error {
+func checkBulkNode(c *Ctx, typ string, ujt int64, data Obj, creds, labels, groups []int64) error {
 	if d, ok := data["diff_mode"]; ok && d != nil {
 		if s, ok := d.(string); ok {
 			b, err := strconv.ParseBool(s)
@@ -576,7 +581,7 @@ func checkBulkNode(c *Ctx, typ string, ujt int64, data Obj, creds, labels []int6
 	if err := validateSchedulePrompts(c, ujt, data, data, nil); err != nil {
 		return err
 	}
-	if len(creds) == 0 && len(labels) == 0 {
+	if len(creds) == 0 && len(labels) == 0 && len(groups) == 0 {
 		return nil
 	}
 	var tpl Obj
@@ -599,6 +604,16 @@ func checkBulkNode(c *Ctx, typ string, ujt int64, data Obj, creds, labels []int6
 		}
 		for _, id := range labels {
 			if err := canUseLabel(c, id); err != nil {
+				return err
+			}
+		}
+	}
+	if len(groups) > 0 {
+		if tpl == nil || !boolv(tpl["ask_instance_groups_on_launch"]) {
+			return api.FieldError("instance_groups", "Field is not configured to prompt on launch.")
+		}
+		for _, id := range groups {
+			if err := api.RequirePermID(c, "instance_groups", "instance_groups", id, "use"); err != nil {
 				return err
 			}
 		}

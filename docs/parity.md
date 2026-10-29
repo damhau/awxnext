@@ -74,7 +74,7 @@ The gaps fall in four groups:
 
 **P3: completeness**
 
-15. ~~Relaunch keeps launch-time labels and instance groups~~ (done, roadmap M3-02); workflow labels passed to nodes; labels and instance group prompts on schedules and nodes.
+15. ~~Relaunch keeps launch-time labels and instance groups; workflow labels passed to nodes; labels and instance group prompts on schedules and nodes~~ (done, roadmap M3-02 and M3-03).
 16. ~~Typed workflow node outputs~~ (done, roadmap M3-04).
 17. ~~Named URLs for credentials and other multi-hop formats, `related.named_url`~~ (done, roadmap M2-10).
 18. Websocket groups `jobs-summary`, `schedules-changed` and `control-limit_reached_<user>` (subscribable, never published).
@@ -146,14 +146,14 @@ The gaps fall in four groups:
 | `ansible_*` variables at launch (extra vars, survey questions, schedules, ad hoc) | Yes | Done | Deliberate difference: refused, as they set how Ansible connects and runs; `ALLOW_ANSIBLE_VARS_AT_LAUNCH` gives AWX's behaviour. Template, inventory and host variables are not affected |
 | Surveys (all types, password encryption) | Yes | Done | Plus choices from the system, conditional questions, answer formats |
 | Relaunch (all, failed hosts) | Yes | Done | Keeps the labels and instance groups chosen at launch, checked as prompts (roadmap M3-02); a sliced job's relaunch takes them from its first slice |
-| `jobs/N/create_schedule/` | Yes | Done | A disabled monthly schedule of the job's template with its launch prompts and credentials; labels and instance groups wait for schedules to store them (M3-03) |
+| `jobs/N/create_schedule/` | Yes | Done | A disabled monthly schedule of the job's template with its launch prompts, credentials, labels and instance groups |
 | Job slicing | Yes | Done | |
 | Job events, stdout formats, host summaries, artifacts | Yes | Done | `job_events/N/children/` and `playbook_counts` (also on job lists). `event_processing_finished` is true once a job has ended, including a job that never ran (a failed dependency, canceled while pending), and workflow jobs don't have it, as in AWX: clients wait on it |
 | Ad hoc commands | Yes | Done | UI dialog lacks EE and passwords |
 | Workflows: edges, convergence, nested, approvals, artifacts, prompts | Yes | Done | Plus `when` conditions, loops and typed outputs (job templates declare the `set_stats` outputs their jobs must publish; see [workflows.md](workflows.md#typed-outputs)) |
 | Management-job workflow nodes | Yes | Done | Fixed during the audit |
-| Node instance groups prompt; workflow labels passed to nodes | Yes | Missing | |
-| Schedules: rrule with exclusions, timezones, saved prompts, preview | Yes | Done | No labels/IG prompts |
+| Node labels and instance groups prompts; workflow labels passed to nodes | Yes | Done | Saved on nodes by whoever may see the labels and use the instance groups, copied to workflow job nodes, and given to the node's job when its template prompts for them (ignored otherwise, as in AWX); a workflow job's labels are added to the jobs of nodes whose template prompts for labels (roadmap M3-03). Editable in the step editor |
+| Schedules: rrule with exclusions, timezones, saved prompts, preview | Yes | Done | Labels and ordered instance groups saved as prompts (`schedules/N/labels/`, `schedules/N/instance_groups/`), by whoever may see and use them, used when the template prompts for them (roadmap M3-03). Editable in the schedule dialog |
 | Notifications: email and webhook, started/success/error/approval events, custom messages | Yes | Done | Email over SMTP in clear, with STARTTLS or TLS from the start, with a login when a username and password are set, AWX's fields, defaults and messages (roadmap M3-01). The server's certificate is verified against the system's CAs; sender and recipient addresses are checked when saved. Attaching needs change on the notification too, as in AWX; `used_by` (awxnext) lists where one is attached |
 | Email | Yes | Later | Roadmap M3-01 |
 | Slack, PagerDuty, Twilio, Grafana, IRC, Mattermost, Rocket.Chat, AWS SNS | Yes | Out of scope | Dropped on 2026-10-27 |
@@ -173,7 +173,7 @@ The gaps fall in four groups:
 | Named URLs | Yes | Done | AWX's graph: every resource it names (credentials as `<name>++<credential_type.name>+<credential_type.kind>++<organization.name>`, hosts, groups and sources through their inventory, workflow nodes by identifier, users by username, instances by hostname), `[+]` for a `+` in a value, an empty segment for a missing parent. `related.named_url` on a detail and in create and update answers, as in AWX; `NAMED_URL_FORMATS` and `NAMED_URL_GRAPH_NODES` in `settings/named-url/` |
 | Browsable HTML API | Yes | Done | Replaced by `/api/docs/`: Swagger UI over the OpenAPI document, in the UI, where a signed-in user calls any endpoint with their session (account menu, API docs). DRF's own browsable pages are out of scope |
 | Dashboard endpoints | Yes | Done | `/dashboard/` (deprecated, as in AWX) and `/dashboard/graphs/jobs/` with `period` and `job_type`, counting what the user sees. The graph counts per day for every period (AWX's `day` period matches only the jobs of the midnight hour). The UI's "Now" page replaces the dashboard |
-| Bulk API | Yes | Done | `bulk/job_launch` creates a workflow job without a template (`is_bulk_job`), one node per job; node prompts are checked against their template like a workflow node's (AWX ignores unprompted ones), and instance groups per node wait for M3-03. Limits `BULK_JOB_MAX_LAUNCH`, `BULK_HOST_MAX_CREATE`, `BULK_HOST_MAX_DELETE` (settings, jobs category) |
+| Bulk API | Yes | Done | `bulk/job_launch` creates a workflow job without a template (`is_bulk_job`), one node per job; node prompts are checked against their template like a workflow node's (AWX ignores unprompted ones), including labels and instance groups. Limits `BULK_JOB_MAX_LAUNCH`, `BULK_HOST_MAX_CREATE`, `BULK_HOST_MAX_DELETE` (settings, jobs category) |
 | Activity stream | Yes | Partial | No entries for job launches or role assignment API grants |
 | Settings API and UI | Yes | Done | Settings with no effect say so in their help ("No effect in awxnext": analytics, subscriptions, OAuth2, custom virtualenvs, `LOG_AGGREGATOR_*` until M6-03); a test keeps it that way. Null is refused ("This field may not be null.") except for the settings AWX registers with `allow_null` (`DEFAULT_EXECUTION_ENVIRONMENT`, `LOG_AGGREGATOR_HOST`, `_PORT`, `_TYPE`) |
 | External log aggregation | Yes | Missing | JSON logs on stderr instead |

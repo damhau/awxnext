@@ -490,9 +490,14 @@ func LaunchJobTemplate(c *Ctx, jt Obj, body Obj, launchType string, ov *LaunchOv
 				fe.Add("credentials", fmt.Sprintf("Removing %s credential at launch time without replacement is not supported. Provided list lacked credential(s): %s.", name, name))
 			}
 		}
-		for _, cid := range launch {
-			if err := checkTemplateCredential(c, nil, cid); err != nil {
-				fe.Add("credentials", fmt.Sprint(err.(*api.Error).Body.(Obj)["detail"]))
+		// As AWX, only credentials given at launch are refused by kind: those
+		// saved on a node or schedule were checked when attached and go to
+		// the job as they are (the runner skips kinds a job cannot use).
+		if ov == nil || ov.Trusted["credentials"] == nil {
+			for _, cid := range launch {
+				if err := checkTemplateCredential(c, nil, cid); err != nil {
+					fe.Add("credentials", fmt.Sprint(err.(*api.Error).Body.(Obj)["detail"]))
+				}
 			}
 		}
 		creds = launch

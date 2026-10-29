@@ -16,6 +16,7 @@ import { addToCondition, outputSuggestions, type OutputDecl, type OutputSuggesti
 import './automation.css'
 import { edgePath, layout, type Box, type EdgeKind, type GraphNode, type Layout } from './layout'
 import { itemLabel, loopProgress, type Iteration, type LoopProgress } from './loops'
+import { SavedLabelsAndGroupsFields, useSavedLabelsAndGroups } from './SavedLabelsAndGroups'
 import { PromptField, PROMPTS, SurveyField, useTemplatePrompts } from './ScheduleForm'
 
 const KINDS: EdgeKind[] = ['success', 'failure', 'always']
@@ -573,6 +574,8 @@ function NodePanel({
 
   const allowed = PROMPTS.filter((p) => template?.[p.ask])
   const askVars = !!template?.ask_variables_on_launch
+  // Labels and instance groups saved on the step (only for the template it already runs).
+  const rel = useSavedLabelsAndGroups(`workflow_job_template_nodes/${node.id}/`, tpl?.id === node.unified_job_template ? template : undefined)
   const byId = new Map(nodes.map((n) => [n.id, n]))
   const outgoing = KINDS.flatMap((k) => (node[`${k}_nodes`] as number[]).map((to) => ({ kind: k, to })))
   const incoming = nodes.flatMap((n) => KINDS.filter((k) => (n[`${k}_nodes`] as number[]).includes(node.id)).map((k) => ({ kind: k, from: n })))
@@ -610,6 +613,7 @@ function NodePanel({
         }
       }
       await api.patch(`workflow_job_template_nodes/${node.id}/`, body)
+      if (!isApproval) await rel.save(`workflow_job_template_nodes/${node.id}/`)
       if (isApproval) {
         await api.post(`workflow_job_template_nodes/${node.id}/create_approval_template/`, {
           name: apName,
@@ -740,9 +744,14 @@ function NodePanel({
             ))}
           </div>
         )}
+        {!isApproval && (rel.askLabels || rel.askGroups) && (
+          <div className="stack" style={{ gap: 12 }}>
+            <SavedLabelsAndGroupsFields rel={rel} orgId={template?.organization} errors={errors} />
+          </div>
+        )}
         {!isApproval && survey.map((s) => <SurveyField key={s.variable} q={s} value={answers[s.variable] ?? s.default} onChange={(v) => setAnswers((a) => ({ ...a, [s.variable]: v }))} />)}
         {!isApproval && askVars && <VarsEditor label="Extra variables" value={extraText} onChange={setExtraText} error={errors.extra_data} rows={4} />}
-        {!isApproval && template && !allowed.length && !askVars && !survey.length && (
+        {!isApproval && template && !allowed.length && !askVars && !survey.length && !rel.askLabels && !rel.askGroups && (
           <p className="small faint" style={{ margin: 0 }}>
             The template prompts for nothing, so this step runs it as configured.
           </p>

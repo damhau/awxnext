@@ -388,6 +388,8 @@ func registerSchedules() {
 			Name: "jobs", Target: "unified_jobs", ReadOnly: true,
 			Filter: func(arg ArgFunc, pid int64) string { return "t.schedule_id = " + arg(pid) },
 		},
+		promptLabelSub("schedule_labels", "schedule_id"),
+		groupSub("schedule_instance_groups", "schedule_id", false),
 	}
 	for _, name := range []string{"job_templates", "projects", "inventory_sources", "system_job_templates", "workflow_job_templates"} {
 		r := api.Lookup(name)
@@ -440,6 +442,9 @@ func registerSchedules() {
 			}
 			trusted["credentials"] = list
 		}
+		if err := savedPrompts(c, trusted, jt, "schedule_labels", "schedule_instance_groups", "schedule_id", sid); err != nil {
+			return 0, err
+		}
 		id, _, err := LaunchJobTemplate(c, jt, body, "scheduled", &LaunchOverrides{Trusted: trusted, ExtraJob: map[string]any{"schedule_id": sid}})
 		return id, err
 	}
@@ -470,6 +475,9 @@ func registerSchedules() {
 			body["extra_vars"] = plain
 		}
 		sid, _ := api.ID(s["id"])
+		if err := savedPrompts(c, trusted, wf, "schedule_labels", "", "schedule_id", sid); err != nil {
+			return 0, err
+		}
 		id, _, err := LaunchWorkflowJobTemplate(c, wf, body, "scheduled", &LaunchOverrides{Trusted: trusted, ExtraJob: map[string]any{"schedule_id": sid}})
 		return id, err
 	}

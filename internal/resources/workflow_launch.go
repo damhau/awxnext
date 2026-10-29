@@ -184,9 +184,11 @@ func copyTemplateNodes(c *Ctx, wfjt, wfJob int64) error {
 			SELECT mf.new_id, mt.new_id, x.kind FROM workflow_job_template_node_edges x
 			JOIN m mf ON mf.old_id = x.from_node_id JOIN m mt ON mt.old_id = x.to_node_id),
 		cr AS (INSERT INTO workflow_job_node_credentials (node_id, credential_id)
-			SELECT m.new_id, x.credential_id FROM workflow_job_template_node_credentials x JOIN m ON m.old_id = x.node_id)
-		INSERT INTO workflow_job_node_labels (node_id, label_id)
-			SELECT m.new_id, x.label_id FROM workflow_job_template_node_labels x JOIN m ON m.old_id = x.node_id`, wfjt, wfJob)
+			SELECT m.new_id, x.credential_id FROM workflow_job_template_node_credentials x JOIN m ON m.old_id = x.node_id),
+		lb AS (INSERT INTO workflow_job_node_labels (node_id, label_id)
+			SELECT m.new_id, x.label_id FROM workflow_job_template_node_labels x JOIN m ON m.old_id = x.node_id)
+		INSERT INTO workflow_job_node_instance_groups (node_id, instance_group_id, position)
+			SELECT m.new_id, x.instance_group_id, x.position FROM workflow_job_template_node_instance_groups x JOIN m ON m.old_id = x.node_id`, wfjt, wfJob)
 	return err
 }
 
@@ -208,9 +210,11 @@ func copyJobNodes(c *Ctx, oldJob, newJob int64) error {
 			SELECT mf.new_id, mt.new_id, x.kind FROM workflow_job_node_edges x
 			JOIN m mf ON mf.old_id = x.from_node_id JOIN m mt ON mt.old_id = x.to_node_id),
 		cr AS (INSERT INTO workflow_job_node_credentials (node_id, credential_id)
-			SELECT m.new_id, x.credential_id FROM workflow_job_node_credentials x JOIN m ON m.old_id = x.node_id)
-		INSERT INTO workflow_job_node_labels (node_id, label_id)
-			SELECT m.new_id, x.label_id FROM workflow_job_node_labels x JOIN m ON m.old_id = x.node_id`, oldJob, newJob)
+			SELECT m.new_id, x.credential_id FROM workflow_job_node_credentials x JOIN m ON m.old_id = x.node_id),
+		lb AS (INSERT INTO workflow_job_node_labels (node_id, label_id)
+			SELECT m.new_id, x.label_id FROM workflow_job_node_labels x JOIN m ON m.old_id = x.node_id)
+		INSERT INTO workflow_job_node_instance_groups (node_id, instance_group_id, position)
+			SELECT m.new_id, x.instance_group_id, x.position FROM workflow_job_node_instance_groups x JOIN m ON m.old_id = x.node_id`, oldJob, newJob)
 	if err != nil {
 		return err
 	}

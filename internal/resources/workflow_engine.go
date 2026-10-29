@@ -845,12 +845,8 @@ func launchNode(c *Ctx, wf jobs.Row, n *wfNode, node Obj, extra map[string]any) 
 			}
 			trusted["credentials"] = list
 		}
-		if labels, _ := idList(c, "SELECT label_id FROM workflow_job_node_labels WHERE node_id = $1", n.id); len(labels) > 0 {
-			list := make([]any, len(labels))
-			for i, id := range labels {
-				list[i] = id
-			}
-			trusted["labels"] = list
+		if err := nodeLabelsAndGroups(c, trusted, wf.ID(), n.id, tpl); err != nil {
+			return 0, err
 		}
 		ov := &LaunchOverrides{Trusted: trusted}
 		if aa := n.artifacts; aa["job_slice"] != nil {
@@ -868,7 +864,11 @@ func launchNode(c *Ctx, wf jobs.Row, n *wfNode, node Obj, extra map[string]any) 
 				return 0, fmt.Errorf("Workflow Job spawned from workflow could not start because it would result in recursion (spawn order, most recent first: %v)", workflowAncestry(c, wf.ID()))
 			}
 		}
-		id, _, err := LaunchWorkflowJobTemplate(c, tpl, Obj{"extra_vars": extra}, "workflow", &LaunchOverrides{Trusted: Obj{}})
+		trusted := Obj{}
+		if err := nodeLabelsAndGroups(c, trusted, wf.ID(), n.id, tpl); err != nil {
+			return 0, err
+		}
+		id, _, err := LaunchWorkflowJobTemplate(c, tpl, Obj{"extra_vars": extra}, "workflow", &LaunchOverrides{Trusted: trusted})
 		return id, err
 	case "system_job_template":
 		// Only the node's own days and dry_run: management jobs take no other variables.
