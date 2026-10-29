@@ -98,6 +98,21 @@ of a `file` source of the inventory:
 awxnext inventory-import --inventory-name Production --source /etc/ansible/hosts --overwrite
 ```
 
+### Signed projects
+
+A project with a signature validation credential (a *GPG Public Key*) checks every sync as
+AWX does: the GPG signature of `.ansible-sign/sha256sum.txt`, then the checkout against it.
+A changed, added or removed file, or a wrong signature, fails the sync, and the project keeps
+the last revision that passed. Sign with [`ansible-sign`](https://github.com/ansible/ansible-sign):
+
+```bash
+ansible-sign project gpg-sign .   # reads MANIFEST.in, writes .ansible-sign/
+```
+
+Every file counts unless `MANIFEST.in` excludes it. `.git` never counts, so the
+`prune .git` that AWX's clones need is not required. As in AWX, the checkouts of jobs, such
+as a branch override, are not verified.
+
 ## Development
 
 ```sh

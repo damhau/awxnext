@@ -141,7 +141,7 @@ The gaps fall in four groups:
 | Archive projects | Yes | Later | Roadmap M4-10. Subversion projects: out of scope by decision (2026-10-29); Insights projects: by design |
 | Branch override, refspec, submodules, delete on update, clean, update on launch with cache | Yes | Done | |
 | Requirements (roles, collections) | Yes | Done | Installed in the EE at run time, cached by content |
-| Content signature validation | Yes | Partial | Field only, nothing verifies |
+| Content signature validation | Yes | Done | Each sync checks the `ansible-sign` GPG signature and checksum manifest (`MANIFEST.in` as distlib reads it) as AWX's verification play does, and fails without moving the project's revision. Deliberate difference: `.git` entries never count, so `prune .git` is not needed. As in AWX, job checkouts are not verified |
 | Job template fields, multiple credentials, labels, instance groups, EE | Yes | Done | `MAX_FORKS` not enforced. The playbook is checked against the project unless the project allows branch override, as in AWX |
 | All 16 `ask_*_on_launch` prompts | Yes | Done | |
 | Launch fields the template does not prompt for | Yes | Done | Deliberate difference: refused with a 400 instead of ignored (`ignored_fields`); `IGNORE_UNPROMPTED_LAUNCH_FIELDS` gives AWX's behaviour. Empty values and the template's own values change nothing and pass (still in `ignored_fields`), so the Terraform provider can update an `aap_job` |

@@ -314,6 +314,10 @@ func runProjectUpdate(ctx context.Context, rc *jobs.RunContext) jobs.Result {
 		}
 		return jobs.Result{Status: "failed", Explanation: err.Error()}
 	}
+	// A failed verification leaves the project at its last verified revision.
+	if err := verifyContent(ctx, rc, src.ProjectID, dir); err != nil {
+		return jobs.Result{Status: "failed", Explanation: "Project signature validation failed: " + err.Error()}
+	}
 	files, err := projectscan.Scan(dir, app.Settings.Bool(ctx, "AWX_SHOW_PLAYBOOK_LINKS"))
 	if err != nil {
 		return jobs.Result{Status: "error", Explanation: err.Error()}

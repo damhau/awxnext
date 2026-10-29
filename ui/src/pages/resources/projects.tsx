@@ -32,6 +32,7 @@ export interface Project extends Base {
   scm_update_cache_timeout: number
   allow_override: boolean
   credential: number | null
+  signature_validation_credential: number | null
   default_environment: number | null
   local_path: string
   timeout: number
@@ -219,6 +220,7 @@ function ProjectFormInner({ p }: { p?: Project }) {
     scm_branch: p?.scm_branch ?? '',
     scm_refspec: p?.scm_refspec ?? '',
     credential: refOf(p?.summary_fields.credential, p?.credential),
+    signature_validation_credential: refOf(p?.summary_fields.signature_validation_credential, p?.signature_validation_credential),
     default_environment: refOf(p?.summary_fields.default_environment, p?.default_environment),
     scm_clean: p?.scm_clean ?? false,
     scm_delete_on_update: p?.scm_delete_on_update ?? false,
@@ -253,6 +255,7 @@ function ProjectFormInner({ p }: { p?: Project }) {
         scm_branch: v.scm_branch,
         scm_refspec: v.scm_refspec,
         credential: v.credential?.id ?? null,
+        signature_validation_credential: v.signature_validation_credential?.id ?? null,
         scm_clean: v.scm_clean,
         scm_delete_on_update: v.scm_delete_on_update,
         scm_track_submodules: v.scm_track_submodules,
@@ -261,7 +264,7 @@ function ProjectFormInner({ p }: { p?: Project }) {
         allow_override: v.allow_override,
       })
     } else {
-      Object.assign(body, { local_path: v.local_path, scm_url: '', credential: null })
+      Object.assign(body, { local_path: v.local_path, scm_url: '', credential: null, signature_validation_credential: null })
     }
     try {
       const saved = p ? await api.patch<Project>(`projects/${p.id}/`, body) : await api.post<Project>('projects/', body)
@@ -332,6 +335,16 @@ function ProjectFormInner({ p }: { p?: Project }) {
                   onChange={(x) => f.set('credential', x)}
                   error={f.errors.credential}
                   help="Needed for private repositories."
+                />
+                <Lookup
+                  label="Signature validation credential"
+                  optional
+                  resource="credentials/"
+                  params={{ credential_type__kind: 'cryptography' }}
+                  value={v.signature_validation_credential}
+                  onChange={(x) => f.set('signature_validation_credential', x)}
+                  error={f.errors.signature_validation_credential}
+                  help="A GPG public key. Each sync then checks the ansible-sign signature and checksums, and fails if a file changed."
                 />
               </div>
               <div className="form-section">
@@ -481,6 +494,9 @@ export function ProjectDetailsTab() {
                 p.scm_type ? ['Revision', p.scm_revision ? <span className="mono" title={p.scm_revision}>{p.scm_revision}</span> : <span className="faint">not synced yet</span>] : [null, null],
                 p.scm_refspec ? ['Refspec', <span className="mono">{p.scm_refspec}</span>] : [null, null],
                 p.scm_type ? ['Credential', p.summary_fields.credential ? <Link to={`/credentials/${p.credential}`}>{p.summary_fields.credential.name}</Link> : <span className="faint">none (public)</span>] : [null, null],
+                p.summary_fields.signature_validation_credential
+                  ? ['Signature validation', <Link to={`/credentials/${p.signature_validation_credential}`}>{p.summary_fields.signature_validation_credential.name}</Link>]
+                  : [null, null],
                 [
                   'Options',
                   [
