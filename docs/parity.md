@@ -31,7 +31,7 @@ The gaps fall in four groups:
    tested nightly since roadmap M2-01 ([compat/](../compat/README.md)); the
    gaps those suites found are roadmap M2-14 to M2-26.
 3. **Deferred by plan**: LDAP, SAML, social, RADIUS and TACACS+ login;
-   notification types other than email and webhook; SVN and archive projects; CyberArk,
+   notification types other than email and webhook; archive projects; CyberArk,
    Thycotic, AWS Secrets Manager and Centrify lookups; Helm chart; backup.
 4. **UI holes over a finished API**: inventory
    instance groups, credential type management, inventory source schedules,
@@ -136,7 +136,7 @@ The gaps fall in four groups:
 | Feature | AWX 24.6 | awxnext | Notes |
 |---|---|---|---|
 | Git and manual projects | Yes | Done | Native Go sync, one immutable checkout per commit. A template's `current_job` is set as soon as a job is pending, and `current_update`/`last_update` are in the summaries of every template and the links of projects and inventory sources, as in AWX |
-| SVN, archive | Yes | Later | Insights projects: by design |
+| Archive projects | Yes | Later | Roadmap M4-10. Subversion projects: out of scope by decision (2026-10-29); Insights projects: by design |
 | Branch override, refspec, submodules, delete on update, clean, update on launch with cache | Yes | Done | |
 | Requirements (roles, collections) | Yes | Done | Installed in the EE at run time, cached by content |
 | Content signature validation | Yes | Partial | Field only, nothing verifies |

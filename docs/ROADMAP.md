@@ -27,7 +27,7 @@ be matched.
 | [M1 Nothing misleading](#m1-nothing-misleading) | What awxnext shows or accepts does what it says | 17 |
 | [M2 AWX clients work unchanged](#m2-awx-clients-work-unchanged) | Collection, awxkit and Terraform run against awxnext, proven in CI | 26 |
 | [M3 Jobs, workflows and notifications](#m3-jobs-workflows-and-notifications) | Email notifications, the rest of AWX's run-time features, typed node outputs | 4 |
-| [M4 Inventories, credentials and projects](#m4-inventories-credentials-and-projects) | Every inventory source, credential type, lookup and project type | 10 |
+| [M4 Inventories, credentials and projects](#m4-inventories-credentials-and-projects) | Every inventory source, credential type, lookup and project type (except Subversion) | 9 |
 | [M5 Authentication](#m5-authentication) | Every login method AWX has, except RADIUS and TACACS+ | 6 |
 | [M6 Operations and scale](#m6-operations-and-scale) | Run awxnext in production: policies, logging, Helm, backup, job isolation | 13 |
 | [M7 UI completeness](#m7-ui-completeness) | Every API feature reachable from the UI; the remaining UI goals | 17 |
@@ -573,7 +573,8 @@ type fails the node.
 ## M4 Inventories, credentials and projects
 
 **Exit:** every AWX inventory source, managed credential type, secret lookup
-and project type is available.
+and project type is available, except Subversion projects (dropped on
+2026-10-29, see Proposed out of scope).
 
 ### M4-01 Insights and Red Hat Virtualization credential types
 **Labels:** feature, credentials · **Size:** S · [#32](https://github.com/damhau/awxnext/issues/32)
@@ -645,14 +646,6 @@ When a project has a signature validation credential, sync checks the
 wrong.
 
 **Done when:** signed, modified and unsigned projects are all tested.
-
-### M4-09 Subversion projects
-**Labels:** feature, projects · **Size:** M · [#40](https://github.com/damhau/awxnext/issues/40)
-
-SVN checkouts with credentials and revision override, cached per revision
-like git.
-
-**Done when:** sync and job runs are tested against a local SVN repository.
 
 ### M4-10 Archive projects
 **Labels:** feature, projects · **Size:** S · [#41](https://github.com/damhau/awxnext/issues/41)
@@ -1029,6 +1022,7 @@ These stay out unless you want any of them back:
 | RADIUS and TACACS+ login | Rarely used. Left out by decision on 2026-10-27. |
 | Slack, PagerDuty, Twilio, Grafana, IRC, Mattermost, Rocket.Chat and AWS SNS notifications | Email and webhook cover the need. Left out by decision on 2026-10-27. |
 | Browser tests in CI | UI logic is covered by Vitest. Left out by decision on 2026-10-27. |
+| Subversion projects (was M4-09, #40) | Not needed. Left out by decision on 2026-10-29. |
 
 ## Decisions
 
@@ -1043,6 +1037,10 @@ Taken on 2026-10-27:
    restore AWX's behaviour for clients that rely on it (M1-15, M1-16).
 6. Notifications: only email is added (M3-01); the other types are dropped.
 7. Browser tests in CI are dropped.
+
+Taken on 2026-10-29:
+
+8. Subversion projects are dropped (M4-09, issue #40 closed as not planned).
 
 ## On GitHub
 
