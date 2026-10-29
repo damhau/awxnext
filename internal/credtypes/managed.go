@@ -271,6 +271,73 @@ var Managed = []Def{
 		str("secret_field", "Secret Name", "help_text", "The name of the secret to look up."),
 		str("secret_version", "Secret Version", "help_text", "Used to specify a specific secret version (if left empty, the latest version will be used)."),
 	}, "metadata_required", []any{"secret_field"})},
+
+	// The other external lookups of AWX 24.6 (awx/main/credential_plugins),
+	// with their inputs, metadata and required fields as AWX defines them.
+	{Namespace: "aim", Name: "CyberArk Central Credential Provider Lookup", Kind: "external", Inputs: inputs([]field{
+		str("url", "CyberArk CCP URL", "format", "url"),
+		str("webservice_id", "Web Service ID", "help_text", "The CCP Web Service ID. Leave blank to default to AIMWebService."),
+		str("app_id", "Application ID", "secret", true),
+		str("client_key", "Client Key", "secret", true, "multiline", true),
+		str("client_cert", "Client Certificate", "secret", true, "multiline", true),
+		boolean("verify", "Verify SSL Certificates", "default", true),
+	}, []string{"url", "app_id", "object_query"}, "metadata", []any{
+		str("object_query", "Object Query", "help_text", "Lookup query for the object. Ex: Safe=TestSafe;Object=testAccountName123"),
+		str("object_query_format", "Object Query Format", "default", "Exact", "choices", []any{"Exact", "Regexp"}),
+		str("object_property", "Object Property", "help_text", "The property of the object to return. Available properties: Username, Password and Address."),
+		str("reason", "Reason", "help_text", "Object request reason. This is only needed if it is required by the object's policy."),
+	})},
+
+	{Namespace: "conjur", Name: "CyberArk Conjur Secrets Manager Lookup", Kind: "external", Inputs: inputs([]field{
+		str("url", "Conjur URL", "format", "url"),
+		str("api_key", "API Key", "secret", true),
+		str("account", "Account"),
+		str("username", "Username"),
+		str("cacert", "Public Key Certificate", "multiline", true),
+	}, []string{"url", "api_key", "account", "username"}, "metadata", []any{
+		str("secret_path", "Secret Identifier", "help_text", "The identifier for the secret e.g., /some/identifier"),
+		str("secret_version", "Secret Version", "help_text", "Used to specify a specific secret version (if left empty, the latest version will be used)."),
+	})},
+
+	{Namespace: "centrify_vault_kv", Name: "Centrify Vault Credential Provider Lookup", Kind: "external", Inputs: inputs([]field{
+		str("url", "Centrify Tenant URL", "help_text", "Centrify Tenant URL", "format", "url"),
+		str("client_id", "Centrify API User", "help_text", "Centrify API User, having necessary permissions as mentioned in support doc"),
+		str("client_password", "Centrify API Password", "help_text", "Password of Centrify API User with necessary permissions", "secret", true),
+		str("oauth_application_id", "OAuth2 Application ID", "help_text", "Application ID of the configured OAuth2 Client (defaults to 'awx')", "default", "awx"),
+		str("oauth_scope", "OAuth2 Scope", "help_text", "Scope of the configured OAuth2 Client (defaults to 'awx')", "default", "awx"),
+	}, []string{"url", "account-name", "system-name", "client_id", "client_password"}, "metadata", []any{
+		str("account-name", "Account Name", "help_text", "Local system account or Domain account name enrolled in Centrify Vault. eg. (root or DOMAIN/Administrator)"),
+		str("system-name", "System Name", "help_text", "Machine Name enrolled with in Centrify Portal"),
+	})},
+
+	{Namespace: "thycotic_dsv", Name: "Thycotic DevOps Secrets Vault", Kind: "external", Inputs: inputs([]field{
+		str("tenant", "Tenant", "help_text", `The tenant e.g. "ex" when the URL is https://ex.secretsvaultcloud.com`),
+		str("tld", "Top-level Domain (TLD)", "help_text", `The TLD of the tenant e.g. "com" when the URL is https://ex.secretsvaultcloud.com`, "choices", []any{"ca", "com", "com.au", "eu"}, "default", "com"),
+		str("client_id", "Client ID"),
+		str("client_secret", "Client Secret", "secret", true),
+	}, []string{"tenant", "client_id", "client_secret", "path", "secret_field", "secret_decoding"}, "metadata", []any{
+		str("path", "Secret Path", "help_text", "The secret path e.g. /test/secret1"),
+		str("secret_field", "Secret Field", "help_text", "The field to extract from the secret"),
+		str("secret_decoding", "Should the secret be base64 decoded?", "help_text", "Specify whether the secret should be base64 decoded, typically used for storing files, such as SSH keys", "choices", []any{"No Decoding", "Decode Base64"}, "default", "No Decoding"),
+	})},
+
+	{Namespace: "thycotic_tss", Name: "Thycotic Secret Server", Kind: "external", Inputs: inputs([]field{
+		str("server_url", "Secret Server URL", "help_text", "The Base URL of Secret Server e.g. https://myserver/SecretServer or https://mytenant.secretservercloud.com"),
+		str("username", "Username", "help_text", "The (Application) user username"),
+		str("domain", "Domain", "help_text", "The (Application) user domain"),
+		str("password", "Password", "help_text", "The corresponding password", "secret", true),
+	}, []string{"server_url", "username", "password", "secret_id", "secret_field"}, "metadata", []any{
+		str("secret_id", "Secret ID", "help_text", "The integer ID of the secret"),
+		str("secret_field", "Secret Field", "help_text", "The field to extract from the secret"),
+	})},
+
+	{Namespace: "aws_secretsmanager_credential", Name: "AWS Secrets Manager lookup", Kind: "external", Inputs: inputs([]field{
+		str("aws_access_key", "AWS Access Key"),
+		str("aws_secret_key", "AWS Secret Key", "secret", true),
+	}, []string{"aws_access_key", "aws_secret_key", "region_name", "secret_name"}, "metadata", []any{
+		str("region_name", "AWS Secrets Manager Region", "help_text", "Region which the secrets manager is located"),
+		str("secret_name", "AWS Secret Name"),
+	})},
 }
 
 func init() {

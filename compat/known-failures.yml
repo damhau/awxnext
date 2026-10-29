@@ -4,7 +4,6 @@
 cli: {}
 collection:
   "application": "out of scope: OAuth2 applications (ROADMAP, Proposed out of scope)"
-  "credential_input_source": "#38 CyberArk Central Credential Provider lookup"
   "notification_template": "out of scope: Slack and other notification types (ROADMAP, Proposed out of scope)"
   "project": "#41 archive projects (after current_update, #86, passes)"
 terraform:

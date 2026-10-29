@@ -13,7 +13,7 @@ from an audit of the code on 2026-10-27 (not of the docs). Status words:
 The core of AWX is there and tested end to end: the `/api/v2` resource model
 with AWX's filtering, OPTIONS metadata and object roles; inventories (regular,
 smart, constructed) and cloud inventory sources; credentials with custom types
-and Vault/Azure Key Vault lookups; git projects; job templates with every
+and every AWX secret lookup; git projects; job templates with every
 launch prompt, surveys, slicing, callbacks and webhooks; ad hoc commands;
 workflows with approvals and convergence; schedules; management jobs; remote
 execution nodes and Kubernetes container groups; HA on PostgreSQL alone.
@@ -31,8 +31,9 @@ The gaps fall in four groups:
    tested nightly since roadmap M2-01 ([compat/](../compat/README.md)); the
    gaps those suites found are roadmap M2-14 to M2-26.
 3. **Deferred by plan**: LDAP, SAML, social, RADIUS and TACACS+ login;
-   notification types other than email and webhook; archive projects; CyberArk,
-   Thycotic, AWS Secrets Manager and Centrify lookups; Helm chart; backup.
+   notification types other than email and webhook; archive projects; Helm
+   chart; backup (CyberArk, Thycotic, AWS Secrets Manager and Centrify lookups
+   are done, roadmap M4-07).
 4. **UI holes over a finished API**: inventory
    instance groups, credential type management, inventory source schedules,
    `start_at_task`, a few more listed below.
@@ -126,6 +127,7 @@ The gaps fall in four groups:
 | Managed credential types | Yes | Partial | All of AWX's, Insights and Red Hat Virtualization included (M4-01). The Kubernetes bearer token is injected in code as in AWX, its CA data as a file in `K8S_AUTH_SSL_CA_CERT` (M4-02); unlike AWX, `verify_ssl` without CA data keeps verifying, against the system's CAs. As in AWX, an encrypted SSH key (OpenSSH with a cipher, PKCS#8 `ENCRYPTED PRIVATE KEY`, PEM `Proc-Type: 4,ENCRYPTED`) needs its passphrase and a passphrase needs an encrypted key, checked against the stored key on update |
 | Custom credential types | Yes | Done | Injectors are Jinja2 (gonja), sandboxed like AWX and checked when saved; `2 ** n` gives a float and `None` prints empty |
 | Lookups: HashiCorp Vault KV and SSH, Azure Key Vault | Yes | Done | Vault logs in with a token, username and password, AppRole, Kubernetes or a TLS client certificate (`client_cert_public`, `client_cert_private`, `client_cert_role`), with AWX 24.6's inputs (roadmap M4-06); an auth path left at AWX's default `approle` uses the method's own mount (`userpass`, `kubernetes`, `cert`). Azure falls back to managed identity |
+| Lookups: CyberArk Central Credential Provider and Conjur, Centrify Vault, Thycotic DevOps Secrets Vault and Secret Server, AWS Secrets Manager | Yes | Done | AWX 24.6's types (namespaces, inputs, metadata), test buttons and importer mapping, making the requests AWX's plugins (or their Delinea and AWS SDKs) make (roadmap M4-07). Secret Server follows python-tss-sdk 1.2 (Secret Server, not Delinea Platform); Centrify names are quoted in its query |
 | Lookups: CyberArk, Conjur, Thycotic, AWS Secrets Manager, Centrify | Yes | Later | |
 | Credentials: owners, input sources, test, copy, ASK | Yes | Done | |
 | Execution environments: pull policy, registry auth, org scope, resolution order | Yes | Done | |

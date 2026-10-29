@@ -188,7 +188,7 @@ func TestImportAWX(t *testing.T) {
 	}
 	warnings := strings.Join(rep.Warnings, "\n")
 	for _, w := range []string{`user "admin" already exists`, "svn projects are not supported", "slack notifications are not supported",
-		`credential "aws lookup" skipped`, `schedule "broken" imported disabled`} {
+		`schedule "broken" imported disabled`} {
 		if !strings.Contains(warnings, w) {
 			t.Errorf("missing warning %q in:\n%s", w, warnings)
 		}
@@ -208,10 +208,15 @@ func TestImportAWX(t *testing.T) {
 		t.Fatalf("bob should be an auditor: %v", bob)
 	}
 
-	creds := a.get(fmt.Sprintf("credentials/?organization=%d", orgID)).results()
-	if len(creds) != 1 || creds[0]["name"] != "machine" {
+	if strings.Contains(warnings, `credential "aws lookup" skipped`) {
+		t.Errorf("the AWS Secrets Manager lookup is supported:\n%s", warnings)
+	}
+	creds := a.get(fmt.Sprintf("credentials/?organization=%d&order_by=name", orgID)).results()
+	if len(creds) != 2 || creds[0]["name"] != "aws lookup" || creds[1]["name"] != "machine" ||
+		creds[0]["credential_type"] != float64(credType(t, a, "aws_secretsmanager_credential")) {
 		t.Fatalf("credentials: %v", creds)
 	}
+	creds = creds[1:]
 	resolved, err := resolveCredential(int64(creds[0]["id"].(float64)))
 	if err != nil || resolved["password"] != "s3cr3t p@ss" || resolved["username"] != "root" {
 		t.Fatalf("credential secret: %v %v", resolved, err)
