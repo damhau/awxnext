@@ -12,6 +12,7 @@ import { DataTable, type Column } from '../../components/table'
 import { Ago, Empty, RunBars, Status } from '../../components/ui'
 import { applyErrors, refOf } from './common'
 import { useSubList, type Inventory } from './inventories'
+import { enabledDefault, enabledHelp } from '../../lib/sourceDefaults'
 
 export interface Source extends Base {
   inventory: number
@@ -410,8 +411,8 @@ function SourceDialog({ inv, source, onClose }: { inv: Inventory; source?: Sourc
             <div className="form-grid">
               <TextInput label="Host filter" optional mono value={v.host_filter} onChange={(x) => f.set('host_filter', x)} error={f.errors.host_filter} help="Regular expression; only matching host names are imported." />
               <TextInput label="Limit" optional mono value={v.limit} onChange={(x) => f.set('limit', x)} help="Host pattern applied by ansible-inventory." />
-              <TextInput label="Enabled variable" optional mono value={v.enabled_var} onChange={(x) => f.set('enabled_var', x)} help="Host variable deciding whether a host is enabled, e.g. status.power_state." />
-              <TextInput label="Enabled value" optional mono value={v.enabled_value} onChange={(x) => f.set('enabled_value', x)} help="Value of that variable meaning enabled." />
+              <TextInput label="Enabled variable" optional mono value={v.enabled_var} onChange={(x) => f.set('enabled_var', x)} placeholder={enabledDefault(v.source)?.variable} help={enabledHelp(v.source)} />
+              <TextInput label="Enabled value" optional mono value={v.enabled_value} onChange={(x) => f.set('enabled_value', x)} placeholder={v.enabled_var ? undefined : enabledDefault(v.source)?.value} help="Value of that variable meaning enabled." />
               <Lookup label="Execution environment" optional resource="execution_environments/" value={v.execution_environment} onChange={(x) => f.set('execution_environment', x)} />
               <SelectField label="Verbosity" value={v.verbosity} onChange={(x) => f.set('verbosity', Number(x))} options={[[0, '0 (warning)'], [1, '1 (info)'], [2, '2 (debug)']]} />
               <TextInput label="Timeout (seconds)" type="number" value={v.timeout} onChange={(x) => f.set('timeout', Number(x))} help="0 means no timeout." />

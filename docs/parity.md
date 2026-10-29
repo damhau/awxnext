@@ -115,7 +115,7 @@ The gaps fall in four groups:
 | `inventories/N/job_templates/`, `groups/N/job_events/` | Yes | Done | A group's events are those of its hosts |
 | Inventory labels | Yes | Done | `inventories/N/labels/` and `summary_fields.labels` |
 | Asynchronous inventory delete | Yes | Done | 202 and `pending_deletion`, then hosts are deleted in batches in the background; a second delete and launches on it are refused, as in AWX |
-| Cloud sources: ec2, gce, azure_rm, vmware, openstack, satellite6, controller, terraform, openshift_virtualization | Yes | Done | AWX's per-source default enabled/instance-id variables are not applied |
+| Cloud sources: ec2, gce, azure_rm, vmware, openstack, satellite6, controller, terraform, openshift_virtualization | Yes | Done | AWX's per-source defaults apply: the enabled variable and value when the source sets none, the host `instance_id` variable (hosts are matched by it before their name, so a host renamed in the cloud keeps its record), and leaving out empty groups (roadmap M4-03). Values ansible-core 2.19+ marks unsafe are stored as plain values |
 | Project file (scm) source | Yes | Partial | `source_vars` not exported as environment |
 | rhv, insights sources | Yes | Done | With AWX's Red Hat Virtualization (INI file and environment) and Insights credential types (roadmap M4-01) |
 | `file` source, `inventory_import` | Yes | Missing | GitOps inventory `content` covers part of it |

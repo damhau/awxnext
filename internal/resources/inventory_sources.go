@@ -12,6 +12,29 @@ import (
 
 // InventoryPlugins maps AWX source names to the inventory plugin and the file
 // name suffix the plugin requires.
+// SourceImportDefaults are AWX's per-source import settings
+// (<SOURCE>_ENABLED_VAR, _ENABLED_VALUE, _INSTANCE_ID_VAR and
+// _EXCLUDE_EMPTY_GROUPS): the enabled variable and value apply when the
+// source sets no enabled_var. Variables may name nested keys (a.b) and
+// list alternatives (a,b).
+var SourceImportDefaults = map[string]struct {
+	EnabledVar, EnabledValue, InstanceIDVar string
+	ExcludeEmptyGroups                      bool
+}{
+	"ec2":                      {"ec2_state", "running", "instance_id", true},
+	"vmware":                   {"guest.gueststate", "running", "config.instanceUuid, config.instanceuuid", true},
+	"gce":                      {"status", "running", "gce_id", true},
+	"azure_rm":                 {"powerstate", "running", "id", true},
+	"openstack":                {"status", "ACTIVE", "openstack.id", true},
+	"rhv":                      {"status", "up", "id", true},
+	"controller":               {"remote_tower_enabled", "true", "remote_tower_id", true},
+	"satellite6":               {"foreman_enabled,foreman.enabled", "True", "foreman_id,foreman.id", true},
+	"insights":                 {"", "", "insights_id", false},
+	"terraform":                {"", "", "id", true},
+	"openshift_virtualization": {"", "", "", true},
+	"constructed":              {"", "", "remote_tower_id", false},
+}
+
 var InventoryPlugins = map[string]struct{ Plugin, File, CredNamespace string }{
 	"ec2":                      {"amazon.aws.aws_ec2", "aws_ec2.yml", "aws"},
 	"gce":                      {"google.cloud.gcp_compute", "gcp_compute.yml", "gce"},

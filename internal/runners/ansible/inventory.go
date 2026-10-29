@@ -1,6 +1,7 @@
 package ansible
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -282,12 +284,19 @@ func runInventoryUpdate(ctx context.Context, rc *jobs.RunContext) jobs.Result {
 		return jobs.Result{Status: "error", Explanation: "Invalid ansible-inventory output: " + err.Error(), Update: update}
 	}
 	start := time.Now()
+	def := resources.SourceImportDefaults[source]
 	opts := ImportOptions{
-		Overwrite:     row.Bool("overwrite"),
-		OverwriteVars: row.Bool("overwrite_vars"),
-		EnabledVar:    row.Str("enabled_var"),
-		EnabledValue:  row.Str("enabled_value"),
-		HostFilter:    row.Str("host_filter"),
+		Overwrite:          row.Bool("overwrite"),
+		OverwriteVars:      row.Bool("overwrite_vars"),
+		EnabledVar:         row.Str("enabled_var"),
+		EnabledValue:       row.Str("enabled_value"),
+		HostFilter:         row.Str("host_filter"),
+		InstanceIDVar:      def.InstanceIDVar,
+		ExcludeEmptyGroups: def.ExcludeEmptyGroups,
+	}
+	// As AWX: the source's enabled variable, else its type's.
+	if opts.EnabledVar == "" {
+		opts.EnabledVar, opts.EnabledValue = def.EnabledVar, def.EnabledValue
 	}
 	stats, err := ImportInventory(ctx, app.DB, invID, row.Int("unified_job_template_id"), data, opts)
 	if err != nil {
@@ -347,6 +356,15 @@ type InventoryGroup struct {
 
 // ParseInventoryJSON reads ansible-inventory --list output.
 func ParseInventoryJSON(b []byte) (*InventoryData, error) {
+	// ansible-core 2.19 marks the values inventory plugins set as unsafe and
+	// writes them as {"__ansible_unsafe": value}: keep the value.
+	if bytes.Contains(b, []byte(`"__ansible_unsafe"`)) {
+		var tree any
+		if err := json.Unmarshal(b, &tree); err != nil {
+			return nil, err
+		}
+		b, _ = json.Marshal(unwrapUnsafe(tree))
+	}
 	var raw map[string]json.RawMessage
 	if err := json.Unmarshal(b, &raw); err != nil {
 		return nil, err
@@ -442,6 +460,12 @@ type ImportOptions struct {
 	Overwrite, OverwriteVars bool
 	EnabledVar, EnabledValue string
 	HostFilter               string
+	// InstanceIDVar names the host variable holding the cloud's id for a
+	// host: hosts are matched by it before their name, so a host renamed in
+	// the cloud is renamed rather than duplicated.
+	InstanceIDVar string
+	// ExcludeEmptyGroups drops groups without hosts, children or variables.
+	ExcludeEmptyGroups bool
 }
 
 // ImportStats summarizes an import.
@@ -497,6 +521,10 @@ func ImportInventory(ctx context.Context, db interface {
 		}
 	}
 
+	if opt.ExcludeEmptyGroups {
+		dropEmptyGroups(d)
+	}
+
 	// Hosts.
 	var hostNames []string
 	for _, h := range d.Hosts {
@@ -504,62 +532,105 @@ func ImportInventory(ctx context.Context, db interface {
 			hostNames = append(hostNames, h)
 		}
 	}
-	existing := map[string]struct {
-		id      int64
-		vars    string
-		enabled bool
-	}{}
-	rows, err := tx.Query(ctx, "SELECT id, name, variables, enabled FROM hosts WHERE inventory_id = $1", invID)
+	type dbHost struct {
+		id         int64
+		name, vars string
+		enabled    bool
+		instanceID string
+	}
+	byName := map[string]*dbHost{}
+	byInstanceID := map[string]*dbHost{}
+	var noInstanceID []*dbHost
+	rows, err := tx.Query(ctx, "SELECT id, name, variables, enabled, instance_id FROM hosts WHERE inventory_id = $1", invID)
 	if err != nil {
 		return nil, err
 	}
 	for rows.Next() {
-		var id int64
-		var name, v string
-		var en bool
-		if err := rows.Scan(&id, &name, &v, &en); err != nil {
+		h := &dbHost{}
+		if err := rows.Scan(&h.id, &h.name, &h.vars, &h.enabled, &h.instanceID); err != nil {
 			rows.Close()
 			return nil, err
 		}
-		existing[name] = struct {
-			id      int64
-			vars    string
-			enabled bool
-		}{id, v, en}
+		byName[h.name] = h
+		if h.instanceID != "" {
+			byInstanceID[h.instanceID] = h
+		} else {
+			noInstanceID = append(noInstanceID, h)
+		}
 	}
 	rows.Close()
+	// As AWX: hosts saved before their instance id was recorded are matched
+	// by the id in their variables.
+	if opt.InstanceIDVar != "" {
+		for _, h := range noInstanceID {
+			hv, _ := vars.Parse(h.vars)
+			if id := hostInstanceID(hv, opt.InstanceIDVar); id != "" {
+				if _, taken := byInstanceID[id]; !taken {
+					byInstanceID[id] = h
+				}
+			}
+		}
+	}
+	// Each imported host matches a saved one by instance id, else by name.
+	used := map[int64]bool{}
+	match := map[string]*dbHost{}
+	for _, h := range hostNames {
+		if id := hostInstanceID(d.HostVars[h], opt.InstanceIDVar); id != "" {
+			if cur, ok := byInstanceID[id]; ok && !used[cur.id] {
+				match[h], used[cur.id] = cur, true
+			}
+		}
+	}
+	for _, h := range hostNames {
+		if cur, ok := byName[h]; ok && match[h] == nil && !used[cur.id] {
+			match[h], used[cur.id] = cur, true
+		}
+	}
 	hostIDs := map[string]int64{}
-	var newNames, newVars []string
+	var newNames, newVars, newInstanceIDs []string
 	var newEnabled []bool
 	var updIDs []int64
-	var updVars []string
+	var updNames, updVars, updInstanceIDs []string
 	var updEnabled []bool
 	for _, h := range hostNames {
 		hv := d.HostVars[h]
 		enabled, hasEnabled := hostEnabled(hv, opt.EnabledVar, opt.EnabledValue)
-		if cur, ok := existing[h]; ok {
+		iid := hostInstanceID(hv, opt.InstanceIDVar)
+		if cur := match[h]; cur != nil {
 			hostIDs[h] = cur.id
 			next, changed := mergeVars(cur.vars, hv, opt.OverwriteVars)
 			en := cur.enabled
 			if hasEnabled && en != enabled {
 				en, changed = enabled, true
 			}
+			if cur.name != h || cur.instanceID != iid {
+				changed = true
+			}
 			if changed {
-				updIDs, updVars, updEnabled = append(updIDs, cur.id), append(updVars, next), append(updEnabled, en)
+				updIDs, updNames, updVars, updEnabled, updInstanceIDs = append(updIDs, cur.id), append(updNames, h), append(updVars, next), append(updEnabled, en), append(updInstanceIDs, iid)
 			}
 			continue
 		}
 		if !hasEnabled {
 			enabled = true
 		}
-		newNames, newVars, newEnabled = append(newNames, h), append(newVars, varsText(hv)), append(newEnabled, enabled)
+		newNames, newVars, newEnabled, newInstanceIDs = append(newNames, h), append(newVars, varsText(hv)), append(newEnabled, enabled), append(newInstanceIDs, iid)
 	}
 	if err := checkMaxHosts(ctx, tx, invID, newNames); err != nil {
 		return nil, err
 	}
+	// Renamed hosts first: a new host may take a name one of them had.
+	if len(updIDs) > 0 {
+		if _, err := tx.Exec(ctx, `UPDATE hosts h SET name = x.n, variables = x.v, enabled = x.e, instance_id = x.i, modified = now()
+			FROM unnest($1::bigint[], $2::text[], $3::text[], $4::boolean[], $5::text[]) AS x(id, n, v, e, i) WHERE h.id = x.id`,
+			updIDs, updNames, updVars, updEnabled, updInstanceIDs); err != nil {
+			return nil, err
+		}
+	}
 	if len(newNames) > 0 {
-		rows, err := tx.Query(ctx, `INSERT INTO hosts (inventory_id, name, variables, enabled)
-			SELECT $1, n, v, e FROM unnest($2::text[], $3::text[], $4::boolean[]) AS x(n, v, e) RETURNING id, name`, invID, newNames, newVars, newEnabled)
+		rows, err := tx.Query(ctx, `INSERT INTO hosts (inventory_id, name, variables, enabled, instance_id)
+			SELECT $1, n, v, e, i FROM unnest($2::text[], $3::text[], $4::boolean[], $5::text[]) AS x(n, v, e, i) RETURNING id, name`,
+			invID, newNames, newVars, newEnabled, newInstanceIDs)
 		if err != nil {
 			return nil, err
 		}
@@ -572,12 +643,6 @@ func ImportInventory(ctx context.Context, db interface {
 		}
 		rows.Close()
 		if err := rows.Err(); err != nil {
-			return nil, err
-		}
-	}
-	if len(updIDs) > 0 {
-		if _, err := tx.Exec(ctx, `UPDATE hosts h SET variables = x.v, enabled = x.e, modified = now()
-			FROM unnest($1::bigint[], $2::text[], $3::boolean[]) AS x(id, v, e) WHERE h.id = x.id`, updIDs, updVars, updEnabled); err != nil {
 			return nil, err
 		}
 	}
@@ -832,22 +897,87 @@ func varsText(v map[string]any) string {
 
 // hostEnabled evaluates enabled_var/enabled_value against host variables.
 // enabled_var may be a dotted path into nested dicts.
+// hostVar finds a host variable named "a.b" (nested keys), trying each of
+// comma-separated alternatives ("a.b,c") in turn.
+func hostVar(hv map[string]any, names string) (any, bool) {
+	for _, name := range strings.Split(names, ",") {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		var cur any = hv
+		found := true
+		for _, part := range strings.Split(name, ".") {
+			m, ok := cur.(map[string]any)
+			if !ok {
+				found = false
+				break
+			}
+			if cur, ok = m[part]; !ok {
+				found = false
+				break
+			}
+		}
+		if found {
+			return cur, true
+		}
+	}
+	return nil, false
+}
+
+// hostInstanceID is a host's instance id: the first non-empty of the
+// instance id variables, as text.
+func hostInstanceID(hv map[string]any, names string) string {
+	for _, name := range strings.Split(names, ",") {
+		if v, ok := hostVar(hv, name); ok && v != nil {
+			if s := fmt.Sprint(v); s != "" {
+				if f, ok := v.(float64); ok {
+					s = strconv.FormatFloat(f, 'f', -1, 64)
+				}
+				return s
+			}
+		}
+	}
+	return ""
+}
+
+// dropEmptyGroups removes groups without hosts, children or variables, in
+// one pass as AWX does.
+func dropEmptyGroups(d *InventoryData) {
+	names := make([]string, 0, len(d.Groups))
+	for n := range d.Groups {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	for _, n := range names {
+		g := d.Groups[n]
+		if len(g.Children) > 0 || len(g.Hosts) > 0 || len(g.Vars) > 0 {
+			continue
+		}
+		delete(d.Groups, n)
+		for _, p := range d.Groups {
+			for i, c := range p.Children {
+				if c == n {
+					p.Children = append(p.Children[:i], p.Children[i+1:]...)
+					break
+				}
+			}
+		}
+	}
+}
+
+// hostEnabled reads a host's enabled variable; with an enabled value, the
+// host is enabled when the variable equals it, ignoring case as AWX does.
 func hostEnabled(hv map[string]any, enabledVar, enabledValue string) (bool, bool) {
 	if enabledVar == "" {
 		return false, false
 	}
-	var cur any = hv
-	for _, part := range strings.Split(enabledVar, ".") {
-		m, ok := cur.(map[string]any)
-		if !ok {
-			return false, false
-		}
-		if cur, ok = m[part]; !ok {
-			return false, false
-		}
+	cur, ok := hostVar(hv, enabledVar)
+	if !ok {
+		return false, false
 	}
 	if enabledValue != "" {
-		return fmt.Sprint(cur) == enabledValue, true
+		return strings.EqualFold(fmt.Sprint(cur), enabledValue), true
 	}
 	switch x := cur.(type) {
 	case bool:
@@ -861,4 +991,22 @@ func hostEnabled(hv map[string]any, enabledVar, enabledValue string) (bool, bool
 		return false, true
 	}
 	return true, true
+}
+
+// unwrapUnsafe replaces {"__ansible_unsafe": v} by v, at any depth.
+func unwrapUnsafe(v any) any {
+	switch x := v.(type) {
+	case map[string]any:
+		if inner, ok := x["__ansible_unsafe"]; ok && len(x) == 1 {
+			return unwrapUnsafe(inner)
+		}
+		for k, e := range x {
+			x[k] = unwrapUnsafe(e)
+		}
+	case []any:
+		for i, e := range x {
+			x[i] = unwrapUnsafe(e)
+		}
+	}
+	return v
 }

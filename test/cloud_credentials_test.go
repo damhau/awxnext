@@ -87,6 +87,45 @@ class InventoryModule(BaseInventoryPlugin):
             inventory.set_variable(h["fqdn"], "insights_id", h["id"])
 `
 
+// A fake of the aws_ec2 inventory plugin: its hosts, groups and variables
+// come from the JSON file the source's data option names.
+const fakeEC2Plugin = `from ansible.plugins.inventory import BaseInventoryPlugin
+import json
+
+DOCUMENTATION = r"""
+name: aws_ec2
+plugin_type: inventory
+short_description: fake aws_ec2 inventory for awxnext tests
+options:
+  plugin:
+    description: the plugin
+    required: true
+  data:
+    description: JSON file of hosts
+    required: true
+"""
+
+
+class InventoryModule(BaseInventoryPlugin):
+    NAME = "amazon.aws.aws_ec2"
+
+    def verify_file(self, path):
+        return path.endswith(("aws_ec2.yml", "aws_ec2.yaml"))
+
+    def parse(self, inventory, loader, path, cache=True):
+        super().parse(inventory, loader, path, cache)
+        self._read_config_data(path)
+        data = json.load(open(self.get_option("data")))
+        for g in data.get("groups", []):
+            inventory.add_group(g)
+        for h in data["hosts"]:
+            inventory.add_host(h["name"])
+            for g in h.get("groups", []):
+                inventory.add_child(g, h["name"])
+            for k, v in h["vars"].items():
+                inventory.set_variable(h["name"], k, v)
+`
+
 // fakeCollections writes the fake plugins as collections and points jobs and
 // updates at them (AWX_TASK_ENV).
 func fakeCollections(t *testing.T, a *client) {
@@ -95,6 +134,7 @@ func fakeCollections(t *testing.T, a *client) {
 	for _, p := range []struct{ ns, coll, file, src string }{
 		{"ovirt", "ovirt", "ovirt.py", fakeOvirtPlugin},
 		{"redhatinsights", "insights", "insights.py", fakeInsightsPlugin},
+		{"amazon", "aws", "aws_ec2.py", fakeEC2Plugin},
 	} {
 		dir := filepath.Join(root, "ansible_collections", p.ns, p.coll, "plugins", "inventory")
 		if err := os.MkdirAll(dir, 0o755); err != nil {
