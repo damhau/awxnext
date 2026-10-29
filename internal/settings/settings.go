@@ -58,6 +58,8 @@ var (
 		{"github-enterprise", "GitHub Enterprise OAuth2"},
 		{"github-enterprise-org", "GitHub Enterprise Organization OAuth2"},
 		{"github-enterprise-team", "GitHub Enterprise Team OAuth2"},
+		{"google-oauth2", "Google OAuth2"},
+		{"azuread-oauth2", "Azure AD OAuth2"},
 		{"jobs", "Jobs"},
 		{"system", "System"},
 		{"ui", "UI"},

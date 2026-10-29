@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -25,10 +26,13 @@ import (
 // user as python-social-auth's pipeline does and applies the backend's
 // organization and team maps.
 
-// GitHub's public URLs; tests point them at a fake.
+// The providers' public URLs; tests point them at fakes.
 var (
-	GitHubURL    = "https://github.com/"
-	GitHubAPIURL = "https://api.github.com/"
+	GitHubURL         = "https://github.com/"
+	GitHubAPIURL      = "https://api.github.com/"
+	GoogleAccountsURL = "https://accounts.google.com/"
+	GoogleUserinfoURL = "https://www.googleapis.com/oauth2/v3/userinfo"
+	AzureADURL        = "https://login.microsoftonline.com/common/"
 )
 
 // socialUser is what a backend learns about the user.
@@ -45,13 +49,19 @@ type socialBackend struct {
 	// them is the same user, and the family's name tags their grants.
 	family []string
 	scopes []string
+	// scopeSep joins the scopes: "," for GitHub, " " for the others.
+	scopeSep string
+	// extraParams are added to the authorization request.
+	extraParams func(get func(string) any) map[string]string
+	// allowed is python-social-auth's auth_allowed.
+	allowed func(get func(string) any, u *socialUser) error
 	// required are the settings (after the prefix) the backend needs, as
 	// AWX enables a backend only when they are set.
 	required []string
 	// endpoints returns the authorization and token URLs and the API URL.
 	endpoints func(get func(string) any) (authURL, tokenURL, apiURL string)
 	// user loads the user with the access token.
-	user func(ctx context.Context, b *socialBackend, get func(string) any, client *http.Client, token, api string) (*socialUser, error)
+	user func(ctx context.Context, b *socialBackend, get func(string) any, client *http.Client, token *oauth2.Token, api string) (*socialUser, error)
 }
 
 func appendSlash(s string) string {
@@ -105,8 +115,9 @@ func githubJSON(ctx context.Context, client *http.Client, u, token string, out a
 // githubUser is GithubOAuth2.user_data and its member check: the user,
 // their primary email when it is not public, and for organization and team
 // logins the membership (any 2xx answer).
-func githubUser(member string) func(context.Context, *socialBackend, func(string) any, *http.Client, string, string) (*socialUser, error) {
-	return func(ctx context.Context, b *socialBackend, get func(string) any, client *http.Client, token, api string) (*socialUser, error) {
+func githubUser(member string) func(context.Context, *socialBackend, func(string) any, *http.Client, *oauth2.Token, string) (*socialUser, error) {
+	return func(ctx context.Context, b *socialBackend, get func(string) any, client *http.Client, tok *oauth2.Token, api string) (*socialUser, error) {
+		token := tok.AccessToken
 		var data struct {
 			ID    json.Number `json:"id"`
 			Login string      `json:"login"`
@@ -153,7 +164,7 @@ func socialBackends() map[string]*socialBackend {
 	out := map[string]*socialBackend{}
 	for _, v := range settings.GitHubVariants {
 		v := v
-		b := &socialBackend{name: v.Backend, prefix: v.Prefix, label: v.Label, scopes: []string{"user:email", "read:org"},
+		b := &socialBackend{name: v.Backend, prefix: v.Prefix, label: v.Label, scopes: []string{"user:email", "read:org"}, scopeSep: ",",
 			required: []string{"KEY", "SECRET"}, user: githubUser(v.Member), family: []string{"github", "github-org", "github-team"}}
 		if v.Enterprise {
 			b.family = []string{"github-enterprise", "github-enterprise-org", "github-enterprise-team"}
@@ -175,7 +186,121 @@ func socialBackends() map[string]*socialBackend {
 		}
 		out[b.name] = b
 	}
+	// GoogleOAuth2: AWX's SCOPE ["profile"] then the backend's defaults.
+	out["google-oauth2"] = &socialBackend{name: "google-oauth2", prefix: "SOCIAL_AUTH_GOOGLE_OAUTH2_", label: "Google", family: []string{"google-oauth2"},
+		scopes: []string{"profile", "openid", "email", "profile"}, scopeSep: " ", required: []string{"KEY", "SECRET"},
+		endpoints: func(func(string) any) (string, string, string) {
+			return resolve(GoogleAccountsURL, "o/oauth2/auth"), resolve(GoogleAccountsURL, "o/oauth2/token"), GoogleUserinfoURL
+		},
+		extraParams: func(get func(string) any) map[string]string {
+			out := map[string]string{}
+			if m, ok := get("SOCIAL_AUTH_GOOGLE_OAUTH2_AUTH_EXTRA_ARGUMENTS").(map[string]any); ok {
+				for k, v := range m {
+					out[k] = fmt.Sprint(v)
+				}
+			}
+			return out
+		},
+		allowed: func(get func(string) any, u *socialUser) error {
+			domains := asStrings(get("SOCIAL_AUTH_GOOGLE_OAUTH2_WHITELISTED_DOMAINS"))
+			if u.email == "" || len(domains) == 0 {
+				return nil
+			}
+			_, domain, _ := strings.Cut(strings.ToLower(u.email), "@")
+			for _, d := range domains {
+				if strings.ToLower(d) == domain {
+					return nil
+				}
+			}
+			return errors.New("Your credentials aren't allowed")
+		},
+		user: googleUser,
+	}
+	out["azuread-oauth2"] = &socialBackend{name: "azuread-oauth2", prefix: "SOCIAL_AUTH_AZUREAD_OAUTH2_", label: "Azure AD", family: []string{"azuread-oauth2"},
+		scopes: []string{"openid", "profile", "user_impersonation", "email"}, scopeSep: " ", required: []string{"KEY", "SECRET"},
+		endpoints: func(func(string) any) (string, string, string) {
+			return resolve(AzureADURL, "oauth2/authorize"), resolve(AzureADURL, "oauth2/token"), ""
+		},
+		user: azureUser,
+	}
 	return out
+}
+
+// googleUser is GoogleOAuth2: the userinfo endpoint; the email is the uid
+// (AWX does not set USE_UNIQUE_USER_ID) and its local part the username.
+func googleUser(ctx context.Context, b *socialBackend, get func(string) any, client *http.Client, tok *oauth2.Token, api string) (*socialUser, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, api, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+tok.AccessToken)
+	res, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+	if res.StatusCode != 200 {
+		return nil, fmt.Errorf("Google userinfo: %s", res.Status)
+	}
+	var data struct {
+		Email, Name, GivenName, FamilyName string
+	}
+	var raw map[string]any
+	if err := json.NewDecoder(io.LimitReader(res.Body, 1<<20)).Decode(&raw); err != nil {
+		return nil, err
+	}
+	data.Email, _ = raw["email"].(string)
+	data.Name, _ = raw["name"].(string)
+	data.GivenName, _ = raw["given_name"].(string)
+	data.FamilyName, _ = raw["family_name"].(string)
+	if data.Email == "" {
+		return nil, errors.New("Google did not return an email address.")
+	}
+	first, last := userNames(data.Name, data.GivenName, data.FamilyName)
+	local, _, _ := strings.Cut(data.Email, "@")
+	return &socialUser{uid: data.Email, username: local, email: data.Email, firstName: first, lastName: last}, nil
+}
+
+// azureUser is AzureADOAuth2: the claims of the token response's id_token,
+// read without checking its signature as python-social-auth does (it comes
+// straight from the token endpoint); the upn is the uid and the name the
+// username.
+func azureUser(ctx context.Context, b *socialBackend, get func(string) any, client *http.Client, tok *oauth2.Token, api string) (*socialUser, error) {
+	idToken, _ := tok.Extra("id_token").(string)
+	if idToken == "" {
+		idToken = tok.AccessToken
+	}
+	parts := strings.Split(idToken, ".")
+	if len(parts) < 2 {
+		return nil, errors.New("Azure AD did not return an ID token.")
+	}
+	payload, err := base64.RawURLEncoding.DecodeString(strings.TrimRight(parts[1], "="))
+	if err != nil {
+		return nil, errors.New("Azure AD's ID token cannot be read.")
+	}
+	var claims map[string]any
+	if err := json.Unmarshal(payload, &claims); err != nil {
+		return nil, errors.New("Azure AD's ID token cannot be read.")
+	}
+	str := func(k string) string { s, _ := claims[k].(string); return s }
+	upn := str("upn")
+	if upn == "" {
+		return nil, errors.New("Azure AD's ID token has no upn.")
+	}
+	email := str("email")
+	if _, ok := claims["email"]; !ok {
+		email = upn
+	}
+	return &socialUser{uid: upn, username: str("name"), email: email, firstName: str("given_name"), lastName: str("family_name")}, nil
+}
+
+// userNames is python-social-auth's get_user_names: the given and family
+// names, or the full name split at its first space.
+func userNames(full, first, last string) (string, string) {
+	if full != "" && first == "" && last == "" {
+		return splitName(full)
+	}
+	return strings.TrimSpace(first), strings.TrimSpace(last)
 }
 
 // Social logs users in through the OAuth2 backends.
@@ -207,8 +332,9 @@ func (s *Social) enabled(ctx context.Context, b *socialBackend) bool {
 // Routes registers the endpoints of every backend.
 func (s *Social) Routes() {
 	app := s.auth.app
-	app.HandlePublic("GET", "/sso/login/{backend:github[a-z-]*}/", s.login)
-	app.HandlePublic("GET", "/sso/complete/{backend:github[a-z-]*}/", s.complete)
+	const backends = "{backend:(?:github[a-z-]*|google-oauth2|azuread-oauth2)}"
+	app.HandlePublic("GET", "/sso/login/"+backends+"/", s.login)
+	app.HandlePublic("GET", "/sso/complete/"+backends+"/", s.complete)
 }
 
 func (s *Social) callback(ctx context.Context, b *socialBackend) string {
@@ -226,7 +352,7 @@ func (s *Social) config(ctx context.Context, b *socialBackend) (*oauth2.Config, 
 	return &oauth2.Config{ClientID: key, ClientSecret: secret, RedirectURL: s.callback(ctx, b),
 		Endpoint: oauth2.Endpoint{AuthURL: authURL, TokenURL: tokenURL, AuthStyle: oauth2.AuthStyleInParams},
 		// python-social-auth separates GitHub's scopes with commas.
-		Scopes: []string{strings.Join(b.scopes, ",")},
+		Scopes: []string{strings.Join(b.scopes, b.scopeSep)},
 	}, apiURL, nil
 }
 
@@ -272,7 +398,13 @@ func (s *Social) login(c *api.Ctx, w http.ResponseWriter, r *http.Request) {
 	}
 	http.SetCookie(w, &http.Cookie{Name: socialStateCookie, Value: url.QueryEscape(sealed), Path: "/sso/", HttpOnly: true,
 		Secure: r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https", SameSite: http.SameSiteLaxMode, MaxAge: 600})
-	http.Redirect(w, r, oc.AuthCodeURL(st.State), http.StatusFound)
+	var opts []oauth2.AuthCodeOption
+	if b.extraParams != nil {
+		for k, v := range b.extraParams(s.get(c)) {
+			opts = append(opts, oauth2.SetAuthURLParam(k, v))
+		}
+	}
+	http.Redirect(w, r, oc.AuthCodeURL(st.State, opts...), http.StatusFound)
 }
 
 func (s *Social) complete(c *api.Ctx, w http.ResponseWriter, r *http.Request) {
@@ -315,7 +447,10 @@ func (s *Social) complete(c *api.Ctx, w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, name, "Could not complete login with the provider.", err)
 		return
 	}
-	u, err := b.user(ctx, b, s.get(c), s.client, tok.AccessToken, apiURL)
+	u, err := b.user(ctx, b, s.get(c), s.client, tok, apiURL)
+	if err == nil && b.allowed != nil {
+		err = b.allowed(s.get(c), u)
+	}
 	if err != nil {
 		s.fail(w, r, name, err.Error(), err)
 		return

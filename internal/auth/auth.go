@@ -53,6 +53,18 @@ func Install(app *api.App) *Auth {
 	a.ldap = &LDAP{auth: a}
 	a.saml = &SAML{auth: a}
 	a.social = newSocial(a)
+	for _, l := range settings.OAuthLogins {
+		backend := l.Backend
+		if d := settings.Lookup(l.Prefix + "CALLBACK_URL"); d != nil {
+			d.Computed = func(get func(string) any) any { return samlBase(app, get) + "/sso/complete/" + backend + "/" }
+		}
+		if d := settings.Lookup(l.Prefix + "ORGANIZATION_MAP"); d != nil {
+			d.Validate = func(v any) error { _, err := ParseOrgMap(v); return err }
+		}
+		if d := settings.Lookup(l.Prefix + "TEAM_MAP"); d != nil {
+			d.Validate = func(v any) error { _, err := ParseTeamMap(v); return err }
+		}
+	}
 	for _, v := range settings.GitHubVariants {
 		backend := v.Backend
 		if d := settings.Lookup(v.Prefix + "CALLBACK_URL"); d != nil {

@@ -46,11 +46,14 @@ func TestEverySettingHasAnEffect(t *testing.T) {
 
 	for _, d := range InCategory("all") {
 		used := strings.Contains(goSrc.String(), `"`+d.Key+`"`) || regexp.MustCompile(`\b`+d.Key+`\b`).MatchString(uiSrc.String())
-		// The six LDAP servers' and the six GitHub logins' settings are read
-		// as prefix + "SUFFIX".
+		// The LDAP servers' and the OAuth2 logins' settings are read as
+		// prefix + "SUFFIX".
 		prefixes := append([]string{}, LDAPServers...)
 		for _, v := range GitHubVariants {
 			prefixes = append(prefixes, v.Prefix)
+		}
+		for _, l := range OAuthLogins {
+			prefixes = append(prefixes, l.Prefix)
 		}
 		for _, p := range prefixes {
 			if strings.HasPrefix(d.Key, p) {

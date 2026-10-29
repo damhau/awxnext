@@ -31,12 +31,14 @@ const blurbs: Record<string, string> = {
   'github-enterprise': 'Login with GitHub Enterprise accounts.',
   'github-enterprise-org': 'Login with GitHub Enterprise accounts that are members of an organization.',
   'github-enterprise-team': 'Login with GitHub Enterprise accounts that are members of a team.',
+  'google-oauth2': 'Login with Google accounts, optionally of some domains only.',
+  'azuread-oauth2': 'Login with Microsoft Entra ID (Azure AD) accounts.',
   logging: 'Shipping logs to an external aggregator.',
   ui: 'Login page and live updates.',
   changed: 'Every setting that differs from its default.',
 }
 
-const order = ['system', 'jobs', 'authentication', 'oidc', 'ldap', 'saml', 'github', 'github-org', 'github-team', 'github-enterprise', 'github-enterprise-org', 'github-enterprise-team', 'logging', 'ui', 'changed']
+const order = ['system', 'jobs', 'authentication', 'oidc', 'ldap', 'saml', 'github', 'github-org', 'github-team', 'github-enterprise', 'github-enterprise-org', 'github-enterprise-team', 'google-oauth2', 'azuread-oauth2', 'logging', 'ui', 'changed']
 
 const isSecret = (key: string) => /SECRET|PASSWORD/.test(key)
 

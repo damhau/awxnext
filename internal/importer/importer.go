@@ -303,7 +303,7 @@ func (i *imp) users() error {
 			ldapDNs[id(r["user_id"])] = str(r["ldap_dn"])
 		}
 	}
-	// Users of python-social-auth's SAML and GitHub backends keep logging
+	// Users of python-social-auth's SAML, GitHub, Google and Azure AD backends keep logging
 	// in with them: the provider and uid (for SAML "<idp>:<permanent id>").
 	type social struct{ provider, uid string }
 	socials := map[int64]social{}
@@ -1429,4 +1429,4 @@ func (i *imp) settings() error {
 // importedProviders are the python-social-auth backends whose users keep
 // logging in with them.
 var importedProviders = map[string]bool{"saml": true, "github": true, "github-org": true, "github-team": true, "github-enterprise": true,
-	"github-enterprise-org": true, "github-enterprise-team": true}
+	"github-enterprise-org": true, "github-enterprise-team": true, "google-oauth2": true, "azuread-oauth2": true}
