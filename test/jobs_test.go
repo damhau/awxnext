@@ -795,3 +795,94 @@ func TestRelaunchAsksForPasswords(t *testing.T) {
 	must(t, a.post(fmt.Sprintf("workflow_jobs/%d/relaunch/", wf.id()), map[string]any{}), 400)
 	must(t, a.post(fmt.Sprintf("workflow_jobs/%d/relaunch/", wf.id()), pw), 201)
 }
+
+// A relaunch keeps the labels and instance groups its job was launched
+// with, for jobs, sliced jobs and workflow jobs, and checks them as prompts.
+func TestRelaunchKeepsLabelsAndInstanceGroups(t *testing.T) {
+	f := newLaunchFixture(t)
+	a := f.a
+	label := func() int64 {
+		return must(t, a.post("labels/", map[string]any{"name": uniq("l"), "organization": f.org}), 201).id()
+	}
+	tplLabel, launchLabel, laterLabel := label(), label(), label()
+	ig1 := must(t, a.post("instance_groups/", map[string]any{"name": uniq("ig")}), 201).id()
+	ig2 := must(t, a.post("instance_groups/", map[string]any{"name": uniq("ig")}), 201).id()
+	labelsOf := func(path string) string {
+		t.Helper()
+		var ids []int64
+		for _, l := range a.get(path + "labels/?order_by=id").results() {
+			ids = append(ids, int64(l["id"].(float64)))
+		}
+		return fmt.Sprint(ids)
+	}
+	groupsOf := func(job int64) string {
+		t.Helper()
+		var ids []int64
+		rows, err := app.DB.Query(t.Context(), "SELECT instance_group_id FROM instance_group_links WHERE content_type = 'unifiedjob' AND object_id = $1 ORDER BY position", job)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var id int64
+			rows.Scan(&id)
+			ids = append(ids, id)
+		}
+		return fmt.Sprint(ids)
+	}
+	prompts := map[string]any{"labels": []int64{launchLabel}, "instance_groups": []int64{ig2, ig1}}
+
+	// A job: the launch's labels are added to the template's current ones; the
+	// instance groups keep their order.
+	jt := f.template(t, "site.yml", map[string]any{"ask_labels_on_launch": true, "ask_instance_groups_on_launch": true})
+	must(t, a.post(fmt.Sprintf("job_templates/%d/labels/", jt), map[string]any{"id": tplLabel}), 204)
+	job := must(t, a.post(fmt.Sprintf("job_templates/%d/launch/", jt), prompts), 201).id()
+	must(t, a.post(fmt.Sprintf("job_templates/%d/labels/", jt), map[string]any{"id": laterLabel}), 204)
+	re := must(t, a.post(fmt.Sprintf("jobs/%d/relaunch/", job), map[string]any{}), 201).id()
+	if got, want := labelsOf(fmt.Sprintf("jobs/%d/", re)), fmt.Sprint([]int64{tplLabel, launchLabel, laterLabel}); got != want {
+		t.Fatalf("relaunch labels: %s, want %s", got, want)
+	}
+	if got := groupsOf(re); got != fmt.Sprint([]int64{ig2, ig1}) {
+		t.Fatalf("relaunch instance groups: %s", got)
+	}
+	// Without launch-time choices, the relaunch has none either.
+	plain := must(t, a.post(fmt.Sprintf("job_templates/%d/launch/", jt), map[string]any{}), 201).id()
+	re = must(t, a.post(fmt.Sprintf("jobs/%d/relaunch/", plain), map[string]any{}), 201).id()
+	if groupsOf(re) != "[]" || labelsOf(fmt.Sprintf("jobs/%d/", re)) != fmt.Sprint([]int64{tplLabel, laterLabel}) {
+		t.Fatalf("plain relaunch: %s %s", groupsOf(re), labelsOf(fmt.Sprintf("jobs/%d/", re)))
+	}
+
+	// They are checked as prompts: relaunching needs use of the instance groups.
+	u, uid := newUser(t, a)
+	must(t, a.post(fmt.Sprintf("organizations/%d/users/", f.org), map[string]any{"id": uid}), 204)
+	must(t, a.post(fmt.Sprintf("users/%d/roles/", uid), map[string]any{"id": objectRole(t, a, "job_templates", jt, "execute_role")}), 204)
+	must(t, u.post(fmt.Sprintf("jobs/%d/relaunch/", job), map[string]any{}), 403)
+	for _, g := range []int64{ig1, ig2} {
+		must(t, a.post(fmt.Sprintf("users/%d/roles/", uid), map[string]any{"id": objectRole(t, a, "instance_groups", g, "use_role")}), 204)
+	}
+	must(t, u.post(fmt.Sprintf("jobs/%d/relaunch/", job), map[string]any{}), 201)
+
+	// A sliced job: every slice of the relaunch gets them.
+	sliced := f.template(t, "site.yml", map[string]any{"job_slice_count": 2, "ask_labels_on_launch": true, "ask_instance_groups_on_launch": true})
+	wj := must(t, a.post(fmt.Sprintf("job_templates/%d/launch/", sliced), prompts), 201).id()
+	rewj := must(t, a.post(fmt.Sprintf("workflow_jobs/%d/relaunch/", wj), map[string]any{}), 201).id()
+	slices := a.get(fmt.Sprintf("workflow_jobs/%d/workflow_nodes/", rewj)).results()
+	if len(slices) != 2 {
+		t.Fatalf("slices: %v", slices)
+	}
+	for _, n := range slices {
+		sj := int64(n["job"].(float64))
+		if labelsOf(fmt.Sprintf("jobs/%d/", sj)) != fmt.Sprint([]int64{launchLabel}) || groupsOf(sj) != fmt.Sprint([]int64{ig2, ig1}) {
+			t.Fatalf("slice %d: labels %s, instance groups %s", sj, labelsOf(fmt.Sprintf("jobs/%d/", sj)), groupsOf(sj))
+		}
+	}
+
+	// A workflow job keeps its labels.
+	wf := must(t, a.post("workflow_job_templates/", map[string]any{"name": uniq("wf"), "organization": f.org, "ask_labels_on_launch": true}), 201).id()
+	must(t, a.post(fmt.Sprintf("workflow_job_templates/%d/labels/", wf), map[string]any{"id": tplLabel}), 204)
+	wfj := must(t, a.post(fmt.Sprintf("workflow_job_templates/%d/launch/", wf), map[string]any{"labels": []int64{launchLabel}}), 201).Body["workflow_job"].(float64)
+	rewf := must(t, a.post(fmt.Sprintf("workflow_jobs/%d/relaunch/", int64(wfj)), map[string]any{}), 201).id()
+	if got := labelsOf(fmt.Sprintf("workflow_jobs/%d/", rewf)); got != fmt.Sprint([]int64{tplLabel, launchLabel}) {
+		t.Fatalf("workflow relaunch labels: %s", got)
+	}
+}

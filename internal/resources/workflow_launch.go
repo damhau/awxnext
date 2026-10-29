@@ -359,6 +359,7 @@ func handleWorkflowRelaunch(c *Ctx, w http.ResponseWriter, r *http.Request, job 
 		trusted := Obj{"inventory": slice["inventory"], "limit": slice["limit"], "job_tags": slice["job_tags"], "skip_tags": slice["skip_tags"],
 			"job_type": slice["job_type"], "verbosity": slice["verbosity"], "diff_mode": slice["diff_mode"], "scm_branch": slice["scm_branch"],
 			"forks": slice["forks"], "timeout": slice["timeout"], "execution_environment": slice["execution_environment"], "job_slice_count": slice["job_slice_count"]}
+		addLaunchChoices(c, trusted, first, ujt)
 		jtNoSurvey := Obj{}
 		for k, v := range jt {
 			jtNoSurvey[k] = v

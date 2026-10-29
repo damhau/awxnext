@@ -74,7 +74,7 @@ The gaps fall in four groups:
 
 **P3: completeness**
 
-15. Relaunch keeps launch-time labels and instance groups; workflow labels passed to nodes; labels and instance group prompts on schedules and nodes.
+15. ~~Relaunch keeps launch-time labels and instance groups~~ (done, roadmap M3-02); workflow labels passed to nodes; labels and instance group prompts on schedules and nodes.
 16. ~~Typed workflow node outputs~~ (done, roadmap M3-04).
 17. ~~Named URLs for credentials and other multi-hop formats, `related.named_url`~~ (done, roadmap M2-10).
 18. Websocket groups `jobs-summary`, `schedules-changed` and `control-limit_reached_<user>` (subscribable, never published).
@@ -145,7 +145,7 @@ The gaps fall in four groups:
 | Launch fields the template does not prompt for | Yes | Done | Deliberate difference: refused with a 400 instead of ignored (`ignored_fields`); `IGNORE_UNPROMPTED_LAUNCH_FIELDS` gives AWX's behaviour. Empty values and the template's own values change nothing and pass (still in `ignored_fields`), so the Terraform provider can update an `aap_job` |
 | `ansible_*` variables at launch (extra vars, survey questions, schedules, ad hoc) | Yes | Done | Deliberate difference: refused, as they set how Ansible connects and runs; `ALLOW_ANSIBLE_VARS_AT_LAUNCH` gives AWX's behaviour. Template, inventory and host variables are not affected |
 | Surveys (all types, password encryption) | Yes | Done | Plus choices from the system, conditional questions, answer formats |
-| Relaunch (all, failed hosts) | Yes | Done | Launch-time labels/IGs not kept (roadmap M3-02) |
+| Relaunch (all, failed hosts) | Yes | Done | Keeps the labels and instance groups chosen at launch, checked as prompts (roadmap M3-02); a sliced job's relaunch takes them from its first slice |
 | `jobs/N/create_schedule/` | Yes | Done | A disabled monthly schedule of the job's template with its launch prompts and credentials; labels and instance groups wait for schedules to store them (M3-03) |
 | Job slicing | Yes | Done | |
 | Job events, stdout formats, host summaries, artifacts | Yes | Done | `job_events/N/children/` and `playbook_counts` (also on job lists). `event_processing_finished` is true once a job has ended, including a job that never ran (a failed dependency, canceled while pending), and workflow jobs don't have it, as in AWX: clients wait on it |

@@ -434,11 +434,14 @@ func LaunchJobTemplate(c *Ctx, jt Obj, body Obj, launchType string, ov *LaunchOv
 	inv := jt["inventory"]
 	if v, ok := accepted["inventory"]; ok {
 		invID, ok := api.ID(v)
+		own, _ := api.ID(jt["inventory"])
 		if !ok {
 			fe.Add("inventory", "Invalid inventory.")
-		} else if err := api.RequirePermID(c, "inventory", "inventories", invID, "use"); err != nil {
-			return 0, nil, err
-		} else {
+		} else if invID != own {
+			// Executing the template allows its own inventory (a relaunch passes it back).
+			if err := api.RequirePermID(c, "inventory", "inventories", invID, "use"); err != nil {
+				return 0, nil, err
+			}
 			inv = invID
 		}
 	}
@@ -723,6 +726,35 @@ func LaunchJobTemplate(c *Ctx, jt Obj, body Obj, launchType string, ov *LaunchOv
 	return jobID, ignored, nil
 }
 
+// addLaunchChoices adds to a relaunch's prompts the labels and instance
+// groups its original job was launched with: the job's labels the template
+// does not have (now), and the instance groups chosen at launch, in order.
+// As prompts, they are checked like a launch's (see checkPromptedLabelsAndGroups).
+func addLaunchChoices(c *Ctx, trusted Obj, job, template int64) {
+	ids := func(sql string, args ...any) []any {
+		rows, err := c.DB().Query(c, sql, args...)
+		if err != nil {
+			return nil
+		}
+		defer rows.Close()
+		var out []any
+		for rows.Next() {
+			var id int64
+			if rows.Scan(&id) == nil {
+				out = append(out, id)
+			}
+		}
+		return out
+	}
+	if l := ids(`SELECT label_id FROM unified_job_labels WHERE unified_job_id = $1 AND label_id NOT IN
+		(SELECT label_id FROM unified_job_template_labels WHERE unified_job_template_id = $2) ORDER BY label_id`, job, template); len(l) > 0 {
+		trusted["labels"] = l
+	}
+	if g := ids("SELECT instance_group_id FROM instance_group_links WHERE content_type = 'unifiedjob' AND object_id = $1 ORDER BY position", job); len(g) > 0 {
+		trusted["instance_groups"] = g
+	}
+}
+
 // handleRelaunch implements /jobs/N/relaunch/.
 func handleRelaunch(c *Ctx, w http.ResponseWriter, r *http.Request, job Obj) {
 	jid, _ := api.ID(job["id"])
@@ -790,6 +822,7 @@ func handleRelaunch(c *Ctx, w http.ResponseWriter, r *http.Request, job Obj) {
 	trusted := Obj{"inventory": job["inventory"], "limit": limit, "job_tags": job["job_tags"], "skip_tags": job["skip_tags"],
 		"job_type": job["job_type"], "verbosity": job["verbosity"], "diff_mode": job["diff_mode"], "scm_branch": job["scm_branch"],
 		"forks": job["forks"], "timeout": job["timeout"], "execution_environment": job["execution_environment"]}
+	addLaunchChoices(c, trusted, jid, jtID)
 	// The original launch's variables are replayed, so those it got at launch
 	// are checked again; template variables are the template's own.
 	tplVars, _ := vars.Parse(str(jt["extra_vars"]))
