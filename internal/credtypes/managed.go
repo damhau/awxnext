@@ -194,9 +194,7 @@ var Managed = []Def{
 		str("bearer_token", "API authentication bearer token", "secret", true),
 		boolean("verify_ssl", "Verify SSL", "default", true),
 		str("ssl_ca_cert", "Certificate Authority data", "secret", true, "multiline", true),
-	}, []string{"host", "bearer_token"}), Injectors: map[string]any{"env": map[string]any{
-		"K8S_AUTH_HOST": "{{host}}", "K8S_AUTH_API_KEY": "{{bearer_token}}", "K8S_AUTH_VERIFY_SSL": "{{verify_ssl}}",
-	}}},
+	}, []string{"host", "bearer_token"})}, // injected in code, as in AWX
 
 	{Namespace: "registry", Name: "Container Registry", Kind: "registry", Inputs: inputs([]field{
 		str("host", "Authentication URL", "help_text", "Authentication endpoint for the container registry.", "default", "quay.io"),

@@ -69,7 +69,7 @@ The gaps fall in four groups:
 10. External log aggregation (logstash, splunk, ...) and its test endpoint.
 11. Password policy settings; activity stream entries for job launches and for role grants made through the role assignment API.
 12. ~~Dashboard endpoints (`/dashboard/`, `/dashboard/graphs/jobs/`)~~ (done, roadmap M2-03).
-13. ~~Managed credential types for Insights and RHV~~ (done, roadmap M4-01); CA file injection for the OpenShift/Kubernetes token type.
+13. ~~Managed credential types for Insights and RHV~~ (done, roadmap M4-01); ~~CA file injection for the OpenShift/Kubernetes token type~~ (done, roadmap M4-02).
 14. Project refspec is not used when a job checks out an overridden branch, so jobs on refs only the refspec fetches (pull requests) can fail.
 
 **P3: completeness**
@@ -123,7 +123,7 @@ The gaps fall in four groups:
 | Inventory updates: cancel, stdout, events, notifications, schedules | Yes | Done | UI has no schedules for sources; notifications are in the source's menu |
 | Bulk host create/delete | Yes | Done | `bulk/host_create` (each host created as through `/hosts/`, all or none) and `bulk/host_delete`, with AWX's limits, checks and messages |
 | Host metrics | Yes | Partial | Collected per job and cleaned up. `/host_metrics/` (list, filter, soft delete) and `/host_metric_summary_monthly/`, for superusers and auditors, as in AWX; the summary is the `host_metric_summary_monthly` management job (weekly), where AWX runs a periodic task. No UI page yet (roadmap M7-08) |
-| Managed credential types | Yes | Partial | All of AWX's, Insights and Red Hat Virtualization included (M4-01); Kubernetes CA not injected. As in AWX, an encrypted SSH key (OpenSSH with a cipher, PKCS#8 `ENCRYPTED PRIVATE KEY`, PEM `Proc-Type: 4,ENCRYPTED`) needs its passphrase and a passphrase needs an encrypted key, checked against the stored key on update |
+| Managed credential types | Yes | Partial | All of AWX's, Insights and Red Hat Virtualization included (M4-01). The Kubernetes bearer token is injected in code as in AWX, its CA data as a file in `K8S_AUTH_SSL_CA_CERT` (M4-02); unlike AWX, `verify_ssl` without CA data keeps verifying, against the system's CAs. As in AWX, an encrypted SSH key (OpenSSH with a cipher, PKCS#8 `ENCRYPTED PRIVATE KEY`, PEM `Proc-Type: 4,ENCRYPTED`) needs its passphrase and a passphrase needs an encrypted key, checked against the stored key on update |
 | Custom credential types | Yes | Done | Injectors are Jinja2 (gonja), sandboxed like AWX and checked when saved; `2 ** n` gives a float and `None` prints empty |
 | Lookups: HashiCorp Vault KV and SSH, Azure Key Vault | Yes | Done | Vault TLS cert auth missing; Azure falls back to managed identity |
 | Lookups: CyberArk, Conjur, Thycotic, AWS Secrets Manager, Centrify | Yes | Later | |

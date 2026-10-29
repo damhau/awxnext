@@ -114,6 +114,27 @@ func Inject(r *Run, creds []*resources.ResolvedCredential, prompts map[string]st
 			} else {
 				inj.Env["ANSIBLE_NET_AUTHORIZE"] = "0"
 			}
+		case "kubernetes":
+			// As AWX's kubernetes_bearer_token injector: the CA data goes to a
+			// file. Unlike AWX, verify_ssl without CA data keeps verifying
+			// (against the system's CAs) instead of turning it off.
+			inj.Env["K8S_AUTH_HOST"] = in("host")
+			inj.Env["K8S_AUTH_API_KEY"] = in("bearer_token")
+			verify, set := rc.Inputs["verify_ssl"].(bool)
+			if !set {
+				verify = true
+			}
+			inj.Env["K8S_AUTH_VERIFY_SSL"] = "False"
+			if verify {
+				inj.Env["K8S_AUTH_VERIFY_SSL"] = "True"
+				if ca := in("ssl_ca_cert"); ca != "" {
+					name := fmt.Sprintf("env/awx_k8s_ca_%d", rc.ID)
+					if err := r.WriteFile(name, []byte(ca), 0o600); err != nil {
+						return nil, err
+					}
+					inj.Env["K8S_AUTH_SSL_CA_CERT"] = r.Path(name)
+				}
+			}
 		case "scm", "registry", "galaxy", "token", "cryptography", "external":
 			// Used by project sync, image pulls, galaxy installs or webhooks; nothing to inject.
 		default:

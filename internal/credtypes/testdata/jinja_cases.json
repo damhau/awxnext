@@ -577,36 +577,6 @@
   "want": "svc-ansible"
  },
  {
-  "name": "managed kubernetes_bearer_token env.K8S_AUTH_API_KEY",
-  "template": "{{bearer_token}}",
-  "vars": {
-   "bearer_token": "eyJhbGci",
-   "host": "https://cloud.example.com:5000/v3",
-   "verify_ssl": true
-  },
-  "want": "eyJhbGci"
- },
- {
-  "name": "managed kubernetes_bearer_token env.K8S_AUTH_HOST",
-  "template": "{{host}}",
-  "vars": {
-   "bearer_token": "eyJhbGci",
-   "host": "https://cloud.example.com:5000/v3",
-   "verify_ssl": true
-  },
-  "want": "https://cloud.example.com:5000/v3"
- },
- {
-  "name": "managed kubernetes_bearer_token env.K8S_AUTH_VERIFY_SSL",
-  "template": "{{verify_ssl}}",
-  "vars": {
-   "bearer_token": "eyJhbGci",
-   "host": "https://cloud.example.com:5000/v3",
-   "verify_ssl": true
-  },
-  "want": "True"
- },
- {
   "files": {
    "clouds": "/runner/env/awx_cred_1_clouds"
   },
