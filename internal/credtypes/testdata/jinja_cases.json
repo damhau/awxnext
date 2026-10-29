@@ -541,6 +541,42 @@
   "want": "{\"type\": \"service_account\", \"private_key\": \"-----BEGIN PRIVATE KEY-----\\nMIIEvQ\\\"IBADAN\\n-----END PRIVATE KEY-----\\n\", \"client_email\": \"svc-ansible\", \"project_id\": \"infra\", \"token_uri\": \"https://oauth2.googleapis.com/token\"}"
  },
  {
+  "name": "managed insights env.INSIGHTS_PASSWORD",
+  "template": "{{password}}",
+  "vars": {
+   "password": "p@ss\"word'<&>",
+   "username": "svc-ansible"
+  },
+  "want": "p@ss\"word'<&>"
+ },
+ {
+  "name": "managed insights env.INSIGHTS_USER",
+  "template": "{{username}}",
+  "vars": {
+   "password": "p@ss\"word'<&>",
+   "username": "svc-ansible"
+  },
+  "want": "svc-ansible"
+ },
+ {
+  "name": "managed insights extra_vars.scm_password",
+  "template": "{{password}}",
+  "vars": {
+   "password": "p@ss\"word'<&>",
+   "username": "svc-ansible"
+  },
+  "want": "p@ss\"word'<&>"
+ },
+ {
+  "name": "managed insights extra_vars.scm_username",
+  "template": "{{username}}",
+  "vars": {
+   "password": "p@ss\"word'<&>",
+   "username": "svc-ansible"
+  },
+  "want": "svc-ansible"
+ },
+ {
   "name": "managed kubernetes_bearer_token env.K8S_AUTH_API_KEY",
   "template": "{{bearer_token}}",
   "vars": {
@@ -605,6 +641,71 @@
    "verify_ssl": true
   },
   "want": "clouds:\n  devstack:\n    auth:\n      auth_url: https://cloud.example.com:5000/v3\n      username: svc-ansible\n      password: p@ss\"word'<&>\n      project_name: infra\n      project_domain_name: Default\n      domain_name: corp\n    region_name: RegionOne\n    verify: True"
+ },
+ {
+  "files": {
+   "": "/runner/env/awx_cred_1_"
+  },
+  "name": "managed rhv env.OVIRT_INI_PATH",
+  "template": "{{tower.filename}}",
+  "vars": {
+   "host": "https://cloud.example.com:5000/v3",
+   "password": "p@ss\"word'<&>",
+   "username": "svc-ansible"
+  },
+  "want": "/runner/env/awx_cred_1_"
+ },
+ {
+  "files": {
+   "": "/runner/env/awx_cred_1_"
+  },
+  "name": "managed rhv env.OVIRT_PASSWORD",
+  "template": "{{password}}",
+  "vars": {
+   "host": "https://cloud.example.com:5000/v3",
+   "password": "p@ss\"word'<&>",
+   "username": "svc-ansible"
+  },
+  "want": "p@ss\"word'<&>"
+ },
+ {
+  "files": {
+   "": "/runner/env/awx_cred_1_"
+  },
+  "name": "managed rhv env.OVIRT_URL",
+  "template": "{{host}}",
+  "vars": {
+   "host": "https://cloud.example.com:5000/v3",
+   "password": "p@ss\"word'<&>",
+   "username": "svc-ansible"
+  },
+  "want": "https://cloud.example.com:5000/v3"
+ },
+ {
+  "files": {
+   "": "/runner/env/awx_cred_1_"
+  },
+  "name": "managed rhv env.OVIRT_USERNAME",
+  "template": "{{username}}",
+  "vars": {
+   "host": "https://cloud.example.com:5000/v3",
+   "password": "p@ss\"word'<&>",
+   "username": "svc-ansible"
+  },
+  "want": "svc-ansible"
+ },
+ {
+  "files": {
+   "": "/runner/env/awx_cred_1_"
+  },
+  "name": "managed rhv file.template",
+  "template": "[ovirt]\novirt_url={{host}}\novirt_username={{username}}\novirt_password={{password}}\n{% if ca_file %}ovirt_ca_file={{ca_file}}{% endif %}",
+  "vars": {
+   "host": "https://cloud.example.com:5000/v3",
+   "password": "p@ss\"word'<&>",
+   "username": "svc-ansible"
+  },
+  "want": "[ovirt]\novirt_url=https://cloud.example.com:5000/v3\novirt_username=svc-ansible\novirt_password=p@ss\"word'<&>\n"
  },
  {
   "name": "managed satellite6 env.FOREMAN_PASSWORD",

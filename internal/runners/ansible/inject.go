@@ -114,7 +114,7 @@ func Inject(r *Run, creds []*resources.ResolvedCredential, prompts map[string]st
 			} else {
 				inj.Env["ANSIBLE_NET_AUTHORIZE"] = "0"
 			}
-		case "scm", "registry", "galaxy", "token", "cryptography", "external", "insights":
+		case "scm", "registry", "galaxy", "token", "cryptography", "external":
 			// Used by project sync, image pulls, galaxy installs or webhooks; nothing to inject.
 		default:
 			if err := applyInjectors(r, rc, inj); err != nil {

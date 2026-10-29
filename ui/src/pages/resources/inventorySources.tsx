@@ -47,9 +47,9 @@ export const sourceInfo: Record<string, { label: string; credential?: string; cr
   vmware: { label: 'VMware vCenter', credential: 'VMware vCenter', credentialKind: 'cloud' },
   satellite6: { label: 'Red Hat Satellite 6', credential: 'Red Hat Satellite 6', credentialKind: 'cloud' },
   openstack: { label: 'OpenStack', credential: 'OpenStack', credentialKind: 'cloud' },
-  rhv: { label: 'Red Hat Virtualization', credentialKind: 'cloud' },
+  rhv: { label: 'Red Hat Virtualization', credential: 'Red Hat Virtualization', credentialKind: 'cloud' },
   controller: { label: 'Red Hat Ansible Automation Platform', credential: 'Red Hat Ansible Automation Platform', credentialKind: 'cloud' },
-  insights: { label: 'Red Hat Insights', credentialKind: 'insights' },
+  insights: { label: 'Red Hat Insights', credential: 'Insights', credentialKind: 'insights' },
   terraform: { label: 'Terraform state', credential: 'Terraform backend configuration', credentialKind: 'cloud' },
   constructed: { label: 'Constructed' },
 }

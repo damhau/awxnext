@@ -69,7 +69,7 @@ The gaps fall in four groups:
 10. External log aggregation (logstash, splunk, ...) and its test endpoint.
 11. Password policy settings; activity stream entries for job launches and for role grants made through the role assignment API.
 12. ~~Dashboard endpoints (`/dashboard/`, `/dashboard/graphs/jobs/`)~~ (done, roadmap M2-03).
-13. Managed credential types for Insights and RHV (their inventory sources exist but no credential can be picked); CA file injection for the OpenShift/Kubernetes token type.
+13. ~~Managed credential types for Insights and RHV~~ (done, roadmap M4-01); CA file injection for the OpenShift/Kubernetes token type.
 14. Project refspec is not used when a job checks out an overridden branch, so jobs on refs only the refspec fetches (pull requests) can fail.
 
 **P3: completeness**
@@ -117,13 +117,13 @@ The gaps fall in four groups:
 | Asynchronous inventory delete | Yes | Done | 202 and `pending_deletion`, then hosts are deleted in batches in the background; a second delete and launches on it are refused, as in AWX |
 | Cloud sources: ec2, gce, azure_rm, vmware, openstack, satellite6, controller, terraform, openshift_virtualization | Yes | Done | AWX's per-source default enabled/instance-id variables are not applied |
 | Project file (scm) source | Yes | Partial | `source_vars` not exported as environment |
-| rhv, insights sources | Yes | Partial | No managed credential type |
+| rhv, insights sources | Yes | Done | With AWX's Red Hat Virtualization (INI file and environment) and Insights credential types (roadmap M4-01) |
 | `file` source, `inventory_import` | Yes | Missing | GitOps inventory `content` covers part of it |
 | overwrite, overwrite_vars, enabled_var, host_filter, update on launch with cache | Yes | Done | |
 | Inventory updates: cancel, stdout, events, notifications, schedules | Yes | Done | UI has no schedules for sources; notifications are in the source's menu |
 | Bulk host create/delete | Yes | Done | `bulk/host_create` (each host created as through `/hosts/`, all or none) and `bulk/host_delete`, with AWX's limits, checks and messages |
 | Host metrics | Yes | Partial | Collected per job and cleaned up. `/host_metrics/` (list, filter, soft delete) and `/host_metric_summary_monthly/`, for superusers and auditors, as in AWX; the summary is the `host_metric_summary_monthly` management job (weekly), where AWX runs a periodic task. No UI page yet (roadmap M7-08) |
-| Managed credential types | Yes | Partial | All but Insights and RHV; Kubernetes CA not injected. As in AWX, an encrypted SSH key (OpenSSH with a cipher, PKCS#8 `ENCRYPTED PRIVATE KEY`, PEM `Proc-Type: 4,ENCRYPTED`) needs its passphrase and a passphrase needs an encrypted key, checked against the stored key on update |
+| Managed credential types | Yes | Partial | All of AWX's, Insights and Red Hat Virtualization included (M4-01); Kubernetes CA not injected. As in AWX, an encrypted SSH key (OpenSSH with a cipher, PKCS#8 `ENCRYPTED PRIVATE KEY`, PEM `Proc-Type: 4,ENCRYPTED`) needs its passphrase and a passphrase needs an encrypted key, checked against the stored key on update |
 | Custom credential types | Yes | Done | Injectors are Jinja2 (gonja), sandboxed like AWX and checked when saved; `2 ** n` gives a float and `None` prints empty |
 | Lookups: HashiCorp Vault KV and SSH, Azure Key Vault | Yes | Done | Vault TLS cert auth missing; Azure falls back to managed identity |
 | Lookups: CyberArk, Conjur, Thycotic, AWS Secrets Manager, Centrify | Yes | Later | |

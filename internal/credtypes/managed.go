@@ -3,7 +3,7 @@
 package credtypes
 
 // Managed credential types, matching AWX's built-in definitions (namespace, kind, inputs, injectors).
-// Types whose injection is done in code (ssh, scm, vault, net, insights, ...) carry no injectors.
+// Types whose injection is done in code (ssh, scm, vault, net, ...) carry no injectors.
 
 type field = map[string]any
 
@@ -154,6 +154,28 @@ var Managed = []Def{
 	{Namespace: "bitbucket_dc_token", Name: "Bitbucket Data Center HTTP Access Token", Kind: "token", Inputs: inputs([]field{
 		str("token", "Token", "secret", true),
 	}, []string{"token"})},
+
+	{Namespace: "insights", Name: "Insights", Kind: "insights", Inputs: inputs([]field{
+		str("username", "Username"),
+		str("password", "Password", "secret", true),
+	}, []string{"username", "password"}), Injectors: map[string]any{
+		"extra_vars": map[string]any{"scm_username": "{{username}}", "scm_password": "{{password}}"},
+		"env":        map[string]any{"INSIGHTS_USER": "{{username}}", "INSIGHTS_PASSWORD": "{{password}}"},
+	}},
+
+	// The ovirt inventory plugin reads the INI file, the ovirt modules the
+	// environment: AWX injects both.
+	{Namespace: "rhv", Name: "Red Hat Virtualization", Kind: "cloud", Inputs: inputs([]field{
+		str("host", "Host (Authentication URL)", "help_text", "The host to authenticate with."),
+		str("username", "Username"),
+		str("password", "Password", "secret", true),
+		str("ca_file", "CA File", "help_text", "Absolute file path to the CA file to use (optional)"),
+	}, []string{"host", "username", "password"}), Injectors: map[string]any{
+		"file": map[string]any{"template": "[ovirt]\novirt_url={{host}}\novirt_username={{username}}\novirt_password={{password}}\n{% if ca_file %}ovirt_ca_file={{ca_file}}{% endif %}"},
+		"env": map[string]any{
+			"OVIRT_INI_PATH": "{{tower.filename}}", "OVIRT_URL": "{{host}}", "OVIRT_USERNAME": "{{username}}", "OVIRT_PASSWORD": "{{password}}",
+		},
+	}},
 
 	{Namespace: "controller", Name: "Red Hat Ansible Automation Platform", Kind: "cloud", Inputs: inputs([]field{
 		str("host", "Red Hat Ansible Automation Platform", "help_text", "Red Hat Ansible Automation Platform base URL to authenticate with."),
