@@ -49,6 +49,12 @@ func Install(app *api.App) *Auth {
 	if d := settings.Lookup("OIDC_MAPPING"); d != nil {
 		d.Validate = func(v any) error { _, err := ParseRules(v); return err }
 	}
+	if d := settings.Lookup("SOCIAL_AUTH_ORGANIZATION_MAP"); d != nil {
+		d.Validate = func(v any) error { _, err := ParseOrgMap(v); return err }
+	}
+	if d := settings.Lookup("SOCIAL_AUTH_TEAM_MAP"); d != nil {
+		d.Validate = func(v any) error { _, err := ParseTeamMap(v); return err }
+	}
 	if d := settings.Lookup("SESSION_COOKIE_AGE"); d != nil {
 		d.Validate = func(v any) error {
 			if n, err := strconv.ParseFloat(fmt.Sprint(v), 64); err == nil && n < 60 {

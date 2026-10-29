@@ -40,15 +40,74 @@ type Grant struct {
 	Organization   string `json:"organization"`
 	Team           string `json:"team,omitempty"`
 	Group          string `json:"matched_group"`
-	Create         bool   `json:"-"`
+	// Map names the AWX map entry that produced the grant.
+	Map    string `json:"map,omitempty"`
+	Create bool   `json:"-"`
 }
 
 // MappingResult is the outcome of evaluating rules against a user's groups.
 type MappingResult struct {
-	Superuser *bool    `json:"superuser"`
-	Auditor   *bool    `json:"auditor"`
-	Grants    []Grant  `json:"grants"`
-	Errors    []string `json:"errors"`
+	Superuser *bool   `json:"superuser"`
+	Auditor   *bool   `json:"auditor"`
+	Grants    []Grant `json:"grants"`
+	// Keep lists mapped roles left as they are: kept if the user has them
+	// from an earlier login, not granted otherwise (AWX's null expressions
+	// and remove options set to false).
+	Keep   []Grant  `json:"kept"`
+	Errors []string `json:"errors"`
+}
+
+// Mapping is how an external login maps to access: awxnext's rules over
+// the user's groups, then AWX's organization and team maps.
+type Mapping struct {
+	Rules []Rule
+	AWX   AWXMaps
+}
+
+// Identity is what a provider tells about a user, for mapping.
+type Identity struct {
+	Username, Email string
+	Groups          []string
+	// Match decides AWX map expressions; nil compares the username and email.
+	Match Matcher
+}
+
+// Evaluate applies the rules and maps to a user. A role granted by either
+// is granted; it is kept only if nothing grants it.
+func (m Mapping) Evaluate(id Identity) MappingResult {
+	res := Evaluate(m.Rules, id.Groups)
+	match := id.Match
+	if match == nil {
+		match = IdentityMatcher(id.Username, id.Email)
+	}
+	m.AWX.Evaluate(match, &res)
+	key := func(g Grant) string { return g.RoleDefinition + "|" + g.Organization + "|" + g.Team }
+	granted := map[string]bool{}
+	grants := res.Grants[:0:0]
+	for _, g := range res.Grants {
+		if !granted[key(g)] {
+			granted[key(g)] = true
+			grants = append(grants, g)
+		}
+	}
+	keep := []Grant{}
+	for _, g := range res.Keep {
+		if !granted[key(g)] {
+			granted[key(g)] = true
+			keep = append(keep, g)
+		}
+	}
+	res.Grants, res.Keep = grants, keep
+	sortGrants(res.Grants)
+	sortGrants(res.Keep)
+	return res
+}
+
+func sortGrants(gs []Grant) {
+	sort.SliceStable(gs, func(i, j int) bool {
+		a, b := gs[i], gs[j]
+		return a.Organization+a.Team+a.RoleDefinition < b.Organization+b.Team+b.RoleDefinition
+	})
 }
 
 var orgRoles = map[string]string{"member": "Organization Member", "admin": "Organization Admin", "auditor": "Organization Audit"}
@@ -104,7 +163,7 @@ func ParseRules(v any) ([]Rule, error) {
 
 // Evaluate applies rules to groups. It is pure so it can back the dry-run endpoint.
 func Evaluate(rules []Rule, groups []string) MappingResult {
-	res := MappingResult{Grants: []Grant{}, Errors: []string{}}
+	res := MappingResult{Grants: []Grant{}, Keep: []Grant{}, Errors: []string{}}
 	var hasSU, hasAud bool
 	su, aud := false, false
 	seen := map[string]bool{}
@@ -176,16 +235,14 @@ func Evaluate(rules []Rule, groups []string) MappingResult {
 	if hasAud {
 		res.Auditor = &aud
 	}
-	sort.Slice(res.Grants, func(i, j int) bool {
-		a, b := res.Grants[i], res.Grants[j]
-		return a.Organization+a.Team+a.RoleDefinition < b.Organization+b.Team+b.RoleDefinition
-	})
+	sortGrants(res.Grants)
 	return res
 }
 
-// ApplyMapping makes the user's mapped (source='oidc') assignments match the result.
-// Manual grants are never touched.
-func ApplyMapping(ctx context.Context, tx api.DBTX, userID int64, res MappingResult) ([]string, error) {
+// ApplyMapping makes the user's assignments mapped by a provider (the
+// source, such as "oidc") match the result; kept roles stay if present.
+// Manual grants, and those of other providers, are never touched.
+func ApplyMapping(ctx context.Context, tx api.DBTX, userID int64, source string, res MappingResult) ([]string, error) {
 	var warnings []string
 	type key struct {
 		rd  int64
@@ -222,7 +279,24 @@ func ApplyMapping(ctx context.Context, tx api.DBTX, userID int64, res MappingRes
 		}
 		desired[key{rdID, ct, obj}] = true
 	}
-	rows, err := tx.Query(ctx, "SELECT id, role_definition_id, content_type, object_id FROM role_assignments WHERE user_id = $1 AND source = 'oidc'", userID)
+	kept := map[key]bool{}
+	for _, g := range res.Keep {
+		var rdID, obj int64
+		var rdCT *string
+		if tx.QueryRow(ctx, "SELECT id, content_type FROM role_definitions WHERE name = $1", g.RoleDefinition).Scan(&rdID, &rdCT) != nil || rdCT == nil {
+			continue
+		}
+		var err error
+		if g.Team != "" {
+			err = tx.QueryRow(ctx, "SELECT t.id FROM teams t JOIN organizations o ON o.id = t.organization_id WHERE o.name = $1 AND t.name = $2", g.Organization, g.Team).Scan(&obj)
+		} else {
+			err = tx.QueryRow(ctx, "SELECT id FROM organizations WHERE name = $1", g.Organization).Scan(&obj)
+		}
+		if err == nil {
+			kept[key{rdID, *rdCT, obj}] = true
+		}
+	}
+	rows, err := tx.Query(ctx, "SELECT id, role_definition_id, content_type, object_id FROM role_assignments WHERE user_id = $1 AND source = $2", userID, source)
 	if err != nil {
 		return nil, err
 	}
@@ -237,7 +311,7 @@ func ApplyMapping(ctx context.Context, tx api.DBTX, userID int64, res MappingRes
 		}
 		k := key{rd, ct, obj}
 		existing[k] = true
-		if !desired[k] {
+		if !desired[k] && !kept[k] {
 			stale = append(stale, id)
 		}
 	}
@@ -253,7 +327,7 @@ func ApplyMapping(ctx context.Context, tx api.DBTX, userID int64, res MappingRes
 		}
 		// An identical manual grant wins (unique index); it is left as is.
 		if _, err := tx.Exec(ctx, `INSERT INTO role_assignments (role_definition_id, user_id, content_type, object_id, source)
-			VALUES ($1, $2, $3, $4, 'oidc') ON CONFLICT DO NOTHING`, k.rd, userID, k.ct, k.obj); err != nil {
+			VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING`, k.rd, userID, k.ct, k.obj, source); err != nil {
 			return nil, err
 		}
 	}

@@ -99,6 +99,7 @@ The gaps fall in four groups:
 | OAuth2 applications, `/api/o/` | Deprecated | By design | Not advertised by `/api/` |
 | Session login, CSRF, basic auth, `/me/` | Yes | Done | |
 | OIDC login | Yes | Done | Ahead of AWX: rules re-applied at every login, bearer JWTs, dry-run endpoint |
+| Organization and team maps (`SOCIAL_AUTH_ORGANIZATION_MAP`, `SOCIAL_AUTH_TEAM_MAP`, per-login maps) | Yes | Done | Roadmap M5-01. AWX's validation and its social pipeline's results: expressions null (no change), true, false, usernames, emails and `/regex/` (flags i, m, matched from the start), `remove_admins`, `remove_users` and `remove`, `organization_alias`; a team map adds to the team only. Applied with the group rules at each login, in the dry run too. As in AWX, a login with its own maps (GitHub, Google, Azure AD, SAML) uses them even when unset; OIDC uses the global maps. Deliberate differences: only memberships a login gave are removed, never manual ones, and organizations and teams are created when someone is mapped into them, not at every login. The per-login map settings come with their logins (M5-03 to M5-05) |
 | LDAP, SAML, GitHub/Google/Azure AD | Yes | Later | |
 | RADIUS, TACACS+ | Yes | Missing | Not in the plan |
 | Session, token and login settings | Yes | Partial | Stored but ignored, see P1 |

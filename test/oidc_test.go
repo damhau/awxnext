@@ -283,3 +283,106 @@ func TestDisableLocalAuth(t *testing.T) {
 	must(t, bob.get("me/"), 401)
 	must(t, a.get("me/"), 200) // break-glass superuser
 }
+
+// AWX's SOCIAL_AUTH_ORGANIZATION_MAP and SOCIAL_AUTH_TEAM_MAP give OIDC
+// users the memberships AWX's social pipeline gives (its
+// test_social_pipeline.py scenarios), re-applied at each login.
+func TestOIDCAWXMaps(t *testing.T) {
+	a := adminClient(t)
+	idp := newFakeIdP(t)
+	configureOIDC(t, a, idp, []map[string]any{})
+	t.Cleanup(func() {
+		a.patch("settings/authentication/", map[string]any{"SOCIAL_AUTH_ORGANIZATION_MAP": nil, "SOCIAL_AUTH_TEAM_MAP": nil})
+	})
+	orgName := uniq("AWX Map Org")
+	setMaps := func(orgOpts, teamMap map[string]any) {
+		t.Helper()
+		body := map[string]any{"SOCIAL_AUTH_ORGANIZATION_MAP": map[string]any{orgName: orgOpts}, "SOCIAL_AUTH_TEAM_MAP": teamMap}
+		must(t, a.patch("settings/authentication/", body), 200)
+	}
+	domain := uniq("foo") + ".com"
+	ids := map[string]int64{}
+	login := func(n int) {
+		t.Helper()
+		name := fmt.Sprintf("user%d@%s", n, domain)
+		tok := idp.sign(t, map[string]any{"sub": name, "preferred_username": name, "email": name, "jti": uniq("jti")}, "awx-client")
+		me := must(t, (&client{t: t, token: tok}).get("me/"), 200).results()[0]
+		ids[name] = int64(me["id"].(float64))
+	}
+	count := func(role string) int {
+		t.Helper()
+		org := must(t, a.get("organizations/?name="+url.QueryEscape(orgName)), 200).results()
+		if len(org) == 0 {
+			return 0
+		}
+		return must(t, a.get(fmt.Sprintf("organizations/%d/%s/?username__endswith=%s", int64(org[0]["id"].(float64)), role, domain)), 200).count()
+	}
+
+	setMaps(map[string]any{"admins": "/.*/", "users": "/.*/"}, nil)
+	for n := 1; n <= 3; n++ {
+		login(n)
+	}
+	if count("admins") != 3 || count("users") != 3 {
+		t.Fatalf("regex: %d admins, %d users", count("admins"), count("users"))
+	}
+	setMaps(map[string]any{"admins": false, "users": false}, nil)
+	login(1)
+	if count("admins") != 2 || count("users") != 2 {
+		t.Errorf("remove: %d admins, %d users", count("admins"), count("users"))
+	}
+	setMaps(map[string]any{"admins": false, "users": false, "remove_admins": false, "remove_users": false}, nil)
+	login(2)
+	if count("admins") != 2 || count("users") != 2 {
+		t.Errorf("remove disabled: %d admins, %d users", count("admins"), count("users"))
+	}
+
+	// A manual membership is never removed by a map.
+	orgID := must(t, a.get("organizations/?name="+url.QueryEscape(orgName)), 200).results()[0]["id"].(float64)
+	user1 := ids["user1@"+domain]
+	must(t, a.post(fmt.Sprintf("organizations/%d/users/", int64(orgID)), map[string]any{"id": user1}), 204)
+	setMaps(map[string]any{"users": false}, nil)
+	login(1)
+	if n := must(t, a.get(fmt.Sprintf("organizations/%d/users/?id=%d", int64(orgID), user1)), 200).count(); n != 1 {
+		t.Error("the manual membership was removed")
+	}
+
+	// Teams, by email; a team member does not join the organization.
+	team := uniq("Blue")
+	setMaps(map[string]any{"users": nil}, map[string]any{team: map[string]any{"organization": orgName, "users": []string{"user3@" + domain}}})
+	login(3)
+	login(2)
+	tm := must(t, a.get("teams/?name="+url.QueryEscape(team)), 200).results()
+	if len(tm) != 1 {
+		t.Fatalf("team not created: %v", tm)
+	}
+	if n := must(t, a.get(fmt.Sprintf("teams/%d/users/", int64(tm[0]["id"].(float64)))), 200).count(); n != 1 {
+		t.Errorf("team members: %d", n)
+	}
+
+	// AWX's validation and the dry run.
+	r := a.patch("settings/authentication/", map[string]any{"SOCIAL_AUTH_ORGANIZATION_MAP": map[string]any{"X": map[string]any{"remove": true}}})
+	if r.Status != 400 || !strings.Contains(r.Raw, `Invalid key(s): \"remove\".`) {
+		t.Errorf("validation: %d %s", r.Status, r.Raw)
+	}
+	dry := must(t, a.post("settings/oidc/test/", map[string]any{
+		"claims":           map[string]any{"preferred_username": "user2@" + domain},
+		"organization_map": map[string]any{orgName: map[string]any{"admins": "/^user2@/", "users": false, "remove_users": false}},
+		"team_map":         map[string]any{},
+	}), 200).Body
+	grants, kept := dry["grants"].([]any), dry["kept"].([]any)
+	if len(grants) != 1 || grants[0].(map[string]any)["role_definition"] != "Organization Admin" ||
+		grants[0].(map[string]any)["map"] != fmt.Sprintf("organization map %q admins", orgName) ||
+		len(kept) != 1 || kept[0].(map[string]any)["role_definition"] != "Organization Member" || dry["email"] != "user2@"+domain {
+		t.Errorf("dry run: %v", dry)
+	}
+	// What would be created is listed once each.
+	newOrg := uniq("New Org")
+	dry = must(t, a.post("settings/oidc/test/", map[string]any{
+		"claims":           map[string]any{"preferred_username": "someone"},
+		"organization_map": map[string]any{newOrg: map[string]any{"admins": true, "users": true}},
+		"team_map":         map[string]any{"Web": map[string]any{"organization": newOrg, "users": true}},
+	}), 200).Body
+	if fmt.Sprint(dry["would_create"]) != fmt.Sprintf("[organization %s team Web in %s]", newOrg, newOrg) {
+		t.Errorf("would create: %v", dry["would_create"])
+	}
+}

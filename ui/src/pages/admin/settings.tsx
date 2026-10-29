@@ -10,6 +10,7 @@ import { Icon } from '../../components/icons'
 import { useConfirm, useToast } from '../../components/overlay'
 import { Empty, ErrorNote, Loading, PageHead, Panel } from '../../components/ui'
 import { humanize } from './common'
+import { grantReason, grantTarget, testerClaims, type MappedGrant } from '../../lib/mapping'
 
 interface Category {
   slug: string
@@ -78,6 +79,7 @@ function useCategory(cat: string) {
 /** Groups related settings under readable headings. */
 function sectionOf(cat: string, key: string): string {
   if (cat === 'oidc') return key.startsWith('SOCIAL_AUTH_') ? 'Provider' : key === 'OIDC_MAPPING' ? 'Group mapping' : 'Claims and tokens'
+  if (cat === 'authentication') return key.endsWith('_MAP') ? 'Organization and team maps' : 'Sessions and accounts'
   if (cat === 'jobs') {
     if (/TIMEOUT/.test(key)) return 'Timeouts'
     if (/GALAXY|COLLECTIONS|ROLES/.test(key)) return 'Content'
@@ -89,6 +91,7 @@ function sectionOf(cat: string, key: string): string {
 
 const sectionOrder: Record<string, string[]> = {
   oidc: ['Provider', 'Claims and tokens', 'Group mapping'],
+  authentication: ['Sessions and accounts', 'Organization and team maps'],
   jobs: ['General', 'Timeouts', 'Content', 'Execution'],
 }
 
@@ -576,11 +579,13 @@ function clean(r: Rule): Rule {
 
 interface DryRun {
   username: string
+  email?: string
   groups: string[]
   groups_claim: string
   superuser: boolean | null
   auditor: boolean | null
-  grants: { role_definition: string; organization: string; team?: string; matched_group: string }[] | null
+  grants: MappedGrant[] | null
+  kept?: MappedGrant[] | null
   would_create: string[] | null
   errors?: string[] | null
 }
@@ -588,6 +593,8 @@ interface DryRun {
 /** Evaluates the unsaved rules against sample token claims. */
 function MappingTester({ rules, groupsClaim }: { rules: Rule[]; groupsClaim: string }) {
   const [groups, setGroups] = useState('')
+  const [user, setUser] = useState('')
+  const [email, setEmail] = useState('')
   const [claimsText, setClaimsText] = useState('')
   const [advanced, setAdvanced] = useState(false)
   const [result, setResult] = useState<DryRun | null>(null)
@@ -597,14 +604,7 @@ function MappingTester({ rules, groupsClaim }: { rules: Rule[]; groupsClaim: str
     try {
       let claims: Record<string, unknown>
       if (advanced) claims = JSON.parse(claimsText || '{}')
-      else
-        claims = {
-          preferred_username: 'test-user',
-          [groupsClaim]: groups
-            .split(/[\n,]+/)
-            .map((s) => s.trim())
-            .filter(Boolean),
-        }
+      else claims = testerClaims(groupsClaim, user, email, groups)
       setResult(await api.post<DryRun>('settings/oidc/test/', { claims, mapping: rules }))
     } catch (e) {
       setError(e)
@@ -615,13 +615,15 @@ function MappingTester({ rules, groupsClaim }: { rules: Rule[]; groupsClaim: str
     <Panel title="Try the rules" actions={<label className="check small"><input type="checkbox" checked={advanced} onChange={(e) => setAdvanced(e.target.checked)} />Paste full token claims</label>}>
       <div className="stack" style={{ gap: 10 }}>
         <p className="small muted" style={{ margin: 0 }}>
-          Nothing is saved or changed: this shows what a user with these groups would get from the rules above, including unsaved edits.
+          Nothing is saved or changed: this shows what a user with these groups would get from the rules above, including unsaved edits, and from the saved organization and team maps of the Authentication settings, which match the username and email.
         </p>
         {advanced ? (
           <textarea className="textarea mono" rows={6} spellCheck={false} placeholder={`{\n  "preferred_username": "alice",\n  "${groupsClaim}": ["ops", "team-payments"]\n}`} value={claimsText} onChange={(e) => setClaimsText(e.target.value)} aria-label="Token claims" />
         ) : (
-          <div className="row">
-            <input className="input mono grow" aria-label="Groups" placeholder="ops, team-payments, awx-admins" value={groups} onChange={(e) => setGroups(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && run()} />
+          <div className="row" style={{ flexWrap: 'wrap' }}>
+            <input className="input mono" style={{ flex: '1 1 10rem', width: 'auto' }} aria-label="Username" placeholder="test-user" value={user} onChange={(e) => setUser(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && run()} />
+            <input className="input mono" style={{ flex: '1 1 12rem', width: 'auto' }} aria-label="Email" placeholder="email (optional)" value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && run()} />
+            <input className="input mono" style={{ flex: '2 1 16rem', width: 'auto' }} aria-label="Groups" placeholder="ops, team-payments, awx-admins" value={groups} onChange={(e) => setGroups(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && run()} />
             <button type="button" className="btn" onClick={run}>
               Evaluate
             </button>
@@ -638,7 +640,8 @@ function MappingTester({ rules, groupsClaim }: { rules: Rule[]; groupsClaim: str
         {result && (
           <div className="stack" style={{ gap: 8 }}>
             <div className="small">
-              <span className="mono">{result.username}</span> with groups {result.groups.length ? result.groups.map((g) => <span key={g} className="chip" style={{ marginRight: 4 }}>{g}</span>) : <span className="faint">none</span>}
+              <span className="mono">{result.username}</span>
+              {result.email ? <span className="mono faint"> ({result.email})</span> : null} with groups {result.groups.length ? result.groups.map((g) => <span key={g} className="chip" style={{ marginRight: 4 }}>{g}</span>) : <span className="faint">none</span>}
             </div>
             {(result.superuser || result.auditor) && <div className="notice accent">{result.superuser ? 'Becomes a superuser.' : 'Becomes a system auditor.'}</div>}
             {result.grants?.length ? (
@@ -647,18 +650,15 @@ function MappingTester({ rules, groupsClaim }: { rules: Rule[]; groupsClaim: str
                   <tr>
                     <th scope="col">Role</th>
                     <th scope="col">On</th>
-                    <th scope="col">Because of group</th>
+                    <th scope="col">Because of</th>
                   </tr>
                 </thead>
                 <tbody>
                   {result.grants.map((g, i) => (
                     <tr key={i}>
                       <td>{g.role_definition}</td>
-                      <td>
-                        {g.team ? `team ${g.team} in ` : ''}
-                        {g.organization}
-                      </td>
-                      <td className="mono small">{g.matched_group}</td>
+                      <td>{grantTarget(g)}</td>
+                      <td className="mono small">{grantReason(g)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -666,6 +666,11 @@ function MappingTester({ rules, groupsClaim }: { rules: Rule[]; groupsClaim: str
             ) : (
               !result.superuser && !result.auditor && <div className="notice">No rule matches: the user could sign in but would have no access.</div>
             )}
+            {result.kept?.length ? (
+              <div className="small muted">
+                Left as they are (kept if the user has them from an earlier login): {result.kept.map((g) => `${g.role_definition} on ${grantTarget(g)}`).join(', ')}
+              </div>
+            ) : null}
             {result.would_create?.length ? <div className="small muted">Would create: {result.would_create.join(', ')}</div> : null}
             {result.errors?.length ? <div className="form-error">{result.errors.join('; ')}</div> : null}
           </div>

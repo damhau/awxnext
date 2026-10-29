@@ -54,6 +54,8 @@ type oidcConfig struct {
 	AllowBearer   bool
 	LinkExisting  bool
 	Rules         []Rule
+	// AWX's organization and team maps.
+	AWX AWXMaps
 }
 
 func NewOIDC(app *api.App) *OIDC { return &OIDC{app: app} }
@@ -81,6 +83,9 @@ func (o *OIDC) config(ctx context.Context) (*oidcConfig, error) {
 	}
 	cfg.Rules, err = ParseRules(s.Get(ctx, "OIDC_MAPPING"))
 	if err != nil {
+		return nil, err
+	}
+	if cfg.AWX, err = LoadAWXMaps(func(k string) any { return s.Get(ctx, k) }, "oidc"); err != nil {
 		return nil, err
 	}
 	return cfg, nil
@@ -329,7 +334,6 @@ func (o *OIDC) provision(ctx context.Context, cfg *oidcConfig, claims map[string
 	first, _ := claims["given_name"].(string)
 	last, _ := claims["family_name"].(string)
 	groups := claimStrings(claimPath(claims, cfg.GroupsClaim))
-	result := Evaluate(cfg.Rules, groups)
 
 	tx, err := o.app.DB.Begin(ctx)
 	if err != nil {
@@ -365,7 +369,13 @@ func (o *OIDC) provision(ctx context.Context, cfg *oidcConfig, claims map[string
 		last_name = coalesce(nullif($4, ''), last_name), last_login = now() WHERE id = $1`, uid, email, first, last); err != nil {
 		return 0, err
 	}
-	warnings, err := ApplyMapping(ctx, tx, uid, result)
+	// AWX's maps match the user's username and email, as stored.
+	var dbName, dbEmail string
+	if err := tx.QueryRow(ctx, "SELECT username, email FROM users WHERE id = $1", uid).Scan(&dbName, &dbEmail); err != nil {
+		return 0, err
+	}
+	result := Mapping{Rules: cfg.Rules, AWX: cfg.AWX}.Evaluate(Identity{Username: dbName, Email: dbEmail, Groups: groups})
+	warnings, err := ApplyMapping(ctx, tx, uid, "oidc", result)
 	if err != nil {
 		return 0, err
 	}
@@ -402,34 +412,65 @@ func (o *OIDC) dryRun(c *api.Ctx, w http.ResponseWriter, r *http.Request) {
 	if gc, ok := data["groups_claim"].(string); ok && gc != "" {
 		cfg.GroupsClaim = gc
 	}
+	if v, ok := data["organization_map"]; ok {
+		if cfg.AWX.Orgs, err = ParseOrgMap(normalizeJSON(v)); err != nil {
+			api.WriteError(w, api.FieldError("organization_map", err.Error()))
+			return
+		}
+	}
+	if v, ok := data["team_map"]; ok {
+		if cfg.AWX.Teams, err = ParseTeamMap(normalizeJSON(v)); err != nil {
+			api.WriteError(w, api.FieldError("team_map", err.Error()))
+			return
+		}
+	}
 	claims, _ := normalizeJSON(data["claims"]).(map[string]any)
 	if claims == nil {
 		api.WriteError(w, api.FieldError("claims", "An object with token claims is required."))
 		return
 	}
 	groups := claimStrings(claimPath(claims, cfg.GroupsClaim))
-	res := Evaluate(cfg.Rules, groups)
+	name, _ := claims["email"].(string)
+	email := name
+	name = username(cfg, claims)
+	// An existing user is matched with the username and email it has.
+	c.App.DB.QueryRow(c, "SELECT email FROM users WHERE username = $1 AND email <> ''", name).Scan(&email)
+	res := Mapping{Rules: cfg.Rules, AWX: cfg.AWX}.Evaluate(Identity{Username: name, Email: email, Groups: groups})
 	// Report objects that would be created.
-	var creates []string
+	creates := []string{}
+	listed := map[string]bool{}
+	create := func(what string) {
+		if !listed[what] {
+			listed[what] = true
+			creates = append(creates, what)
+		}
+	}
 	for _, g := range res.Grants {
+		if !g.Create {
+			continue
+		}
 		var exists bool
 		c.App.DB.QueryRow(c, "SELECT EXISTS(SELECT 1 FROM organizations WHERE name = $1)", g.Organization).Scan(&exists)
 		if !exists {
-			creates = append(creates, "organization "+g.Organization)
-		} else if g.Team != "" {
-			c.App.DB.QueryRow(c, "SELECT EXISTS(SELECT 1 FROM teams t JOIN organizations o ON o.id = t.organization_id WHERE o.name = $1 AND t.name = $2)", g.Organization, g.Team).Scan(&exists)
+			create("organization " + g.Organization)
+		}
+		if g.Team != "" {
+			exists = exists && c.App.DB.QueryRow(c, "SELECT 1 FROM teams t JOIN organizations o ON o.id = t.organization_id WHERE o.name = $1 AND t.name = $2",
+				g.Organization, g.Team).Scan(new(int)) == nil
 			if !exists {
-				creates = append(creates, "team "+g.Team+" in "+g.Organization)
+				create("team " + g.Team + " in " + g.Organization)
 			}
 		}
 	}
 	api.WriteJSON(w, 200, api.Obj{
-		"username":     username(cfg, claims),
+		"username":     name,
+		"email":        email,
 		"groups_claim": cfg.GroupsClaim,
 		"groups":       groups,
 		"superuser":    res.Superuser,
 		"auditor":      res.Auditor,
 		"grants":       res.Grants,
+		"kept":         res.Keep,
 		"would_create": creates,
 		"errors":       nonNilStrings(res.Errors),
 	})
