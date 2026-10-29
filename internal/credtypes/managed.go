@@ -46,6 +46,27 @@ func inputs(fields []field, required []string, extra ...any) map[string]any {
 
 var becomeHelp = "Specify a method for \"become\" operations. This is equivalent to specifying the --become-method Ansible parameter."
 
+// vaultInputs are the inputs both HashiCorp Vault lookups share, as AWX
+// 24.6's base_inputs: the server, then token, AppRole, TLS certificate,
+// Kubernetes and userpass authentication.
+func vaultInputs() []field {
+	return []field{
+		str("url", "Server URL", "format", "url", "help_text", "The URL to the HashiCorp Vault"),
+		str("token", "Token", "secret", true, "help_text", "The access token used to authenticate to the Vault server"),
+		str("cacert", "CA Certificate", "multiline", true, "help_text", "The CA certificate used to verify the SSL certificate of the Vault server"),
+		str("role_id", "AppRole role_id", "multiline", false, "help_text", "The Role ID for AppRole Authentication"),
+		str("secret_id", "AppRole secret_id", "multiline", false, "secret", true, "help_text", "The Secret ID for AppRole Authentication"),
+		str("client_cert_public", "Client Certificate", "multiline", true, "help_text", "The PEM-encoded client certificate used for TLS client authentication. This should include the certificate and any intermediate certififcates."),
+		str("client_cert_private", "Client Certificate Key", "multiline", true, "secret", true, "help_text", "The certificate private key used for TLS client authentication."),
+		str("client_cert_role", "TLS Authentication Role", "multiline", false, "help_text", "The role configured in Hashicorp Vault for TLS client authentication. If not provided, Hashicorp Vault may assign roles based on the certificate used."),
+		str("namespace", "Namespace name (Vault Enterprise only)", "multiline", false, "help_text", "Name of the namespace to use when authenticate and retrieve secrets"),
+		str("kubernetes_role", "Kubernetes role", "multiline", false, "help_text", "The Role for Kubernetes Authentication. This is the named role, configured in Vault server, for AWX pod auth policies. see https://www.vaultproject.io/docs/auth/kubernetes#configuration"),
+		str("username", "Username", "secret", false, "help_text", "Username for user authentication."),
+		str("password", "Password", "secret", true, "help_text", "Password for user authentication."),
+		str("default_auth_path", "Path to Auth", "multiline", false, "default", "approle", "help_text", "The Authentication path to use if one isn't provided in the metadata when linking to an input field. Defaults to 'approle'"),
+	}
+}
+
 // Managed lists the built-in credential types.
 var Managed = []Def{
 	{Namespace: "ssh", Name: "Machine", Kind: "ssh", Inputs: inputs([]field{
@@ -222,17 +243,9 @@ var Managed = []Def{
 	}},
 
 	// External secret lookups (v1 scope: HashiCorp Vault and Azure Key Vault).
-	{Namespace: "hashivault_kv", Name: "HashiCorp Vault Secret Lookup", Kind: "external", Inputs: inputs([]field{
-		str("url", "Server URL", "help_text", "The URL to the HashiCorp Vault"),
-		str("token", "Token", "secret", true, "help_text", "The access token used to authenticate to the Vault server"),
-		str("cacert", "CA Certificate", "multiline", true, "help_text", "The CA certificate used to verify the SSL certificate of the Vault server"),
-		str("role_id", "AppRole role_id", "multiline", false, "help_text", "The Role ID for AppRole Authentication"),
-		str("secret_id", "AppRole secret_id", "multiline", false, "secret", true, "help_text", "The Secret ID for AppRole Authentication"),
-		str("namespace", "Namespace name (Vault Enterprise only)", "multiline", false),
-		str("kubernetes_role", "Kubernetes role", "multiline", false, "help_text", "The Role for Kubernetes Authentication. This is the named role, configured in Vault server, that AWX pod's Service Account is bound to."),
-		str("default_auth_path", "Path to Auth", "multiline", false, "default", "approle", "help_text", "The Authentication path to use if one isn't provided in the metadata when linking to an input field. Defaults to 'approle'"),
+	{Namespace: "hashivault_kv", Name: "HashiCorp Vault Secret Lookup", Kind: "external", Inputs: inputs(append(vaultInputs(),
 		str("api_version", "API Version", "choices", []any{"v1", "v2"}, "default", "v1", "help_text", "API v1 is for static key/value lookups.  API v2 is for versioned key/value lookups."),
-	}, []string{"url", "api_version"}, "metadata", []any{
+	), []string{"url", "api_version"}, "metadata", []any{
 		str("secret_backend", "Name of Secret Backend", "help_text", "The name of the kv secret backend (if left empty, the first segment of the secret path will be used)."),
 		str("secret_path", "Path to Secret", "help_text", "The path to the secret stored in the secret backend e.g, /some/secret/. It is recommended that you use the secret backend field to identify the storage backend and to use this field for locating a specific secret within that store. However, if you prefer to fully identify both the secret backend and one of its secrets using only this field, join their locations into a single path without any additional separators, e.g, /location/of/backend/some/secret."),
 		str("auth_path", "Path to Auth", "help_text", "The path where the Authentication method is mounted e.g, approle"),
@@ -240,16 +253,7 @@ var Managed = []Def{
 		str("secret_version", "Secret Version (v2 only)", "help_text", "Used to specify a specific secret version (if left empty, the latest version will be used)."),
 	}, "metadata_required", []any{"secret_path", "secret_key"})},
 
-	{Namespace: "hashivault_ssh", Name: "HashiCorp Vault Signed SSH", Kind: "external", Inputs: inputs([]field{
-		str("url", "Server URL", "help_text", "The URL to the HashiCorp Vault"),
-		str("token", "Token", "secret", true, "help_text", "The access token used to authenticate to the Vault server"),
-		str("cacert", "CA Certificate", "multiline", true),
-		str("role_id", "AppRole role_id"),
-		str("secret_id", "AppRole secret_id", "secret", true),
-		str("namespace", "Namespace name (Vault Enterprise only)"),
-		str("kubernetes_role", "Kubernetes role"),
-		str("default_auth_path", "Path to Auth", "default", "approle"),
-	}, []string{"url"}, "metadata", []any{
+	{Namespace: "hashivault_ssh", Name: "HashiCorp Vault Signed SSH", Kind: "external", Inputs: inputs(vaultInputs(), []string{"url"}, "metadata", []any{
 		str("public_key", "Unsigned Public Key", "multiline", true),
 		str("secret_path", "Path to Secret", "help_text", "The path to the secret stored in the secret backend e.g, /some/secret/"),
 		str("auth_path", "Path to Auth"),

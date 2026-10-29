@@ -48,18 +48,34 @@ func vaultClient(inputs, metadata map[string]any) (*vaultclient.Client, error) {
 		CACert:    s(inputs, "cacert"),
 		AuthMount: strings.Trim(authPath, "/"),
 	}
+	// AWX's order: token, username and password, AppRole, Kubernetes, TLS
+	// certificate. Auth paths left at AWX's default "approle" use the method's own.
+	byDefault := func(mount string) {
+		if cfg.AuthMount == "" || cfg.AuthMount == "approle" {
+			cfg.AuthMount = mount
+		}
+	}
+	cert, key := s(inputs, "client_cert_public"), s(inputs, "client_cert_private")
 	switch {
 	case cfg.Token != "":
 		cfg.AuthMount = ""
+	case s(inputs, "username") != "" && s(inputs, "password") != "":
+		cfg.Username, cfg.Password = s(inputs, "username"), s(inputs, "password")
+		byDefault("userpass")
 	case s(inputs, "role_id") != "" && s(inputs, "secret_id") != "":
 		cfg.RoleID, cfg.SecretID = s(inputs, "role_id"), s(inputs, "secret_id")
 	case s(inputs, "kubernetes_role") != "":
 		cfg.K8sRole = s(inputs, "kubernetes_role")
-		if cfg.AuthMount == "" || cfg.AuthMount == "approle" {
-			cfg.AuthMount = "kubernetes"
-		}
+		byDefault("kubernetes")
+	case cert != "" && key != "":
+		cfg.CertRole = s(inputs, "client_cert_role")
+		byDefault("cert")
 	default:
-		return nil, errors.New("a token, AppRole (role_id and secret_id) or Kubernetes role is required")
+		return nil, errors.New("Token, Username/Password, AppRole, Kubernetes, or TLS authentication parameters must be set")
+	}
+	// As AWX, the certificate goes with the requests whenever both halves are set.
+	if cert != "" && key != "" {
+		cfg.ClientCert, cfg.ClientKey = cert, key
 	}
 	return vaultclient.New(cfg)
 }

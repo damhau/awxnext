@@ -1,5 +1,5 @@
 // Package vaultclient is a minimal HashiCorp Vault HTTP client supporting
-// token, AppRole and Kubernetes authentication. It is shared by the master-key
+// token, AppRole, Kubernetes, TLS certificate and userpass authentication. It is shared by the master-key
 // provider (Transit) and credential lookups (KV, SSH signing).
 package vaultclient
 
@@ -31,7 +31,16 @@ type Config struct {
 	K8sRole string
 	JWT     string
 	JWTPath string
-	// AuthMount overrides the auth mount path (default "approle" / "kubernetes").
+	// TLS certificate auth: a PEM certificate (with its chain) and key, sent
+	// on every connection, and the Vault role to log in as (optional).
+	ClientCert string
+	ClientKey  string
+	CertRole   string
+	// Userpass auth.
+	Username string
+	Password string
+	// AuthMount overrides the auth mount path (default "approle",
+	// "kubernetes", "cert" or "userpass").
 	AuthMount     string
 	CACert        string
 	TLSSkipVerify bool
@@ -56,6 +65,13 @@ func New(cfg Config) (*Client, error) {
 			return nil, errors.New("invalid vault CA certificate")
 		}
 		tlsCfg.RootCAs = pool
+	}
+	if cfg.ClientCert != "" || cfg.ClientKey != "" {
+		pair, err := tls.X509KeyPair([]byte(cfg.ClientCert), []byte(cfg.ClientKey))
+		if err != nil {
+			return nil, fmt.Errorf("invalid vault client certificate: %w", err)
+		}
+		tlsCfg.Certificates = []tls.Certificate{pair}
 	}
 	timeout := cfg.Timeout
 	if timeout == 0 {
@@ -152,6 +168,21 @@ func (c *Client) login(ctx context.Context) (string, error) {
 		}
 		path = "auth/" + mount + "/login"
 		body = map[string]any{"role": c.cfg.K8sRole, "jwt": jwt}
+	case c.cfg.Username != "":
+		mount := c.cfg.AuthMount
+		if mount == "" {
+			mount = "userpass"
+		}
+		path = "auth/" + mount + "/login/" + c.cfg.Username
+		body = map[string]any{"password": c.cfg.Password}
+	case c.cfg.ClientCert != "":
+		// The certificate itself authenticates (TLS); name picks the role.
+		mount := c.cfg.AuthMount
+		if mount == "" {
+			mount = "cert"
+		}
+		path = "auth/" + mount + "/login"
+		body = map[string]any{"name": c.cfg.CertRole}
 	default:
 		if c.cfg.Token == "" {
 			return "", errors.New("vault: no authentication method configured")
