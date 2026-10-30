@@ -383,7 +383,8 @@ func Markdown(results []*Result, names []string) string {
 		}
 		b.WriteString("\n")
 	}
-	row("Version", func(r *Result) string { return r.Version })
+	// awxnext answers with the AWX version its API follows.
+	row("API version (ping)", func(r *Result) string { return r.Version })
 	row("Event ingestion (events/s)", func(r *Result) string {
 		return fmt.Sprintf("%.0f (%d events in %.1f s)", r.EventsPerSecond, r.Events, r.EventSeconds)
 	})

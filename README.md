@@ -7,7 +7,8 @@ design, scope and roadmap.
 **Status:** early development. The API, job execution (local, remote agents,
 Kubernetes container groups), workflows, schedules, notifications, GitOps, the AWX
 importer and the web UI are in place; see [docs/PLAN.md](docs/PLAN.md) for what's next and
-[docs/parity.md](docs/parity.md) for a feature by feature comparison with AWX 24.6.
+[docs/parity.md](docs/parity.md) for a feature by feature comparison with AWX 24.6, and
+[docs/benchmarks.md](docs/benchmarks.md) for measures against it.
 
 ## Try it with Docker Compose
 

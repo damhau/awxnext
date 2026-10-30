@@ -38,7 +38,7 @@ jobs:
             echo
             echo "- $(nproc) CPUs, $(free -g | awk '/Mem:/ {print $2}') GiB of memory ($(lscpu | sed -n 's/^Model name: *//p'))"
             echo
-          } >> "$GITHUB_STEP_SUMMARY"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
       - name: AWX 24.6.1 (awx-operator 2.19.1)
         run: |
           mkdir -p /tmp/awx && cd /tmp/awx

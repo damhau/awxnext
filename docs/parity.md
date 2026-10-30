@@ -80,7 +80,7 @@ The gaps fall in four groups:
 17. ~~Named URLs for credentials and other multi-hop formats, `related.named_url`~~ (done, roadmap M2-10).
 18. ~~Websocket groups `jobs-summary`, `schedules-changed` and `control-limit_reached_<user>` (subscribable, never published)~~ (done, roadmap M6-05).
 19. UI: `start_at_task`, `prevent_instance_group_fallback` and instance groups on templates and inventories, webhook key display, credential types page, inventory source schedules tab, execution environment and passwords in the ad hoc dialog, node credentials and labels in the workflow editor, EE contents view (promised in PLAN.md).
-20. Plan items not built yet: S3/Azure Blob event archives, benchmarks, dark mode, saved views stored per user on the server (per-job event rate caps and the Helm chart done, roadmap M6-06 and M6-10).
+20. Plan items not built yet: S3/Azure Blob event archives, dark mode, saved views stored per user on the server (per-job event rate caps, the Helm chart and the [benchmarks against AWX](benchmarks.md) done, roadmap M6-06, M6-10 and M6-11).
 
 ## Authentication, users, organizations, RBAC
 
