@@ -5,7 +5,9 @@ import { useMemo, useState, type ReactNode } from 'react'
 import { api, getAll, type Params } from '../api/client'
 import { useInvalidate } from '../api/hooks'
 import { bulkMessage, bulkOutcome, MAX_SELECT_ALL, nameList, nextSelection, offerSelectAll, type BulkOutcome } from '../lib/bulk'
+import { HAS_USED_BY, inUse, summarize } from '../lib/usedBy'
 import { useConfirm, useToast } from './overlay'
+import { fetchUsedBy } from './UsedBy'
 
 type Key = number | string
 
@@ -68,12 +70,30 @@ export function BulkDelete<T>({
       className="btn warn"
       onClick={async () => {
         const rows = sel.rows
+        // What uses them, for up to 50 of them.
+        const check = HAS_USED_BY.has(resource) && rows.length <= 50
+        const used = check ? await Promise.all(rows.map((r) => fetchUsedBy(resource, (r as { id: number }).id))) : []
+        const busy = rows.map((r, i) => ({ name: name(r), u: used[i] ?? null })).filter((x) => inUse(x.u))
         const ok = await confirm({
           title: `Delete ${rows.length} ${rows.length === 1 ? noun[0] : noun[1]}?`,
           body: (
-            <p style={{ margin: 0 }}>
-              {nameList(rows.map(name))}. {note ?? 'This cannot be undone.'}
-            </p>
+            <>
+              <p style={{ margin: 0 }}>
+                {nameList(rows.map(name))}. {note ?? 'This cannot be undone.'}
+              </p>
+              {busy.length > 0 && (
+                <div className="notice warn small stack" role="note" style={{ gap: 4, marginTop: 10 }}>
+                  <div>{busy.length === 1 ? 'One of them is in use:' : `${busy.length} of them are in use:`}</div>
+                  {busy.slice(0, 8).map((x) => (
+                    <div key={x.name}>
+                      <b>{x.name}</b>: used by {summarize(x.u!)}
+                    </div>
+                  ))}
+                  {busy.length > 8 && <div>and {busy.length - 8} more.</div>}
+                </div>
+              )}
+              {HAS_USED_BY.has(resource) && !check && <p className="small faint">Not checked for what uses them: more than 50 are selected.</p>}
+            </>
           ),
           confirm: 'Delete',
           danger: true,

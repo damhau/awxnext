@@ -13,6 +13,7 @@ import { Ago, Empty, KV, PageHead } from '../../components/ui'
 import { filterCollections, readOfOtherImage, shortDigest, type ContentsRead } from '../../lib/eeContents'
 import { plural } from '../../lib/format'
 import { applyErrors, FilterBox, KindTag, refOf, useDelete } from './common'
+import { UsedByDialog } from '../../components/UsedBy'
 
 interface EE extends Base {
   image: string
@@ -48,6 +49,7 @@ export function ExecutionEnvironmentList() {
   const list = useList<EE>('execution_environments/', { search: ls.q || undefined, ...params, order_by: ls.order, page: ls.page, page_size: ls.pageSize })
   const [edit, setEdit] = useState<null | { ee?: EE }>(null)
   const [contents, setContents] = useState<EE | null>(null)
+  const [usedBy, setUsedBy] = useState<EE | null>(null)
   const del = useDelete('execution_environments')
   const copy = useCopy('execution_environments', { onCopied: (ee) => setEdit({ ee: ee as EE }) })
   const cols: Column<EE>[] = [
@@ -100,6 +102,7 @@ export function ExecutionEnvironmentList() {
       render: (e) => (
         <Menu label={`Actions for ${e.name}`} className="btn sm icon ghost">
           <button onClick={() => setContents(e)}>Contents…</button>
+          <button onClick={() => setUsedBy(e)}>Used by…</button>
           {e.summary_fields.user_capabilities?.edit && (
             <>
               <button onClick={() => setEdit({ ee: e })}>Edit…</button>
@@ -153,6 +156,7 @@ export function ExecutionEnvironmentList() {
       </div>
       {edit && <EEDialog ee={edit.ee} onClose={() => setEdit(null)} />}
       {contents && <ContentsDialog ee={contents} onClose={() => setContents(null)} />}
+      {usedBy && <UsedByDialog resource="execution_environments" id={usedBy.id} name={usedBy.name} empty="Nothing uses this execution environment." onClose={() => setUsedBy(null)} />}
     </div>
   )
 }

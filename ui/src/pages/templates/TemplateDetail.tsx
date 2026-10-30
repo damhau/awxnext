@@ -1,7 +1,6 @@
-import { useQuery } from '@tanstack/react-query'
 import { useMemo } from 'react'
 import { Link, Route, Routes, useNavigate, useParams } from 'react-router'
-import { api, type Page } from '../../api/client'
+import { api } from '../../api/client'
 import { useInvalidate, useList, useObject } from '../../api/hooks'
 import type { Base, Job, Template } from '../../api/types'
 import { AccessTab } from '../../components/access/Access'
@@ -10,7 +9,7 @@ import { NotificationsTab } from '../../components/NotificationsTab'
 import { varsText } from '../../components/form'
 import { Icon } from '../../components/icons'
 import { Menu, useConfirm, useToast } from '../../components/overlay'
-import { Ago, ErrorNote, KV, Loading, Maybe, PageHead, Panel, Tab, Upcoming } from '../../components/ui'
+import { Ago, ErrorNote, KV, Loading, Maybe, PageHead, Panel, Tab } from '../../components/ui'
 import { duration, jobPath, statusKind, userName } from '../../lib/format'
 import { SchedulesTab } from '../automation/SchedulesTab'
 import { WorkflowVisualizer } from '../automation/workflow'
@@ -20,6 +19,7 @@ import type { OutputDecl } from '../../lib/outputs'
 import { History } from './History'
 import { SurveyEditor } from './SurveyEditor'
 import { TemplateForm } from './TemplateForm'
+import { DeleteEffects, fetchUsedBy, UsedByPanel } from '../../components/UsedBy'
 
 export type Kind = 'job' | 'workflow'
 export const resOf = (k: Kind) => (k === 'job' ? 'job_templates' : 'workflow_job_templates')
@@ -54,7 +54,14 @@ export function TemplateDetail({ kind }: { kind: Kind }) {
   const base = `/templates/${kind}/${id}`
 
   const remove = async () => {
-    if (!(await confirm({ title: `Delete ${tpl.name}?`, body: 'Its schedules are deleted too. Job history stays.', confirm: 'Delete', danger: true }))) return
+    const used = await fetchUsedBy(res, tpl.id)
+    const body = (
+      <>
+        <p style={{ margin: 0 }}>Its schedules are deleted too. Job history stays.</p>
+        <DeleteEffects u={used} />
+      </>
+    )
+    if (!(await confirm({ title: `Delete ${tpl.name}?`, body, confirm: 'Delete', danger: true }))) return
     try {
       await api.del(`${res}/${id}/`)
       invalidate('unified_job_templates', res)
@@ -158,11 +165,6 @@ const asked = (t: Template) =>
 function Details({ kind, tpl }: { kind: Kind; tpl: Template }) {
   const sf = tpl.summary_fields
   const recent = useList<Job>('unified_jobs/', { unified_job_template: tpl.id, order_by: '-id', page_size: 30 })
-  const usedBy = useQuery({
-    queryKey: ['workflow_job_template_nodes/', 'used-by', tpl.id],
-    queryFn: () => api.get<Page<Base>>('workflow_job_template_nodes/', { unified_job_template: tpl.id, page_size: 20 }),
-  })
-  const schedules = useList<Base>(`${resOf(kind)}/${tpl.id}/schedules/`, { page_size: 10 })
   const runs = recent.data?.results ?? []
   const done = runs.filter((j) => j.finished)
   const failed = done.filter((j) => ['fail', 'error'].includes(statusKind(j.status)))
@@ -300,31 +302,14 @@ function Details({ kind, tpl }: { kind: Kind; tpl: Template }) {
               </p>
             )}
           </Panel>
-          <Panel title="Used by">
-            <ul className="list-plain small" style={{ gap: 10 }}>
-              {(usedBy.data?.results ?? []).map((n) => (
-                <li key={n.id} style={{ display: 'block' }}>
-                  <Link to={`/templates/workflow/${n.workflow_job_template}/visualizer`}>{n.summary_fields?.workflow_job_template?.name ?? `workflow ${n.workflow_job_template}`}</Link>
-                  <div className="faint">workflow node {n.identifier ? <span className="mono">{n.identifier}</span> : ''}</div>
-                </li>
-              ))}
-              {(schedules.data?.results ?? []).map((s) => (
-                <li key={'s' + s.id} style={{ display: 'block' }}>
-                  <Link to={`/templates/${kind}/${tpl.id}/schedules`}>{s.name}</Link>
-                  <div className="faint">
-                    schedule · {s.enabled ? <>next <Upcoming at={s.next_run} /></> : 'paused'}
-                  </div>
-                </li>
-              ))}
-              {tpl.webhook_service && (
-                <li style={{ display: 'block' }}>
-                  <span>{tpl.webhook_service} webhook</span>
-                  <div className="faint">launches on incoming events</div>
-                </li>
-              )}
-              {!usedBy.data?.results.length && !schedules.data?.results.length && !tpl.webhook_service && <li className="muted">Only launched by hand.</li>}
-            </ul>
-          </Panel>
+          <UsedByPanel resource={resOf(kind)} id={tpl.id} empty={tpl.webhook_service ? '' : 'Only launched by hand.'}>
+            {tpl.webhook_service && (
+              <div className="small" style={{ marginTop: 10 }}>
+                <span>{tpl.webhook_service} webhook</span>
+                <div className="faint">launches on incoming events</div>
+              </div>
+            )}
+          </UsedByPanel>
           <Panel title="Source of truth">
             {tpl.managed_by ? (
               <p className="small" style={{ margin: 0 }}>

@@ -18,6 +18,7 @@ import { usePref } from '../../lib/prefs'
 import { FolderDialog } from '../../components/FolderDialog'
 import { useCopy } from '../../components/CopyDialog'
 import { BulkBar, useBulk, useSelection } from '../../components/BulkBar'
+import { DeleteEffects, fetchUsedBy } from '../../components/UsedBy'
 import { ancestors, buildTree, flatten, subtreeIds, useFolders, type FolderNode } from '../../lib/folders'
 import { shortRule } from '../automation/rrule'
 
@@ -123,7 +124,14 @@ export function TemplateList() {
   const copyJob = useCopy('job_templates', { to: (id) => `/templates/job/${id}`, what: 'Credentials, labels and the survey are copied.', invalidates: ['unified_job_templates', 'folders'] })
   const copyWorkflow = useCopy('workflow_job_templates', { to: (id) => `/templates/workflow/${id}`, what: 'Nodes, links and the survey are copied.', invalidates: ['unified_job_templates', 'folders'] })
   const remove = async (t: Template) => {
-    if (!(await confirm({ title: `Delete ${t.name}?`, body: 'Its schedules are deleted too. Job history stays.', confirm: 'Delete', danger: true }))) return
+    const used = await fetchUsedBy(res(t), t.id)
+    const body = (
+      <>
+        <p style={{ margin: 0 }}>Its schedules are deleted too. Job history stays.</p>
+        <DeleteEffects u={used} />
+      </>
+    )
+    if (!(await confirm({ title: `Delete ${t.name}?`, body, confirm: 'Delete', danger: true }))) return
     try {
       await api.del(`${res(t)}/${t.id}/`)
       toast(`Deleted ${t.name}`)

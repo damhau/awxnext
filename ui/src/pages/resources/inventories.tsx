@@ -18,6 +18,7 @@ import { plural } from '../../lib/format'
 import { compile, type KeyTable } from '../../lib/query'
 import { syncRelation } from '../../lib/relations'
 import { applyErrors, Count, FilterBox, KindTag, ManagedNotice, NameCell, Provenance, refOf, useDelete, useOrgColumn, folderColumn, folderKey } from './common'
+import { UsedByPanel } from '../../components/UsedBy'
 
 export interface Inventory extends Base {
   kind: '' | 'smart' | 'constructed'
@@ -586,33 +587,10 @@ export function InventoryDetailsTab({ inv }: { inv: Inventory }) {
               )}
             </div>
           </Panel>
-          <UsedBy invId={inv.id} />
+          <UsedByPanel resource="inventories" id={inv.id} empty="Nothing uses this inventory." />
         </div>
       </div>
     </div>
-  )
-}
-
-/** Templates that run against this inventory. */
-function UsedBy({ invId }: { invId: number }) {
-  const jts = useList<Base>('job_templates/', { inventory: invId, page_size: 8, order_by: 'name' })
-  return (
-    <Panel title="Used by">
-      {jts.data?.results.length ? (
-        <ul className="list-plain small">
-          {jts.data.results.map((t) => (
-            <li key={t.id}>
-              <Link to={`/templates/job/${t.id}`} className="ellipsis">
-                {t.name}
-              </Link>
-            </li>
-          ))}
-          {jts.data.count > jts.data.results.length && <li className="faint">and {jts.data.count - jts.data.results.length} more</li>}
-        </ul>
-      ) : (
-        <span className="faint small">No job template uses this inventory.</span>
-      )}
-    </Panel>
   )
 }
 

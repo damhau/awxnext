@@ -16,6 +16,7 @@ import { Ago, Empty, ErrorNote, KV, Loading, PageHead, Panel, Tab } from '../../
 import { plural } from '../../lib/format'
 import { compile, type KeyTable } from '../../lib/query'
 import { applyErrors, FilterBox, KindTag, ManagedNotice, NameCell, Provenance, refOf, SECRET, useDelete, useOrgColumn, folderColumn, folderKey } from './common'
+import { UsedByPanel } from '../../components/UsedBy'
 
 export interface Credential extends Base {
   credential_type: number
@@ -695,8 +696,6 @@ export function CredentialDetailsTab() {
   const c = useOutletContext<Credential>()
   const type = useCredType(c.credential_type)
   const sources = useInputSources(c.id)
-  const templates = useList<Base>('job_templates/', { credentials__id: c.id, page_size: 10, order_by: 'name' })
-  const projects = useList<Base>('projects/', { credential: c.id, page_size: 10, order_by: 'name' })
   const fields = type.data?.inputs.fields ?? []
   const linked = new Map((sources.data ?? []).map((s) => [s.input_field_name, s]))
   const rows: [ReactNode, ReactNode][] = fields
@@ -728,21 +727,7 @@ export function CredentialDetailsTab() {
           </Panel>
         </div>
         <div className="narrow stack" style={{ gap: 16 }}>
-          <Panel title="Used by">
-            <div className="stack small" style={{ gap: 6 }}>
-              {(templates.data?.results ?? []).map((t) => (
-                <Link key={t.id} to={`/templates/job/${t.id}`} className="ellipsis">
-                  {t.name}
-                </Link>
-              ))}
-              {(projects.data?.results ?? []).map((p) => (
-                <Link key={'p' + p.id} to={`/projects/${p.id}`} className="ellipsis">
-                  {p.name} <span className="faint">· project</span>
-                </Link>
-              ))}
-              {!templates.data?.count && !projects.data?.count && <span className="faint">Not used by any template or project.</span>}
-            </div>
-          </Panel>
+          <UsedByPanel resource="credentials" id={c.id} empty="Nothing uses this credential." />
           <Panel title="About">
             <KV
               items={[

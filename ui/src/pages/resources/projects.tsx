@@ -20,6 +20,7 @@ import { SchedulesTab } from '../automation/SchedulesTab'
 import { applyErrors, FilterBox, ManagedNotice, NameCell, Provenance, refOf, useDelete, useOrgColumn, folderColumn, folderKey } from './common'
 import { NotificationsTab } from '../../components/NotificationsTab'
 import { scmTypeLabel, scmTypeOptions, sourceBody, type ScmType } from '../../lib/projectSource'
+import { UsedByPanel } from '../../components/UsedBy'
 
 export interface Project extends Base {
   scm_type: ScmType
@@ -499,8 +500,6 @@ export const useProject = () => useOutletContext<Project>()
 export function ProjectDetailsTab() {
   const p = useProject()
   const playbooks = useQuery({ queryKey: [`projects/${p.id}/playbooks/`, p.scm_revision], queryFn: () => api.get<string[]>(`projects/${p.id}/playbooks/`) })
-  const templates = useList<Base>('job_templates/', { project: p.id, page_size: 10, order_by: 'name' })
-  const inventories = useList<Base>('inventory_sources/', { source_project: p.id, page_size: 10, order_by: 'name' })
   const last = p.summary_fields.last_job as (Base & { status: string; finished: string }) | undefined
   const [filter, setFilter] = useState('')
   const books = (playbooks.data ?? []).filter((b) => !filter || b.toLowerCase().includes(filter.toLowerCase()))
@@ -575,26 +574,7 @@ export function ProjectDetailsTab() {
               <span className="faint small">Never synced.</span>
             )}
           </Panel>
-          <Panel title="Used by">
-            <div className="stack small" style={{ gap: 6 }}>
-              {(templates.data?.results ?? []).map((t) => (
-                <Link key={t.id} to={`/templates/job/${t.id}`} className="ellipsis">
-                  {t.name}
-                </Link>
-              ))}
-              {(inventories.data?.results ?? []).map((s) => (
-                <Link key={'s' + s.id} to={`/inventories/${s.inventory}/sources?source=${s.id}`} className="ellipsis">
-                  {s.name} <span className="faint">· inventory source</span>
-                </Link>
-              ))}
-              {!templates.data?.count && !inventories.data?.count && <span className="faint">Nothing uses this project yet.</span>}
-              {(templates.data?.count ?? 0) > 10 && (
-                <Link to={`/templates?q=${encodeURIComponent(`project:"${p.name}"`)}`} className="faint">
-                  all {templates.data!.count} templates
-                </Link>
-              )}
-            </div>
-          </Panel>
+          <UsedByPanel resource="projects" id={p.id} empty="Nothing uses this project yet." />
           <Panel title="About">
             <KV
               items={[

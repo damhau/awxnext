@@ -101,8 +101,12 @@ func resolveEE(c *Ctx, prompt any, tpl Obj) any {
 			return *id
 		}
 	}
+	// The global default, unless it has been deleted since.
 	if gid, ok := api.ID(c.App.Settings.Get(c, "DEFAULT_EXECUTION_ENVIRONMENT")); ok {
-		return gid
+		var exists bool
+		if c.DB().QueryRow(c, "SELECT EXISTS (SELECT 1 FROM execution_environments WHERE id = $1)", gid).Scan(&exists); exists {
+			return gid
+		}
 	}
 	var def int64
 	if err := c.DB().QueryRow(c, "SELECT id FROM execution_environments WHERE managed ORDER BY id LIMIT 1").Scan(&def); err == nil {

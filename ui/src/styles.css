@@ -338,6 +338,7 @@ legend { font-weight: 500; margin-bottom: 8px; padding: 0; }
 .form-error { padding: 10px 12px; border: 1px solid var(--fail-line); background: var(--fail-soft); color: var(--fail-deep); border-radius: var(--radius); }
 .notice { padding: 10px 12px; border: 1px solid var(--line); background: var(--surface-3); border-radius: var(--radius); color: var(--ink-3); }
 .notice.accent { border-color: var(--lime-line); background: var(--lime-wash); color: var(--ink); }
+.notice.warn { border-color: var(--fail-line); background: var(--fail-soft); color: var(--ink); }
 
 /* ---------- lookup / popover ---------- */
 .lookup { position: relative; }

@@ -8,6 +8,8 @@ import type { Base, Ref } from '../../api/types'
 import { useOrg } from '../../app/context'
 import { Icon } from '../../components/icons'
 import { useConfirm, useToast } from '../../components/overlay'
+import { DeleteEffects, fetchUsedBy } from '../../components/UsedBy'
+import { HAS_USED_BY } from '../../lib/usedBy'
 import { userName } from '../../lib/format'
 import type { KeySpec } from '../../lib/query'
 
@@ -98,9 +100,15 @@ export function useDelete(resource: string, after?: string) {
   const invalidate = useInvalidate()
   const nav = useNavigate()
   return async (obj: { id: number; name: string }, what = 'object', body?: ReactNode) => {
+    const used = HAS_USED_BY.has(resource) ? await fetchUsedBy(resource, obj.id) : null
     const ok = await confirm({
       title: `Delete ${obj.name}?`,
-      body: body ?? <p style={{ margin: 0 }}>This permanently deletes the {what}. It cannot be undone.</p>,
+      body: (
+        <>
+          {body ?? <p style={{ margin: 0 }}>This permanently deletes the {what}. It cannot be undone.</p>}
+          <DeleteEffects u={used} />
+        </>
+      ),
       confirm: 'Delete',
       danger: true,
     })
