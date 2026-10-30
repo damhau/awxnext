@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router'
-import { api } from '../../api/client'
+import { api, ApiError } from '../../api/client'
 import { useInvalidate } from '../../api/hooks'
 import type { Base, Ref } from '../../api/types'
 import { Check, FormError, Lookup, SelectField, TextInput, VarsEditor, parseVars, useForm, varsError } from '../../components/form'
@@ -10,6 +10,7 @@ import { Dialog, Menu, useConfirm, useToast } from '../../components/overlay'
 import { DataTable, Pager, useListState, type Column } from '../../components/table'
 import { Ago, Empty, StatusDot } from '../../components/ui'
 import { plural } from '../../lib/format'
+import { askedPasswords, passwordLabel } from '../../lib/jobs'
 import { compile, type KeyTable } from '../../lib/query'
 import { applyErrors, FilterBox } from './common'
 import { useSubList, type Inventory } from './inventories'
@@ -305,6 +306,7 @@ export function AdHocDialog({ inventory, limit, onClose }: { inventory: Pick<Inv
     module_args: '',
     limit,
     credential: null as Ref | null,
+    execution_environment: null as Ref | null,
     verbosity: 0,
     forks: 0,
     become_enabled: false,
@@ -318,6 +320,11 @@ export function AdHocDialog({ inventory, limit, onClose }: { inventory: Pick<Inv
   const invalidate = useInvalidate()
   const v = f.values
   const needsArgs = v.module_name === 'command' || v.module_name === 'shell'
+  // The credential's ASK inputs, and any the API reports missing.
+  const [reported, setReported] = useState<string[]>([])
+  const [passwords, setPasswords] = useState<Record<string, string>>({})
+  const asked = [...new Set([...askedPasswords((v.credential as { inputs?: Record<string, unknown> } | null)?.inputs), ...reported])]
+  const passwordsMissing = asked.some((p) => !passwords[p])
   const submit = async (e?: FormEvent) => {
     e?.preventDefault()
     setBusy(true)
@@ -328,6 +335,8 @@ export function AdHocDialog({ inventory, limit, onClose }: { inventory: Pick<Inv
         module_args: v.module_args,
         limit: v.limit,
         credential: v.credential?.id ?? null,
+        execution_environment: v.execution_environment?.id ?? null,
+        credential_passwords: Object.fromEntries(asked.map((p) => [p, passwords[p] ?? ''])),
         verbosity: Number(v.verbosity),
         forks: Number(v.forks) || 0,
         become_enabled: v.become_enabled,
@@ -339,7 +348,11 @@ export function AdHocDialog({ inventory, limit, onClose }: { inventory: Pick<Inv
       onClose()
       nav(`/jobs/ad_hoc_command/${job.id}`)
     } catch (err) {
-      setError(applyErrors(err, f.setErrors))
+      const needed = err instanceof ApiError && err.status === 400 ? (err.body as { passwords_needed_to_start?: string[] })?.passwords_needed_to_start : undefined
+      if (needed?.length) {
+        setReported(needed)
+        setError(new Error(`Enter ${needed.map(passwordLabel).join(', ')}.`))
+      } else setError(applyErrors(err, f.setErrors))
       setBusy(false)
     }
   }
@@ -356,7 +369,7 @@ export function AdHocDialog({ inventory, limit, onClose }: { inventory: Pick<Inv
           <button className="btn" onClick={onClose}>
             Cancel
           </button>
-          <button className="btn primary" disabled={busy || (needsArgs && !v.module_args.trim()) || !!varsError(v.extra_vars)} onClick={() => submit()}>
+          <button className="btn primary" disabled={busy || (needsArgs && !v.module_args.trim()) || !!varsError(v.extra_vars) || passwordsMissing} onClick={() => submit()}>
             <Icon name="play" size={12} /> {busy ? 'Starting…' : 'Run'}
           </button>
         </>
@@ -390,6 +403,19 @@ export function AdHocDialog({ inventory, limit, onClose }: { inventory: Pick<Inv
             value={v.credential}
             onChange={(x) => f.set('credential', x)}
             error={f.errors.credential}
+          />
+          {asked.map((p) => (
+            <TextInput key={p} label={passwordLabel(p)} type="password" value={passwords[p] ?? ''} onChange={(x) => setPasswords((o) => ({ ...o, [p]: x }))} help="The credential asks for it at launch." />
+          ))}
+          <Lookup
+            label="Execution environment"
+            optional
+            resource="execution_environments/"
+            value={v.execution_environment}
+            onChange={(x) => f.set('execution_environment', x)}
+            error={f.errors.execution_environment}
+            placeholder="The inventory's organization default"
+            meta={(e) => e.image}
           />
           <SelectField
             label="Verbosity"

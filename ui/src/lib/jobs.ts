@@ -30,6 +30,20 @@ const passwordLabels: Record<string, string> = {
   vault_password: 'Vault password',
 }
 
+// The machine credential inputs a launch must supply when set to ASK, by
+// the credential_passwords key they need.
+const askInputs: [string, string][] = [
+  ['password', 'ssh_password'],
+  ['ssh_key_unlock', 'ssh_key_unlock'],
+  ['become_password', 'become_password'],
+]
+
+/** The passwords a launch with this machine credential needs: its inputs
+ * set to ASK (an ad hoc command has no launch info to say so). */
+export function askedPasswords(inputs: Record<string, unknown> | null | undefined): string[] {
+  return askInputs.filter(([input]) => inputs?.[input] === 'ASK').map(([, key]) => key)
+}
+
 /** A credential_passwords key in words: "Vault password (prod)" for vault_password.prod. */
 export function passwordLabel(key: string): string {
   const [base, vaultId] = key.split(/\.(.*)/)
