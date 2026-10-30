@@ -86,7 +86,7 @@ func writeDBMetrics(c *Ctx, mw *metrics.Writer) {
 		lastSeen                             *time.Time
 	}
 	var list []inst
-	rows, err = c.DB().Query(c, `SELECT i.hostname, i.uuid, i.version, i.node_type, i.node_state, (i.capacity * i.capacity_adjustment)::float8,
+	rows, err = c.DB().Query(c, `SELECT i.hostname, i.uuid, i.version, i.node_type, i.node_state, i.capacity::float8,
 		i.cpu::float8, i.cpu_capacity, i.mem_capacity, i.memory, i.enabled, i.last_seen,
 		coalesce((SELECT sum(task_impact) FROM unified_jobs j WHERE j.execution_node = i.hostname AND j.status IN ('waiting', 'running')), 0)
 		FROM instances i ORDER BY i.hostname`)

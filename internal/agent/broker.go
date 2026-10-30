@@ -26,6 +26,7 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/damhau/awxnext/internal/api"
+	"github.com/damhau/awxnext/internal/capacity"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -201,18 +202,19 @@ func (b *Broker) handleConnect(c *api.Ctx, w http.ResponseWriter, r *http.Reques
 		}
 		switch m.Type {
 		case "register":
-			capacity := m.Capacity
-			cpuCap := int(m.CPU * 4)
-			memCap := int(max((m.Memory>>20)-2048, 0) / 100)
-			if capacity <= 0 {
-				capacity = max(min(cpuCap, memCap), 1)
+			// AWX's capacity of an execution node, from the resources it
+			// reports; the agent's --capacity, when set, is both capacities.
+			cpuCap, memCap := capacity.CPU(m.CPU, false), capacity.Memory(m.Memory, false)
+			if m.Capacity > 0 {
+				cpuCap, memCap = m.Capacity, m.Capacity
 			}
-			if _, err := b.app.DB.Exec(ctx, `UPDATE instances SET node_state = 'ready', last_seen = now(), last_health_check = now(), errors = '',
-				version = $2, cpu = $3, memory = $4, cpu_capacity = $5, mem_capacity = $6, capacity = $7, agent_runtime = $8, agent_work_dir = $9
-				WHERE hostname = $1`, host, m.Version, m.CPU, m.Memory, cpuCap, memCap, capacity, m.Runtime, m.WorkDir); err != nil {
+			var forks int
+			if err := b.app.DB.QueryRow(ctx, `UPDATE instances SET node_state = 'ready', last_seen = now(), last_health_check = now(), errors = '',
+				version = $2, cpu = $3, memory = $4, cpu_capacity = $5, mem_capacity = $6, capacity = `+capacity.SQL("$5", "$6")+`, agent_runtime = $7, agent_work_dir = $8
+				WHERE hostname = $1 RETURNING capacity`, host, m.Version, m.CPU, m.Memory, cpuCap, memCap, m.Runtime, m.WorkDir).Scan(&forks); err != nil {
 				slog.Error("agent registration", "node", host, "err", err)
 			}
-			conn.send(ctx, message{Type: "registered", Capacity: capacity})
+			conn.send(ctx, message{Type: "registered", Capacity: forks})
 			b.app.DB.Exec(ctx, "SELECT pg_notify('awx_dispatch', '')")
 		case "heartbeat":
 			b.app.DB.Exec(ctx, "UPDATE instances SET last_seen = now(), node_state = 'ready' WHERE hostname = $1", host)

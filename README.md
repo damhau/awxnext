@@ -55,6 +55,13 @@ on :8052. `uv run --no-project scripts/seed-demo.py --jobs` fills it with demo c
 | `AWXNEXT_PROJECTS_ROOT` | `/var/lib/awxnext/projects` | Project checkouts |
 | `AWXNEXT_JOBS_ROOT` | `/var/lib/awxnext/jobs` | Job working directories |
 | `AWXNEXT_UI_DIR` | — | Serve the web UI from this directory instead of the embedded build |
+| `AWXNEXT_CAPACITY` | — | Fixed forks capacity of this node, instead of the one its CPU and memory allow |
+
+Capacity follows AWX's formula: 4 forks per CPU and one fork per 100 MB of memory after 2 GiB
+(none set aside in Kubernetes). AWX's `SYSTEM_TASK_FORKS_CPU` and `SYSTEM_TASK_FORKS_MEM` change
+these ratios, and `SYSTEM_TASK_ABS_CPU` (`2`, `1500m`) and `SYSTEM_TASK_ABS_MEM` (`8Gi`) replace a
+control node's measured CPU and memory. An instance's `capacity_adjustment` goes from the smaller of
+its CPU and memory capacities (0) to the larger (1).
 
 Vault Transit: `AWXNEXT_KMS_VAULT_ADDR`, `_KEY`, `_MOUNT`, and `_TOKEN`, `_ROLE_ID`/`_SECRET_ID`
 or `_K8S_ROLE`. Azure Key Vault: `AWXNEXT_KMS_AZURE_VAULT_URL`, `_KEY`, `_TENANT_ID`, `_CLIENT_ID`,

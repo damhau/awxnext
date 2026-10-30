@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/damhau/awxnext/internal/api"
+	"github.com/damhau/awxnext/internal/capacity"
 	"github.com/damhau/awxnext/internal/rbac"
 )
 
@@ -64,11 +65,13 @@ func Bootstrap(ctx context.Context, app *api.App) error {
 			return err
 		}
 	}
-	_, err := app.DB.Exec(ctx, `INSERT INTO instances (hostname, node_type, node_state, capacity, managed, version, last_seen, internal_url)
-		VALUES ($1, 'hybrid', 'ready', $2, true, $3, now(), $4)
-		ON CONFLICT (hostname) DO UPDATE SET last_seen = now(), version = EXCLUDED.version, capacity = EXCLUDED.capacity,
-			internal_url = EXCLUDED.internal_url`,
-		app.Cfg.NodeName, app.Cfg.Capacity, api.ProductVersion, app.Cfg.InternalURL)
+	cpu, mem, cpuCap, memCap := ControlNodeResources(app)
+	_, err := app.DB.Exec(ctx, `INSERT INTO instances (hostname, node_type, node_state, cpu, memory, cpu_capacity, mem_capacity, capacity, managed, version, last_seen, internal_url)
+		VALUES ($1, 'hybrid', 'ready', $4, $5, $6, $7, greatest($6::int, $7::int), true, $2, now(), $3)
+		ON CONFLICT (hostname) DO UPDATE SET last_seen = now(), version = EXCLUDED.version, internal_url = EXCLUDED.internal_url,
+			cpu = EXCLUDED.cpu, memory = EXCLUDED.memory, cpu_capacity = EXCLUDED.cpu_capacity, mem_capacity = EXCLUDED.mem_capacity,
+			capacity = `+capacity.SQL("EXCLUDED.cpu_capacity", "EXCLUDED.mem_capacity"),
+		app.Cfg.NodeName, api.ProductVersion, app.Cfg.InternalURL, cpu, mem, cpuCap, memCap)
 	if err != nil {
 		return err
 	}

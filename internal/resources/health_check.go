@@ -11,6 +11,7 @@ import (
 
 	"github.com/damhau/awxnext/internal/agent"
 	"github.com/damhau/awxnext/internal/api"
+	"github.com/damhau/awxnext/internal/capacity"
 )
 
 // HealthCheckTimeout is how long an execution node's agent has to answer a
@@ -110,16 +111,28 @@ func probeThisNode(c *Ctx, id int64) error {
 			os.Remove(f.Name())
 		}
 	}
-	cpu, mem := runtime.NumCPU(), agent.TotalMemory()
-	cpuCap, memCap := cpu*4, int(max((mem>>20)-2048, 0)/100)
-	capacity := c.App.Cfg.Capacity
+	cpu, mem, cpuCap, memCap := ControlNodeResources(c.App)
 	if len(errs) > 0 {
-		capacity = 0
+		// AWX's mark_offline.
+		cpuCap, memCap = 0, 0
 	}
-	_, err := c.DB().Exec(c, `UPDATE instances SET cpu = $2, memory = $3, cpu_capacity = $4, mem_capacity = $5, capacity = $6, errors = $7,
-		version = $8, last_health_check = now(), last_seen = now() WHERE id = $1`,
-		id, cpu, mem, cpuCap, memCap, capacity, strings.Join(errs, "\n"), api.ProductVersion)
+	_, err := c.DB().Exec(c, `UPDATE instances SET cpu = $2, memory = $3, cpu_capacity = $4, mem_capacity = $5, capacity = `+capacity.SQL("$4", "$5")+`,
+		errors = $6, version = $7, last_health_check = now(), last_seen = now() WHERE id = $1`,
+		id, cpu, mem, cpuCap, memCap, strings.Join(errs, "\n"), api.ProductVersion)
 	return err
+}
+
+// ControlNodeResources measures this control node as AWX's
+// local_health_check: its CPU and memory, corrected by
+// SYSTEM_TASK_ABS_CPU and SYSTEM_TASK_ABS_MEM, and the forks they allow.
+// AWXNEXT_CAPACITY, when set, is both capacities.
+func ControlNodeResources(app *api.App) (cpu float64, mem int64, cpuCap, memCap int) {
+	cpu, mem = capacity.CorrectedCPU(float64(runtime.NumCPU())), capacity.CorrectedMemory(agent.TotalMemory())
+	cpuCap, memCap = capacity.CPU(cpu, true), capacity.Memory(mem, true)
+	if app.Cfg.Capacity > 0 {
+		cpuCap, memCap = app.Cfg.Capacity, app.Cfg.Capacity
+	}
+	return
 }
 
 // judgeControlNode checks another control node by its heartbeat (every 15

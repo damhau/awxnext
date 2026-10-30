@@ -405,8 +405,8 @@ func (m *Manager) candidates(ctx context.Context, group int64, controlPlane bool
 	if controlPlane {
 		types = "('control', 'hybrid')"
 	}
-	rows, err := m.DB().Query(ctx, `SELECT i.hostname, i.node_type, (i.capacity * i.capacity_adjustment)::int,
-			(i.capacity * i.capacity_adjustment)::int - coalesce((SELECT sum(task_impact) FROM unified_jobs j
+	rows, err := m.DB().Query(ctx, `SELECT i.hostname, i.node_type, i.capacity,
+			i.capacity - coalesce((SELECT sum(task_impact) FROM unified_jobs j
 				WHERE j.execution_node = i.hostname AND j.status IN ('waiting', 'running')), 0)
 		FROM instances i JOIN instance_group_instances gi ON gi.instance_id = i.id
 		WHERE gi.instance_group_id = $1 AND i.enabled AND i.node_state = 'ready' AND i.node_type IN `+types+`

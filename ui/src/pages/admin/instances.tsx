@@ -11,6 +11,7 @@ import { Dialog, Menu, useToast } from '../../components/overlay'
 import { DataTable } from '../../components/table'
 import { Ago, Cell, Elapsed, Empty, ErrorNote, KV, Loading, PageHead, Panel, Status, Tab } from '../../components/ui'
 import type { CellState } from '../../lib/cells'
+import { adjustedCapacity, describeAdjustment } from '../../lib/capacity'
 import { jobPath, jobsNewestFirst } from '../../lib/format'
 import { checkGroupForm, describePolicy, installerGroup, memberReason, parseHosts } from '../../lib/instanceGroups'
 import { OneTimeSecret, useDelete } from './common'
@@ -28,6 +29,8 @@ type Instance = Base & {
   version: string
   cpu: number
   memory: number
+  cpu_capacity: number
+  mem_capacity: number
   errors: string
   managed: boolean
   managed_by_policy: boolean
@@ -450,11 +453,16 @@ function CapacityAdjust({ inst }: { inst: Instance }) {
             invalidate('instances')
           }}
         />
-        <span className="mono" style={{ width: 40 }}>
+        <span className="mono nowrap" style={{ minWidth: 40 }}>
           {Math.round(v * 100)}%
         </span>
+        {(inst.cpu_capacity > 0 || inst.mem_capacity > 0) && (
+          <span className="mono small nowrap" title="Capacity at this adjustment">
+            {adjustedCapacity(inst.cpu_capacity, inst.mem_capacity, v)} forks
+          </span>
+        )}
       </div>
-      <span className="help">0% sizes capacity by memory (fewer forks), 100% by CPU (more forks).</span>
+      <span className="help">{describeAdjustment(inst.cpu_capacity, inst.mem_capacity)}</span>
     </div>
   )
 }

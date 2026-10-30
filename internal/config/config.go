@@ -27,7 +27,9 @@ type Config struct {
 	RunnerCommand string
 	// UIDir serves a built UI from disk when set; otherwise the embedded UI is used.
 	UIDir string
-	// Capacity is the forks capacity of this node for local execution.
+	// Capacity, when positive, replaces the forks this node's CPU and
+	// memory allow (AWX's formula, tuned by SYSTEM_TASK_FORKS_CPU,
+	// SYSTEM_TASK_FORKS_MEM, SYSTEM_TASK_ABS_CPU and SYSTEM_TASK_ABS_MEM).
 	Capacity int
 	DevMode  bool
 	// InternalURL is how other control nodes, agents and job pods reach this node.
@@ -56,7 +58,7 @@ func Load() *Config {
 		DefaultEEImage:   env("AWXNEXT_DEFAULT_EE_IMAGE", "quay.io/ansible/awx-ee:latest"),
 		RunnerCommand:    env("AWXNEXT_RUNNER_CMD", "ansible-runner"),
 		UIDir:            env("AWXNEXT_UI_DIR", ""),
-		Capacity:         envInt("AWXNEXT_CAPACITY", 100),
+		Capacity:         envInt("AWXNEXT_CAPACITY", 0),
 		DevMode:          env("AWXNEXT_DEV", "") != "",
 		InternalURL:      strings.TrimRight(env("AWXNEXT_INTERNAL_URL", ""), "/"),
 		MetricsToken:     env("AWXNEXT_METRICS_TOKEN", ""),

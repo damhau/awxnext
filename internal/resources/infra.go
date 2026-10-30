@@ -6,12 +6,15 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 
 	"github.com/damhau/awxnext/internal/agent"
 	"github.com/damhau/awxnext/internal/api"
+	"github.com/damhau/awxnext/internal/capacity"
 )
 
 var pullChoices = labelled("", "---------", "always", "Always pull container before running.", "missing", "Only pull the image if not present before running.", "never", "Never pull container before running.")
@@ -60,6 +63,26 @@ func installerGroup(name string) bool { return name == "controlplane" || name ==
 // an instance or a group.
 func recomputeMembership(c *Ctx) error {
 	return c.WithTx(func(c *Ctx) error { return ApplyMembershipPolicies(c, c.DB()) })
+}
+
+// adjustment is the DecimalField(max_digits=3, decimal_places=2) of AWX's
+// capacity_adjustment, at least 0.
+func adjustment(c *Ctx, v any, data Obj) error {
+	f, _ := v.(float64)
+	if f < 0 {
+		return errors.New("Ensure this value is greater than or equal to 0.")
+	}
+	whole, frac, _ := strings.Cut(strconv.FormatFloat(f, 'f', -1, 64), ".")
+	whole = strings.TrimLeft(whole, "0")
+	switch {
+	case len(whole)+len(frac) > 3:
+		return errors.New("Ensure that there are no more than 3 digits in total.")
+	case len(frac) > 2:
+		return errors.New("Ensure that there are no more than 2 decimal places.")
+	case len(whole) > 1:
+		return errors.New("Ensure that there are no more than 1 digits before the decimal point.")
+	}
+	return nil
 }
 
 func percentage(c *Ctx, v any, data Obj) error {
@@ -436,7 +459,7 @@ func registerInfrastructure() {
 			{Name: "node_type", Type: api.TChoice, Default: "execution", CreateOnly: true, Choices: labelled("control", "Control plane node", "execution", "Execution plane node", "hybrid", "Controller and execution", "hop", "Message-passing node, no execution capability")},
 			{Name: "node_state", Type: api.TChoice, ReadOnly: true, Choices: choices("provisioning", "provision-fail", "installed", "ready", "unavailable", "deprovisioning", "deprovision-fail")},
 			{Name: "capacity", Type: api.TInt, ReadOnly: true},
-			{Name: "capacity_adjustment", Type: api.TFloat, Default: 1.0},
+			{Name: "capacity_adjustment", Type: api.TFloat, Default: 1.0, Validate: adjustment},
 			{Name: "cpu", Type: api.TFloat, ReadOnly: true},
 			{Name: "memory", Type: api.TInt, ReadOnly: true},
 			{Name: "cpu_capacity", Type: api.TInt, ReadOnly: true},
@@ -486,6 +509,15 @@ func registerInfrastructure() {
 		// its POLICY_FIELDS change.
 		AfterCreate: func(c *Ctx, obj Obj) error { return recomputeMembership(c) },
 		AfterUpdate: func(c *Ctx, old, obj Obj) error {
+			// AWX's InstanceDetail.update: set_capacity_value.
+			if fmt.Sprint(old["capacity_adjustment"]) != fmt.Sprint(obj["capacity_adjustment"]) || fmt.Sprint(old["enabled"]) != fmt.Sprint(obj["enabled"]) {
+				var forks int64
+				if err := c.DB().QueryRow(c, "UPDATE instances SET capacity = "+capacity.SQL("cpu_capacity", "mem_capacity")+" WHERE id = $1 RETURNING capacity",
+					obj["id"]).Scan(&forks); err != nil {
+					return err
+				}
+				obj["capacity"] = forks
+			}
 			for _, f := range []string{"managed_by_policy", "hostname", "capacity_adjustment"} {
 				if fmt.Sprint(old[f]) != fmt.Sprint(obj[f]) {
 					return recomputeMembership(c)
