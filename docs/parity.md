@@ -31,8 +31,8 @@ The gaps fall in four groups:
    tested nightly since roadmap M2-01 ([compat/](../compat/README.md)); the
    gaps those suites found are roadmap M2-14 to M2-26.
 3. **Deferred by plan**: RADIUS and TACACS+ login (LDAP, SAML, GitHub, Google and Azure AD are done, roadmap M5-02 to M5-05);
-   notification types other than email and webhook; Helm chart; backup
-   (CyberArk, Thycotic, AWS Secrets Manager and Centrify lookups are done,
+   notification types other than email and webhook; Helm chart
+   (backup and restore are done, roadmap M6-09; CyberArk, Thycotic, AWS Secrets Manager and Centrify lookups are done,
    roadmap M4-07; archive projects, roadmap M4-10).
 4. **UI holes over a finished API**: inventory
    instance groups, credential type management, inventory source schedules,
@@ -196,7 +196,7 @@ The gaps fall in four groups:
 | Event processing | Yes | Done | Batched COPY into daily partitions, archived after N days. Per-job rate cap (`JOB_EVENT_MAX_RATE`, awxnext's, 1000 a second): beyond it, consecutive verbose events are folded into one, stdout unchanged and counters contiguous, so a noisy job leaves others' event latency within 750 ms (p95) in a test (roadmap M6-06) |
 | HA, task and dependency manager | Yes | Done | PostgreSQL only, no Redis |
 | `awx-manage` commands | Yes | Done | `inventory_import` as `awxnext inventory-import`; `provision_instance`, `deprovision_instance`, `register_queue`, `unregister_queue`, `remove_from_queue` and `list_instances` with their options and output, under their names with dashes or underscores (roadmap M6-08). `provision-instance` needs `--hostname` (control nodes register themselves), and `unregister-queue` keeps `default` and `controlplane`, as the API does. Other awx-manage commands (`cleanup_jobs`...) are management jobs |
-| Backup/restore, operator, Helm | Yes | Missing | Docker image and Compose only; key escrow commands |
+| Backup/restore, operator, Helm | Yes | Partial | `awxnext backup` and `awxnext restore` (roadmap M6-09): the database with `pg_dump`, and with a passphrase the data keys' escrow, so a backup restores under another master key; restore goes into an empty database, re-wraps the keys, migrates, marks the backed up install's nodes unavailable and queues an update of every SCM project to rebuild the checkouts (manual projects' files are not in it). No operator or Helm chart yet (roadmap M6-10) |
 | UI: dashboard, approvals bell, instances, management jobs | Yes | Done | Redesigned dashboard; no topology |
 | UI: dark mode, translations, about dialog | Yes | Missing | |
 

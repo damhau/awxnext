@@ -32,6 +32,9 @@ jobs:
           python-version: "3.11"
       - name: ansible for the job tests
         run: pip install ansible-core==2.19.14 ansible-runner==2.4.3
+      # pg_dump and pg_restore of the server's major version, for the backup test.
+      - name: PostgreSQL client tools
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends postgresql-client-16
       - name: gofmt
         run: test -z "$(gofmt -l .)" || (gofmt -l . && exit 1)
       - name: vet

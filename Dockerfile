@@ -18,8 +18,15 @@ RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/awxnext ./cmd/awxn
 # installs and for trying awxnext out.
 FROM python:3.12-slim-bookworm AS all-in-one
 COPY --from=ghcr.io/astral-sh/uv:0.13.5 /uv /usr/local/bin/uv
+# PostgreSQL 16's client tools (pg_dump, pg_restore) for awxnext backup and
+# restore, from the PostgreSQL project's repository: Debian's are version 15.
 RUN apt-get update \
-	&& apt-get install -y --no-install-recommends git openssh-client sshpass ca-certificates \
+	&& apt-get install -y --no-install-recommends git openssh-client sshpass ca-certificates curl gnupg \
+	&& curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmor -o /usr/share/keyrings/pgdg.gpg \
+	&& echo "deb [signed-by=/usr/share/keyrings/pgdg.gpg] http://apt.postgresql.org/pub/repos/apt bookworm-pgdg main" > /etc/apt/sources.list.d/pgdg.list \
+	&& apt-get update \
+	&& apt-get install -y --no-install-recommends postgresql-client-16 \
+	&& apt-get purge -y curl gnupg && apt-get autoremove -y \
 	&& rm -rf /var/lib/apt/lists/*
 RUN uv pip install --system --no-cache ansible-core==2.20.10 ansible-runner==2.4.3
 RUN useradd --uid 1000 --home-dir /var/lib/awxnext --create-home awx \

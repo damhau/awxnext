@@ -83,6 +83,29 @@ secret key and database password. Otherwise run jobs in containers (`podman`, `d
 on remote execution nodes or in container groups. The server logs a warning at start
 when it uses `none` or the Compose example secrets.
 
+### Backup and restore
+
+```sh
+awxnext backup -o awxnext.tar.gz --passphrase-file pass.txt   # or AWXNEXT_BACKUP_PASSPHRASE
+awxnext restore --passphrase-file pass.txt awxnext.tar.gz      # into an empty database
+```
+
+A backup holds the database (`pg_dump`, so PostgreSQL's client tools of the server's major
+version are needed; the image has them, or set `AWXNEXT_PG_DUMP` and `AWXNEXT_PG_RESTORE`) and
+a manifest of the install's settings that are not secrets. With a passphrase it also holds the
+data keys' escrow, encrypted with it (scrypt and AES-256-GCM): the backup then restores under
+another master key. Without one, restoring needs the backed up install's master key.
+
+`restore` loads the backup into the empty database `AWXNEXT_DATABASE_URL` names, re-wraps the
+data keys with this install's master key, applies this version's migrations, marks the backed
+up install's nodes unavailable (they come back when they connect to this database), and queues
+an update of every SCM project, run when the server starts, to rebuild the project checkouts.
+The files of manual projects are not in the backup. With Compose:
+
+```sh
+docker compose exec awxnext awxnext backup -o - > awxnext.tar.gz
+```
+
 ### Encryption keys
 
 Secrets are encrypted with data keys that are wrapped by the master key. Keep an escrow copy:

@@ -39,6 +39,10 @@ Commands:
   keys import FILE  restore escrowed data keys, wrapped with the configured master key
   keys rewrap       re-wrap data keys from the AWXNEXT_OLD_* master key to the current one
   import-awx        import the configuration of an AWX installation from its database
+  backup [-o FILE] [--passphrase-file F]
+                    back up the database (pg_dump), and the data keys' escrow with a passphrase
+  restore [--passphrase-file F] FILE
+                    restore a backup into an empty database (pg_restore) and queue project updates
   inventory-import  import an inventory file, directory or script (as awx-manage inventory_import)
   provision-instance --hostname H [--node_type T] [--uuid U]
                     register an instance (as awx-manage provision_instance)
@@ -81,6 +85,10 @@ func main() {
 		err = keys(ctx, cfg, os.Args[2:])
 	case "import-awx":
 		err = importAWX(ctx, cfg, os.Args[2:])
+	case "backup":
+		err = runBackup(ctx, cfg, os.Args[2:])
+	case "restore":
+		err = runRestore(ctx, cfg, os.Args[2:])
 	case "inventory-import":
 		err = inventoryImport(ctx, cfg, os.Args[1:])
 	case "agent":
