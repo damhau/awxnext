@@ -4,6 +4,7 @@ import { useList } from '../../api/hooks'
 import type { Job } from '../../api/types'
 import { Ago, Cell } from '../../components/ui'
 import { stripAnsi } from '../../lib/ansi'
+import { diffLines, hunks, taskDiffs, tooLargeToCompare, unifiedKind, type TaskDiff } from '../../lib/diff'
 import type { CellSize } from '../../lib/cells'
 import { active, jobPath, plural } from '../../lib/format'
 import { isBad, peers, projectPath, type firstFailure, type Grid, type TaskState } from './events'
@@ -172,6 +173,7 @@ function CellDetail({ grid, host, task, job, failure, onHost, onJump }: { grid: 
         <b className={bad ? 'fail-text' : undefined}>{word[s]}</b> {peers(grid, host, task)}
       </div>
       <pre className="cd-out">{out}</pre>
+      {e && <Diffs diffs={taskDiffs(e.event_data?.res)} onJump={() => onJump(e.start_line + 1)} />}
       {bad && (
         <div className="cd-note small muted">
           {failure?.stopped && failure.task === t.name && <p>The play stopped here: no hosts were left to continue (max_fail_percentage or any_errors_fatal).</p>}
@@ -199,5 +201,58 @@ function CellDetail({ grid, host, task, job, failure, onHost, onJump }: { grid: 
         {h.id && <Link to={`/hosts/${h.id}`}>Open host →</Link>}
       </div>
     </aside>
+  )
+}
+
+/** Diff mode: each file the task changed on this host, before and after. */
+function Diffs({ diffs, onJump }: { diffs: TaskDiff[]; onJump: () => void }) {
+  if (!diffs.length) return null
+  return (
+    <div className="cd-diffs">
+      {diffs.map((d, i) => (
+        <div key={i}>
+          <div className="mono small cd-diff-path" title={d.path}>
+            {d.item !== undefined && <span className="faint">{d.item} · </span>}
+            {d.path || 'Changes'}
+          </div>
+          {d.prepared ? (
+            <div className="diff" role="table" aria-label={`Changes to ${d.path || 'the host'}`}>
+              {d.prepared.replace(/\n$/, '').split('\n').map((l, j) => {
+                const k = unifiedKind(l)
+                return (
+                  <div key={j} role="row" className={k === 'add' || k === 'del' ? k : ''}>
+                    <span>{l}</span>
+                  </div>
+                )
+              })}
+            </div>
+          ) : tooLargeToCompare(d.before, d.after) ? (
+            <p className="small muted" style={{ margin: '6px 0 0' }}>
+              Too large to compare here.{' '}
+              <button className="link-btn" onClick={onJump}>
+                See the diff in the output
+              </button>
+            </p>
+          ) : (
+            <div className="diff" role="table" aria-label={`Diff of ${d.path || 'the change'}`}>
+              {hunks(diffLines(d.before, d.after)).map((l, j) =>
+                l.kind === 'skip' ? (
+                  <div key={j} role="row" className="skip">
+                    <span>⋯ {plural(l.n, 'unchanged line')}</span>
+                  </div>
+                ) : (
+                  <div key={j} role="row" className={l.kind === 'ctx' ? '' : l.kind}>
+                    <span className="n">{l.a ?? ''}</span>
+                    <span className="n">{l.b ?? ''}</span>
+                    <span className="m">{l.kind === 'add' ? '+' : l.kind === 'del' ? '−' : ' '}</span>
+                    <span>{l.text}</span>
+                  </div>
+                ),
+              )}
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
   )
 }

@@ -89,6 +89,23 @@ describe('toLines', () => {
       ['TASK [Start]', 2, 'failed'],
     ])
   })
+  it('ties a task’s lines to its header, after the blank line the runner prints first', () => {
+    const lines = toLines([
+      ev('playbook_on_play_start', { stdout: '\r\nPLAY [site] ****' }),
+      ev('playbook_on_task_start', { stdout: '\r\nTASK [config] ****', task: 'config' }),
+      ev('runner_on_ok', { stdout: 'changed: [web1]', changed: true }),
+    ])
+    const head = lines.findIndex((l) => l.kind === 'task')
+    expect(lines[head].task).toBe(head)
+    expect(lines.find((l) => l.kind === 'changed')?.task).toBe(head)
+  })
+  it('marks the lines of a diff mode’s file diff', () => {
+    const stdout = '\x1b[0;31m--- before: /etc/app.conf\x1b[0m\r\n\x1b[0;32m+++ after: /tmp/x/app.conf.j2\x1b[0m\r\n@@ -1,2 +1,2 @@\r\n\x1b[0;31m-port = 8080\x1b[0m\r\n\x1b[0;32m+port = 9090\x1b[0m\r\n workers = 4'
+    const lines = toLines([ev('playbook_on_task_start', { stdout: 'TASK [config] ***', task: 'config' }), ev('runner_on_file_diff', { stdout, host_name: 'web1' }), ev('runner_on_ok', { stdout: 'changed: [web1]', changed: true })])
+    const diff = lines.filter((l) => l.kind === 'diff')
+    expect(diff.map((l) => l.diff)).toEqual(['head', 'head', 'hunk', 'del', 'add', 'ctx'])
+    expect(diff.every((l) => l.task === 0)).toBe(true)
+  })
 })
 
 describe('projectPath', () => {

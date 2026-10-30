@@ -4,6 +4,7 @@ import type { JobEvent } from '../../api/types'
 import { eventGroup, useLive } from '../../api/live'
 import { stripAnsi } from '../../lib/ansi'
 import { jobApi } from '../../lib/format'
+import { unifiedKind } from '../../lib/diff'
 
 /** MAX_UI_JOB_EVENTS when the setting is not loaded. */
 export const DEFAULT_MAX_EVENTS = 4000
@@ -133,7 +134,7 @@ export function useJobEvents(type: string, id: number, running: boolean, max = D
   return { events, loading, truncated, held: store.current.size, loadMore, refresh }
 }
 
-export type LineKind = 'play' | 'task' | 'fatal' | 'ok' | 'changed' | 'skip' | 'recap' | 'plain'
+export type LineKind = 'play' | 'task' | 'fatal' | 'ok' | 'changed' | 'skip' | 'recap' | 'diff' | 'plain'
 
 export interface Line {
   n: number
@@ -147,6 +148,8 @@ export interface Line {
   /** On task headers: the task's column number in the hosts x tasks grid, and its worst result. */
   taskNo?: number
   taskState?: TaskState
+  /** On a diff mode's lines (runner_on_file_diff): which part of the diff. */
+  diff?: ReturnType<typeof unifiedKind>
 }
 
 const failedEvent = (e: JobEvent) => (e.event === 'runner_on_failed' && !e.event_data?.ignore_errors) || e.event === 'runner_on_unreachable'
@@ -170,6 +173,8 @@ export function kindOf(e: JobEvent): LineKind {
       return 'skip'
     case 'playbook_on_stats':
       return 'recap'
+    case 'runner_on_file_diff':
+      return 'diff'
   }
   return 'plain'
 }
@@ -206,6 +211,9 @@ export function toLines(events: JobEvent[]): Line[] {
       if (i === parts.length - 1 && text === '' && parts.length > 1) return
       const plain = stripAnsi(text)
       const header = (kind === 'task' || kind === 'play') && /\*{3,}\s*$/.test(plain)
+      // The lines that follow belong to the header line itself, not to the
+      // blank line the runner prints before it.
+      if (header) task = lines.length
       const line: Line = {
         n: (e.start_line ?? lines.length) + i + 1,
         text: header ? text.replace(/\s*\*{3,}(\x1b\[[0-9;]*m)*\s*$/, '$1') : text,
@@ -214,6 +222,7 @@ export function toLines(events: JobEvent[]): Line[] {
         event: e,
         task: kind === 'task' || kind === 'play' ? lines.length : task,
       }
+      if (kind === 'diff') line.diff = unifiedKind(plain)
       if (header && kind === 'task') {
         const s = taskStats.get(e.uuid)
         if (s) {

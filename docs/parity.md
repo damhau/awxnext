@@ -80,7 +80,7 @@ The gaps fall in four groups:
 17. ~~Named URLs for credentials and other multi-hop formats, `related.named_url`~~ (done, roadmap M2-10).
 18. ~~Websocket groups `jobs-summary`, `schedules-changed` and `control-limit_reached_<user>` (subscribable, never published)~~ (done, roadmap M6-05).
 19. ~~UI: credential types page, inventory source schedules, the ad hoc dialog's execution environment and passwords, node credentials and labels, EE contents view~~ (done, roadmap M7-01 to M7-07).
-20. Plan items not built yet: dark mode (per-job event rate caps, S3 and Azure Blob event archives, the Helm chart and the [benchmarks against AWX](benchmarks.md) done, roadmap M6-06, M6-07, M6-10 and M6-11; saved views, starred templates and list settings kept per user on the server, roadmap M7-09; bulk actions and the column chooser on every list, roadmap M7-10; "Used by" and dependents in delete confirmations, roadmap M7-11).
+20. Plan items not built yet: dark mode (per-job event rate caps, S3 and Azure Blob event archives, the Helm chart and the [benchmarks against AWX](benchmarks.md) done, roadmap M6-06, M6-07, M6-10 and M6-11; saved views, starred templates and list settings kept per user on the server, roadmap M7-09; bulk actions and the column chooser on every list, roadmap M7-10; "Used by" and dependents in delete confirmations, roadmap M7-11; the diff view of diff mode jobs, roadmap M7-12).
 
 ## Authentication, users, organizations, RBAC
 
@@ -155,7 +155,7 @@ The gaps fall in four groups:
 | Relaunch (all, failed hosts) | Yes | Done | Keeps the labels and instance groups chosen at launch, checked as prompts (roadmap M3-02); a sliced job's relaunch takes them from its first slice |
 | `jobs/N/create_schedule/` | Yes | Done | A disabled monthly schedule of the job's template with its launch prompts, credentials, labels and instance groups |
 | Job slicing | Yes | Done | |
-| Job events, stdout formats, host summaries, artifacts | Yes | Done | `job_events/N/children/` and `playbook_counts` (also on job lists). `event_processing_finished` is true once a job has ended, including a job that never ran (a failed dependency, canceled while pending), and workflow jobs don't have it, as in AWX: clients wait on it |
+| Job events, stdout formats, host summaries, artifacts | Yes | Done | `job_events/N/children/` and `playbook_counts` (also on job lists). `event_processing_finished` is true once a job has ended, including a job that never ran (a failed dependency, canceled while pending), and workflow jobs don't have it, as in AWX: clients wait on it. A job run in diff mode shows each changed file's diff in its output (roadmap M7-12): the runner's diff lines coloured as a diff and kept by the Changed filter, and the before and after of the task on a host in the hosts × tasks grid |
 | Ad hoc commands | Yes | Done | The dialog (roadmap M7-05) chooses the execution environment, and asks for the machine credential's passwords set to ASK (SSH password, key passphrase, privilege escalation), or for those the API reports missing |
 | Workflows: edges, convergence, nested, approvals, artifacts, prompts | Yes | Done | Plus `when` conditions, loops and typed outputs (job templates declare the `set_stats` outputs their jobs must publish; see [workflows.md](workflows.md#typed-outputs)). The editor saves a step's credentials, labels and instance groups (in order) when its template prompts for them (roadmap M7-06) |
 | Management-job workflow nodes | Yes | Done | Fixed during the audit |

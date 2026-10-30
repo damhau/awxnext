@@ -43,7 +43,7 @@ export function Output({
     let out = lines
     if (filtering) {
       const match = (l: Line) =>
-        (!failedOnly || l.kind === 'fatal') && (!changedOnly || l.kind === 'changed' || l.event.changed) && (!host || l.event.host_name === host)
+        (!failedOnly || l.kind === 'fatal') && (!changedOnly || l.kind === 'changed' || l.kind === 'diff' || l.event.changed) && (!host || l.event.host_name === host)
       // Keep headers only when something under them matches.
       const taskHas = new Set<number>()
       for (const l of lines) if (!keepHeader(l) && match(l)) taskHas.add(l.task)
@@ -187,7 +187,7 @@ export function Output({
                 const i = start + k
                 const isTask = l.kind === 'task'
                 const bad = l.taskState === 'failed' || l.taskState === 'unreachable'
-                const cls = ['term-line', l.kind === 'fatal' ? 'fatal' : '', hitSet.has(i) ? 'hit' : '', i === current ? 'current' : '', isTask ? 'task' : '', bad ? 'bad' : ''].join(' ')
+                const cls = ['term-line', l.kind === 'fatal' ? 'fatal' : '', l.diff ? `diff-${l.diff}` : '', hitSet.has(i) ? 'hit' : '', i === current ? 'current' : '', isTask ? 'task' : '', bad ? 'bad' : ''].join(' ')
                 return (
                   <div key={l.n + ':' + i} className={cls} style={{ height: ROW }} onClick={isTask ? () => toggleTask(l.task) : undefined}>
                     <span className="ln">{l.n}</span>
