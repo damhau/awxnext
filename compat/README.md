@@ -53,6 +53,7 @@ each entry still failing and marking new ones `TODO`.
 
 ## CI
 
-`.github/workflows/compat.yml` runs every suite nightly and on demand (Actions,
-Compatibility, Run workflow, optionally one suite). The report is in the run
-summary and in the `compat-report` artifact, with the server log.
+`.github/workflows/compat.yml` runs the suites. `full.yml` calls it nightly and before a
+milestone closes, one job per suite in parallel; it also runs on demand (Actions,
+Compatibility, Run workflow, optionally one suite). The report is in the run summary and in
+the `compat-report` artifact (`compat-report-<suite>` from `full.yml`), with the server log.
