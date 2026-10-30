@@ -21,6 +21,7 @@ const paths: Record<string, string> = {
   external: 'M9.5 2.5h4v4M13.5 2.5 7 9M11.5 9.5v4h-9v-9h4',
   filter: 'M2 3h12L9.5 8.5v4.5l-3-1.5v-3z',
   menu: 'M2.5 4.5h11M2.5 8h11M2.5 11.5h11',
+  columns: 'M2.5 3h11v10h-11zM6.2 3v10M9.8 3v10',
   templates: 'M2.5 2.5h11v11h-11zM2.5 6.5h11M6.5 6.5v7',
   jobs: 'M3 4.5h10M3 8h10M3 11.5h6',
   inventory: 'M3 2.5h10v4H3zM3 9.5h10v4H3z',

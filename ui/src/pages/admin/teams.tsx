@@ -13,6 +13,7 @@ import { DataTable } from '../../components/table'
 import { Ago, Avatar, Empty, ErrorNote, Loading, PageHead, Panel, Tab } from '../../components/ui'
 import { userName } from '../../lib/format'
 import { ListPage, useDelete } from './common'
+import { BulkDelete } from '../../components/BulkBar'
 
 type Team = Base & { organization: number }
 
@@ -27,6 +28,7 @@ export function TeamList() {
       params={scope}
       keys={{ org: { field: 'organization__name', help: 'organization name' } }}
       placeholder="Filter teams…  try  org:Acme*"
+      bulk={(sel) => <BulkDelete sel={sel} resource="teams" noun={['team', 'teams']} name={(t) => t.name} note="Their members lose the roles granted to the team." />}
       actions={
         <Link to="/teams/new" className="btn primary">
           <Icon name="plus" size={14} />

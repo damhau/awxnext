@@ -8,6 +8,7 @@ import type { Base, Ref } from '../../api/types'
 import { useOrg, usePreselectOrg } from '../../app/context'
 import { AccessTab } from '../../components/access/Access'
 import { useCopy } from '../../components/CopyDialog'
+import { BulkBar, BulkDelete, useBulk, useSelection } from '../../components/BulkBar'
 import { Check, FormError, Lookup, MultiLookup, SelectField, TextInput, VarsEditor, useForm } from '../../components/form'
 import { Icon } from '../../components/icons'
 import { Menu, useToast } from '../../components/overlay'
@@ -48,7 +49,10 @@ export function InventoryList() {
   const { scope } = useOrg()
   const nav = useNavigate()
   const q = compile(ls.q, keys)
-  const list = useList<Inventory>('inventories/', { ...q.params, ...scope, order_by: ls.order, page: ls.page, page_size: ls.pageSize })
+  const params = { ...q.params, ...scope, order_by: ls.order, page: ls.page, page_size: ls.pageSize }
+  const list = useList<Inventory>('inventories/', params)
+  const sel = useSelection<Inventory>(list.data?.results)
+  const run = useBulk<Inventory>(['inventory', 'inventories'], 'inventories', 'inventory_sources')
   const del = useDelete('inventories')
   const copy = useCopy('inventories', { to: (id) => `/inventories/${id}`, what: 'Hosts and groups are copied with their variables. Inventory sources are not.' })
   const orgCol = useOrgColumn<Inventory>()
@@ -110,10 +114,26 @@ export function InventoryList() {
       {copy.dialog}
       <div className="page-body">
         <FilterBox value={ls.q} onApply={ls.setQ} placeholder="name…  try  kind:smart  org:Acme*  folder:checkout" />
+        <BulkBar sel={sel} page={list.data?.results} total={list.data?.count} path="inventories/" params={params} style={{ marginBottom: 12 }}>
+          <button
+            className="btn"
+            onClick={() =>
+              run('Sync sources', sel.rows, (r) =>
+                r.kind === 'smart' ? Promise.reject(new Error(`${r.name} is a smart inventory, with no sources`)) : api.post(`inventories/${r.id}/update_inventory_sources/`, {}),
+              )
+            }
+          >
+            Sync sources
+          </button>
+          <BulkDelete sel={sel} resource="inventories" noun={['inventory', 'inventories']} name={(r) => r.name} note="Their hosts, groups and sources are deleted with them; job history stays." />
+        </BulkBar>
         <DataTable
           label="Inventories"
           rows={list.data?.results}
           columns={cols}
+          selected={sel.selected}
+          onSelect={sel.onSelect}
+          columnsKey="inventories"
           loading={list.isPending}
           error={list.error}
           order={ls.order}

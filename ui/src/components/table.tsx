@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useSearchParams } from 'react-router'
+import { choosable, columnLabel, shownColumns, toggleColumn } from '../lib/columns'
 import { useHotkeys } from '../lib/hotkeys'
+import { usePref } from '../lib/prefs'
+import { Icon } from './icons'
+import { Menu } from './overlay'
 import { Empty, ErrorNote, Loading } from './ui'
 
 export interface Column<T> {
@@ -11,6 +15,10 @@ export interface Column<T> {
   sort?: string
   className?: string
   width?: number | string
+  /** Always shown (the first column always is). */
+  fixed?: boolean
+  /** The column's name in the column chooser, when its header is not text. */
+  label?: string
 }
 
 interface Props<T> {
@@ -31,8 +39,12 @@ interface Props<T> {
   footer?: ReactNode
   minWidth?: number
   label?: string
-  /** Rows shown above the data rows (folder rows); the caller spans the columns. */
-  lead?: ReactNode
+  /** Rows shown above the data rows (folder rows); the caller spans the
+   * columns, given how many data columns are shown. */
+  lead?: ReactNode | ((span: number) => ReactNode)
+  /** Offers a column chooser; the hidden columns are kept with the user's
+   * preferences as columns.<columnsKey>. */
+  columnsKey?: string
 }
 
 export function DataTable<T>({
@@ -53,8 +65,13 @@ export function DataTable<T>({
   minWidth,
   label,
   lead,
+  columnsKey,
 }: Props<T>) {
   const [cursor, setCursor] = useState(-1)
+  const [hidden, setHidden] = usePref<string[]>(`columns.${columnsKey ?? 'none'}`, [])
+  const all = columns
+  columns = columnsKey ? shownColumns(all, hidden) : all
+  const span = columns.length + (columnsKey ? 1 : 0)
   const list = rows ?? []
   useEffect(() => setCursor((c) => Math.min(c, list.length - 1)), [list.length])
   const toggle = (k: number | string) => {
@@ -121,10 +138,15 @@ export function DataTable<T>({
                 </th>
               )
             })}
+            {columnsKey && (
+              <th className="cols-pick" scope="col">
+                <ColumnChooser columns={all} hidden={hidden} onToggle={(k) => setHidden((h) => toggleColumn(h, k))} onReset={() => setHidden([])} />
+              </th>
+            )}
           </tr>
         </thead>
         <tbody>
-          {lead}
+          {typeof lead === 'function' ? lead(span) : lead}
           {list.map((r, i) => {
             const k = rowKey(r)
             const sel = selected?.has(k)
@@ -151,6 +173,7 @@ export function DataTable<T>({
                     {c.render(r)}
                   </td>
                 ))}
+                {columnsKey && <td className="cols-pick" />}
               </tr>
             )
           })}
@@ -160,6 +183,30 @@ export function DataTable<T>({
       {!loading && list.length === 0 && !lead && (empty ?? <Empty title="Nothing here yet" />)}
       {footer}
     </div>
+  )
+}
+
+/** Shows or hides a list's columns; kept with the user's preferences. */
+function ColumnChooser<T>({ columns, hidden, onToggle, onReset }: { columns: Column<T>[]; hidden: string[]; onToggle: (key: string) => void; onReset: () => void }) {
+  const can = choosable(columns)
+  if (!can.length) return null
+  const n = can.filter((c) => hidden.includes(c.key)).length
+  return (
+    <Menu label={n ? `Columns, ${n} hidden` : 'Columns'} className={`btn sm icon ghost${n ? ' on' : ''}`} trigger={<Icon name="columns" size={14} />}>
+      <div className="head">Columns</div>
+      {can.map((c) => (
+        <label key={c.key} className="menu-check">
+          <input type="checkbox" checked={!hidden.includes(c.key)} onChange={() => onToggle(c.key)} />
+          {columnLabel(c)}
+        </label>
+      ))}
+      {n > 0 && (
+        <>
+          <hr />
+          <button onClick={onReset}>Show all columns</button>
+        </>
+      )}
+    </Menu>
   )
 }
 

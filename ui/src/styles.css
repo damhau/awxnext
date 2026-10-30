@@ -367,6 +367,10 @@ legend { font-weight: 500; margin-bottom: 8px; padding: 0; }
 .menu-list button:hover, .menu-list a:hover { background: var(--hover); text-decoration: none; }
 .menu-list .danger { color: var(--fail-deep); }
 .menu-list hr { border: none; border-top: 1px solid var(--line-soft); margin: 4px 0; }
+.menu-list .menu-check { display: flex; gap: 8px; align-items: center; padding: 6px 12px; cursor: pointer; }
+.menu-list .menu-check:hover { background: var(--hover); }
+table.data th.cols-pick, table.data td.cols-pick { width: 36px; padding-left: 0; padding-right: 8px; text-align: right; }
+table.data th.cols-pick .menu-list { text-transform: none; letter-spacing: normal; font-weight: 400; font-size: 13px; color: var(--ink); text-align: left; }
 .menu-list .head { padding: 8px 12px 4px; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted-2); }
 
 /* ---------- dialogs ---------- */

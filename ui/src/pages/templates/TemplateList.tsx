@@ -17,6 +17,7 @@ import { compile, statusValue, type KeyTable } from '../../lib/query'
 import { usePref } from '../../lib/prefs'
 import { FolderDialog } from '../../components/FolderDialog'
 import { useCopy } from '../../components/CopyDialog'
+import { BulkBar, useBulk, useSelection } from '../../components/BulkBar'
 import { ancestors, buildTree, flatten, subtreeIds, useFolders, type FolderNode } from '../../lib/folders'
 import { shortRule } from '../automation/rrule'
 
@@ -54,7 +55,6 @@ export function TemplateList() {
   const [starred, setStarred] = usePref<string[]>('starred-templates', [])
   const [views, setViews] = usePref<View[]>('template-views', [])
   const [tree, setTree] = usePref('templates-folder-tree', false)
-  const [selected, setSelected] = useState<Set<number | string>>(new Set())
   const [dialog, setDialog] = useState<null | 'move' | 'labels' | 'grant' | 'save' | 'access' | 'folder-new' | 'folder-edit'>(null)
   const confirm = useConfirm()
   const toast = useToast()
@@ -105,7 +105,8 @@ export function TemplateList() {
   }
   const failingHere = folder ? failingIn(folder) : (failing.data?.count ?? 0)
   const multiOrg = !org && new Set(rows.map((r) => r.organization)).size > 1
-  const selectedRows = rows.filter((r) => selected.has(tkey(r)))
+  const sel = useSelection<Template>(rows, tkey)
+  const selectedRows = sel.rows
   const isStarred = (t: Template) => starred.includes(tkey(t))
   const toggleStar = (t: Template) => setStarred((s) => (s.includes(tkey(t)) ? s.filter((x) => x !== tkey(t)) : [...s, tkey(t)]))
   const open = (t: Template) => nav(`/templates/${kindPath(t)}/${t.id}`)
@@ -266,24 +267,19 @@ export function TemplateList() {
     },
   ]
 
-  const bulk = async (label: string, fn: (t: Template) => Promise<unknown>) => {
-    const results = await Promise.allSettled(selectedRows.map(fn))
-    const failed = results.filter((r) => r.status === 'rejected') as PromiseRejectedResult[]
-    if (failed.length) toast(`${label}: ${failed.length} of ${results.length} failed — ${(failed[0].reason as Error).message}`, 'error')
-    else toast(`${label}: done for ${results.length} template${results.length === 1 ? '' : 's'}`)
-    invalidate('unified_job_templates', 'job_templates', 'workflow_job_templates', 'folders')
-  }
+  const runBulk = useBulk<Template>(['template', 'templates'], 'unified_job_templates', 'job_templates', 'workflow_job_templates', 'folders')
+  const bulk = (label: string, fn: (t: Template) => Promise<unknown>) => runBulk(label, selectedRows, fn)
 
   const trail = folder ? ancestors(folder, byId) : []
   const crumbs = folder ? [{ label: 'Templates', to: '/templates' }, ...trail.slice(0, -1).map((a) => ({ label: a.folder.name, to: `/templates?folder=${a.folder.id}` }))] : null
   const viewOn = (v: View) => ls.q === v.q && (v.folder ?? null) === folderId && (v.show ?? null) === (special ?? null)
   const failedView = ls.q === 'status:failed'
-  const leadRows = subfolders.map((n) => {
+  const leadRows = (span: number) => subfolders.map((n) => {
     const bad = failingIn(n)
     return (
       <tr key={`f${n.folder.id}`} className="folder-row clickable" onClick={(e) => !(e.target as HTMLElement).closest('a,button') && goTo(n.folder.id)}>
         <td className="sel" />
-        <td colSpan={columns.length}>
+        <td colSpan={span}>
           <div className="folder-cell">
             <button className="folder-link" onClick={() => goTo(n.folder.id)}>
               <Icon name="folder" size={15} />
@@ -418,9 +414,7 @@ export function TemplateList() {
           />
         </div>
 
-        {selected.size > 0 && (
-          <div className="bulkbar" role="region" aria-label="Bulk actions" style={{ margin: '12px 24px 0' }}>
-            <span className="n">{selected.size} selected</span>
+        <BulkBar sel={sel} page={rows} total={list.data?.count} path="unified_job_templates/" params={params} rowKey={tkey} style={{ margin: '12px 24px 0' }}>
             <button
               className="btn"
               onClick={async () => {
@@ -455,16 +449,12 @@ export function TemplateList() {
               onClick={async () => {
                 if (!(await confirm({ title: `Delete ${selectedRows.length} templates?`, body: <p style={{ margin: 0 }}>{selectedRows.map((t) => t.name).join(', ')}. Their job history stays.</p>, confirm: 'Delete', danger: true }))) return
                 await bulk('Delete', (t) => api.del(`${res(t)}/${t.id}/`))
-                setSelected(new Set())
+                sel.clear()
               }}
             >
               Delete
             </button>
-            <button className="btn clear" onClick={() => setSelected(new Set())}>
-              Clear
-            </button>
-          </div>
-        )}
+        </BulkBar>
 
         {copyJob.dialog}
         {copyWorkflow.dialog}
@@ -476,14 +466,15 @@ export function TemplateList() {
             rowKey={tkey}
             loading={list.isPending}
             error={list.error}
-            selected={selected}
-            onSelect={setSelected}
+            selected={sel.selected}
+            onSelect={sel.onSelect}
+            columnsKey="templates"
             onOpen={open}
             order={ls.order}
             onOrder={ls.setOrder}
             keys={{ l: launch, s: toggleStar }}
             minWidth={900}
-            lead={leadRows.length ? leadRows : undefined}
+            lead={subfolders.length ? leadRows : undefined}
             empty={
               !browse ? (
                 <Empty title="No templates match">Remove a filter, or pick another folder.</Empty>

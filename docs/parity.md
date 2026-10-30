@@ -80,7 +80,7 @@ The gaps fall in four groups:
 17. ~~Named URLs for credentials and other multi-hop formats, `related.named_url`~~ (done, roadmap M2-10).
 18. ~~Websocket groups `jobs-summary`, `schedules-changed` and `control-limit_reached_<user>` (subscribable, never published)~~ (done, roadmap M6-05).
 19. ~~UI: credential types page, inventory source schedules, the ad hoc dialog's execution environment and passwords, node credentials and labels, EE contents view~~ (done, roadmap M7-01 to M7-07).
-20. Plan items not built yet: dark mode (per-job event rate caps, S3 and Azure Blob event archives, the Helm chart and the [benchmarks against AWX](benchmarks.md) done, roadmap M6-06, M6-07, M6-10 and M6-11; saved views, starred templates and list settings kept per user on the server, roadmap M7-09).
+20. Plan items not built yet: dark mode (per-job event rate caps, S3 and Azure Blob event archives, the Helm chart and the [benchmarks against AWX](benchmarks.md) done, roadmap M6-06, M6-07, M6-10 and M6-11; saved views, starred templates and list settings kept per user on the server, roadmap M7-09; bulk actions and the column chooser on every list, roadmap M7-10).
 
 ## Authentication, users, organizations, RBAC
 
@@ -203,6 +203,7 @@ The gaps fall in four groups:
 
 ## Only in awxnext
 
+- Bulk actions on every main list (templates, inventories, projects, credentials, schedules, users and teams): select a page or every row the filter matches, then launch, sync, turn schedules on or off, or delete, each object on its own with failures reported; and a column chooser per list, kept with the user.
 - Saved views, starred templates and list settings kept with the user on the server (`/api/v2/me/preferences/`), in every browser; what a browser kept before is uploaded the first time.
 - Execution environment contents, read from the registry: collections, ansible-core, Python and `ansible.cfg` of each image.
 - Version history with diffs and one-click revert on every object.

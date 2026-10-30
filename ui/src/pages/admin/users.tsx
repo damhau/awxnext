@@ -14,6 +14,7 @@ import { Ago, Avatar, Empty, ErrorNote, KV, Loading, PageHead, Panel, Tab } from
 import { absolute, userName } from '../../lib/format'
 import { checkPassword, describeRules, passwordRules } from '../../lib/passwordPolicy'
 import { ListPage, OneTimeSecret, useDelete } from './common'
+import { BulkDelete } from '../../components/BulkBar'
 
 type User = Base & Me & { last_login: string | null; is_active?: boolean; ldap_dn?: string; external_account?: string | null; auth?: unknown[] }
 
@@ -44,6 +45,7 @@ export function UserList() {
         </Link>
       }
       onOpen={(u) => nav(`/users/${u.id}`)}
+      bulk={(sel) => <BulkDelete sel={sel} resource="users" noun={['user', 'users']} name={(u) => u.username} note="Their job history stays, under their name; their tokens stop working." />}
       columns={[
         {
           key: 'name',

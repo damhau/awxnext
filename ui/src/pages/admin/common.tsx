@@ -4,6 +4,7 @@ import { api, type Params } from '../../api/client'
 import { useInvalidate, useList } from '../../api/hooks'
 import { Icon } from '../../components/icons'
 import { useConfirm, useToast } from '../../components/overlay'
+import { BulkBar, useSelection, type Selection } from '../../components/BulkBar'
 import { DataTable, Pager, useListState, type Column } from '../../components/table'
 import { PageHead } from '../../components/ui'
 import { compile, type KeyTable } from '../../lib/query'
@@ -80,6 +81,7 @@ export function ListPage<T extends { id: number }>({
   empty,
   onOpen,
   rowKeys,
+  bulk,
   children,
 }: {
   title: string
@@ -94,11 +96,15 @@ export function ListPage<T extends { id: number }>({
   empty?: ReactNode
   onOpen?: (r: T) => void
   rowKeys?: Record<string, (r: T) => void>
+  /** The bulk actions on the selected rows; the list is selectable when given. */
+  bulk?: (sel: Selection<T>) => ReactNode
   children?: ReactNode
 }) {
   const ls = useListState({ order })
   const compiled = compile(ls.q, keys ?? {})
-  const list = useList<T>(path, { ...params, ...compiled.params, order_by: ls.order, page: ls.page, page_size: ls.pageSize })
+  const listParams = { ...params, ...compiled.params, order_by: ls.order, page: ls.page, page_size: ls.pageSize }
+  const list = useList<T>(path, listParams)
+  const sel = useSelection<T>(list.data?.results)
   return (
     <div className="page">
       <PageHead title={title} subtitle={subtitle} actions={actions} bordered={false}>
@@ -106,10 +112,18 @@ export function ListPage<T extends { id: number }>({
       </PageHead>
       {children}
       <div className="page-body">
+        {bulk && (
+          <BulkBar sel={sel} page={list.data?.results} total={list.data?.count} path={path} params={listParams} style={{ marginBottom: 12 }}>
+            {bulk(sel)}
+          </BulkBar>
+        )}
         <DataTable
           label={title}
           rows={list.data?.results}
           columns={columns}
+          selected={bulk ? sel.selected : undefined}
+          onSelect={bulk ? sel.onSelect : undefined}
+          columnsKey={path.replace(/\/$/, '').replace(/[^a-z0-9_.-]/g, '-')}
           loading={list.isPending}
           error={list.error}
           order={ls.order}

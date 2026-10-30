@@ -8,6 +8,7 @@ import type { Base, Job, Ref } from '../../api/types'
 import { useOrg, usePreselectOrg } from '../../app/context'
 import { AccessTab } from '../../components/access/Access'
 import { useCopy } from '../../components/CopyDialog'
+import { BulkBar, BulkDelete, useBulk, useSelection } from '../../components/BulkBar'
 import { Check, FormError, Lookup, Segmented, TextInput, useForm } from '../../components/form'
 import { Icon } from '../../components/icons'
 import { Menu, useToast } from '../../components/overlay'
@@ -88,7 +89,10 @@ export function ProjectList() {
   const { scope } = useOrg()
   const nav = useNavigate()
   const q = compile(ls.q, keys)
-  const list = useList<Project>('projects/', { ...q.params, ...scope, order_by: ls.order, page: ls.page, page_size: ls.pageSize })
+  const params = { ...q.params, ...scope, order_by: ls.order, page: ls.page, page_size: ls.pageSize }
+  const list = useList<Project>('projects/', params)
+  const sel = useSelection<Project>(list.data?.results)
+  const run = useBulk<Project>(['project', 'projects'], 'projects')
   const sync = useSync()
   const del = useDelete('projects')
   const copy = useCopy('projects', { to: (id) => `/projects/${id}`, what: 'Git projects get their own checkout, synced right away.' })
@@ -169,10 +173,24 @@ export function ProjectList() {
       {copy.dialog}
       <div className="page-body">
         <FilterBox value={ls.q} onApply={ls.setQ} placeholder="name…  try  status:failed  type:manual  folder:checkout" />
+        <BulkBar sel={sel} page={list.data?.results} total={list.data?.count} path="projects/" params={params} style={{ marginBottom: 12 }}>
+          <button
+            className="btn"
+            onClick={() =>
+              run('Sync', sel.rows, (p) => (p.scm_type ? api.post(`projects/${p.id}/update/`, {}) : Promise.reject(new Error(`${p.name} is a manual project, with nothing to sync`))))
+            }
+          >
+            Sync
+          </button>
+          <BulkDelete sel={sel} resource="projects" noun={['project', 'projects']} name={(p) => p.name} note="Templates using them stop working until given another project; job history stays." />
+        </BulkBar>
         <DataTable
           label="Projects"
           rows={list.data?.results}
           columns={cols}
+          selected={sel.selected}
+          onSelect={sel.onSelect}
+          columnsKey="projects"
           loading={list.isPending}
           error={list.error}
           order={ls.order}

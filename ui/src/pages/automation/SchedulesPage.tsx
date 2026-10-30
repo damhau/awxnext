@@ -5,6 +5,8 @@ import { useLive } from '../../api/live'
 import type { Any } from '../../api/types'
 import { useOrg } from '../../app/context'
 import { Icon } from '../../components/icons'
+import { api } from '../../api/client'
+import { BulkBar, BulkDelete, useBulk, useSelection } from '../../components/BulkBar'
 import { DataTable, Pager, useListState, type Column } from '../../components/table'
 import { Empty, PageHead, Upcoming } from '../../components/ui'
 import { templatePath, typeLabel } from '../../lib/format'
@@ -45,6 +47,9 @@ export function SchedulesPage() {
     page_size: ls.pageSize,
   }
   const list = useList<Any>('schedules/', params)
+  const sel = useSelection<Any>(list.data?.results)
+  const run = useBulk<Any>(['schedule', 'schedules'], 'schedules', 'job_templates', 'workflow_job_templates', 'projects', 'inventory_sources', 'system_job_templates', 'unified_job_templates')
+  const turn = (on: boolean) => run(on ? 'Turn on' : 'Turn off', sel.rows, (s) => api.patch(`schedules/${s.id}/`, { enabled: on }))
   // Next runs move as the scheduler runs them and as schedules change.
   const invalidate = useInvalidate()
   useLive({ schedules: ['changed'] }, () => invalidate('schedules'))
@@ -150,10 +155,22 @@ export function SchedulesPage() {
         )}
       </PageHead>
       <div className="page-body" style={{ paddingTop: 12 }}>
+        <BulkBar sel={sel} page={list.data?.results} total={list.data?.count} path="schedules/" params={params} style={{ marginBottom: 12 }}>
+          <button className="btn" onClick={() => turn(true)}>
+            Turn on
+          </button>
+          <button className="btn" onClick={() => turn(false)}>
+            Turn off
+          </button>
+          <BulkDelete sel={sel} resource="schedules" noun={['schedule', 'schedules']} name={(s) => s.name} note="What they launch stays; it no longer runs on these schedules." />
+        </BulkBar>
         <DataTable
           label="Schedules"
           rows={list.data?.results}
           columns={columns}
+          selected={sel.selected}
+          onSelect={sel.onSelect}
+          columnsKey="schedules"
           loading={list.isPending}
           error={list.error}
           order={ls.order}

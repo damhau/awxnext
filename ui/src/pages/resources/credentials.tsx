@@ -7,6 +7,7 @@ import type { Base, Ref } from '../../api/types'
 import { useOrg, usePreselectOrg } from '../../app/context'
 import { AccessTab } from '../../components/access/Access'
 import { useCopy } from '../../components/CopyDialog'
+import { BulkBar, BulkDelete, useSelection } from '../../components/BulkBar'
 import { Field, FormError, Lookup, TextInput, useForm } from '../../components/form'
 import { Icon } from '../../components/icons'
 import { Dialog, Menu, useToast } from '../../components/overlay'
@@ -81,7 +82,9 @@ export function CredentialList() {
   const { scope } = useOrg()
   const nav = useNavigate()
   const q = compile(ls.q, keys)
-  const list = useList<Credential>('credentials/', { ...q.params, ...scope, order_by: ls.order, page: ls.page, page_size: ls.pageSize })
+  const params = { ...q.params, ...scope, order_by: ls.order, page: ls.page, page_size: ls.pageSize }
+  const list = useList<Credential>('credentials/', params)
+  const sel = useSelection<Credential>(list.data?.results)
   const del = useDelete('credentials')
   const copy = useCopy('credentials', { to: (id) => `/credentials/${id}`, what: 'Secret values and secret lookups are copied as they are.' })
   const orgCol = useOrgColumn<Credential>()
@@ -133,10 +136,16 @@ export function CredentialList() {
       {copy.dialog}
       <div className="page-body">
         <FilterBox value={ls.q} onApply={ls.setQ} placeholder="name…  try  kind:machine  type:vault*  folder:checkout" />
+        <BulkBar sel={sel} page={list.data?.results} total={list.data?.count} path="credentials/" params={params} style={{ marginBottom: 12 }}>
+          <BulkDelete sel={sel} resource="credentials" noun={['credential', 'credentials']} name={(c) => c.name} note="Templates and sources using them lose them; this cannot be undone." />
+        </BulkBar>
         <DataTable
           label="Credentials"
           rows={list.data?.results}
           columns={cols}
+          selected={sel.selected}
+          onSelect={sel.onSelect}
+          columnsKey="credentials"
           loading={list.isPending}
           error={list.error}
           order={ls.order}
