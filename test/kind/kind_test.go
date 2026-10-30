@@ -115,3 +115,49 @@ func TestContainerGroupJob(t *testing.T) {
 		t.Errorf("not run in the container group: group %v, node %v", job["instance_group"], job["execution_node"])
 	}
 }
+
+// A backup of the release restored into another (docs/operations.md, Backup
+// and restore): the templates of the backed up install launch, their
+// projects checked out again by the restore's project updates.
+func TestRestoredInstall(t *testing.T) {
+	base := os.Getenv("AWXNEXT_TEST_KIND_RESTORED_URL")
+	if base == "" {
+		t.Skip("AWXNEXT_TEST_KIND_RESTORED_URL is not set (CI's helm job)")
+	}
+	a := &api{t: t, base: strings.TrimRight(base, "/"), pass: os.Getenv("AWXNEXT_TEST_KIND_PASSWORD")}
+	for deadline := time.Now().Add(2 * time.Minute); ; time.Sleep(2 * time.Second) {
+		if status, _, _ := a.call("GET", "ping/", nil); status == 200 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("awxnext is not answering")
+		}
+	}
+	_, list, raw := a.call("GET", "job_templates/?name__startswith=kind-&order_by=id", nil)
+	results, _ := list["results"].([]any)
+	if len(results) == 0 {
+		t.Fatalf("no template of the backed up install: %s", raw)
+	}
+	jt := results[0].(map[string]any)
+	// The project keeps its status from the backup, which has its first
+	// update only: wait for the second, the one the restore queued.
+	for deadline := time.Now().Add(5 * time.Minute); ; time.Sleep(2 * time.Second) {
+		_, u, _ := a.call("GET", fmt.Sprintf("project_updates/?project=%v&order_by=-id&page_size=1", jt["project"]), nil)
+		latest := map[string]any{}
+		if r, _ := u["results"].([]any); len(r) > 0 {
+			latest = r[0].(map[string]any)
+		}
+		if count, _ := u["count"].(float64); count >= 2 && latest["status"] == "successful" {
+			break
+		}
+		if latest["status"] == "failed" || latest["status"] == "error" || time.Now().After(deadline) {
+			t.Fatalf("project update after the restore: %v", latest)
+		}
+	}
+	id := a.create(fmt.Sprintf("job_templates/%v/launch/", jt["id"]), map[string]any{})
+	job := a.wait(fmt.Sprintf("jobs/%d/", id), 10*time.Minute)
+	_, _, stdout := a.call("GET", fmt.Sprintf("jobs/%d/stdout/?format=txt", id), nil)
+	if job["status"] != "successful" || !strings.Contains(stdout, "Hello World!") {
+		t.Fatalf("job of a restored template: %v %v\n%s", job["status"], job["job_explanation"], stdout)
+	}
+}

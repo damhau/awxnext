@@ -68,18 +68,9 @@ on :8052. `uv run --no-project scripts/seed-demo.py --jobs` fills it with demo c
 
 ## Configuration
 
-| Variable | Default | Purpose |
-|---|---|---|
-| `AWXNEXT_DATABASE_URL` | `postgres://postgres@localhost:5432/awxnext` | PostgreSQL connection |
-| `AWXNEXT_SECRET_KEY` | — (required unless `AWXNEXT_DEV=1`) | Master key for the local key provider |
-| `AWXNEXT_KMS` | `local` | `local`, `vault-transit` or `azure-keyvault` master key provider |
-| `AWXNEXT_BASE_URL` | `http://localhost:8052` | External URL (OIDC redirects, notifications) |
-| `AWXNEXT_LISTEN` | `:8052` | Listen address |
-| `AWXNEXT_CONTAINER_RUNTIME` | `podman` | How local jobs run: `podman` or `docker` (execution environment image), or `none` (ansible-runner on the PATH) |
-| `AWXNEXT_PROJECTS_ROOT` | `/var/lib/awxnext/projects` | Project checkouts |
-| `AWXNEXT_JOBS_ROOT` | `/var/lib/awxnext/jobs` | Job working directories |
-| `AWXNEXT_UI_DIR` | — | Serve the web UI from this directory instead of the embedded build |
-| `AWXNEXT_CAPACITY` | — | Fixed forks capacity of this node, instead of the one its CPU and memory allow |
+Every environment variable and setting is in the [configuration reference](docs/configuration.md),
+generated from the code (`go run ./cmd/gendocs`). Installing, upgrading, high availability,
+migrating from AWX and the master key: the [operator guide](docs/operations.md).
 
 Capacity follows AWX's formula: 4 forks per CPU and one fork per 100 MB of memory after 2 GiB
 (none set aside in Kubernetes). AWX's `SYSTEM_TASK_FORKS_CPU` and `SYSTEM_TASK_FORKS_MEM` change
@@ -91,10 +82,6 @@ External logging is set under Settings → Logging, as in AWX (`LOG_AGGREGATOR_*
 activity stream entries, job events and gathered facts go to logstash, Splunk, Loggly, Sumo Logic
 or any HTTPS/HTTP, TCP or UDP receiver, as JSON. Activity stream entries, job events and facts are
 INFO messages, so they need `LOG_AGGREGATOR_LEVEL` at INFO.
-
-Vault Transit: `AWXNEXT_KMS_VAULT_ADDR`, `_KEY`, `_MOUNT`, and `_TOKEN`, `_ROLE_ID`/`_SECRET_ID`
-or `_K8S_ROLE`. Azure Key Vault: `AWXNEXT_KMS_AZURE_VAULT_URL`, `_KEY`, `_TENANT_ID`, `_CLIENT_ID`,
-and `_CLIENT_SECRET`, workload identity, or `_MANAGED_IDENTITY=1`.
 
 ### Job isolation and the `none` runtime
 
@@ -127,7 +114,7 @@ an update of every SCM project, run when the server starts, to rebuild the proje
 The files of manual projects are not in the backup. With Compose:
 
 ```sh
-docker compose exec awxnext awxnext backup -o - > awxnext.tar.gz
+docker compose exec -T awxnext awxnext backup -o - > awxnext.tar.gz
 ```
 
 ### Encryption keys

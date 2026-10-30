@@ -81,12 +81,37 @@ jobs:
           export AWXNEXT_TEST_KIND_URL=http://127.0.0.1:8052
           export AWXNEXT_TEST_KIND_PASSWORD="$(kubectl get secret awxnext-secrets -o jsonpath='{.data.admin-password}' | base64 -d)"
           go test -count=1 -v ./test/kind/
+      # docs/operations.md, Backup and restore: into a new release.
+      - name: backup and restore into a new release
+        run: |
+          kubectl exec deploy/awxnext -- env AWXNEXT_BACKUP_PASSPHRASE=ci-backup awxnext backup -o - > /tmp/awxnext.tar.gz
+          helm install awxnext deploy/helm/awxnext -f deploy/helm/ci/values.yaml -n restored --create-namespace \
+            --set replicaCount=0 --wait --timeout 10m
+          kubectl -n restored get deployment awxnext -o json | jq '{apiVersion: "v1", kind: "Pod",
+              metadata: {name: "awxnext-restore"}, spec: (.spec.template.spec | .restartPolicy = "Never"
+              | .containers[0] |= (.command = ["sleep", "infinity"] | del(.args, .readinessProbe, .livenessProbe)))}' |
+            kubectl -n restored apply -f -
+          kubectl -n restored wait --for=condition=Ready pod/awxnext-restore --timeout 5m
+          kubectl -n restored exec -i awxnext-restore -- env AWXNEXT_BACKUP_PASSPHRASE=ci-backup awxnext restore - < /tmp/awxnext.tar.gz
+          kubectl -n restored delete pod awxnext-restore
+          helm upgrade awxnext deploy/helm/awxnext -f deploy/helm/ci/values.yaml -n restored --reuse-values \
+            --set replicaCount=1 --wait --timeout 10m
+      - name: job of a restored template
+        run: |
+          pkill -f "kubectl port-forward" || true
+          kubectl -n restored rollout status deployment/awxnext --timeout 5m
+          kubectl -n restored port-forward svc/awxnext 8053:8052 > /tmp/port-forward-restored.log 2>&1 &
+          export AWXNEXT_TEST_KIND_RESTORED_URL=http://127.0.0.1:8053
+          export AWXNEXT_TEST_KIND_PASSWORD="$(kubectl -n restored get secret awxnext-secrets -o jsonpath='{.data.admin-password}' | base64 -d)"
+          go test -count=1 -v -run TestRestoredInstall ./test/kind/
       - name: diagnostics
         if: failure()
         run: |
-          kubectl get pods,jobs,svc -o wide || true
+          kubectl get pods,jobs,svc -A -o wide || true
           kubectl describe pods || true
           kubectl logs -l app.kubernetes.io/instance=awxnext --all-containers --prefix --tail 300 || true
+          kubectl -n restored describe pods || true
+          kubectl -n restored logs -l app.kubernetes.io/instance=awxnext --all-containers --prefix --tail 300 || true
 
   ui:
     runs-on: ubuntu-latest
