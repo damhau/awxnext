@@ -8,7 +8,7 @@
   transition: background 120ms ease;
 }
 .toggle .track::after {
-  content: ''; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff;
+  content: ''; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: var(--knob);
   box-shadow: 0 1px 2px rgba(27, 29, 28, 0.25); transition: transform 120ms ease;
 }
 .toggle input:checked + .track { background: var(--ink); }
@@ -68,7 +68,7 @@
 .wf-links { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .wf-links li { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .wf-kind { font-family: var(--mono); font-size: 11px; padding: 0 5px; border-radius: 2px; border: 1px solid var(--line); white-space: nowrap; }
-.wf-kind.success { color: var(--ok-ink); border-color: #bcdcca; background: var(--ok-soft); }
+.wf-kind.success { color: var(--ok-ink); border-color: var(--ok-line); background: var(--ok-soft); }
 .wf-kind.failure { color: var(--fail-deep); border-color: var(--fail-line); background: var(--fail-soft); }
 .wf-kind.always { color: var(--ink-3); background: var(--surface-3); }
 .wf-hint { font-size: 12px; color: var(--muted); }

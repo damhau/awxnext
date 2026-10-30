@@ -11,6 +11,7 @@ import { Avatar, BrandMark, Loading, RunBars } from '../components/ui'
 import { jobsNewestFirst, userName } from '../lib/format'
 import { useHotkeys } from '../lib/hotkeys'
 import { useUploadLocalPrefs } from '../lib/prefs'
+import { THEMES, useTheme } from '../lib/theme'
 import { useStored } from '../lib/storage'
 import { useOrg, useSession } from './context'
 import { Palette } from './Palette'
@@ -172,6 +173,7 @@ function OrgSwitcher() {
 
 function Account() {
   const { me, logout } = useSession()
+  const [theme, setTheme] = useTheme()
   const name = userName(me)
   return (
     <Menu label={`Account: ${name}`} className="avatar" trigger={<Avatar name={name} />}>
@@ -179,6 +181,15 @@ function Account() {
       <Link to={`/users/${me.id}`}>Profile and tokens</Link>
       <Link to="/run">Operator view</Link>
       <Link to="/api/docs">API docs</Link>
+      <hr />
+      <div className="head">Theme</div>
+      <div className="menu-segmented" role="radiogroup" aria-label="Theme">
+        {THEMES.map((t) => (
+          <button key={t.value} role="radio" aria-checked={theme === t.value} className={theme === t.value ? 'on' : ''} onClick={() => setTheme(t.value)}>
+            {t.label}
+          </button>
+        ))}
+      </div>
       <hr />
       <button onClick={logout}>
         <Icon name="logout" size={14} />

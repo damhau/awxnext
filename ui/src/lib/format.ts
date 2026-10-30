@@ -74,12 +74,14 @@ export function initials(name: string): string {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
 }
 
+/** Avatar pastels, the same in both themes; their initials are coal. */
+export const avatarPalette = ['#E3C9A8', '#BFD3C4', '#CFC4E8', '#C4D7E8', '#E8C4C9', '#D8DDB8', '#C9C9C9']
+
 /** Stable pastel for an avatar, derived from the name. */
 export function avatarColor(name: string): string {
-  const palette = ['#E3C9A8', '#BFD3C4', '#CFC4E8', '#C4D7E8', '#E8C4C9', '#D8DDB8', '#C9C9C9']
   let h = 0
   for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) >>> 0
-  return palette[h % palette.length]
+  return avatarPalette[h % avatarPalette.length]
 }
 
 export type StatusKind = 'ok' | 'fail' | 'error' | 'run' | 'pending' | 'cancel' | 'none'

@@ -273,7 +273,7 @@ function Around({ tpl, version, next }: { tpl: Template; version: Version; next?
             </div>
             <div className={`small ${beforeFailed.data?.count ? 'fail-text' : 'ok-text'}`}>{beforeFailed.data?.count ?? 0} failed</div>
           </div>
-          <div className="panel" style={{ padding: 10, ...(af?.count ? { borderColor: 'var(--fail-line)', background: '#fff7f2' } : { borderColor: 'var(--line-soft)' }) }}>
+          <div className="panel" style={{ padding: 10, ...(af?.count ? { borderColor: 'var(--fail-line)', background: 'var(--fail-wash)' } : { borderColor: 'var(--line-soft)' }) }}>
             <div className="small faint">{next ? `with v${version.version}` : `since v${version.version}`}</div>
             <div style={{ fontSize: 18, fontWeight: 500, marginTop: 2 }}>
               {after.data?.count ?? '…'} <span className="small muted" style={{ fontWeight: 400 }}>runs</span>
