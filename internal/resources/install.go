@@ -15,6 +15,7 @@ import (
 func Install(app *api.App) {
 	jobs.OpenArchiveStore = archiveStore(app)
 	installSettings(app)
+	installPreferences(app)
 	installBulk(app)
 	installDashboard(app)
 	installLicense(app)

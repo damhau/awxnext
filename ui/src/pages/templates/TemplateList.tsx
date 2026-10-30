@@ -14,7 +14,7 @@ import { Ago, Cell, Crumbs, Empty, RunBars, Status, Upcoming } from '../../compo
 import { AccessTab } from '../../components/access/Access'
 import { plural, userName } from '../../lib/format'
 import { compile, statusValue, type KeyTable } from '../../lib/query'
-import { useStored } from '../../lib/storage'
+import { usePref } from '../../lib/prefs'
 import { FolderDialog } from '../../components/FolderDialog'
 import { useCopy } from '../../components/CopyDialog'
 import { ancestors, buildTree, flatten, subtreeIds, useFolders, type FolderNode } from '../../lib/folders'
@@ -51,9 +51,9 @@ export function TemplateList() {
   const { org, scope } = useOrg()
   const folders = useFolders()
   const { roots, byId } = useMemo(() => buildTree(folders.data ?? []), [folders.data])
-  const [starred, setStarred] = useStored<string[]>('starred-templates', [])
-  const [views, setViews] = useStored<View[]>('template-views', [])
-  const [tree, setTree] = useStored('templates-folder-tree', false)
+  const [starred, setStarred] = usePref<string[]>('starred-templates', [])
+  const [views, setViews] = usePref<View[]>('template-views', [])
+  const [tree, setTree] = usePref('templates-folder-tree', false)
   const [selected, setSelected] = useState<Set<number | string>>(new Set())
   const [dialog, setDialog] = useState<null | 'move' | 'labels' | 'grant' | 'save' | 'access' | 'folder-new' | 'folder-edit'>(null)
   const confirm = useConfirm()
@@ -626,7 +626,7 @@ function SaveViewDialog({ onClose, onSave }: { onClose: () => void; onSave: (nam
       <div className="field">
         <label htmlFor="vn">Name</label>
         <input id="vn" className="input" value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && name.trim() && onSave(name.trim())} placeholder="Prod deploys · EU" />
-        <span className="help">Saved in this browser, with the current folder. Shows as a chip above the list.</span>
+        <span className="help">Saved with your account, with the current folder: a chip above the list in every browser you sign in to.</span>
       </div>
     </Dialog>
   )

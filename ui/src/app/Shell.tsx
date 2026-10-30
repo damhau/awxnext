@@ -10,6 +10,7 @@ import { Menu } from '../components/overlay'
 import { Avatar, BrandMark, Loading, RunBars } from '../components/ui'
 import { jobsNewestFirst, userName } from '../lib/format'
 import { useHotkeys } from '../lib/hotkeys'
+import { useUploadLocalPrefs } from '../lib/prefs'
 import { useStored } from '../lib/storage'
 import { useOrg, useSession } from './context'
 import { Palette } from './Palette'
@@ -189,6 +190,8 @@ function Account() {
 
 export function Shell() {
   const [palette, setPalette] = useState(false)
+  // Saved views and stars kept in this browser before they moved to the server.
+  useUploadLocalPrefs()
   const nav = useNavigate()
   const loc = useLocation()
   useHotkeys({

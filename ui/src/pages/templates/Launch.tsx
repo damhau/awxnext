@@ -9,7 +9,7 @@ import { Check, FormError, Lookup, MultiLookup, parseVars, VarsEditor, varsError
 import { Icon } from '../../components/icons'
 import { Empty, Loading, Panel, Status } from '../../components/ui'
 import { ago, duration, jobPath, plural, shortSha, statusKind } from '../../lib/format'
-import { useStored } from '../../lib/storage'
+import { usePref } from '../../lib/prefs'
 import { SurveyFields, useSurveyChoices, validateSurvey, type Survey } from './SurveyEditor'
 import { visibleQuestions } from './surveyLogic'
 import { resOf, type Kind } from './TemplateDetail'
@@ -96,7 +96,7 @@ function Catalog({ current }: { current?: string }) {
 export function RunHome() {
   const [q, setQ] = useState('')
   const { scope } = useOrg()
-  const [starred] = useStored<string[]>('starred-templates', [])
+  const [starred] = usePref<string[]>('starred-templates', [])
   const list = useList<Template>('unified_job_templates/', { type__in: 'job_template,workflow_job_template', search: q || undefined, order_by: 'name', page_size: 200, ...scope })
   const items = (list.data?.results ?? []).filter((t) => t.summary_fields.user_capabilities?.start !== false)
   const groups = new Map<string, Template[]>()

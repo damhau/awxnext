@@ -1,4 +1,6 @@
-// Per-browser preferences (starred templates, saved views, nav state).
+// Per-browser preferences (nav state, the organization chosen, recent
+// searches). Saved views, stars and list settings are the user's, on the
+// server (lib/prefs.ts).
 // localStorage can be unavailable (private mode, blocked storage): every
 // access is guarded and the UI works without it.
 import { useCallback, useEffect, useState } from 'react'
@@ -21,6 +23,14 @@ export function save(key: string, value: unknown) {
     /* storage unavailable */
   }
   window.dispatchEvent(new CustomEvent('awxnext-storage', { detail: key }))
+}
+
+export function forget(key: string) {
+  try {
+    localStorage.removeItem(prefix + key)
+  } catch {
+    /* storage unavailable */
+  }
 }
 
 /** State persisted in localStorage and shared between components using the same key. */
