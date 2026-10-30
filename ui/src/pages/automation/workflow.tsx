@@ -744,14 +744,14 @@ function NodePanel({
             ))}
           </div>
         )}
-        {!isApproval && (rel.askLabels || rel.askGroups) && (
+        {!isApproval && rel.any && (
           <div className="stack" style={{ gap: 12 }}>
             <SavedLabelsAndGroupsFields rel={rel} orgId={template?.organization} errors={errors} />
           </div>
         )}
         {!isApproval && survey.map((s) => <SurveyField key={s.variable} q={s} value={answers[s.variable] ?? s.default} onChange={(v) => setAnswers((a) => ({ ...a, [s.variable]: v }))} />)}
         {!isApproval && askVars && <VarsEditor label="Extra variables" value={extraText} onChange={setExtraText} error={errors.extra_data} rows={4} />}
-        {!isApproval && template && !allowed.length && !askVars && !survey.length && !rel.askLabels && !rel.askGroups && (
+        {!isApproval && template && !allowed.length && !askVars && !survey.length && !rel.any && (
           <p className="small faint" style={{ margin: 0 }}>
             The template prompts for nothing, so this step runs it as configured.
           </p>

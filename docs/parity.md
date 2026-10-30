@@ -79,7 +79,7 @@ The gaps fall in four groups:
 16. ~~Typed workflow node outputs~~ (done, roadmap M3-04).
 17. ~~Named URLs for credentials and other multi-hop formats, `related.named_url`~~ (done, roadmap M2-10).
 18. ~~Websocket groups `jobs-summary`, `schedules-changed` and `control-limit_reached_<user>` (subscribable, never published)~~ (done, roadmap M6-05).
-19. UI: node credentials and labels in the workflow editor, EE contents view (promised in PLAN.md).
+19. UI: EE contents view (promised in PLAN.md).
 20. Plan items not built yet: dark mode, saved views stored per user on the server (per-job event rate caps, S3 and Azure Blob event archives, the Helm chart and the [benchmarks against AWX](benchmarks.md) done, roadmap M6-06, M6-07, M6-10 and M6-11).
 
 ## Authentication, users, organizations, RBAC
@@ -157,10 +157,10 @@ The gaps fall in four groups:
 | Job slicing | Yes | Done | |
 | Job events, stdout formats, host summaries, artifacts | Yes | Done | `job_events/N/children/` and `playbook_counts` (also on job lists). `event_processing_finished` is true once a job has ended, including a job that never ran (a failed dependency, canceled while pending), and workflow jobs don't have it, as in AWX: clients wait on it |
 | Ad hoc commands | Yes | Done | The dialog (roadmap M7-05) chooses the execution environment, and asks for the machine credential's passwords set to ASK (SSH password, key passphrase, privilege escalation), or for those the API reports missing |
-| Workflows: edges, convergence, nested, approvals, artifacts, prompts | Yes | Done | Plus `when` conditions, loops and typed outputs (job templates declare the `set_stats` outputs their jobs must publish; see [workflows.md](workflows.md#typed-outputs)) |
+| Workflows: edges, convergence, nested, approvals, artifacts, prompts | Yes | Done | Plus `when` conditions, loops and typed outputs (job templates declare the `set_stats` outputs their jobs must publish; see [workflows.md](workflows.md#typed-outputs)). The editor saves a step's credentials, labels and instance groups (in order) when its template prompts for them (roadmap M7-06) |
 | Management-job workflow nodes | Yes | Done | Fixed during the audit |
 | Node labels and instance groups prompts; workflow labels passed to nodes | Yes | Done | Saved on nodes by whoever may see the labels and use the instance groups, copied to workflow job nodes, and given to the node's job when its template prompts for them (ignored otherwise, as in AWX); a workflow job's labels are added to the jobs of nodes whose template prompts for labels (roadmap M3-03). Editable in the step editor |
-| Schedules: rrule with exclusions, timezones, saved prompts, preview | Yes | Done | Labels and ordered instance groups saved as prompts (`schedules/N/labels/`, `schedules/N/instance_groups/`), by whoever may see and use them, used when the template prompts for them (roadmap M3-03). Editable in the schedule dialog |
+| Schedules: rrule with exclusions, timezones, saved prompts, preview | Yes | Done | Labels and ordered instance groups saved as prompts (`schedules/N/labels/`, `schedules/N/instance_groups/`), by whoever may see and use them, used when the template prompts for them (roadmap M3-03), and credentials (`schedules/N/credentials/`), which replace the template's of the same type. All three editable in the schedule dialog (roadmap M7-06) |
 | Notifications: email and webhook, started/success/error/approval events, custom messages | Yes | Done | Email over SMTP in clear, with STARTTLS or TLS from the start, with a login when a username and password are set, AWX's fields, defaults and messages (roadmap M3-01). The server's certificate is verified against the system's CAs; sender and recipient addresses are checked when saved. Attaching needs change on the notification too, as in AWX; `used_by` (awxnext) lists where one is attached |
 | Email | Yes | Later | Roadmap M3-01 |
 | Slack, PagerDuty, Twilio, Grafana, IRC, Mattermost, Rocket.Chat, AWS SNS | Yes | Out of scope | Dropped on 2026-10-27 |

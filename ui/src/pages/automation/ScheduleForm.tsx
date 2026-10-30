@@ -576,7 +576,7 @@ export function ScheduleDialog({
       <RRuleEditor value={rrule} onChange={setRrule} error={errors.rrule} />
       <Check label="Enabled" checked={enabled} onChange={setEnabled} help="Disabled schedules keep their rule but do not launch anything." />
 
-      {template && (allowed.length > 0 || survey.length > 0 || askVars || wantsDays || rel.askLabels || rel.askGroups) && (
+      {template && (allowed.length > 0 || survey.length > 0 || askVars || wantsDays || rel.any) && (
         <section className="form-section">
           <h2>Launch with</h2>
           <p className="small muted" style={{ margin: 0 }}>
