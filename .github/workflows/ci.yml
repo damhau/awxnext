@@ -44,6 +44,50 @@ jobs:
       - name: build
         run: go build -o bin/awxnext ./cmd/awxnext
 
+  # The Helm chart in kind: install, a job in a container group, upgrade
+  # (to two replicas, through the migration job), the job again.
+  helm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+      - name: lint
+        run: helm lint deploy/helm/awxnext && helm template awxnext deploy/helm/awxnext > /dev/null
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: helm/kind-action@v1
+        with:
+          cluster_name: awxnext
+      - name: image
+        run: |
+          docker build --target all-in-one -t awxnext:ci .
+          kind load docker-image awxnext:ci --name awxnext
+      - name: install
+        run: helm install awxnext deploy/helm/awxnext -f deploy/helm/ci/values.yaml --wait --timeout 10m
+      - name: job in a container group
+        run: |
+          kubectl port-forward svc/awxnext 8052:8052 > /tmp/port-forward.log 2>&1 &
+          export AWXNEXT_TEST_KIND_URL=http://127.0.0.1:8052
+          export AWXNEXT_TEST_KIND_PASSWORD="$(kubectl get secret awxnext-secrets -o jsonpath='{.data.admin-password}' | base64 -d)"
+          go test -count=1 -v ./test/kind/
+      - name: upgrade
+        run: helm upgrade awxnext deploy/helm/awxnext -f deploy/helm/ci/values.yaml --set replicaCount=2 --wait --timeout 10m
+      - name: job in a container group after the upgrade
+        run: |
+          pkill -f "kubectl port-forward" || true
+          kubectl rollout status deployment/awxnext --timeout 5m
+          kubectl port-forward svc/awxnext 8052:8052 > /tmp/port-forward.log 2>&1 &
+          export AWXNEXT_TEST_KIND_URL=http://127.0.0.1:8052
+          export AWXNEXT_TEST_KIND_PASSWORD="$(kubectl get secret awxnext-secrets -o jsonpath='{.data.admin-password}' | base64 -d)"
+          go test -count=1 -v ./test/kind/
+      - name: diagnostics
+        if: failure()
+        run: |
+          kubectl get pods,jobs -o wide
+          kubectl describe pods
+          kubectl logs -l app.kubernetes.io/instance=awxnext --all-containers --prefix --tail 300
+
   ui:
     runs-on: ubuntu-latest
     defaults:

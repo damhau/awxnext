@@ -29,9 +29,11 @@ RUN apt-get update \
 	&& apt-get purge -y curl gnupg && apt-get autoremove -y \
 	&& rm -rf /var/lib/apt/lists/*
 RUN uv pip install --system --no-cache ansible-core==2.20.10 ansible-runner==2.4.3
+# /runner as in AWX's execution environments, so the image runs container
+# group jobs too.
 RUN useradd --uid 1000 --home-dir /var/lib/awxnext --create-home awx \
-	&& mkdir -p /var/lib/awxnext/projects /var/lib/awxnext/jobs \
-	&& chown -R awx /var/lib/awxnext
+	&& mkdir -p /var/lib/awxnext/projects /var/lib/awxnext/jobs /runner \
+	&& chown -R awx /var/lib/awxnext /runner
 COPY --from=build /out/awxnext /usr/local/bin/awxnext
 COPY deploy/docker-entrypoint.sh /usr/local/bin/awxnext-entrypoint
 COPY scripts/seed-demo.py /usr/local/bin/seed-demo

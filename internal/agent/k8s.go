@@ -209,7 +209,8 @@ func BuildPod(req PodRequest, unitURL, token string) (map[string]any, string, er
 	spec["containers"] = containers
 	inits, _ := spec["initContainers"].([]any)
 	spec["initContainers"] = append(inits, map[string]any{
-		"name": "awxnext-shim", "image": req.ShimImage, "command": []any{"/awxnext", "install-shim", "/awxnext-shim/awxnext"},
+		// Both of awxnext's images have the binary there.
+		"name": "awxnext-shim", "image": req.ShimImage, "command": []any{"/usr/local/bin/awxnext", "install-shim", "/awxnext-shim/awxnext"},
 		"volumeMounts": []any{map[string]any{"name": "awxnext-shim", "mountPath": "/awxnext-shim"}},
 	})
 	spec["volumes"] = append(volumes, map[string]any{"name": "awxnext-shim", "emptyDir": map[string]any{}})

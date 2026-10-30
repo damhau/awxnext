@@ -1,0 +1,38 @@
+{{- if .Values.serviceAccount.create }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "awxnext.serviceAccount" . }}
+  labels: {{- include "awxnext.labels" . | nindent 4 }}
+{{- end }}
+{{- if .Values.containerGroups.rbac }}
+---
+# Container groups without a Kubernetes credential create their job pods
+# (and image pull secrets) in this namespace with this service account.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "awxnext.fullname" . }}-container-groups
+  labels: {{- include "awxnext.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["create", "get", "delete"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["create", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "awxnext.fullname" . }}-container-groups
+  labels: {{- include "awxnext.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "awxnext.fullname" . }}-container-groups
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "awxnext.serviceAccount" . }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}

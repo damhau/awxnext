@@ -182,7 +182,9 @@ func TestContainerGroup(t *testing.T) {
 		init := spec["initContainers"].([]any)[0].(map[string]any)
 		if meta["namespace"] != "jobs" || labels["team"] != "ops" || labels["ansible-awx-job-id"] != fmt.Sprint(job.id()) ||
 			worker["image"] != "quay.io/ansible/awx-ee:latest" || spec["restartPolicy"] != "Never" ||
-			worker["resources"].(map[string]any)["limits"] == nil || !strings.HasSuffix(fmt.Sprint(init["image"]), "awxnext:latest") {
+			worker["resources"].(map[string]any)["limits"] == nil || !strings.HasSuffix(fmt.Sprint(init["image"]), "awxnext:latest") ||
+			// The binary's path in awxnext's images.
+			!strings.HasPrefix(fmt.Sprint(init["command"]), "[/usr/local/bin/awxnext install-shim") {
 			t.Fatalf("pod spec: %v", pod)
 		}
 	}

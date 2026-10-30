@@ -1,0 +1,91 @@
+# awxnext on Kubernetes. Values not set here keep awxnext's defaults
+# (README, "Configuration").
+
+image:
+  # The all-in-one image: project syncs need its git, and jobs on the
+  # control plane its ansible-runner.
+  repository: ghcr.io/damhau/awxnext-all-in-one
+  # Defaults to the chart's appVersion.
+  tag: ""
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+
+# API and control plane replicas. Each registers itself as an instance (its
+# pod name) and runs jobs; jobs in container groups run in their own pods.
+replicaCount: 1
+
+admin:
+  # The superuser created and kept at each start, with the password in an
+  # existing secret (key "password") or generated (shown by the NOTES).
+  username: admin
+  existingSecret: ""
+
+# The master key that wraps the data keys of secrets. Keep it: without it
+# (or a key escrow, `awxnext keys export`), secrets cannot be read.
+secretKey:
+  # An existing secret with the key under "secret-key"; empty: one is
+  # generated at install and kept across upgrades.
+  existingSecret: ""
+
+# PostgreSQL: bundled (a single-replica StatefulSet, for trying awxnext out
+# and small installs) or external.
+postgresql:
+  bundled: true
+  image: postgres:16
+  storage: 8Gi
+  storageClass: ""
+  # External: a secret holding the connection URL under "url"
+  # (postgres://user:password@host:5432/awxnext?sslmode=require).
+  external:
+    existingSecret: ""
+
+# How jobs run on the control plane replicas: none (ansible-runner in the
+# image), podman or docker. Container groups run jobs in pods instead.
+containerRuntime: none
+# The execution environment of templates that name none.
+defaultExecutionEnvironment: quay.io/ansible/awx-ee:latest
+
+persistence:
+  # Project checkouts and job directories. Without a claim they live in the
+  # pod (emptyDir); with several replicas each keeps its own.
+  existingClaim: ""
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  host: awxnext.example.com
+  tls: []
+  #  - secretName: awxnext-tls
+  #    hosts: [awxnext.example.com]
+
+service:
+  type: ClusterIP
+  port: 8052
+
+# The service account of the control plane pods, which container groups
+# without a Kubernetes credential use to create job pods in this namespace.
+serviceAccount:
+  create: true
+  name: ""
+containerGroups:
+  # The Role letting the service account create and delete job pods.
+  rbac: true
+
+# A remote execution node: an agent dialing back to the control plane, with
+# the token of its instance (`POST /api/v2/instances/N/agent_token/`).
+agent:
+  enabled: false
+  url: ""
+  tokenSecret: ""
+  runtime: none
+
+# Run the migrations as a Job before an upgrade rolls the replicas.
+migrations:
+  enabled: true
+
+env: []
+resources: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}

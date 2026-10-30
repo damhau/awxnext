@@ -1,0 +1,92 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "awxnext.fullname" . }}
+  labels: {{- include "awxnext.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels: {{- include "awxnext.selector" . | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "awxnext.selector" . | nindent 8 }}
+        app.kubernetes.io/component: control
+    spec:
+      serviceAccountName: {{ include "awxnext.serviceAccount" . }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      {{- if .Values.postgresql.bundled }}
+      initContainers:
+        - name: wait-for-postgresql
+          image: {{ .Values.postgresql.image }}
+          command: ["sh", "-c", "until pg_isready -h {{ include "awxnext.fullname" . }}-postgresql -p 5432; do sleep 2; done"]
+      {{- end }}
+      containers:
+        - name: awxnext
+          image: {{ include "awxnext.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["serve"]
+          env:
+            {{- include "awxnext.env" . | nindent 12 }}
+            # Each replica is an instance, reachable by the others.
+            - name: AWXNEXT_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: AWXNEXT_INTERNAL_URL
+              value: "http://$(POD_IP):8052"
+            - name: AWXNEXT_LISTEN
+              value: ":8052"
+            - name: AWXNEXT_ADMIN_USER
+              value: {{ .Values.admin.username | quote }}
+            - name: AWXNEXT_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.admin.existingSecret | default (include "awxnext.secret" .) }}
+                  key: {{ ternary "password" "admin-password" (ne .Values.admin.existingSecret "") }}
+          ports:
+            - name: http
+              containerPort: 8052
+          readinessProbe:
+            httpGet:
+              path: /api/v2/ping/
+              port: http
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /api/v2/ping/
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/awxnext
+          {{- with .Values.resources }}
+          resources: {{- toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: data
+          {{- if .Values.persistence.existingClaim }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.persistence.existingClaim }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity: {{- toYaml . | nindent 8 }}
+      {{- end }}

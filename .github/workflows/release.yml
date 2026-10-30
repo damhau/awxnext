@@ -1,0 +1,40 @@
+# On a version tag (v1.2.3): the images on ghcr.io, and the Helm chart as an
+# OCI artifact (oci://ghcr.io/<owner>/charts/awxnext).
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: images
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          owner="$(echo "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')"
+          docker build -t "ghcr.io/$owner/awxnext:$version" -t "ghcr.io/$owner/awxnext:latest" .
+          docker build --target all-in-one -t "ghcr.io/$owner/awxnext-all-in-one:$version" -t "ghcr.io/$owner/awxnext-all-in-one:latest" .
+          for image in awxnext awxnext-all-in-one; do
+            docker push "ghcr.io/$owner/$image:$version"
+            docker push "ghcr.io/$owner/$image:latest"
+          done
+      - uses: azure/setup-helm@v4
+      - name: chart
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          owner="$(echo "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')"
+          echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io --username "${{ github.actor }}" --password-stdin
+          helm package deploy/helm/awxnext --version "$version" --app-version "$version"
+          helm push "awxnext-$version.tgz" "oci://ghcr.io/$owner/charts"

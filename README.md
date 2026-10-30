@@ -27,6 +27,30 @@ Open http://localhost:8052 and sign in as `admin`. The Compose install uses the
 `AWXNEXT_ADMIN_PASSWORD` creates the admin user, and resets its password on every start
 while it is set.
 
+## Install on Kubernetes with Helm
+
+```bash
+helm install awxnext oci://ghcr.io/damhau/charts/awxnext --namespace awxnext --create-namespace
+kubectl -n awxnext get secret awxnext-secrets -o jsonpath='{.data.admin-password}' | base64 -d
+```
+
+The chart (`deploy/helm/awxnext`) runs the all-in-one image:
+
+- `replicaCount` API and control plane replicas, each an instance named after its pod,
+  reaching the others by its pod IP;
+- a bundled PostgreSQL (`postgresql.bundled`, a single-replica StatefulSet) or an external one
+  (`postgresql.external.existingSecret`, the URL under `url`);
+- the master key generated into a kept secret, or `secretKey.existingSecret` (key `secret-key`);
+- `ingress.enabled`, `ingress.host`, `ingress.tls`;
+- a service account and Role letting container groups without a Kubernetes credential run their
+  job pods in the release's namespace (`containerGroups.rbac`);
+- the migrations as a Job before each upgrade (`migrations.enabled`);
+- an optional remote execution node (`agent.enabled`, with its instance's token in
+  `agent.tokenSecret`).
+
+Keep a copy of the master key (or a key escrow, `awxnext keys export`): the secret is kept when
+the release is uninstalled, and secrets cannot be read without it.
+
 ## Run from source
 
 Needs Go, Node 22 (or 20.19+), PostgreSQL and, to run jobs, ansible-runner on the PATH.

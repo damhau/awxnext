@@ -1,0 +1,9 @@
+# CI's helm job: the image built by the job, loaded into kind, as the
+# control plane and as the execution environment of container group pods.
+image:
+  repository: awxnext
+  tag: ci
+  pullPolicy: Never
+defaultExecutionEnvironment: awxnext:ci
+postgresql:
+  storage: 1Gi

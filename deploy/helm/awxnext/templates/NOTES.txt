@@ -1,0 +1,23 @@
+awxnext {{ .Chart.AppVersion }} is installed.
+
+{{- if .Values.ingress.enabled }}
+URL: {{ printf "%s://%s" (ternary "https" "http" (gt (len .Values.ingress.tls) 0)) .Values.ingress.host }}
+{{- else }}
+Reach it with:
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "awxnext.fullname" . }} 8052:{{ .Values.service.port }}
+  then http://localhost:8052
+{{- end }}
+
+Sign in as {{ .Values.admin.username }}, with the password:
+{{- if .Values.admin.existingSecret }}
+  in the secret {{ .Values.admin.existingSecret }} (key "password").
+{{- else }}
+  kubectl -n {{ .Release.Namespace }} get secret {{ include "awxnext.secret" . }} -o jsonpath='{.data.admin-password}' | base64 -d
+{{- end }}
+
+{{- if not .Values.secretKey.existingSecret }}
+
+The master key is in the secret {{ include "awxnext.secret" . }} (key "secret-key"), kept when the
+release is uninstalled. Keep a copy, or a key escrow (`awxnext keys export`): secrets cannot be
+read without them.
+{{- end }}

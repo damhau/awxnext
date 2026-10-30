@@ -1,0 +1,43 @@
+{{- if .Values.agent.enabled }}
+# A remote execution node in the cluster: an agent dialing back to the
+# control plane with its instance's token.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "awxnext.fullname" . }}-agent
+  labels: {{- include "awxnext.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: agent
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/component: agent
+    spec:
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+      containers:
+        - name: agent
+          image: {{ include "awxnext.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["agent", "--runtime", {{ .Values.agent.runtime | quote }}, "--work-dir", "/var/lib/awxnext/agent"]
+          env:
+            - name: AWXNEXT_AGENT_URL
+              value: {{ .Values.agent.url | default (include "awxnext.serviceURL" .) | quote }}
+            - name: AWXNEXT_AGENT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ required "agent.tokenSecret is required for the agent" .Values.agent.tokenSecret }}
+                  key: token
+          volumeMounts:
+            - name: work
+              mountPath: /var/lib/awxnext
+      volumes:
+        - name: work
+          emptyDir: {}
+{{- end }}

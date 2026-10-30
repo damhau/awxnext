@@ -1,0 +1,38 @@
+{{- if .Values.migrations.enabled }}
+# Before an upgrade rolls the replicas, the new version's migrations run
+# once. (At install the first replica migrates the new database; replicas
+# serialize migrations with a lock.)
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "awxnext.fullname" . }}-migrate
+  labels: {{- include "awxnext.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: pre-upgrade
+    helm.sh/hook-weight: "0"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/component: migrate
+    spec:
+      restartPolicy: Never
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+      containers:
+        - name: migrate
+          image: {{ include "awxnext.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["migrate"]
+          env:
+            {{- include "awxnext.env" . | nindent 12 }}
+            - name: AWXNEXT_NODE_NAME
+              value: {{ include "awxnext.fullname" . }}-migrate
+{{- end }}
