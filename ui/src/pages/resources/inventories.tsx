@@ -8,13 +8,14 @@ import type { Base, Ref } from '../../api/types'
 import { useOrg, usePreselectOrg } from '../../app/context'
 import { AccessTab } from '../../components/access/Access'
 import { useCopy } from '../../components/CopyDialog'
-import { FormError, Lookup, MultiLookup, SelectField, TextInput, VarsEditor, useForm } from '../../components/form'
+import { Check, FormError, Lookup, MultiLookup, SelectField, TextInput, VarsEditor, useForm } from '../../components/form'
 import { Icon } from '../../components/icons'
 import { Menu, useToast } from '../../components/overlay'
 import { DataTable, Pager, useListState, type Column } from '../../components/table'
 import { Ago, Empty, ErrorNote, KV, Loading, PageHead, Panel, Status, Tab } from '../../components/ui'
 import { plural } from '../../lib/format'
 import { compile, type KeyTable } from '../../lib/query'
+import { syncRelation } from '../../lib/relations'
 import { applyErrors, Count, FilterBox, KindTag, ManagedNotice, NameCell, Provenance, refOf, useDelete, useOrgColumn, folderColumn, folderKey } from './common'
 
 export interface Inventory extends Base {
@@ -30,6 +31,7 @@ export interface Inventory extends Base {
   inventory_sources_with_failures: number
   has_inventory_sources: boolean
   managed_by?: string
+  prevent_instance_group_fallback?: boolean
 }
 
 const kindLabel = (k: string) => (k === 'smart' ? 'smart' : k === 'constructed' ? 'constructed' : 'inventory')
@@ -189,12 +191,17 @@ export function InventoryForm() {
     queryFn: () => getAll<Ref>(`inventories/${id}/input_inventories/`),
     enabled: editing && kind === 'constructed',
   })
-  if (editing && (existing.isPending || (kind === 'constructed' && (constructed.isPending || inputs.isPending)))) return <Loading />
+  const groups = useQuery({
+    queryKey: [`inventories/${id}/instance_groups/`, 'all'],
+    queryFn: () => getAll<Ref>(`inventories/${id}/instance_groups/`),
+    enabled: editing,
+  })
+  if (editing && (existing.isPending || groups.isPending || (kind === 'constructed' && (constructed.isPending || inputs.isPending)))) return <Loading />
   if (existing.error) return <ErrorNote error={existing.error} />
-  return <InventoryFormInner key={id ?? 'new' + kind} kind={kind} inv={existing.data} extra={constructed.data} inputs={inputs.data ?? []} />
+  return <InventoryFormInner key={id ?? 'new' + kind} kind={kind} inv={existing.data} extra={constructed.data} inputs={inputs.data ?? []} groups={groups.data ?? []} />
 }
 
-function InventoryFormInner({ kind, inv, extra, inputs }: { kind: Inventory['kind']; inv?: Inventory; extra?: ConstructedExtra; inputs: Ref[] }) {
+function InventoryFormInner({ kind, inv, extra, inputs, groups }: { kind: Inventory['kind']; inv?: Inventory; extra?: ConstructedExtra; inputs: Ref[]; groups: Ref[] }) {
   const { org } = useOrg()
   const nav = useNavigate()
   const invalidate = useInvalidate()
@@ -211,6 +218,9 @@ function InventoryFormInner({ kind, inv, extra, inputs }: { kind: Inventory['kin
     update_cache_timeout: extra?.update_cache_timeout ?? 0,
     verbosity: extra?.verbosity ?? 1,
     inputs: inputs as Ref[],
+    instance_groups: groups,
+    prevent_instance_group_fallback: inv?.prevent_instance_group_fallback ?? false,
+    labels: (inv?.summary_fields.labels?.results ?? []) as Ref[],
   })
   usePreselectOrg(f.values.organization, (o) => f.set('organization', o), !inv)
   const [error, setError] = useState<unknown>(null)
@@ -226,6 +236,7 @@ function InventoryFormInner({ kind, inv, extra, inputs }: { kind: Inventory['kin
       organization: v.organization?.id ?? null,
       folder: v.folder?.id ?? null,
       variables: v.variables,
+      prevent_instance_group_fallback: v.prevent_instance_group_fallback,
     }
     if (kind === 'smart') body.host_filter = v.host_filter
     if (!inv) body.kind = kind
@@ -243,6 +254,9 @@ function InventoryFormInner({ kind, inv, extra, inputs }: { kind: Inventory['kin
         for (const i of v.inputs) if (!before.has(i.id)) await api.post(`inventories/${saved.id}/input_inventories/`, { id: i.id })
         for (const i of inputs) if (!after.has(i.id)) await api.post(`inventories/${saved.id}/input_inventories/`, { id: i.id, disassociate: true })
       }
+      // Instance groups are tried in order: a new order rebuilds the list.
+      await syncRelation(`inventories/${saved.id}/instance_groups/`, groups.map((g) => g.id), v.instance_groups.map((g) => g.id), true)
+      await syncRelation(`inventories/${saved.id}/labels/`, (inv?.summary_fields.labels?.results ?? []).map((l: Ref) => l.id), v.labels.map((l) => l.id))
       invalidate('inventories', 'constructed_inventories')
       toast(inv ? `Saved ${saved.name}` : `Created ${saved.name}`)
       nav(`/inventories/${saved.id}`)
@@ -333,6 +347,37 @@ function InventoryFormInner({ kind, inv, extra, inputs }: { kind: Inventory['kin
             </div>
           </div>
         )}
+        <div className="form-section">
+          <h2>Where jobs run</h2>
+          <div className="form-grid">
+            <MultiLookup
+              label="Instance groups"
+              optional
+              resource="instance_groups/"
+              values={v.instance_groups}
+              onChange={(x) => f.set('instance_groups', x)}
+              help="Tried in this order for jobs on this inventory, after the template's. Empty uses the organization's."
+              ordered
+              full
+            />
+            <div className="field full">
+              <Check
+                label="Only these instance groups: do not fall back to the organization's"
+                checked={v.prevent_instance_group_fallback}
+                onChange={(x) => f.set('prevent_instance_group_fallback', x)}
+              />
+            </div>
+            <MultiLookup
+              label="Labels"
+              optional
+              resource="labels/"
+              params={v.organization ? { organization: v.organization.id } : undefined}
+              values={v.labels}
+              onChange={(x) => f.set('labels', x)}
+              full
+            />
+          </div>
+        </div>
         <VarsEditor value={v.variables} onChange={(x) => f.set('variables', x)} error={f.errors.variables} help="Inventory-wide variables, the equivalent of group_vars/all." />
         <FormError error={error} />
         <div className="form-actions">

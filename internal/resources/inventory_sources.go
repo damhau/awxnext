@@ -407,6 +407,7 @@ func registerConstructedInventories() {
 			{Name: "update_cache_timeout", Type: api.TInt, Virtual: true, Help: "The cache timeout for the related auto-created inventory source, special to constructed inventory"},
 			{Name: "limit", Type: api.TText, Virtual: true, Help: "The limit to restrict the returned hosts for the related auto-created inventory source, special to constructed inventory."},
 			{Name: "verbosity", Type: api.TInt, Virtual: true, Help: "The verbosity level for the related auto-created inventory source, special to constructed inventory"},
+			{Name: "prevent_instance_group_fallback", Type: api.TBool, Default: false},
 		},
 		View: func(c *Ctx, arg ArgFunc) string {
 			return "t.kind = 'constructed' AND (" + viewOf(c, inv, arg) + ")"

@@ -79,7 +79,7 @@ The gaps fall in four groups:
 16. ~~Typed workflow node outputs~~ (done, roadmap M3-04).
 17. ~~Named URLs for credentials and other multi-hop formats, `related.named_url`~~ (done, roadmap M2-10).
 18. ~~Websocket groups `jobs-summary`, `schedules-changed` and `control-limit_reached_<user>` (subscribable, never published)~~ (done, roadmap M6-05).
-19. UI: `prevent_instance_group_fallback` and instance groups on inventories, credential types page, inventory source schedules tab, execution environment and passwords in the ad hoc dialog, node credentials and labels in the workflow editor, EE contents view (promised in PLAN.md).
+19. UI: credential types page, inventory source schedules tab, execution environment and passwords in the ad hoc dialog, node credentials and labels in the workflow editor, EE contents view (promised in PLAN.md).
 20. Plan items not built yet: dark mode, saved views stored per user on the server (per-job event rate caps, S3 and Azure Blob event archives, the Helm chart and the [benchmarks against AWX](benchmarks.md) done, roadmap M6-06, M6-07, M6-10 and M6-11).
 
 ## Authentication, users, organizations, RBAC
@@ -116,10 +116,10 @@ The gaps fall in four groups:
 | Regular, smart and constructed inventories | Yes | Done | Smart filters compiled to SQL and checked when saved |
 | Hosts, groups (nested), variables, facts | Yes | Done | `instance_id` is not set by imports. Deleting a group deletes its hosts left in no group and its children left without a parent, recursively, as AWX's `delete_recursive` |
 | Inventory script endpoint | Yes | Done | `subset=sliceNofM` gives one slice of the hosts, with AWX's errors |
-| Inventory instance groups, `prevent_instance_group_fallback` | Yes | Done (API only) | Not in the inventory form |
+| Inventory instance groups, `prevent_instance_group_fallback` | Yes | Done | In the inventory form (roadmap M7-02), the groups in order (reordered in place); on constructed inventories too, whose `constructed_inventories/` serializer now has `prevent_instance_group_fallback` as AWX's does |
 | Inventory copy | Yes | Done | Groups, hosts, memberships and instance groups |
 | `inventories/N/job_templates/`, `groups/N/job_events/` | Yes | Done | A group's events are those of its hosts |
-| Inventory labels | Yes | Done | `inventories/N/labels/` and `summary_fields.labels` |
+| Inventory labels | Yes | Done | `inventories/N/labels/` and `summary_fields.labels`; in the inventory form (roadmap M7-02) |
 | Asynchronous inventory delete | Yes | Done | 202 and `pending_deletion`, then hosts are deleted in batches in the background; a second delete and launches on it are refused, as in AWX |
 | Cloud sources: ec2, gce, azure_rm, vmware, openstack, satellite6, controller, terraform, openshift_virtualization | Yes | Done | AWX's per-source defaults apply: the enabled variable and value when the source sets none, the host `instance_id` variable (hosts are matched by it before their name, so a host renamed in the cloud keeps its record), and leaving out empty groups (roadmap M4-03). Values ansible-core 2.19+ marks unsafe are stored as plain values |
 | Project file (scm) source | Yes | Done | `source_vars` become environment variables for the source's scripts and plugins, as Python's `str()` of each value, except names already set and `HOME`, `USER`, `_`, `TERM`, `PATH` (roadmap M4-04) |
