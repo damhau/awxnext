@@ -558,6 +558,9 @@ func launchBulkJob(c *Ctx, body Obj) (int64, error) {
 				}
 			}
 		}
+		if err := jobLaunched(c, "workflow_jobs", wfID); err != nil {
+			return err
+		}
 		jobs.Wake(c, c.DB())
 		return nil
 	})

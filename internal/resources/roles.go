@@ -175,6 +175,16 @@ func registerRoles() {
 		NoName:       true,
 		ReadOnly:     true,
 		NoActivity:   true,
+		// As AWX's: the role's field, and the object it is on.
+		ActivitySummary: func(c *Ctx, obj Obj) Obj {
+			ct := str(obj["content_type"])
+			oid, _ := api.ID(obj["object_id"])
+			s := Obj{"id": obj["id"], "role_field": obj["role_field"], "resource_type": nil, "resource_id": nil, "resource_name": nil}
+			if res := resourceForCT(ct); res != nil {
+				s["resource_type"], s["resource_id"], s["resource_name"] = res.Type, oid, contentObjectName(c, ct, oid)
+			}
+			return s
+		},
 		Fields: []*Field{
 			{Name: "content_type", Type: api.TString, ReadOnly: true, Hidden: true},
 			{Name: "object_id", Type: api.TInt, ReadOnly: true, Hidden: true},
@@ -495,6 +505,8 @@ func registerDAB() {
 			CanChange: func(c *Ctx, old, data Obj) error {
 				return api.Detail(405, "Role assignments cannot be modified; delete and recreate instead.")
 			},
+			AfterCreate: func(c *Ctx, obj Obj) error { return assignmentActivity(c, "associate", kind.col, obj) },
+			AfterDelete: func(c *Ctx, obj Obj) error { return assignmentActivity(c, "disassociate", kind.col, obj) },
 			CanDelete: func(c *Ctx, obj Obj) error {
 				rd, _ := api.ID(obj["role_definition"])
 				oid, _ := api.ID(obj["object_id"])

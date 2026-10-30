@@ -193,6 +193,9 @@ type Resource struct {
 	AfterUpdate  func(c *Ctx, old, obj Obj) error
 	BeforeDelete func(c *Ctx, obj Obj) error
 	AfterDelete  func(c *Ctx, obj Obj) error
+	// ActivitySummary, when set, is the object's summary in activity stream
+	// entries, instead of its id and name.
+	ActivitySummary func(c *Ctx, obj Obj) Obj
 	// SoftDelete, when set, replaces the deletion of the row (AWX's
 	// soft_delete): the object stays, marked deleted.
 	SoftDelete func(c *Ctx, obj Obj) error

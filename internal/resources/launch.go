@@ -701,7 +701,7 @@ func LaunchJobTemplate(c *Ctx, jt Obj, body Obj, launchType string, ov *LaunchOv
 				}
 			}
 		}
-		return jobID, nil
+		return jobID, jobLaunched(c, "jobs", jobID)
 	}
 	// A sliced template launches a workflow job running one job per slice of the inventory.
 	slices := 1

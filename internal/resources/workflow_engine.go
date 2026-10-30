@@ -878,8 +878,12 @@ func launchNode(c *Ctx, wf jobs.Row, n *wfNode, node Obj, extra map[string]any) 
 		}
 		return LaunchSystemJob(c, tpl, ed, "workflow")
 	case "workflow_approval_template":
-		return jobs.Create(c, c.DB(), map[string]any{"type": "workflow_approval", "name": tpl["name"], "description": tpl["description"],
+		id, err := jobs.Create(c, c.DB(), map[string]any{"type": "workflow_approval", "name": tpl["name"], "description": tpl["description"],
 			"unified_job_template_id": n.ujt, "approval_timeout": tpl["timeout"], "status": "pending", "launch_type": "workflow"})
+		if err != nil {
+			return 0, err
+		}
+		return id, jobLaunched(c, "workflow_approvals", id)
 	}
 	return 0, fmt.Errorf("unsupported node type %q", n.ujtType)
 }

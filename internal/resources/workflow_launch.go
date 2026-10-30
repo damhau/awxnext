@@ -158,6 +158,9 @@ func LaunchWorkflowJobTemplate(c *Ctx, wf Obj, body Obj, launchType string, ov *
 				}
 			}
 		}
+		if err := jobLaunched(c, "workflow_jobs", wfJobID); err != nil {
+			return err
+		}
 		jobs.Wake(c, c.DB())
 		return nil
 	})
@@ -405,6 +408,9 @@ func handleWorkflowRelaunch(c *Ctx, w http.ResponseWriter, r *http.Request, job 
 		if _, err := c.DB().Exec(c, "INSERT INTO unified_job_labels (unified_job_id, label_id) SELECT $1, label_id FROM unified_job_labels WHERE unified_job_id = $2", newID, jid); err != nil {
 			return err
 		}
+		if err := jobLaunched(c, "workflow_jobs", newID); err != nil {
+			return err
+		}
 		jobs.Wake(c, c.DB())
 		return nil
 	})
@@ -486,5 +492,5 @@ func createSlices(c *Ctx, jt Obj, values map[string]any, n int, createJob func(c
 			return 0, err
 		}
 	}
-	return wfID, nil
+	return wfID, jobLaunched(c, "workflow_jobs", wfID)
 }

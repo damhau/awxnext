@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/damhau/awxnext/internal/api"
+	"github.com/damhau/awxnext/internal/rbac"
 )
 
 func registerActivity() {
@@ -74,4 +75,85 @@ func asStrings(v any) []string {
 		return l
 	}
 	return nil
+}
+
+// jobLaunched records a launch as AWX's activity_stream_create does for
+// jobs, workflow jobs and workflow approvals: the job's fields, its
+// credentials ("name (id)") and labels by name, survey passwords hidden in
+// its extra_vars, and the user who launched it.
+func jobLaunched(c *Ctx, resName string, id int64) error {
+	if !c.App.Settings.Bool(c, "ACTIVITY_STREAM_ENABLED") {
+		return nil
+	}
+	res := api.Lookup(resName)
+	sys := *c
+	sys.User = rbac.System()
+	obj, err := api.Get(&sys, res, id)
+	if err != nil {
+		return err
+	}
+	changes := api.ActivityFields(res, obj)
+	if ev, ok := changes["extra_vars"].(string); ok {
+		changes["extra_vars"] = maskSurveyPasswords(ev)
+	}
+	names := func(sql string) []string {
+		out := []string{}
+		rows, err := c.DB().Query(c, sql, id)
+		if err != nil {
+			return out
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var n string
+			if rows.Scan(&n) == nil {
+				out = append(out, n)
+			}
+		}
+		return out
+	}
+	if resName == "jobs" {
+		changes["credentials"] = names(`SELECT cr.name || ' (' || cr.id || ')' FROM unified_job_credentials x JOIN credentials cr ON cr.id = x.credential_id
+			WHERE x.unified_job_id = $1 ORDER BY cr.id`)
+		changes["labels"] = names("SELECT l.name FROM unified_job_labels x JOIN labels l ON l.id = x.label_id WHERE x.unified_job_id = $1 ORDER BY l.name")
+	}
+	return api.Activity(c, "create", res, obj, changes, nil, nil, "")
+}
+
+// assignmentActivity records a role given or taken away through the role
+// assignment API as the role API records it, which AWX's role assignments
+// do too: the role linked to the user or team. A role definition with no
+// role on the object (custom or system-wide ones) is recorded on the
+// definition, the object in the changes.
+func assignmentActivity(c *Ctx, op, principal string, obj Obj) error {
+	rd, _ := api.ID(obj["role_definition"])
+	pid, _ := api.ID(obj[principal])
+	ct := str(obj["content_type"])
+	oid, _ := api.ID(obj["object_id"])
+	sys := *c
+	sys.User = rbac.System()
+	plural := principal + "s"
+	who, err := api.Get(&sys, api.Lookup(plural), pid)
+	if err != nil {
+		return err
+	}
+	var roleID int64
+	if c.DB().QueryRow(c, "SELECT id FROM object_roles WHERE role_definition_id = $1 AND content_type = $2 AND object_id = $3", rd, ct, oid).Scan(&roleID) == nil {
+		roles := api.Lookup("roles")
+		role, err := api.Get(&sys, roles, roleID)
+		if err != nil {
+			return err
+		}
+		return api.Activity(c, op, roles, role, Obj{}, api.Lookup(plural), who, "role."+plural)
+	}
+	defs := api.Lookup("role_definitions")
+	def, err := api.Get(&sys, defs, rd)
+	if err != nil {
+		return err
+	}
+	changes := Obj{"content_type": dabCT(obj["content_type"]), "object_id": nil}
+	if ct != "" {
+		changes["object_id"] = oid
+		changes["object_name"] = contentObjectName(c, ct, oid)
+	}
+	return api.Activity(c, op, defs, def, changes, api.Lookup(plural), who, "role_definition."+plural)
 }

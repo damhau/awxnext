@@ -9,6 +9,7 @@ import { Ago, Avatar, Empty, ErrorNote, Loading, PageHead } from '../../componen
 import { absolute, userName } from '../../lib/format'
 import { compile, getTerm, setTerm, type KeyTable } from '../../lib/query'
 import { FilterBox } from './common'
+import { assignmentTarget, roleName } from '../../lib/activityRoles'
 
 interface Entry {
   id: number
@@ -73,9 +74,13 @@ function describe(e: Entry): ReactNode {
   const t1 = e.object1.replace(/_/g, ' ')
   if (e.object1 === 'setting') return <>changed settings {Object.keys(e.changes ?? {}).map((k) => <span key={k} className="mono small"> {k}</span>)}</>
   if (e.operation === 'associate' || e.operation === 'disassociate') {
+    const role = e.object1 === 'role' ? roleName(first) : ''
+    const target = assignmentTarget(e.object1, e.changes)
     return (
       <>
-        {e.operation === 'associate' ? 'linked' : 'unlinked'} {e.object2.replace(/_/g, ' ')} {objLink(e.object2, second)} {e.operation === 'associate' ? 'to' : 'from'} {t1} {objLink(e.object1, first)}
+        {e.operation === 'associate' ? 'linked' : 'unlinked'} {e.object2.replace(/_/g, ' ')} {objLink(e.object2, second)} {e.operation === 'associate' ? 'to' : 'from'}{' '}
+        {role ? <span>the {role}</span> : <>{t1} {objLink(e.object1, first)}</>}
+        {target && <span> {target}</span>}
         {e.object_association && <span className="faint small"> ({e.object_association.split('.').pop()?.replace(/_/g, ' ')})</span>}
       </>
     )

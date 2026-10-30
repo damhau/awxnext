@@ -1166,6 +1166,18 @@ func equalValues(a, b any) bool {
 	return string(ja) == string(jb)
 }
 
+// ActivityFields is what a create entry records of an object: its fields,
+// secrets hidden.
+func ActivityFields(res *Resource, obj Obj) Obj {
+	changes := Obj{}
+	for _, f := range res.Fields {
+		if v, ok := obj[f.Name]; ok && !f.Virtual && !f.Hidden {
+			changes[f.Name] = activityValue(f, v)
+		}
+	}
+	return changes
+}
+
 func activityValue(f *Field, v any) any {
 	if f.Redact != nil {
 		return f.Redact(v)
@@ -1234,14 +1246,20 @@ func Activity(c *Ctx, op string, res *Resource, obj Obj, changes Obj, res2 *Reso
 		return nil
 	}
 	id, _ := ID(obj["id"])
-	summary := Obj{res.Type: []Obj{summaryOf(res, obj)}}
+	summarize := func(res *Resource, obj Obj) Obj {
+		if res.ActivitySummary != nil {
+			return res.ActivitySummary(c, obj)
+		}
+		return summaryOf(res, obj)
+	}
+	summary := Obj{res.Type: []Obj{summarize(res, obj)}}
 	var o2 string
 	var o2id *int64
 	if res2 != nil {
 		o2 = res2.Type
 		i, _ := ID(obj2["id"])
 		o2id = &i
-		summary[res2.Type] = append(asObjs(summary[res2.Type]), summaryOf(res2, obj2))
+		summary[res2.Type] = append(asObjs(summary[res2.Type]), summarize(res2, obj2))
 	}
 	var actor *int64
 	if !c.User.Anonymous() {
