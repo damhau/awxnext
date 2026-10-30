@@ -50,6 +50,11 @@ jobs:
           images:
             - name: quay.io/ansible/awx-operator
               newTag: 2.19.1
+            # gcr.io/kubebuilder no longer serves its images: the same
+            # proxy from its own project.
+            - name: gcr.io/kubebuilder/kube-rbac-proxy
+              newName: quay.io/brancz/kube-rbac-proxy
+              newTag: v0.15.0
           namespace: awx
           EOF
           kubectl create namespace awx
