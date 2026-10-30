@@ -47,7 +47,9 @@ func TestInstanceManagementCommands(t *testing.T) {
 	if fmt.Sprint(must(t, a.get(fmt.Sprintf("instances/%d/instance_groups/", int64(i["id"].(float64)))), 200).Raw) == "" {
 		t.Error("no groups")
 	}
-	if _, err := run(func(b *bytes.Buffer) error { return resources.ProvisionInstance(ctx, app, b, host, "hop", "1b6a8f9e-2e7c-4e3e-9b3a-0f1d2c3b4a59") }); err != nil {
+	if _, err := run(func(b *bytes.Buffer) error {
+		return resources.ProvisionInstance(ctx, app, b, host, "hop", "1b6a8f9e-2e7c-4e3e-9b3a-0f1d2c3b4a59")
+	}); err != nil {
 		t.Fatal(err)
 	}
 	// By UUID, a new hostname.
@@ -83,11 +85,15 @@ func TestInstanceManagementCommands(t *testing.T) {
 		t.Errorf("registered group: %v", g)
 	}
 	// Again, unchanged; a hop node or an unknown instance cannot be listed.
-	out, err = run(func(b *bytes.Buffer) error { return resources.RegisterQueue(ctx, app, b, resources.Queue{Name: q, Hostnames: []string{exec}, Minimum: 1}) })
+	out, err = run(func(b *bytes.Buffer) error {
+		return resources.RegisterQueue(ctx, app, b, resources.Queue{Name: q, Hostnames: []string{exec}, Minimum: 1})
+	})
 	if err != nil || out != fmt.Sprintf("Instance Group already registered %s\nAdded instance %s to %s\n", q, exec, q) {
 		t.Errorf("register_queue again: %v %q", err, out)
 	}
-	out, err = run(func(b *bytes.Buffer) error { return resources.RegisterQueue(ctx, app, b, resources.Queue{Name: q, Hostnames: []string{host}, Minimum: 1}) })
+	out, err = run(func(b *bytes.Buffer) error {
+		return resources.RegisterQueue(ctx, app, b, resources.Queue{Name: q, Hostnames: []string{host}, Minimum: 1})
+	})
 	if !failed(err, true) || !strings.HasSuffix(out, "Instance does not exist or cannot run jobs: "+host+"\n") {
 		t.Errorf("hop node: %v %q", err, out)
 	}
