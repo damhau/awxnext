@@ -24,7 +24,8 @@ spec:
       initContainers:
         - name: wait-for-postgresql
           image: {{ .Values.postgresql.image }}
-          command: ["sh", "-c", "until pg_isready -h {{ include "awxnext.fullname" . }}-postgresql -p 5432; do sleep 2; done"]
+          # A user name: the pod's has no passwd entry in this image.
+          command: ["sh", "-c", "until pg_isready -h {{ include "awxnext.fullname" . }}-postgresql -p 5432 -U awxnext; do sleep 2; done"]
       {{- end }}
       containers:
         - name: awxnext

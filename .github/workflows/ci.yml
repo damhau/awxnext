@@ -84,9 +84,9 @@ jobs:
       - name: diagnostics
         if: failure()
         run: |
-          kubectl get pods,jobs -o wide
-          kubectl describe pods
-          kubectl logs -l app.kubernetes.io/instance=awxnext --all-containers --prefix --tail 300
+          kubectl get pods,jobs,svc -o wide || true
+          kubectl describe pods || true
+          kubectl logs -l app.kubernetes.io/instance=awxnext --all-containers --prefix --tail 300 || true
 
   ui:
     runs-on: ubuntu-latest
