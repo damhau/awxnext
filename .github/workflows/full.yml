@@ -1,0 +1,70 @@
+name: Full
+
+# Everything: the whole Go suite with the race detector (job tests, object
+# storage against MinIO and Azurite), the images and the chart (deploy.yml)
+# and AWX's clients (compat.yml, a job per suite). Nightly, and by hand before
+# a milestone is closed: gh workflow run full.yml
+on:
+  schedule:
+    - cron: "17 2 * * *"
+  workflow_dispatch:
+
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      AWXNEXT_TEST_DATABASE_URL: postgres://postgres@localhost:5432/postgres?sslmode=disable
+      AWXNEXT_TEST_S3_ENDPOINT: http://127.0.0.1:9000
+      AWXNEXT_TEST_S3_ACCESS_KEY: awxnext
+      AWXNEXT_TEST_S3_SECRET_KEY: awxnext-test-secret
+      AWXNEXT_TEST_AZURITE_BLOB_ENDPOINT: http://127.0.0.1:10000/devstoreaccount1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      # Without ansible-runner on the PATH the job tests skip themselves.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: ansible for the job tests
+        run: pip install ansible-core==2.19.14 ansible-runner==2.4.3
+      # pg_dump and pg_restore of the server's major version, for the backup test.
+      - name: PostgreSQL client tools
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends postgresql-client-16
+      # Object storage for the job event archive tests: MinIO (the pgsty/minio
+      # community fork; MinIO publishes no builds) and Azurite. Services
+      # cannot be given a command.
+      - name: MinIO and Azurite
+        run: |
+          docker run -d --name minio -p 9000:9000 -e MINIO_ROOT_USER=awxnext -e MINIO_ROOT_PASSWORD=awxnext-test-secret \
+            pgsty/minio:RELEASE.2026-08-04T00-00-00Z server /data
+          docker run -d --name azurite -p 10000:10000 mcr.microsoft.com/azure-storage/azurite:3.36.0 \
+            azurite-blob --blobHost 0.0.0.0 --skipApiVersionCheck --loose
+          for i in $(seq 1 60); do curl -sf http://127.0.0.1:9000/minio/health/live && break; sleep 1; done
+      - name: test
+        run: go test -race -count=1 ./...
+
+  deploy:
+    uses: ./.github/workflows/deploy.yml
+
+  compat:
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [collection, cli, terraform]
+    uses: ./.github/workflows/compat.yml
+    with:
+      suite: ${{ matrix.suite }}

@@ -5,6 +5,8 @@ on:
   pull_request:
 
 jobs:
+  # The short suite (go test -short, no race detector): what each change
+  # needs. full.yml runs everything nightly and before a milestone closes.
   go:
     runs-on: ubuntu-latest
     services:
@@ -21,136 +23,19 @@ jobs:
           --health-retries 10
     env:
       AWXNEXT_TEST_DATABASE_URL: postgres://postgres@localhost:5432/postgres?sslmode=disable
-      AWXNEXT_TEST_S3_ENDPOINT: http://127.0.0.1:9000
-      AWXNEXT_TEST_S3_ACCESS_KEY: awxnext
-      AWXNEXT_TEST_S3_SECRET_KEY: awxnext-test-secret
-      AWXNEXT_TEST_AZURITE_BLOB_ENDPOINT: http://127.0.0.1:10000/devstoreaccount1
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      # Without ansible-runner on the PATH the job tests skip themselves.
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      - name: ansible for the job tests
-        run: pip install ansible-core==2.19.14 ansible-runner==2.4.3
-      # pg_dump and pg_restore of the server's major version, for the backup test.
-      - name: PostgreSQL client tools
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends postgresql-client-16
-      # Object storage for the job event archive tests: MinIO (the pgsty/minio
-      # community fork; MinIO publishes no builds) and Azurite. Services
-      # cannot be given a command.
-      - name: MinIO and Azurite
-        run: |
-          docker run -d --name minio -p 9000:9000 -e MINIO_ROOT_USER=awxnext -e MINIO_ROOT_PASSWORD=awxnext-test-secret \
-            pgsty/minio:RELEASE.2026-08-04T00-00-00Z server /data
-          docker run -d --name azurite -p 10000:10000 mcr.microsoft.com/azure-storage/azurite:3.36.0 \
-            azurite-blob --blobHost 0.0.0.0 --skipApiVersionCheck --loose
-          for i in $(seq 1 60); do curl -sf http://127.0.0.1:9000/minio/health/live && break; sleep 1; done
       - name: gofmt
         run: test -z "$(gofmt -l .)" || (gofmt -l . && exit 1)
       - name: vet
         run: go vet ./...
       - name: test
-        run: go test -race -count=1 ./...
+        run: go test -short -count=1 ./...
       - name: build
         run: go build -o bin/awxnext ./cmd/awxnext
-
-  # The Helm chart in kind: install, a job in a container group, upgrade
-  # (to two replicas, through the migration job), the job again.
-  helm:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: azure/setup-helm@v4
-      - name: lint
-        run: helm lint deploy/helm/awxnext && helm template awxnext deploy/helm/awxnext > /dev/null
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-      - uses: helm/kind-action@v1
-        with:
-          cluster_name: awxnext
-      - name: image
-        run: |
-          docker build --target all-in-one -t awxnext:ci .
-          kind load docker-image awxnext:ci --name awxnext
-      - name: install
-        run: helm install awxnext deploy/helm/awxnext -f deploy/helm/ci/values.yaml --wait --timeout 10m
-      - name: job in a container group
-        run: |
-          kubectl port-forward svc/awxnext 8052:8052 > /tmp/port-forward.log 2>&1 &
-          export AWXNEXT_TEST_KIND_URL=http://127.0.0.1:8052
-          export AWXNEXT_TEST_KIND_PASSWORD="$(kubectl get secret awxnext-secrets -o jsonpath='{.data.admin-password}' | base64 -d)"
-          go test -count=1 -v ./test/kind/
-      - name: upgrade
-        run: helm upgrade awxnext deploy/helm/awxnext -f deploy/helm/ci/values.yaml --set replicaCount=2 --wait --timeout 10m
-      - name: job in a container group after the upgrade
-        run: |
-          pkill -f "kubectl port-forward" || true
-          kubectl rollout status deployment/awxnext --timeout 5m
-          kubectl port-forward svc/awxnext 8052:8052 > /tmp/port-forward.log 2>&1 &
-          export AWXNEXT_TEST_KIND_URL=http://127.0.0.1:8052
-          export AWXNEXT_TEST_KIND_PASSWORD="$(kubectl get secret awxnext-secrets -o jsonpath='{.data.admin-password}' | base64 -d)"
-          go test -count=1 -v ./test/kind/
-      # docs/operations.md, Backup and restore: into a new release.
-      - name: backup and restore into a new release
-        run: |
-          kubectl exec deploy/awxnext -- env AWXNEXT_BACKUP_PASSPHRASE=ci-backup awxnext backup -o - > /tmp/awxnext.tar.gz
-          helm install awxnext deploy/helm/awxnext -f deploy/helm/ci/values.yaml -n restored --create-namespace \
-            --set replicaCount=0 --wait --timeout 10m
-          kubectl -n restored get deployment awxnext -o json | jq '{apiVersion: "v1", kind: "Pod",
-              metadata: {name: "awxnext-restore"}, spec: (.spec.template.spec | .restartPolicy = "Never"
-              | .containers[0] |= (.command = ["sleep", "infinity"] | del(.args, .readinessProbe, .livenessProbe)))}' |
-            kubectl -n restored apply -f -
-          kubectl -n restored wait --for=condition=Ready pod/awxnext-restore --timeout 5m
-          kubectl -n restored exec -i awxnext-restore -- env AWXNEXT_BACKUP_PASSPHRASE=ci-backup awxnext restore - < /tmp/awxnext.tar.gz
-          kubectl -n restored delete pod awxnext-restore
-          helm upgrade awxnext deploy/helm/awxnext -f deploy/helm/ci/values.yaml -n restored --reuse-values \
-            --set replicaCount=1 --wait --timeout 10m
-      - name: job of a restored template
-        run: |
-          pkill -f "kubectl port-forward" || true
-          kubectl -n restored rollout status deployment/awxnext --timeout 5m
-          kubectl -n restored port-forward svc/awxnext 8053:8052 > /tmp/port-forward-restored.log 2>&1 &
-          export AWXNEXT_TEST_KIND_RESTORED_URL=http://127.0.0.1:8053
-          export AWXNEXT_TEST_KIND_PASSWORD="$(kubectl -n restored get secret awxnext-secrets -o jsonpath='{.data.admin-password}' | base64 -d)"
-          go test -count=1 -v -run TestRestoredInstall ./test/kind/
-      - name: diagnostics
-        if: failure()
-        run: |
-          kubectl get pods,jobs,svc -A -o wide || true
-          kubectl describe pods || true
-          kubectl logs -l app.kubernetes.io/instance=awxnext --all-containers --prefix --tail 300 || true
-          kubectl -n restored describe pods || true
-          kubectl -n restored logs -l app.kubernetes.io/instance=awxnext --all-containers --prefix --tail 300 || true
-
-  # The all-in-one image from deploy/compose: jobs as job users of their own
-  # (internal/jobexec), tested by test/isolation.
-  compose:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-      - name: start
-        working-directory: deploy/compose
-        env:
-          AWXNEXT_SECRET_KEY: ci-compose-secret-key
-          AWXNEXT_DB_PASSWORD: cicompose
-          AWXNEXT_ADMIN_PASSWORD: ci-compose-admin
-        run: docker compose up -d --build --wait
-      - name: jobs as job users
-        run: |
-          docker compose -f deploy/compose/docker-compose.yml logs awxnext | grep "jobs run as job users"
-          export AWXNEXT_TEST_ISOLATION_URL=http://127.0.0.1:8052 AWXNEXT_TEST_ISOLATION_PASSWORD=ci-compose-admin
-          go test -count=1 -v ./test/isolation/
-      - name: diagnostics
-        if: failure()
-        run: docker compose -f deploy/compose/docker-compose.yml logs --tail 300 || true
 
   ui:
     runs-on: ubuntu-latest

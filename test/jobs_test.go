@@ -11,8 +11,19 @@ import (
 	"github.com/damhau/awxnext/internal/resources"
 )
 
+// slow leaves a test to the full suite (nightly and at the end of a
+// milestone): go test -short, run for each change, skips it.
+func slow(t *testing.T) {
+	t.Helper()
+	if testing.Short() {
+		t.Skip("slow: not in go test -short")
+	}
+}
+
+// requireAnsible: the test runs jobs with ansible-runner (slow).
 func requireAnsible(t *testing.T) {
 	t.Helper()
+	slow(t)
 	if _, err := exec.LookPath("ansible-runner"); err != nil {
 		t.Skip("ansible-runner not installed")
 	}

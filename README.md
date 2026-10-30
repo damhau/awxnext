@@ -205,13 +205,25 @@ as a branch override, are not verified.
 ## Development
 
 ```sh
-make test   # vet + unit and integration tests
+make test        # vet + the short suite (go test -short), about 30 s
+make test-full   # vet + every test, with the race detector
 cd ui && npx tsc --noEmit -p . && npx vitest run   # UI typecheck and unit tests
 ```
 
 The integration tests use the PostgreSQL server in `AWXNEXT_TEST_DATABASE_URL`, or start a
 throwaway PostgreSQL 16 when it isn't set (its binaries are downloaded once from Maven Central
-into the user cache directory). Job tests run only when `ansible-runner` is on the PATH; they
-are skipped otherwise.
+into the user cache directory). The short suite skips the slow tests (`slow(t)` in `test/`):
+those that run jobs with ansible-runner, and a few others. In the full suite, job tests run only
+when `ansible-runner` is on the PATH, and the object storage tests when
+`AWXNEXT_TEST_S3_ENDPOINT` (MinIO) and `AWXNEXT_TEST_AZURITE_BLOB_ENDPOINT` (Azurite) are set.
+
+CI runs in tiers:
+
+| Workflow | When | What |
+|---|---|---|
+| `ci.yml` | every push | gofmt, vet, the short suite, the UI's typecheck, unit tests and build |
+| `deploy.yml` | pushes that change the Dockerfile, `deploy/`, the job helper or the agent | the Helm chart in kind, the all-in-one image with Compose |
+| `full.yml` | nightly, and by hand before a milestone closes (`gh workflow run full.yml`) | every Go test with the race detector, MinIO and Azurite; `deploy.yml`; the compatibility suites (`compat.yml`), a job each |
+| `bench.yml` | by hand | the [benchmarks against AWX](docs/benchmarks.md) |
 
 Licensed under the Apache License 2.0.

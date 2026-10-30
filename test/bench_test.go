@@ -3,7 +3,6 @@ package test
 import (
 	"context"
 	"os"
-	"os/exec"
 	"strings"
 	"testing"
 	"time"
@@ -14,9 +13,7 @@ import (
 // awxbench's steps against this server, small: what the benchmark workflow
 // runs against AWX and awxnext at scale.
 func TestBenchmark(t *testing.T) {
-	if _, err := exec.LookPath("ansible-runner"); err != nil {
-		t.Skip("ansible-runner not found")
-	}
+	requireAnsible(t)
 	a := adminClient(t)
 	allowFileURLs(t, a)
 	files := map[string]string{}

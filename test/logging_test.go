@@ -150,6 +150,7 @@ func portOf(t *testing.T, u string) int {
 // AWX's external logging: its loggers, formatted as its LogstashFormatter,
 // sent over HTTPS/HTTP, TCP and UDP to receivers the test starts.
 func TestExternalLogging(t *testing.T) {
+	slow(t)
 	a := adminClient(t)
 	t.Cleanup(func() { a.delete("settings/logging/") })
 	set := func(v map[string]any) {

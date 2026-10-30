@@ -68,10 +68,8 @@ func freePort(t *testing.T) int {
 // under another master key, and a job run by the restored install with a
 // secret of the backup.
 func TestBackupAndRestore(t *testing.T) {
+	requireAnsible(t)
 	pgDump, pgRestore := pgClientTools(t)
-	if _, err := exec.LookPath("ansible-runner"); err != nil {
-		t.Skip("ansible-runner not found")
-	}
 	f := newLaunchFixture(t)
 	a := f.a
 	ct := must(t, a.post("credential_types/", map[string]any{"name": uniq("mycloud"), "kind": "cloud",

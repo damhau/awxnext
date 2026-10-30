@@ -182,6 +182,7 @@ func TestInstanceGroupPolicies(t *testing.T) {
 // max_concurrent_jobs and max_forks hold on every group, not only container
 // groups; a job that does not fit goes to the next group.
 func TestInstanceGroupLimits(t *testing.T) {
+	slow(t)
 	f := newLaunchFixture(t)
 	a := f.a
 	tn := int64(must(t, a.get("instances/?hostname=test-node"), 200).results()[0]["id"].(float64))

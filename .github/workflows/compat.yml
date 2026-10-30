@@ -1,11 +1,16 @@
 name: Compatibility
 
 # AWX's own clients against awxnext (compat/run.py): the awx.awx collection's
-# integration targets, the awx CLI and the Terraform provider. Nightly and on
-# demand; the report is attached to the run and shown in its summary.
+# integration targets, the awx CLI and the Terraform provider. From full.yml
+# (nightly, a job per suite) and on demand; the report is attached to the run
+# and shown in its summary.
 on:
-  schedule:
-    - cron: "17 2 * * *"
+  workflow_call:
+    inputs:
+      suite:
+        type: string
+        required: false
+        default: ""
   workflow_dispatch:
     inputs:
       suite:
@@ -37,5 +42,5 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: compat-report
+          name: compat-report${{ inputs.suite && format('-{0}', inputs.suite) || '' }}
           path: compat-report
