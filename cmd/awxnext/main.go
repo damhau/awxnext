@@ -40,6 +40,18 @@ Commands:
   keys rewrap       re-wrap data keys from the AWXNEXT_OLD_* master key to the current one
   import-awx        import the configuration of an AWX installation from its database
   inventory-import  import an inventory file, directory or script (as awx-manage inventory_import)
+  provision-instance --hostname H [--node_type T] [--uuid U]
+                    register an instance (as awx-manage provision_instance)
+  deprovision-instance --hostname H
+                    remove an instance (as awx-manage deprovision_instance)
+  register-queue --queuename Q [--hostnames A,B] [--instance_percent N] [--instance_minimum N]
+                    create or update an instance group (as awx-manage register_queue)
+  unregister-queue --queuename Q
+                    remove an instance group (as awx-manage unregister_queue)
+  remove-from-queue --queuename Q --hostname H
+                    take an instance out of a group (as awx-manage remove_from_queue)
+  list-instances [--no-color]
+                    list instance groups and instances (as awx-manage list_instances)
   agent             run a remote execution node agent (dials back to the control plane)
   shim              run one job inside a container group pod (started by the control plane)
   install-shim DEST copy this binary to DEST (job pod init container)
@@ -83,6 +95,10 @@ func main() {
 	case "version":
 		fmt.Println(api.ProductVersion)
 	default:
+		if name, ok := manageCommand(os.Args[1]); ok {
+			err = manage(ctx, cfg, name, os.Args[2:])
+			break
+		}
 		usage()
 	}
 	if err != nil {

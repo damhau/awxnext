@@ -110,6 +110,27 @@ of a `file` source of the inventory:
 awxnext inventory-import --inventory-name Production --source /etc/ansible/hosts --overwrite
 ```
 
+### Instances and instance groups
+
+awx-manage's instance commands, with their options and output, under their names with dashes or
+underscores. Control nodes register themselves when they start; these are for other nodes and
+for groups:
+
+```bash
+awxnext provision-instance --hostname exec-1.example.com --node_type execution   # or --uuid U
+awxnext deprovision-instance --hostname exec-1.example.com
+awxnext register-queue --queuename dmz --hostnames exec-1.example.com,exec-2.example.com \
+  --instance_minimum 1 --instance_percent 0       # also --is_container_group, --pod_spec_override,
+                                                  # --max_forks, --max_concurrent_jobs
+awxnext remove-from-queue --queuename dmz --hostname exec-2.example.com
+awxnext unregister-queue --queuename dmz
+awxnext list-instances --no-color
+```
+
+As in AWX, `register-queue` only adds instances, and sets the percentage and minimum (0 when not
+given); the group's policies then choose its members. `default` and `controlplane` cannot be
+unregistered.
+
 ### Signed projects
 
 A project with a signature validation credential (a *GPG Public Key*) checks every sync as
