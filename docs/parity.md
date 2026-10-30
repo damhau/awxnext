@@ -34,9 +34,9 @@ The gaps fall in four groups:
    notification types other than email and webhook
    (backup and restore, and the Helm chart, are done, roadmap M6-09 and M6-10; CyberArk, Thycotic, AWS Secrets Manager and Centrify lookups are done,
    roadmap M4-07; archive projects, roadmap M4-10).
-4. **UI holes over a finished API**: credential type management, a few more
-   listed below (inventory instance groups, inventory source schedules and
-   `start_at_task` are done, roadmap M7-01 to M7-03).
+4. **UI holes over a finished API**: a few, listed below (inventory instance
+   groups, inventory source schedules, `start_at_task` and credential type
+   management are done, roadmap M7-01 to M7-04).
 
 ## Fixed during the audit
 
@@ -79,7 +79,7 @@ The gaps fall in four groups:
 16. ~~Typed workflow node outputs~~ (done, roadmap M3-04).
 17. ~~Named URLs for credentials and other multi-hop formats, `related.named_url`~~ (done, roadmap M2-10).
 18. ~~Websocket groups `jobs-summary`, `schedules-changed` and `control-limit_reached_<user>` (subscribable, never published)~~ (done, roadmap M6-05).
-19. UI: credential types page, execution environment and passwords in the ad hoc dialog, node credentials and labels in the workflow editor, EE contents view (promised in PLAN.md).
+19. UI: execution environment and passwords in the ad hoc dialog, node credentials and labels in the workflow editor, EE contents view (promised in PLAN.md).
 20. Plan items not built yet: dark mode, saved views stored per user on the server (per-job event rate caps, S3 and Azure Blob event archives, the Helm chart and the [benchmarks against AWX](benchmarks.md) done, roadmap M6-06, M6-07, M6-10 and M6-11).
 
 ## Authentication, users, organizations, RBAC
@@ -130,7 +130,7 @@ The gaps fall in four groups:
 | Bulk host create/delete | Yes | Done | `bulk/host_create` (each host created as through `/hosts/`, all or none) and `bulk/host_delete`, with AWX's limits, checks and messages |
 | Host metrics | Yes | Partial | Collected per job and cleaned up. `/host_metrics/` (list, filter, soft delete) and `/host_metric_summary_monthly/`, for superusers and auditors, as in AWX; the summary is the `host_metric_summary_monthly` management job (weekly), where AWX runs a periodic task. No UI page yet (roadmap M7-08) |
 | Managed credential types | Yes | Partial | All of AWX's, Insights and Red Hat Virtualization included (M4-01). The Kubernetes bearer token is injected in code as in AWX, its CA data as a file in `K8S_AUTH_SSL_CA_CERT` (M4-02); unlike AWX, `verify_ssl` without CA data keeps verifying, against the system's CAs. As in AWX, an encrypted SSH key (OpenSSH with a cipher, PKCS#8 `ENCRYPTED PRIVATE KEY`, PEM `Proc-Type: 4,ENCRYPTED`) needs its passphrase and a passphrase needs an encrypted key, checked against the stored key on update |
-| Custom credential types | Yes | Done | Injectors are Jinja2 (gonja), sandboxed like AWX and checked when saved; `2 ** n` gives a float and `None` prints empty |
+| Custom credential types | Yes | Done | Injectors are Jinja2 (gonja), sandboxed like AWX and checked when saved; `2 ** n` gives a float and `None` prints empty. The Credential types page (Admin, roadmap M7-04) lists the types, built-in ones read-only, and creates and edits custom types with YAML or JSON input and injector editors: injector variables no field defines are pointed out as you type, the API's errors shown under each editor, and the inputs locked once credentials use the type |
 | Lookups: HashiCorp Vault KV and SSH, Azure Key Vault | Yes | Done | Vault logs in with a token, username and password, AppRole, Kubernetes or a TLS client certificate (`client_cert_public`, `client_cert_private`, `client_cert_role`), with AWX 24.6's inputs (roadmap M4-06); an auth path left at AWX's default `approle` uses the method's own mount (`userpass`, `kubernetes`, `cert`). Azure falls back to managed identity |
 | Lookups: CyberArk Central Credential Provider and Conjur, Centrify Vault, Thycotic DevOps Secrets Vault and Secret Server, AWS Secrets Manager | Yes | Done | AWX 24.6's types (namespaces, inputs, metadata), test buttons and importer mapping, making the requests AWX's plugins (or their Delinea and AWS SDKs) make (roadmap M4-07). Secret Server follows python-tss-sdk 1.2 (Secret Server, not Delinea Platform); Centrify names are quoted in its query |
 | Lookups: CyberArk, Conjur, Thycotic, AWS Secrets Manager, Centrify | Yes | Later | |

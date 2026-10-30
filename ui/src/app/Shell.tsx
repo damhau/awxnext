@@ -101,6 +101,7 @@ function useNav(): { label: string; items: NavItem[] }[] {
       label: 'Admin',
       items: [
         { to: '/instances', label: 'Instances', icon: 'server' },
+        { to: '/credential-types', label: 'Credential types', icon: 'shield' },
         { to: '/notifications', label: 'Notifications', icon: 'bell' },
         { to: '/gitops', label: 'GitOps', icon: 'git' },
         { to: '/management-jobs', label: 'Management jobs', icon: 'terminal', superuser: true },

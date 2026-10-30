@@ -1,4 +1,4 @@
-// Routes for organizations, teams, users, instances, notifications, GitOps,
+// Routes for organizations, teams, users, instances, credential types, notifications, GitOps,
 // management jobs, activity stream and settings.
 import { Route } from 'react-router'
 
@@ -7,6 +7,8 @@ import { lazyModule } from '../../lib/lazy'
 
 const m_activity = lazyModule(() => import('./activity'))
 const Activity = m_activity('Activity')
+const m_credentialTypes = lazyModule(() => import('./credentialTypes'))
+const CredentialTypeList = m_credentialTypes('CredentialTypeList')
 const m_folders = lazyModule(() => import('./folders'))
 const FolderDetail = m_folders('FolderDetail')
 const FolderList = m_folders('FolderList')
@@ -55,6 +57,7 @@ export function adminRoutes() {
       <Route path="users" element={<UserList />} />
       <Route path="users/new" element={<UserNew />} />
       <Route path="users/:id/*" element={<UserDetail />} />
+      <Route path="credential-types" element={<CredentialTypeList />} />
       <Route path="instances" element={<InstanceList />} />
       <Route path="instances/:id" element={<InstanceDetail />} />
       <Route path="instance-groups/new" element={<GroupNew />} />
