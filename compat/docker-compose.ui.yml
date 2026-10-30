@@ -1,0 +1,13 @@
+# For working on the UI: the stack serves the checkout's ui/dist instead of
+# the UI built into its image. Rebuild it (cd ui && npm run build) and reload
+# the page; the stack and its data stay. Rebuild the stack only when the Go
+# code changes. Not for CI: ui/dist is empty until it is built.
+#
+#   (cd ui && npm run build)
+#   docker compose -f compat/docker-compose.yml -f compat/docker-compose.ui.yml up -d --build --wait
+services:
+  awxnext:
+    environment:
+      AWXNEXT_UI_DIR: /ui
+    volumes:
+      - ../ui/dist:/ui:ro

@@ -30,6 +30,15 @@ with a self-signed certificate, as AWX's own test environment serves HTTPS
 HTTP stays on port 8053. `--host`, `--username` and `--password` point the
 suites at another instance.
 
+To work on the UI against this stack, add `compat/docker-compose.ui.yml`: it serves the
+checkout's `ui/dist`, so a UI change shows after `npm run build` (about 15 s) and a reload,
+without rebuilding the stack or losing its data.
+
+```sh
+(cd ui && npm run build)
+docker compose -f compat/docker-compose.yml -f compat/docker-compose.ui.yml up -d --build --wait
+```
+
 They expect AWX's preload data: the `demo_data` target creates it, and the
 harness adds the `Demo Credential` that AWX's installer also creates. The
 suites create and delete objects, so use a throwaway install.
