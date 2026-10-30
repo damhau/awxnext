@@ -16,6 +16,8 @@ const m_gitops = lazyModule(() => import('./gitops'))
 const GitOpsDetail = m_gitops('GitOpsDetail')
 const GitOpsList = m_gitops('GitOpsList')
 const GitOpsNew = m_gitops('GitOpsNew')
+const m_hostMetrics = lazyModule(() => import('./hostMetrics'))
+const HostMetrics = m_hostMetrics('HostMetrics')
 const m_instances = lazyModule(() => import('./instances'))
 const GroupDetail = m_instances('GroupDetail')
 const GroupNew = m_instances('GroupNew')
@@ -58,6 +60,7 @@ export function adminRoutes() {
       <Route path="users/new" element={<UserNew />} />
       <Route path="users/:id/*" element={<UserDetail />} />
       <Route path="credential-types" element={<CredentialTypeList />} />
+      <Route path="host-metrics" element={<HostMetrics />} />
       <Route path="instances" element={<InstanceList />} />
       <Route path="instances/:id" element={<InstanceDetail />} />
       <Route path="instance-groups/new" element={<GroupNew />} />
