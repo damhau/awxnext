@@ -6,9 +6,11 @@ import { useInvalidate, useObject } from '../../api/hooks'
 import type { Ref, Template } from '../../api/types'
 import { useOrg, usePreselectOrg } from '../../app/context'
 import { Check, FormError, Lookup, MultiLookup, SelectField, TextArea, TextInput, VarsEditor, varsError, varsText } from '../../components/form'
+import { useConfirm } from '../../components/overlay'
 import { PageHead, Panel } from '../../components/ui'
 import { buildTree, flatten, useFolders } from '../../lib/folders'
 import { cleanOutputs, type OutputDecl } from '../../lib/outputs'
+import { syncRelation } from '../../lib/relations'
 import { OutputsEditor } from './OutputsEditor'
 import { resOf, type Kind } from './TemplateDetail'
 
@@ -33,6 +35,57 @@ function Askable({ label, ask, onAsk, children, help, error, full }: { label: Re
 }
 
 type Values = Record<string, any> // eslint-disable-line @typescript-eslint/no-explicit-any
+
+/** The template's webhook key, shown on demand and rotated after a confirm:
+ * the service sending the webhook then needs the new one. */
+function WebhookKey({ res, id }: { res: string; id: number }) {
+  const confirm = useConfirm()
+  const [key, setKey] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<unknown>(null)
+  const call = async (rotate: boolean) => {
+    setBusy(true)
+    setError(null)
+    try {
+      const path = `${res}/${id}/webhook_key/`
+      const r = rotate ? await api.post<{ webhook_key: string }>(path, {}) : await api.get<{ webhook_key: string }>(path)
+      setKey(r.webhook_key)
+    } catch (e) {
+      setError(e)
+    } finally {
+      setBusy(false)
+    }
+  }
+  const rotate = async () => {
+    const ok = await confirm({
+      title: 'Rotate the webhook key?',
+      body: <p style={{ margin: 0 }}>The current key stops working at once: set the new one where the webhook is configured.</p>,
+      confirm: 'Rotate key',
+      danger: true,
+    })
+    if (ok) await call(true)
+  }
+  return (
+    <div className="field full">
+      <span className="label" style={{ fontWeight: 500 }}>
+        Webhook key
+      </span>
+      <div className="row" style={{ gap: 8 }}>
+        <input className="input mono" readOnly aria-label="Webhook key" value={key ?? '••••••••••••••••••••••••'} style={{ flex: 1 }} />
+        {key === null && (
+          <button type="button" className="btn" disabled={busy} onClick={() => call(false)}>
+            Show
+          </button>
+        )}
+        <button type="button" className="btn" disabled={busy} onClick={rotate}>
+          Rotate
+        </button>
+      </div>
+      <span className="help">The secret the sending service signs or authenticates its requests with.</span>
+      {error ? <FormError error={error} /> : null}
+    </div>
+  )
+}
 
 const relOf = (t?: Template, k?: string): Ref[] => {
   if (!t || !k) return []
@@ -77,6 +130,8 @@ export function TemplateForm({ kind, tpl }: { kind: Kind; tpl?: Template }) {
     use_fact_cache: tpl?.use_fact_cache ?? false,
     force_handlers: tpl?.force_handlers ?? false,
     host_config_key: tpl?.host_config_key ?? '',
+    start_at_task: tpl?.start_at_task ?? '',
+    prevent_instance_group_fallback: tpl?.prevent_instance_group_fallback ?? false,
     webhook_service: tpl?.webhook_service ?? '',
     webhook_credential: sf.webhook_credential ?? null,
     outputs: ((tpl?.outputs as OutputDecl[] | undefined) ?? []).map((o) => ({ ...o })),
@@ -140,6 +195,8 @@ export function TemplateForm({ kind, tpl }: { kind: Kind; tpl?: Template }) {
         use_fact_cache: v.use_fact_cache,
         force_handlers: v.force_handlers,
         host_config_key: v.host_config_key,
+        start_at_task: v.start_at_task,
+        prevent_instance_group_fallback: v.prevent_instance_group_fallback,
         outputs: cleanOutputs(v.outputs),
       })
     } else {
@@ -156,7 +213,9 @@ export function TemplateForm({ kind, tpl }: { kind: Kind; tpl?: Template }) {
       }
       if (kind === 'job') await sync('credentials', v.credentials, relOf(tpl, 'credentials'))
       await sync('labels', v.labels, relOf(tpl, 'labels'))
-      if (kind === 'job' && v.instance_groups) await sync('instance_groups', v.instance_groups, igs.data ?? [])
+      // Instance groups are tried in order: a new order rebuilds the list.
+      if (kind === 'job' && v.instance_groups)
+        await syncRelation(`${res}/${saved.id}/instance_groups/`, (igs.data ?? []).map((g) => g.id), (v.instance_groups as Ref[]).map((g) => g.id), true)
       invalidate('unified_job_templates', res, 'folders')
       nav(`/templates/${kind}/${saved.id}`)
     } catch (e) {
@@ -234,9 +293,18 @@ export function TemplateForm({ kind, tpl }: { kind: Kind; tpl?: Template }) {
             </Askable>
           )}
           {kind === 'job' && (
-            <Askable label="Instance groups" ask={ask('instance_groups')} onAsk={(o) => setAsk('instance_groups', o)} help="Preferred groups, in order. Empty uses the inventory's and organization's groups." full>
-              <MultiLookup label={<span className="sr-only">Instance groups</span>} resource="instance_groups/" values={instanceGroups} onChange={(x) => set('instance_groups', x)} />
+            <Askable label="Instance groups" ask={ask('instance_groups')} onAsk={(o) => setAsk('instance_groups', o)} help="Preferred groups, tried in this order. Empty uses the inventory's and organization's groups." full>
+              <MultiLookup label={<span className="sr-only">Instance groups</span>} resource="instance_groups/" values={instanceGroups} onChange={(x) => set('instance_groups', x)} ordered />
             </Askable>
+          )}
+          {kind === 'job' && (
+            <div className="field full">
+              <Check
+                label="Only these instance groups: do not fall back to the inventory's and organization's"
+                checked={v.prevent_instance_group_fallback}
+                onChange={(x) => set('prevent_instance_group_fallback', x)}
+              />
+            </div>
           )}
           {kind === 'workflow' && (
             <Askable label="Branch" ask={ask('scm_branch')} onAsk={(o) => setAsk('scm_branch', o)} help="Passed to nodes whose project allows branch override.">
@@ -278,6 +346,9 @@ export function TemplateForm({ kind, tpl }: { kind: Kind; tpl?: Template }) {
             </Askable>
             <Askable label="Skip tags" ask={ask('skip_tags')} onAsk={(o) => setAsk('skip_tags', o)}>
               <input className="input mono" value={v.skip_tags} onChange={(e) => set('skip_tags', e.target.value)} />
+            </Askable>
+            <Askable label="Start at task" ask={ask('start_at_task')} onAsk={(o) => setAsk('start_at_task', o)} help="Name of the task to start from (--start-at-task); empty runs the whole playbook." error={errors.start_at_task}>
+              <input className="input mono" value={v.start_at_task} onChange={(e) => set('start_at_task', e.target.value)} />
             </Askable>
             <Askable label="Show changes (--diff)" ask={ask('diff_mode')} onAsk={(o) => setAsk('diff_mode', o)}>
               <Check label="Show what changed in files and templates" checked={v.diff_mode} onChange={(x) => set('diff_mode', x)} />
@@ -344,6 +415,7 @@ export function TemplateForm({ kind, tpl }: { kind: Kind; tpl?: Template }) {
           {v.webhook_service && v.webhook_service !== 'generic' && (
             <Lookup label="Webhook credential" resource="credentials/" value={v.webhook_credential} onChange={(x) => set('webhook_credential', x)} optional help="Token used to post commit statuses back." />
           )}
+          {tpl?.webhook_service && v.webhook_service === tpl.webhook_service && <WebhookKey res={res} id={tpl.id} />}
           {kind === 'job' && (
             <TextInput label="Provisioning callback key" value={v.host_config_key} onChange={(x) => set('host_config_key', x)} optional mono help="Lets new hosts request a run of this template for themselves." />
           )}

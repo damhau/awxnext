@@ -79,7 +79,7 @@ The gaps fall in four groups:
 16. ~~Typed workflow node outputs~~ (done, roadmap M3-04).
 17. ~~Named URLs for credentials and other multi-hop formats, `related.named_url`~~ (done, roadmap M2-10).
 18. ~~Websocket groups `jobs-summary`, `schedules-changed` and `control-limit_reached_<user>` (subscribable, never published)~~ (done, roadmap M6-05).
-19. UI: `start_at_task`, `prevent_instance_group_fallback` and instance groups on templates and inventories, webhook key display, credential types page, inventory source schedules tab, execution environment and passwords in the ad hoc dialog, node credentials and labels in the workflow editor, EE contents view (promised in PLAN.md).
+19. UI: `prevent_instance_group_fallback` and instance groups on inventories, credential types page, inventory source schedules tab, execution environment and passwords in the ad hoc dialog, node credentials and labels in the workflow editor, EE contents view (promised in PLAN.md).
 20. Plan items not built yet: dark mode, saved views stored per user on the server (per-job event rate caps, S3 and Azure Blob event archives, the Helm chart and the [benchmarks against AWX](benchmarks.md) done, roadmap M6-06, M6-07, M6-10 and M6-11).
 
 ## Authentication, users, organizations, RBAC
@@ -147,7 +147,7 @@ The gaps fall in four groups:
 | Branch override, refspec, submodules, delete on update, clean, update on launch with cache | Yes | Done | |
 | Requirements (roles, collections) | Yes | Done | Installed in the EE at run time, cached by content |
 | Content signature validation | Yes | Done | Each sync checks the `ansible-sign` GPG signature and checksum manifest (`MANIFEST.in` as distlib reads it) as AWX's verification play does, and fails without moving the project's revision. Deliberate difference: `.git` entries never count, so `prune .git` is not needed. As in AWX, job checkouts are not verified |
-| Job template fields, multiple credentials, labels, instance groups, EE | Yes | Done | `MAX_FORKS` not enforced. The playbook is checked against the project unless the project allows branch override, as in AWX |
+| Job template fields, multiple credentials, labels, instance groups, EE | Yes | Done | `MAX_FORKS` is enforced wherever forks are saved or asked for. The playbook is checked against the project unless the project allows branch override, as in AWX. The form has every field (roadmap M7-01): instance groups in order (reordered in place, the list rebuilt when the order changes), `prevent_instance_group_fallback`, `start_at_task`, and the webhook key shown and rotated. `start_at_task` can be asked at launch with awxnext's `ask_start_at_task_on_launch` (AWX has no such prompt) |
 | All 16 `ask_*_on_launch` prompts | Yes | Done | |
 | Launch fields the template does not prompt for | Yes | Done | Deliberate difference: refused with a 400 instead of ignored (`ignored_fields`); `IGNORE_UNPROMPTED_LAUNCH_FIELDS` gives AWX's behaviour. Empty values and the template's own values change nothing and pass (still in `ignored_fields`), so the Terraform provider can update an `aap_job` |
 | `ansible_*` variables at launch (extra vars, survey questions, schedules, ad hoc) | Yes | Done | Deliberate difference: refused, as they set how Ansible connects and runs; `ALLOW_ANSIBLE_VARS_AT_LAUNCH` gives AWX's behaviour. Template, inventory and host variables are not affected |

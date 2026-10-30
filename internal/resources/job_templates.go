@@ -18,6 +18,8 @@ var askFields = []string{
 	"ask_inventory_on_launch", "ask_credential_on_launch", "ask_execution_environment_on_launch",
 	"ask_labels_on_launch", "ask_forks_on_launch", "ask_job_slice_count_on_launch", "ask_timeout_on_launch",
 	"ask_instance_groups_on_launch",
+	// awxnext's: AWX does not prompt for start_at_task.
+	"ask_start_at_task_on_launch",
 }
 
 func askFieldDefs() []*Field {

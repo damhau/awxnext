@@ -17,6 +17,15 @@ export function relationOps(had: number[], want: number[], ordered: boolean): { 
   return { detach: removed, attach: want.filter((id) => !present.has(id)) }
 }
 
+/** list with its item at i moved one place earlier (an ordered list's
+ * "move up"); the first item stays. */
+export function moveEarlier<T>(list: T[], i: number): T[] {
+  if (i <= 0 || i >= list.length) return list
+  const out = [...list]
+  ;[out[i - 1], out[i]] = [out[i], out[i - 1]]
+  return out
+}
+
 /** Applies relationOps to a sub-list such as schedules/5/labels/. */
 export async function syncRelation(path: string, had: number[], want: number[], ordered = false): Promise<void> {
   const { detach, attach } = relationOps(had, want, ordered)

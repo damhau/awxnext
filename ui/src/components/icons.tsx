@@ -45,6 +45,7 @@ const paths: Record<string, string> = {
   logout: 'M6 2.5H3v11h3M10 5l3 3-3 3M13 8H6',
   pause: 'M5 3.5v9M11 3.5v9',
   arrowDown: 'M8 3v10M4 9l4 4 4-4',
+  arrowLeft: 'M13 8H3M7 4L3 8l4 4',
   info: 'M8 14A6 6 0 1 0 8 2a6 6 0 0 0 0 12zM8 7v4M8 5h.01',
   link: 'M6.5 9.5l3-3M7 4.5l1-1a2.8 2.8 0 0 1 4 4l-1 1M9 11.5l-1 1a2.8 2.8 0 0 1-4-4l1-1',
   terminal: 'M2.5 3h11v10h-11zM5 6.5l2 1.5-2 1.5M8.5 10h2.5',

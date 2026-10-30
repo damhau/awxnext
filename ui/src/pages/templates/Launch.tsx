@@ -171,6 +171,7 @@ function LaunchForm({ kind, tpl, info, survey, operator }: { kind: Kind; tpl: Te
     job_slice_count: d.job_slice_count ?? 1,
     job_tags: d.job_tags ?? '',
     skip_tags: d.skip_tags ?? '',
+    start_at_task: d.start_at_task ?? '',
     diff_mode: d.diff_mode ?? false,
     extra_vars: varsText(d.extra_vars ?? ''),
   })
@@ -253,6 +254,7 @@ function LaunchForm({ kind, tpl, info, survey, operator }: { kind: Kind; tpl: Te
     for (const f of ['limit', 'scm_branch', 'job_type', 'verbosity', 'forks', 'timeout', 'job_slice_count', 'diff_mode']) if (asks(f)) payload[f] = fields[f]
     if (asks('tags')) payload.job_tags = fields.job_tags
     if (asks('skip_tags')) payload.skip_tags = fields.skip_tags
+    if (asks('start_at_task')) payload.start_at_task = fields.start_at_task
     Object.assign(payload, passwords)
     try {
       const r = await api.post<{ id: number; type?: string; job?: number; workflow_job?: number }>(`${res}/${tpl.id}/launch/`, payload)
@@ -276,6 +278,14 @@ function LaunchForm({ kind, tpl, info, survey, operator }: { kind: Kind; tpl: Te
       </div>,
     )
   if (asks('credential')) prompts.push(<MultiLookup key="cred" label="Credentials" resource="credentials/" values={credentials} onChange={setCredentials} meta={(c) => c.kind ?? ''} />)
+  if (asks('start_at_task'))
+    prompts.push(
+      <div key="start" className="field">
+        <label htmlFor="start-at">Start at task</label>
+        <input id="start-at" className="input mono" value={fields.start_at_task} onChange={(e) => set('start_at_task', e.target.value)} placeholder="the first task" style={{ maxWidth: 440 }} />
+        <span className="help">Name of the task to start from; empty runs the whole playbook.</span>
+      </div>,
+    )
   if (asks('scm_branch'))
     prompts.push(
       <div key="branch" className="field">
@@ -301,7 +311,7 @@ function LaunchForm({ kind, tpl, info, survey, operator }: { kind: Kind; tpl: Te
       </fieldset>,
     )
   if (asks('execution_environment')) prompts.push(<Lookup key="ee" label="Execution environment" resource="execution_environments/" value={ee} onChange={setEe} placeholder="Default" />)
-  if (asks('instance_groups')) prompts.push(<MultiLookup key="ig" label="Instance groups" resource="instance_groups/" values={igs} onChange={setIgs} />)
+  if (asks('instance_groups')) prompts.push(<MultiLookup key="ig" label="Instance groups" resource="instance_groups/" values={igs} onChange={setIgs} ordered />)
   if (asks('labels')) prompts.push(<MultiLookup key="lab" label="Labels" resource="labels/" values={labels} onChange={setLabels} />)
   for (const [f, label] of [
     ['tags', 'Tags'],

@@ -2,6 +2,7 @@ import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'rea
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml'
 import { api, type Page } from '../api/client'
 import type { Ref } from '../api/types'
+import { moveEarlier } from '../lib/relations'
 import { Icon } from './icons'
 
 export function Field({
@@ -318,6 +319,7 @@ export function MultiLookup({
   meta,
   full,
   order,
+  ordered,
 }: {
   label: ReactNode
   resource: string
@@ -331,11 +333,14 @@ export function MultiLookup({
   meta?: (r: Ref) => ReactNode
   full?: boolean
   order?: string
+  /** The values' order matters (instance groups): numbered, with a move
+   * earlier button. */
+  ordered?: boolean
 }) {
   const id = useId()
   return (
     <Field label={label} error={error} help={help} optional={optional} htmlFor={id} full={full}>
-      <Picker id={id} resource={resource} params={params} placeholder="Add…" display={display} meta={meta} order={order} values={values} onChange={onChange} />
+      <Picker id={id} resource={resource} params={params} placeholder="Add…" display={display} meta={meta} order={order} values={values} onChange={onChange} ordered={ordered} />
     </Field>
   )
 }
@@ -351,6 +356,7 @@ function Picker({
   single,
   onChange,
   order = 'name',
+  ordered,
 }: {
   id: string
   resource: string
@@ -362,6 +368,7 @@ function Picker({
   single?: boolean
   onChange: (v: Ref[]) => void
   order?: string
+  ordered?: boolean
 }) {
   const [q, setQ] = useState('')
   const [open, setOpen] = useState(false)
@@ -411,9 +418,15 @@ function Picker({
     <div className="lookup" ref={box}>
       <div className="lookup-box" onClick={() => box.current?.querySelector('input')?.focus()}>
         {!single &&
-          values.map((v) => (
+          values.map((v, i) => (
             <span key={v.id} className="chip">
+              {ordered && <span className="faint">{i + 1}.</span>}
               {display(v)}
+              {ordered && i > 0 && (
+                <button type="button" aria-label={`Move ${display(v)} earlier`} title="Move earlier" onClick={() => onChange(moveEarlier(values, i))}>
+                  <Icon name="arrowLeft" size={12} />
+                </button>
+              )}
               <button type="button" aria-label={`Remove ${display(v)}`} onClick={() => onChange(values.filter((x) => x.id !== v.id))}>
                 <Icon name="x" size={12} />
               </button>

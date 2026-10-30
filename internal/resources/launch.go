@@ -29,6 +29,7 @@ var promptable = map[string]string{
 	"verbosity": "ask_verbosity_on_launch", "diff_mode": "ask_diff_mode_on_launch", "scm_branch": "ask_scm_branch_on_launch",
 	"execution_environment": "ask_execution_environment_on_launch", "labels": "ask_labels_on_launch", "forks": "ask_forks_on_launch",
 	"job_slice_count": "ask_job_slice_count_on_launch", "timeout": "ask_timeout_on_launch", "instance_groups": "ask_instance_groups_on_launch",
+	"start_at_task": "ask_start_at_task_on_launch",
 }
 
 var passwordKeys = []string{"ssh_password", "ssh_key_unlock", "become_password"}
@@ -365,7 +366,7 @@ func launchInfo(c *Ctx, jt Obj) Obj {
 	defaults := Obj{
 		"extra_vars": jt["extra_vars"], "diff_mode": jt["diff_mode"], "limit": jt["limit"], "job_tags": jt["job_tags"],
 		"skip_tags": jt["skip_tags"], "job_type": jt["job_type"], "verbosity": jt["verbosity"], "scm_branch": jt["scm_branch"],
-		"forks": jt["forks"], "job_slice_count": jt["job_slice_count"], "timeout": jt["timeout"], "credentials": credObjs,
+		"forks": jt["forks"], "job_slice_count": jt["job_slice_count"], "timeout": jt["timeout"], "start_at_task": jt["start_at_task"], "credentials": credObjs,
 		"labels": []Obj{}, "instance_groups": []Obj{},
 	}
 	if inv, ok := api.ID(jt["inventory"]); ok {
@@ -429,6 +430,11 @@ func LaunchJobTemplate(c *Ctx, jt Obj, body Obj, launchType string, ov *LaunchOv
 		}
 	}
 	fe := api.FieldErrors{}
+	if v, ok := accepted["start_at_task"]; ok {
+		if _, isText := v.(string); !isText {
+			fe.Add("start_at_task", "Not a valid string.")
+		}
+	}
 
 	// Inventory.
 	inv := jt["inventory"]
@@ -649,7 +655,7 @@ func LaunchJobTemplate(c *Ctx, jt Obj, body Obj, launchType string, ov *LaunchOv
 		"extra_vars":               vars.PyJSON(base),
 		"job_tags":                 pick("job_tags"),
 		"skip_tags":                pick("skip_tags"),
-		"start_at_task":            jt["start_at_task"],
+		"start_at_task":            pick("start_at_task"),
 		"timeout":                  pick("timeout"),
 		"use_fact_cache":           jt["use_fact_cache"],
 		"force_handlers":           jt["force_handlers"],
