@@ -78,7 +78,7 @@ The gaps fall in four groups:
 15. ~~Relaunch keeps launch-time labels and instance groups; workflow labels passed to nodes; labels and instance group prompts on schedules and nodes~~ (done, roadmap M3-02 and M3-03).
 16. ~~Typed workflow node outputs~~ (done, roadmap M3-04).
 17. ~~Named URLs for credentials and other multi-hop formats, `related.named_url`~~ (done, roadmap M2-10).
-18. Websocket groups `jobs-summary`, `schedules-changed` and `control-limit_reached_<user>` (subscribable, never published).
+18. ~~Websocket groups `jobs-summary`, `schedules-changed` and `control-limit_reached_<user>` (subscribable, never published)~~ (done, roadmap M6-05).
 19. UI: `start_at_task`, `prevent_instance_group_fallback` and instance groups on templates and inventories, webhook key display, credential types page, inventory source schedules tab, execution environment and passwords in the ad hoc dialog, node credentials and labels in the workflow editor, EE contents view (promised in PLAN.md).
 20. Plan items not built yet: per-job event rate caps, S3/Azure Blob event archives, benchmarks, Helm chart, dark mode, saved views stored per user on the server.
 
@@ -192,7 +192,7 @@ The gaps fall in four groups:
 | Instance group policies, `max_forks`, `max_concurrent_jobs` | Yes | Done | AWX's `apply_cluster_membership_policies` (list, then minimums, then percentages) runs when an instance joins, leaves or changes `managed_by_policy`, `hostname` or `capacity_adjustment`, and when a group's policies change. Attaching an instance lists it, detaching unlists it, so an instance the percentage selects comes back, as in AWX; `default` and `controlplane` take every instance and keep their names and policies. Both limits hold on every group, counted on its instances; a job that does not fit goes to the next group, and `default` joins the chain only when nothing else is selected, as AWX's `preferred_instance_groups`. The control task impact (`AWX_CONTROL_NODE_TASK_IMPACT`) counts only for control plane tasks (roadmap M6-01) |
 | Container groups with `pod_spec_override` | Yes | Done | Push-based shim, no log tailing |
 | Job isolation | Yes | Partial | AWX always runs jobs in containers. awxnext's `none` runtime runs them as processes of the server's user: the server's environment is hidden from them, other jobs' files are not (roadmap M6-13) |
-| Websockets | Yes | Partial | Three groups never published |
+| Websockets | Yes | Done | Every AWX group is published, to subscribers on every node: `jobs-summary` once a job's events are stored (with `final_counter`, AWX's EOF), `schedules-changed` when a schedule's next run, start or end moves (created, changed, run by the scheduler), and `control-limit_reached_<user>` when a login beyond `SESSIONS_PER_USER` ends that user's oldest sessions; the UI then signs those tabs out (roadmap M6-05) |
 | Event processing | Yes | Done | Batched COPY into daily partitions, archived after N days |
 | HA, task and dependency manager | Yes | Done | PostgreSQL only, no Redis |
 | `awx-manage` commands | Yes | Partial | `inventory_import` as `awxnext inventory-import`; no instance provisioning commands |

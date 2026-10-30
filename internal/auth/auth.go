@@ -321,10 +321,15 @@ func (a *Auth) StartSession(ctx context.Context, w http.ResponseWriter, r *http.
 		hashToken(sid), uid, csrf, time.Now().Add(age)); err != nil {
 		return err
 	}
-	// SESSIONS_PER_USER: beyond the limit, the oldest sessions end.
+	// SESSIONS_PER_USER: beyond the limit, the oldest sessions end, and
+	// their tabs hear it on AWX's control-limit_reached_<user> group.
 	if n := a.app.Settings.Int(ctx, "SESSIONS_PER_USER"); n > 0 {
-		a.app.DB.Exec(ctx, `DELETE FROM sessions WHERE user_id = $1 AND (expires <= now() OR id NOT IN (
-			SELECT id FROM sessions WHERE user_id = $1 AND expires > now() ORDER BY created DESC LIMIT $2))`, uid, n)
+		a.app.DB.Exec(ctx, "DELETE FROM sessions WHERE user_id = $1 AND expires <= now()", uid)
+		tag, err := a.app.DB.Exec(ctx, `DELETE FROM sessions WHERE user_id = $1 AND id NOT IN (
+			SELECT id FROM sessions WHERE user_id = $1 ORDER BY created DESC LIMIT $2)`, uid, n)
+		if err == nil && tag.RowsAffected() > 0 {
+			api.Broadcast(ctx, a.app.DB, fmt.Sprintf("control-limit_reached_%d", uid), map[string]any{"group_name": "control", "reason": "limit_reached"})
+		}
 	}
 	a.app.DB.Exec(ctx, "UPDATE users SET last_login = now() WHERE id = $1", uid)
 	setCookie(w, r, SessionCookie, sid, true, age)

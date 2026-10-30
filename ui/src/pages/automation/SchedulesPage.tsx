@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router'
-import { useList } from '../../api/hooks'
+import { useInvalidate, useList } from '../../api/hooks'
+import { useLive } from '../../api/live'
 import type { Any } from '../../api/types'
 import { useOrg } from '../../app/context'
 import { Icon } from '../../components/icons'
@@ -44,6 +45,9 @@ export function SchedulesPage() {
     page_size: ls.pageSize,
   }
   const list = useList<Any>('schedules/', params)
+  // Next runs move as the scheduler runs them and as schedules change.
+  const invalidate = useInvalidate()
+  useLive({ schedules: ['changed'] }, () => invalidate('schedules'))
   const enabledFilter = getTerm(ls.q, 'enabled')
 
   const columns: Column<Any>[] = [

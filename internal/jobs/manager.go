@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"runtime/debug"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -194,7 +195,7 @@ func (m *Manager) listenOnce(ctx context.Context) error {
 	}
 	conn := pc.Hijack()
 	defer conn.Close(context.Background())
-	for _, ch := range []string{chDispatch, chWork, chCancel, chStatus, chEvents} {
+	for _, ch := range []string{chDispatch, chWork, chCancel, chStatus, chEvents, api.GroupChannel} {
 		if _, err := conn.Exec(ctx, "LISTEN "+ch); err != nil {
 			return err
 		}
@@ -220,6 +221,10 @@ func (m *Manager) listenOnce(ctx context.Context) error {
 			m.Hub.fromNotification(n.Channel, n.Payload, m.Node)
 		case chEvents:
 			m.relayEvents(ctx, n.Payload)
+		case api.GroupChannel:
+			if group, body, ok := strings.Cut(n.Payload, "|"); ok {
+				m.Hub.Publish(group, []byte(body))
+			}
 		}
 	}
 }

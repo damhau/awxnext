@@ -300,8 +300,16 @@ func registerSchedules() {
 			data["dtstart"], data["dtend"], data["next_run"] = dtstart, dtend, next
 			return nil
 		},
-		AfterCreate: func(c *Ctx, obj Obj) error { return refreshNextJobRun(c, obj["unified_job_template"]) },
-		AfterUpdate: func(c *Ctx, old, obj Obj) error { return refreshNextJobRun(c, obj["unified_job_template"]) },
+		AfterCreate: func(c *Ctx, obj Obj) error {
+			schedulesChanged(c, obj["id"])
+			return refreshNextJobRun(c, obj["unified_job_template"])
+		},
+		AfterUpdate: func(c *Ctx, old, obj Obj) error {
+			if fmt.Sprint(old["next_run"], old["dtstart"], old["dtend"]) != fmt.Sprint(obj["next_run"], obj["dtstart"], obj["dtend"]) {
+				schedulesChanged(c, obj["id"])
+			}
+			return refreshNextJobRun(c, obj["unified_job_template"])
+		},
 		AfterDelete: func(c *Ctx, obj Obj) error { return refreshNextJobRun(c, obj["unified_job_template"]) },
 		Serialize: func(c *Ctx, o Obj) {
 			o["timezone"], o["until"] = "", ""
@@ -539,6 +547,12 @@ func ScheduleTick(ctx context.Context, m *jobs.Manager) {
 	}
 }
 
+// schedulesChanged is AWX's schedules-changed websocket message, sent when
+// a schedule's next run, start or end moves.
+func schedulesChanged(c *Ctx, id any) {
+	api.Broadcast(c, c.DB(), "schedules-changed", Obj{"id": id, "group_name": "schedules"})
+}
+
 func runSchedule(c *Ctx, id int64) error {
 	// Advance next_run first so a failing launch is not retried every tick.
 	var rule string
@@ -558,6 +572,7 @@ func runSchedule(c *Ctx, id int64) error {
 		if _, err := c.DB().Exec(c, "UPDATE schedules SET next_run = $2 WHERE id = $1", id, next); err != nil {
 			return err
 		}
+		schedulesChanged(c, id)
 		return refreshNextJobRun(c, ujt)
 	})
 	if err != nil || rule == "" {

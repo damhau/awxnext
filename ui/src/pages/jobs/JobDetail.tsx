@@ -24,8 +24,9 @@ export function JobDetail() {
   const path = jobApi(type, jid)
   const qc = useQueryClient()
   const job = useObject<Job>(path, { refetchInterval: (q) => (q.state.data && active(q.state.data.status) ? 10_000 : false) })
-  useLive({ jobs: ['status_changed'] }, (m) => {
-    if (m.unified_job_id === jid) qc.invalidateQueries({ queryKey: [path] })
+  // status_changed as it runs; summary once all its events are stored.
+  useLive({ jobs: ['status_changed', 'summary'] }, (m) => {
+    if (m.unified_job_id === jid) qc.invalidateQueries({ predicate: (q) => typeof q.queryKey[0] === 'string' && q.queryKey[0].startsWith(path) })
   })
   if (type === 'workflow_approval') return <Navigate to="/approvals" replace />
   if (job.isPending) return <div className="page"><Loading /></div>

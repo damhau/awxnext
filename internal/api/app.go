@@ -260,3 +260,17 @@ func SQLLiteral(v any) string {
 	}
 	return SQLLiteral(fmt.Sprint(v))
 }
+
+// GroupChannel carries websocket messages to every node, as "group|json".
+const GroupChannel = "awx_group"
+
+// Broadcast sends a websocket message to the subscribers of a group
+// ("jobs-summary", "schedules-changed") on every node; in a transaction,
+// when it commits.
+func Broadcast(ctx context.Context, db DBTX, group string, msg any) {
+	b, err := json.Marshal(msg)
+	if err != nil {
+		return
+	}
+	db.Exec(ctx, "SELECT pg_notify($1, $2)", GroupChannel, group+"|"+string(b))
+}

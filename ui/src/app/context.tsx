@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { api, ApiError, getAll, onUnauthorized, type Page } from '../api/client'
 import type { Me, Ref } from '../api/types'
-import { live } from '../api/live'
+import { live, useLive } from '../api/live'
 import { useStored } from '../lib/storage'
 import { Login } from '../pages/Login'
 
@@ -27,6 +27,7 @@ export function useMe(): Me {
 export function SessionGate({ children }: { children: ReactNode }) {
   const qc = useQueryClient()
   const [expired, setExpired] = useState(false)
+  const [replaced, setReplaced] = useState(false)
   const me = useQuery({
     queryKey: ['me'],
     queryFn: () => api.get<Page<Me>>('me/').then((r) => r.results[0]),
@@ -34,6 +35,17 @@ export function SessionGate({ children }: { children: ReactNode }) {
     staleTime: 5 * 60_000,
   })
   useEffect(() => onUnauthorized(() => setExpired(true)), [])
+  // SESSIONS_PER_USER: a login elsewhere ended the user's oldest sessions;
+  // tabs of a session that still works stay.
+  useLive(me.data ? { control: [`limit_reached_${me.data.id}`] } : null, (m) => {
+    if (m.reason !== 'limit_reached') return
+    api.get('me/').catch((e) => {
+      if (e instanceof ApiError && e.status === 401) {
+        setReplaced(true)
+        setExpired(true)
+      }
+    })
+  })
   const logout = async () => {
     await api.post('/api/logout/').catch(() => {})
     live.stop()
@@ -46,8 +58,10 @@ export function SessionGate({ children }: { children: ReactNode }) {
     return (
       <Login
         expired={expired && !!me.data}
+        replaced={replaced}
         onDone={async () => {
           setExpired(false)
+          setReplaced(false)
           await qc.invalidateQueries()
         }}
       />

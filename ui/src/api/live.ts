@@ -125,10 +125,15 @@ class Live {
   }
 }
 
-function matches(groups: Groups, m: LiveMessage): boolean {
+/**
+ * Whether a message is for a subscription. jobs (status_changed, summary),
+ * schedules (changed) and control (limit_reached_<user>) are subscribed by
+ * event, the server sending only those; the others by object id.
+ */
+export function matches(groups: Groups, m: LiveMessage): boolean {
   const ids = groups[m.group_name]
   if (!ids) return false
-  if (m.group_name === 'jobs') return true
+  if (m.group_name === 'jobs' || m.group_name === 'schedules' || m.group_name === 'control') return true
   const id = m.job ?? m.project_update ?? m.inventory_update ?? m.ad_hoc_command ?? m.system_job ?? m.workflow_job_id ?? m.unified_job_id
   return ids.some((x) => String(x) === String(id))
 }

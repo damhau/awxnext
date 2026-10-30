@@ -4,7 +4,7 @@ import { api } from '../api/client'
 import { BrandMark } from '../components/ui'
 import { ssoLogins, type Backend } from '../lib/sso'
 
-export function Login({ onDone, expired }: { onDone: () => void; expired?: boolean }) {
+export function Login({ onDone, expired, replaced }: { onDone: () => void; expired?: boolean; replaced?: boolean }) {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   // A failed single sign-on comes back with ?error=.
@@ -52,7 +52,11 @@ export function Login({ onDone, expired }: { onDone: () => void; expired?: boole
           <h1 id="login-title" style={{ fontSize: 18 }}>
             {expired ? 'Your session ended' : 'Sign in'}
           </h1>
-          {expired && <p className="subtitle">Sign in again to continue where you were.</p>}
+          {expired && (
+            <p className="subtitle">
+              {replaced ? 'You signed in elsewhere, beyond the sessions allowed per user. ' : ''}Sign in again to continue where you were.
+            </p>
+          )}
         </div>
         {sso.length > 0 && (
           <>

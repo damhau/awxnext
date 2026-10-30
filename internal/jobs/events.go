@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/damhau/awxnext/internal/api"
 	"github.com/damhau/awxnext/internal/logship"
 	"github.com/damhau/awxnext/internal/metrics"
 	"github.com/jackc/pgx/v5"
@@ -227,8 +228,11 @@ func (o *Output) Close() error {
 	o.mu.Lock()
 	total := o.total
 	err := o.err
+	final := o.counter
 	o.mu.Unlock()
 	o.db.Exec(ctx, "UPDATE unified_jobs SET emitted_events = $2, event_processing_finished = true WHERE id = $1", o.jobID, total)
+	// AWX's jobs-summary, sent when a job's output ends (its EOF event).
+	api.Broadcast(ctx, o.db, "jobs-summary", map[string]any{"group_name": "jobs", "unified_job_id": o.jobID, "final_counter": final})
 	return err
 }
 
