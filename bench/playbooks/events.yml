@@ -1,0 +1,8 @@
+# One task looping over `count` items: an event per item, as fast as
+# ansible-runner reports them (awxbench's event ingestion).
+- hosts: all
+  gather_facts: false
+  tasks:
+    - ansible.builtin.debug:
+        msg: "event {{ item }}"
+      loop: "{{ range(count | default(2000) | int) | list }}"

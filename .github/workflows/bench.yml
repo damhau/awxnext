@@ -1,0 +1,103 @@
+# awxnext against AWX 24.6.1 on the same runner: both in one kind cluster,
+# AWX from its operator, awxnext from the Helm chart, the jobs of both in
+# container group pods with the same execution environment. awxbench
+# measures one after the other; the table goes to the job summary
+# (docs/benchmarks.md has the published run).
+name: bench
+
+on:
+  workflow_dispatch:
+    inputs:
+      hosts:
+        description: hosts in the listed inventory
+        default: "10000"
+      events:
+        description: events of the event job
+        default: "5000"
+      launches:
+        description: small jobs launched
+        default: "50"
+
+jobs:
+  bench:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: azure/setup-helm@v4
+      - uses: helm/kind-action@v1
+        with:
+          cluster_name: bench
+      - name: runner
+        run: |
+          {
+            echo "## Runner"
+            echo
+            echo "- $(nproc) CPUs, $(free -g | awk '/Mem:/ {print $2}') GiB of memory ($(lscpu | sed -n 's/^Model name: *//p'))"
+            echo
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: AWX 24.6.1 (awx-operator 2.19.1)
+        run: |
+          mkdir -p /tmp/awx && cd /tmp/awx
+          cat > kustomization.yaml <<'EOF'
+          apiVersion: kustomize.config.k8s.io/v1beta1
+          kind: Kustomization
+          resources:
+            - github.com/ansible/awx-operator/config/default?ref=2.19.1
+          images:
+            - name: quay.io/ansible/awx-operator
+              newTag: 2.19.1
+          namespace: awx
+          EOF
+          kubectl create namespace awx
+          kubectl apply -k .
+          kubectl -n awx rollout status deployment/awx-operator-controller-manager --timeout 10m
+          cat <<'EOF' | kubectl apply -f -
+          apiVersion: awx.ansible.com/v1beta1
+          kind: AWX
+          metadata:
+            name: awx
+            namespace: awx
+          spec:
+            service_type: clusterip
+          EOF
+          for i in $(seq 1 120); do kubectl -n awx get deployment awx-task >/dev/null 2>&1 && break; sleep 10; done
+          kubectl -n awx rollout status deployment/awx-web --timeout 20m
+          kubectl -n awx rollout status deployment/awx-task --timeout 20m
+      - name: awxnext (Helm chart)
+        run: |
+          docker build --target all-in-one -t awxnext:bench .
+          kind load docker-image awxnext:bench --name bench
+          helm install awxnext deploy/helm/awxnext --namespace awxnext --create-namespace \
+            --set image.repository=awxnext --set image.tag=bench --set image.pullPolicy=Never \
+            --set defaultExecutionEnvironment=quay.io/ansible/awx-ee:24.6.1 --wait --timeout 10m
+      - name: measure
+        run: |
+          go build -o /tmp/awxbench ./cmd/awxbench
+          kubectl -n awx port-forward svc/awx-service 8043:80 > /tmp/pf-awx.log 2>&1 &
+          kubectl -n awxnext port-forward svc/awxnext 8052:8052 > /tmp/pf-awxnext.log 2>&1 &
+          sleep 5
+          args="--hosts ${{ inputs.hosts }} --events ${{ inputs.events }} --launches ${{ inputs.launches }} --container-group --branch ${GITHUB_REF_NAME}"
+          AWXBENCH_PASSWORD="$(kubectl -n awx get secret awx-admin-password -o jsonpath='{.data.password}' | base64 -d)" \
+            /tmp/awxbench run --url http://127.0.0.1:8043 $args --out awx.json
+          AWXBENCH_PASSWORD="$(kubectl -n awxnext get secret awxnext-secrets -o jsonpath='{.data.admin-password}' | base64 -d)" \
+            /tmp/awxbench run --url http://127.0.0.1:8052 $args --out awxnext.json
+          {
+            echo "## Results"
+            echo
+            /tmp/awxbench table "AWX 24.6.1=awx.json" "awxnext=awxnext.json"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bench
+          path: "*.json"
+      - name: diagnostics
+        if: failure()
+        run: |
+          kubectl get pods -A || true
+          kubectl -n awx logs deployment/awx-task --all-containers --tail 200 || true
+          kubectl -n awxnext logs deployment/awxnext --all-containers --tail 200 || true
