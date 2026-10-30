@@ -13,6 +13,7 @@ import { humanize } from './common'
 import { grantReason, grantTarget, testerClaims, type MappedGrant } from '../../lib/mapping'
 import { ldapPrefix, ldapServer, ldapServerOn, ldapServerOrder } from '../../lib/ldapSettings'
 import { aggregatorTarget, loggingSection, loggingSections, testOutcome } from '../../lib/logging'
+import { archiveCredentialParams, compareSettings, jobsSection, jobsSections } from '../../lib/jobSettings'
 
 interface Category {
   slug: string
@@ -95,12 +96,7 @@ function sectionOf(cat: string, key: string): string {
   if (cat === 'ldap') return ldapServer(key)
   if (cat === 'logging') return loggingSection(key)
   if (cat === 'saml') return /_MAP$|_ATTR$|FLAGS/.test(key) ? 'Organizations, teams and flags' : /IDPS|SECURITY|EXTRA_DATA/.test(key) ? 'Identity providers' : 'Service provider'
-  if (cat === 'jobs') {
-    if (/TIMEOUT/.test(key)) return 'Timeouts'
-    if (/GALAXY|COLLECTIONS|ROLES/.test(key)) return 'Content'
-    if (/ISOLATION|MOUNT|TASK_ENV|CALLBACK/.test(key)) return 'Execution'
-    return 'General'
-  }
+  if (cat === 'jobs') return jobsSection(key)
   return ''
 }
 
@@ -109,7 +105,7 @@ const sectionOrder: Record<string, string[]> = {
   authentication: ['Sessions and accounts', 'Local passwords', 'Organization and team maps'],
   ldap: ldapServerOrder,
   saml: ['Service provider', 'Identity providers', 'Organizations, teams and flags'],
-  jobs: ['General', 'Timeouts', 'Content', 'Execution'],
+  jobs: jobsSections,
   logging: loggingSections,
 }
 
@@ -158,7 +154,7 @@ function CategoryForm({ cat, editable }: { cat: string; editable: boolean }) {
     const get = meta.data?.actions?.GET ?? {}
     return Object.entries(get)
       .map(([k, m]) => ({ key: k, meta: m, writable: editable && k in put }))
-      .sort((a, b) => a.key.localeCompare(b.key))
+      .sort((a, b) => compareSettings(a.key, b.key))
   }, [meta.data, editable])
   if (meta.error || values.error) return <ErrorNote error={meta.error ?? values.error} />
   if (!meta.data || !values.data) return <Loading />
@@ -217,6 +213,7 @@ function CategoryForm({ cat, editable }: { cat: string; editable: boolean }) {
                 disabled={!f.writable}
                 error={errors[f.key]}
                 prefix={cat === 'ldap' ? ldapPrefix(f.key) : undefined}
+                draft={draft}
               />
             ))}
           </div>
@@ -287,6 +284,7 @@ function SettingField({
   disabled,
   error,
   prefix,
+  draft,
 }: {
   k: string
   meta: FieldMeta
@@ -296,6 +294,8 @@ function SettingField({
   disabled: boolean
   error?: string
   prefix?: string
+  /** The category's values being edited (fields that depend on others). */
+  draft?: Values
 }) {
   const label = meta.label && meta.label !== k ? meta.label : humanize(k, prefix)
   const isDefault = JSON.stringify(value) === JSON.stringify(meta.default ?? null) || (value === '' && (meta.default ?? '') === '')
@@ -316,6 +316,8 @@ function SettingField({
     </>
   )
   const id = `s-${k}`
+  if (k === 'JOB_EVENTS_ARCHIVE_CREDENTIAL')
+    return <ArchiveCredentialField label={label} help={help} error={error} value={value as number | null} onChange={onChange} disabled={disabled} storage={draft?.JOB_EVENTS_ARCHIVE_STORAGE} />
   switch (meta.type) {
     case 'boolean':
       return (
@@ -435,6 +437,25 @@ function JsonField({ id, label, help, error, value, onChange, disabled }: { id: 
       />
     </Field>
   )
+}
+
+function ArchiveCredentialField({ label, help, error, value, onChange, disabled, storage }: {
+  label: string
+  help: ReactNode
+  error?: string
+  value: number | null
+  onChange: (v: unknown) => void
+  disabled: boolean
+  storage: unknown
+}) {
+  const cred = useObject<Ref>(value ? `credentials/${value}/` : null)
+  if (disabled)
+    return (
+      <Field label={label} help={help}>
+        <span>{cred.data?.name ?? (value ? `#${value}` : 'Not set')}</span>
+      </Field>
+    )
+  return <Lookup label={label} help={help} error={error} optional resource="credentials/" params={archiveCredentialParams(storage)} value={cred.data ?? null} onChange={(r) => onChange(r?.id ?? null)} />
 }
 
 function EEField({ label, help, value, onChange, disabled }: { label: string; help: ReactNode; value: number | null; onChange: (v: unknown) => void; disabled: boolean }) {

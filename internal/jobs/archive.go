@@ -13,12 +13,33 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/damhau/awxnext/internal/blob"
 )
 
 // Job events of finished jobs leave the database after JOB_EVENTS_HOT_DAYS:
 // each job's events become one gzip'd JSON-lines archive and the day's
 // partition is dropped. Viewing an archived job's output restores its events
-// into the default partition for a day.
+// into the default partition for a day. Archives are kept in the database,
+// or in S3 or Azure Blob Storage (JOB_EVENTS_ARCHIVE_STORAGE).
+
+// OpenArchiveStore opens the object storage of a kind ("s3", "azure_blob")
+// from the JOB_EVENTS_ARCHIVE_* settings; set by the server.
+var OpenArchiveStore func(ctx context.Context, kind string) (blob.Store, error)
+
+// archiveTarget is where new archives go: nil for the database.
+type archiveTarget struct {
+	kind   string
+	store  blob.Store
+	prefix string
+}
+
+func openStore(ctx context.Context, kind string) (blob.Store, error) {
+	if OpenArchiveStore == nil {
+		return nil, fmt.Errorf("no %s archive storage", kind)
+	}
+	return OpenArchiveStore(ctx, kind)
+}
 
 var eventColumns = []string{"id", "job_id", "job_created", "created", "modified", "counter", "event", "event_data", "failed", "changed",
 	"uuid", "parent_uuid", "host_id", "host_name", "playbook", "play", "role", "task", "stdout", "start_line", "end_line", "verbosity"}
@@ -64,6 +85,16 @@ func (m *Manager) ArchiveEvents(ctx context.Context, hotDays int) error {
 	}
 	now := time.Now().UTC()
 	cutoff := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC).AddDate(0, 0, -hotDays)
+	var target *archiveTarget
+	if kind := m.App.Settings.String(ctx, "JOB_EVENTS_ARCHIVE_STORAGE"); kind != "" && kind != "database" {
+		store, err := openStore(ctx, kind)
+		if err != nil {
+			return fmt.Errorf("job event archive storage: %w", err)
+		}
+		// Keys are per install, so installs can share a bucket.
+		target = &archiveTarget{kind: kind, store: store,
+			prefix: m.App.Settings.String(ctx, "JOB_EVENTS_ARCHIVE_PREFIX") + m.App.Settings.String(ctx, "INSTALL_UUID") + "/"}
+	}
 	rows, err := m.DB().Query(ctx, `SELECT c.relname FROM pg_inherits i JOIN pg_class c ON c.oid = i.inhrelid
 		JOIN pg_class p ON p.oid = i.inhparent WHERE p.relname = 'job_events' ORDER BY c.relname`)
 	if err != nil {
@@ -85,20 +116,21 @@ func (m *Manager) ArchiveEvents(ctx context.Context, hotDays int) error {
 		if err != nil || day.AddDate(0, 0, 1).After(cutoff) {
 			continue
 		}
-		if err := m.archivePartition(ctx, name, day, day.AddDate(0, 0, 1)); err != nil {
+		if err := m.archivePartition(ctx, name, day, day.AddDate(0, 0, 1), target); err != nil {
 			return fmt.Errorf("archiving %s: %w", name, err)
 		}
 	}
-	if err := m.archiveDefault(ctx, cutoff); err != nil {
+	if err := m.archiveDefault(ctx, cutoff, target); err != nil {
 		return err
 	}
+	m.deleteArchives(ctx)
 	// Restored copies are dropped again after a day.
 	_, err = m.DB().Exec(ctx, `WITH r AS (UPDATE job_event_archives SET restored = NULL WHERE restored < now() - interval '1 day' RETURNING job_id)
 		DELETE FROM job_events WHERE job_id IN (SELECT job_id FROM r)`)
 	return err
 }
 
-func (m *Manager) archivePartition(ctx context.Context, name string, from, to time.Time) error {
+func (m *Manager) archivePartition(ctx context.Context, name string, from, to time.Time, target *archiveTarget) error {
 	tx, err := m.DB().Begin(ctx)
 	if err != nil {
 		return err
@@ -117,7 +149,7 @@ func (m *Manager) archivePartition(ctx context.Context, name string, from, to ti
 		return err
 	}
 	for _, id := range ids {
-		if err := archiveJob(ctx, tx, name, id); err != nil {
+		if err := archiveJob(ctx, tx, name, id, target); err != nil {
 			return err
 		}
 	}
@@ -129,7 +161,7 @@ func (m *Manager) archivePartition(ctx context.Context, name string, from, to ti
 }
 
 // archiveDefault archives old events that landed in the default partition.
-func (m *Manager) archiveDefault(ctx context.Context, cutoff time.Time) error {
+func (m *Manager) archiveDefault(ctx context.Context, cutoff time.Time, target *archiveTarget) error {
 	ids, err := collectIDs(ctx, m.DB(), `SELECT DISTINCT e.job_id FROM job_events_default e JOIN unified_jobs j ON j.id = e.job_id
 		WHERE e.job_created < $1 AND j.status IN `+finalStatuses+`
 		AND NOT EXISTS (SELECT 1 FROM job_event_archives a WHERE a.job_id = e.job_id) LIMIT 1000`, cutoff)
@@ -141,7 +173,7 @@ func (m *Manager) archiveDefault(ctx context.Context, cutoff time.Time) error {
 		if err != nil {
 			return err
 		}
-		if err := archiveJob(ctx, tx, "job_events_default", id); err != nil {
+		if err := archiveJob(ctx, tx, "job_events_default", id, target); err != nil {
 			tx.Rollback(ctx)
 			return err
 		}
@@ -154,6 +186,44 @@ func (m *Manager) archiveDefault(ctx context.Context, cutoff time.Time) error {
 		}
 	}
 	return nil
+}
+
+// deleteArchives removes the objects of archives whose job was deleted.
+func (m *Manager) deleteArchives(ctx context.Context) {
+	rows, err := m.DB().Query(ctx, "SELECT id, storage, location FROM job_event_archive_deletions ORDER BY id LIMIT 1000")
+	if err != nil {
+		return
+	}
+	type gone struct {
+		id                int64
+		storage, location string
+	}
+	var list []gone
+	for rows.Next() {
+		var g gone
+		if rows.Scan(&g.id, &g.storage, &g.location) == nil {
+			list = append(list, g)
+		}
+	}
+	rows.Close()
+	stores := map[string]blob.Store{}
+	for _, g := range list {
+		store, ok := stores[g.storage]
+		if !ok {
+			if store, err = openStore(ctx, g.storage); err != nil {
+				slog.Warn("job event archive storage", "storage", g.storage, "err", err)
+			}
+			stores[g.storage] = store
+		}
+		if store == nil {
+			continue
+		}
+		if err := store.Delete(ctx, g.location); err != nil {
+			slog.Warn("deleting a job event archive", "location", g.location, "err", err)
+			continue
+		}
+		m.DB().Exec(ctx, "DELETE FROM job_event_archive_deletions WHERE id = $1", g.id)
+	}
 }
 
 type querier interface {
@@ -177,8 +247,14 @@ func collectIDs(ctx context.Context, q querier, sql string, args ...any) ([]int6
 	return ids, rows.Err()
 }
 
-// archiveJob stores one job's events from table as a compressed archive.
-func archiveJob(ctx context.Context, tx pgx.Tx, table string, jobID int64) error {
+// archiveJob stores one job's events from table as a compressed archive, in
+// the database or, with a target, in object storage.
+func archiveJob(ctx context.Context, tx pgx.Tx, table string, jobID int64, target *archiveTarget) error {
+	// Events of deleted jobs are dropped with the partition.
+	var exists bool
+	if err := tx.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM unified_jobs WHERE id = $1)", jobID).Scan(&exists); err != nil || !exists {
+		return err
+	}
 	rows, err := tx.Query(ctx, fmt.Sprintf(`SELECT id, job_id, job_created, created, modified, counter, event, event_data, failed, changed,
 		uuid, parent_uuid, host_id, host_name, playbook, play, role, task, stdout, start_line, end_line, verbosity
 		FROM %s WHERE job_id = $1 ORDER BY counter, id`, pgx.Identifier{table}.Sanitize()), jobID)
@@ -211,10 +287,17 @@ func archiveJob(ctx context.Context, tx pgx.Tx, table string, jobID int64) error
 	if err := zw.Close(); err != nil {
 		return err
 	}
-	// Events of deleted jobs are dropped with the partition.
-	_, err = tx.Exec(ctx, `INSERT INTO job_event_archives (job_id, job_created, event_count, data)
-		SELECT $1, $2, $3, $4 WHERE EXISTS (SELECT 1 FROM unified_jobs WHERE id = $1) ON CONFLICT (job_id) DO NOTHING`,
-		jobID, jobCreated, n, buf.Bytes())
+	storage, location, data := "database", "", buf.Bytes()
+	if target != nil {
+		loc, err := target.store.Put(ctx, fmt.Sprintf("%s%d.jsonl.gz", target.prefix, jobID), data)
+		if err != nil {
+			return fmt.Errorf("storing the archive of job %d: %w", jobID, err)
+		}
+		storage, location, data = target.kind, loc, nil
+	}
+	_, err = tx.Exec(ctx, `INSERT INTO job_event_archives (job_id, job_created, event_count, data, storage, location)
+		SELECT $1, $2, $3, $4, $5, $6 WHERE EXISTS (SELECT 1 FROM unified_jobs WHERE id = $1) ON CONFLICT (job_id) DO NOTHING`,
+		jobID, jobCreated, n, data, storage, location)
 	return err
 }
 
@@ -231,8 +314,19 @@ func RestoreEvents(ctx context.Context, db *pgxpool.Pool, jobID int64) error {
 	}
 	defer tx.Rollback(ctx)
 	var data []byte
-	if err := tx.QueryRow(ctx, "SELECT data FROM job_event_archives WHERE job_id = $1 AND restored IS NULL FOR UPDATE", jobID).Scan(&data); err != nil {
+	var storage, location string
+	if err := tx.QueryRow(ctx, "SELECT data, storage, location FROM job_event_archives WHERE job_id = $1 AND restored IS NULL FOR UPDATE", jobID).
+		Scan(&data, &storage, &location); err != nil {
 		return nil // restored concurrently
+	}
+	if storage != "database" {
+		store, err := openStore(ctx, storage)
+		if err != nil {
+			return fmt.Errorf("job event archive storage: %w", err)
+		}
+		if data, err = store.Get(ctx, location); err != nil {
+			return fmt.Errorf("reading the archive of job %d: %w", jobID, err)
+		}
 	}
 	zr, err := gzip.NewReader(bytes.NewReader(data))
 	if err != nil {

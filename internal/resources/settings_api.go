@@ -2,6 +2,7 @@ package resources
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -86,6 +87,12 @@ func installSettings(app *api.App) {
 		}
 		if cat == "logging" || cat == "all" {
 			if err := checkLogging(c, data); err != nil {
+				api.WriteError(w, err)
+				return
+			}
+		}
+		if cat == "jobs" || cat == "all" {
+			if err := checkArchiveCredential(c, data); err != nil {
 				api.WriteError(w, err)
 				return
 			}
@@ -236,6 +243,24 @@ func checkLogging(c *Ctx, data Obj) error {
 	}
 	if len(errs) > 0 {
 		return &api.Error{Status: 400, Body: Obj{"non_field_errors": []string{strings.Join(errs, "\n")}}}
+	}
+	return nil
+}
+
+// checkArchiveCredential: the job event archive credential is an Amazon Web
+// Services or Microsoft Azure Resource Manager credential.
+func checkArchiveCredential(c *Ctx, data Obj) error {
+	v, ok := data["JOB_EVENTS_ARCHIVE_CREDENTIAL"]
+	if !ok || v == nil {
+		return nil
+	}
+	id, _ := api.ID(v)
+	var ns *string
+	if err := c.DB().QueryRow(c, "SELECT ct.namespace FROM credentials cr JOIN credential_types ct ON ct.id = cr.credential_type_id WHERE cr.id = $1", id).Scan(&ns); err != nil {
+		return api.FieldError("JOB_EVENTS_ARCHIVE_CREDENTIAL", fmt.Sprintf("Invalid pk \"%d\" - object does not exist.", id))
+	}
+	if ns == nil || (*ns != "aws" && *ns != "azure_rm") {
+		return api.FieldError("JOB_EVENTS_ARCHIVE_CREDENTIAL", "Choose an Amazon Web Services or Microsoft Azure Resource Manager credential.")
 	}
 	return nil
 }

@@ -92,6 +92,12 @@ by a system administrator, as in AWX.
 | `AWXNEXT_SHIM_TOKEN` |  | Set by the control plane in container group job pods. |
 | `AWXNEXT_SHIM_INSECURE` |  | Container group job pods: skip TLS verification of the control plane (testing). |
 
+### Job event archives
+
+| Variable | Default | |
+|---|---|---|
+| `AZURE_STORAGE_CONNECTION_STRING` |  | Job event archives in Azure Blob Storage without a credential: the account's connection string (else Azure's default chain). For S3 without a credential, AWS's own variables (AWS_ACCESS_KEY_ID, AWS_REGION, ...). |
+
 ### Observability
 
 | Variable | Default | |
@@ -154,6 +160,12 @@ clients and imports keep working.
 | `MAX_FORKS` | integer | `200` | Most forks a template, launch, schedule, workflow node or ad hoc command may ask for. 0: no limit. |
 | `PROJECT_ALLOW_FILE_URLS` | boolean | `false` | Allow git projects to use file:// URLs or local paths on the control plane. Only enable for trusted single-tenant installs. |
 | `JOB_EVENTS_HOT_DAYS` | integer | `14` | Days job events stay in the database before they are served from the compressed archive. |
+| `JOB_EVENTS_ARCHIVE_STORAGE` | choice | `"database"` | Where new job event archives are kept. Archives already made stay readable where they are. |
+| `JOB_EVENTS_ARCHIVE_BUCKET` | string | `""` | The S3 bucket or the Azure Blob Storage container of the archives. It must exist. |
+| `JOB_EVENTS_ARCHIVE_PREFIX` | string | `"job-events/"` | Prepended to the archives' keys, followed by the install's INSTALL_UUID, so installs can share a bucket. |
+| `JOB_EVENTS_ARCHIVE_ENDPOINT` | string | `""` | For S3, an S3-compatible service (https://minio.example.com:9000), empty for AWS. For Azure, the account's blob endpoint (https://<account>.blob.core.windows.net/). |
+| `JOB_EVENTS_ARCHIVE_REGION` | string | `""` | The S3 region; empty for the environment's (AWS_REGION), else us-east-1. |
+| `JOB_EVENTS_ARCHIVE_CREDENTIAL` | integer | null | An Amazon Web Services (access key) or Microsoft Azure Resource Manager (client ID and secret) credential. Empty: the environment's (AWS's default chain; AZURE_STORAGE_CONNECTION_STRING, or Azure's default chain: environment, workload identity, managed identity). |
 | `AWX_COLLECTIONS_ENABLED_ON_PROJECT_SYNC` | boolean | `true` | *No effect.* requirements are installed when a job starts, under AWX_ROLES_ENABLED and AWX_COLLECTIONS_ENABLED. |
 | `SESSION_COOKIE_AGE` | integer | `1800` | Seconds without activity after which a session ends (at least 60). |
 | `SESSIONS_PER_USER` | integer | `-1` | Logging in beyond this number ends the user's oldest session. -1: no limit. |
@@ -654,6 +666,12 @@ clients and imports keep working.
 | `MAX_FORKS` | integer | `200` | Most forks a template, launch, schedule, workflow node or ad hoc command may ask for. 0: no limit. |
 | `PROJECT_ALLOW_FILE_URLS` | boolean | `false` | Allow git projects to use file:// URLs or local paths on the control plane. Only enable for trusted single-tenant installs. |
 | `JOB_EVENTS_HOT_DAYS` | integer | `14` | Days job events stay in the database before they are served from the compressed archive. |
+| `JOB_EVENTS_ARCHIVE_STORAGE` | choice | `"database"` | Where new job event archives are kept. Archives already made stay readable where they are. |
+| `JOB_EVENTS_ARCHIVE_BUCKET` | string | `""` | The S3 bucket or the Azure Blob Storage container of the archives. It must exist. |
+| `JOB_EVENTS_ARCHIVE_PREFIX` | string | `"job-events/"` | Prepended to the archives' keys, followed by the install's INSTALL_UUID, so installs can share a bucket. |
+| `JOB_EVENTS_ARCHIVE_ENDPOINT` | string | `""` | For S3, an S3-compatible service (https://minio.example.com:9000), empty for AWS. For Azure, the account's blob endpoint (https://<account>.blob.core.windows.net/). |
+| `JOB_EVENTS_ARCHIVE_REGION` | string | `""` | The S3 region; empty for the environment's (AWS_REGION), else us-east-1. |
+| `JOB_EVENTS_ARCHIVE_CREDENTIAL` | integer | null | An Amazon Web Services (access key) or Microsoft Azure Resource Manager (client ID and secret) credential. Empty: the environment's (AWS's default chain; AZURE_STORAGE_CONNECTION_STRING, or Azure's default chain: environment, workload identity, managed identity). |
 | `AWX_COLLECTIONS_ENABLED_ON_PROJECT_SYNC` | boolean | `true` | *No effect.* requirements are installed when a job starts, under AWX_ROLES_ENABLED and AWX_COLLECTIONS_ENABLED. |
 
 ### System (`/api/v2/settings/system/`)

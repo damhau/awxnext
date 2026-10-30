@@ -7,11 +7,13 @@ import (
 
 	"github.com/damhau/awxnext/internal/api"
 	"github.com/damhau/awxnext/internal/capacity"
+	"github.com/damhau/awxnext/internal/jobs"
 	"github.com/damhau/awxnext/internal/rbac"
 )
 
 // Install registers non-resource routes (ping, config, settings, ...).
 func Install(app *api.App) {
+	jobs.OpenArchiveStore = archiveStore(app)
 	installSettings(app)
 	installBulk(app)
 	installDashboard(app)

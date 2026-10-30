@@ -238,6 +238,27 @@ kubectl -n awxnext delete pod awxnext-restore
 helm upgrade awxnext oci://ghcr.io/damhau/charts/awxnext -n awxnext --reuse-values --set replicaCount=1
 ```
 
+## Job event archives
+
+A finished job's events stay in the database for `JOB_EVENTS_HOT_DAYS` (14), then become one
+compressed file per job. Viewing the output of an archived job reads it back for a day.
+Archives are kept in the database by default; to keep the database small, put them in object
+storage (Settings, Jobs, or `/api/v2/settings/jobs/`):
+
+| Setting | S3 or S3-compatible | Azure Blob Storage |
+|---|---|---|
+| `JOB_EVENTS_ARCHIVE_STORAGE` | `s3` | `azure_blob` |
+| `JOB_EVENTS_ARCHIVE_BUCKET` | the bucket (it must exist) | the container (it must exist) |
+| `JOB_EVENTS_ARCHIVE_ENDPOINT` | empty for AWS; else the service's URL, such as `https://minio.example.com:9000` | `https://<account>.blob.core.windows.net/` |
+| `JOB_EVENTS_ARCHIVE_REGION` | the region (else `AWS_REGION`, else `us-east-1`) | |
+| `JOB_EVENTS_ARCHIVE_CREDENTIAL` | an Amazon Web Services credential (access key), or empty: AWS's default chain (environment, shared files, EKS web identity, instance role) | a Microsoft Azure Resource Manager credential (service principal), or empty: `AZURE_STORAGE_CONNECTION_STRING`, else Azure's default chain (environment, workload identity, managed identity) |
+
+Objects are named `<prefix><INSTALL_UUID>/<job id>.jsonl.gz` (`JOB_EVENTS_ARCHIVE_PREFIX`,
+`job-events/` by default), so several installs can share a bucket. Archives made before a change
+stay readable where they are, and deleting a job deletes its object at the next archive run
+(every 10 minutes). A backup holds the database only: archives in object storage are not in it, so keep
+the bucket's own backups or versioning.
+
 ## Observe
 
 - **Metrics:** `/metrics` (Prometheus; `AWXNEXT_METRICS_TOKEN` to protect it) and

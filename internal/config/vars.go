@@ -73,6 +73,8 @@ var Vars = []Var{
 	{"AWXNEXT_SHIM_TOKEN", "", "Set by the control plane in container group job pods.", "Agent"},
 	{"AWXNEXT_SHIM_INSECURE", "", "Container group job pods: skip TLS verification of the control plane (testing).", "Agent"},
 
+	{"AZURE_STORAGE_CONNECTION_STRING", "", "Job event archives in Azure Blob Storage without a credential: the account's connection string (else Azure's default chain). For S3 without a credential, AWS's own variables (AWS_ACCESS_KEY_ID, AWS_REGION, ...).", "Job event archives"},
+
 	{"OTEL_EXPORTER_OTLP_ENDPOINT", "", "OpenTelemetry exporter endpoint; no tracing when neither this nor the next is set.", "Observability"},
 	{"OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "", "OpenTelemetry traces endpoint.", "Observability"},
 	{"OTEL_SERVICE_NAME", "awxnext", "OpenTelemetry service name.", "Observability"},
