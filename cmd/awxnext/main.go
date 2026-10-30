@@ -21,6 +21,7 @@ import (
 	"github.com/damhau/awxnext/internal/config"
 	"github.com/damhau/awxnext/internal/crypto"
 	"github.com/damhau/awxnext/internal/importer"
+	"github.com/damhau/awxnext/internal/jobexec"
 	"github.com/damhau/awxnext/internal/kms"
 	"github.com/damhau/awxnext/internal/runners/ansible"
 	"github.com/damhau/awxnext/internal/server"
@@ -121,7 +122,22 @@ func serve(ctx context.Context, cfg *config.Config) error {
 	}
 	switch cfg.ContainerRuntime {
 	case "none", "process", "":
-		slog.Warn("jobs run as processes of the server's user (AWXNEXT_CONTAINER_RUNTIME=none): a playbook can read the files of other running jobs and change project checkouts; use this runtime for one trusted team only")
+		iso, err := jobexec.Setup(ctx, cfg.JobIsolation, cfg.JobExec, cfg.JobsRoot, cfg.ProjectsRoot, "/etc/passwd")
+		switch {
+		case iso != nil:
+			jobexec.Default = iso
+			// Checkouts are the server's alone; jobs get a copy.
+			os.Chmod(cfg.ProjectsRoot, 0o700)
+			slog.Info("jobs run as job users, each its own", "users", len(iso.Users), "helper", iso.Helper)
+		case err != nil && cfg.JobIsolation == "users":
+			return fmt.Errorf("AWXNEXT_JOB_ISOLATION=users: %w", err)
+		default:
+			reason := "AWXNEXT_JOB_ISOLATION=off"
+			if err != nil {
+				reason = err.Error()
+			}
+			slog.Warn("jobs run as processes of the server's user (AWXNEXT_CONTAINER_RUNTIME=none): a playbook can read the files of other running jobs and change project checkouts; use this runtime for one trusted team only, or run jobs as job users (the all-in-one image)", "reason", reason)
+		}
 	}
 	if cfg.SecretKey == "change-me" {
 		slog.Warn("AWXNEXT_SECRET_KEY is the example value of the Compose file; set your own before storing credentials")

@@ -87,13 +87,34 @@ INFO messages, so they need `LOG_AGGREGATOR_LEVEL` at INFO.
 ### Job isolation and the `none` runtime
 
 With `AWXNEXT_CONTAINER_RUNTIME=none`, the default of the all-in-one image, jobs are not
-containers but processes of the server's own user. The server keeps its environment
-(secret key, database URL, key provider tokens) unreadable to them, but a playbook can
-still read the files of other jobs running at the same time, change project checkouts,
-and reach the database over the network. Use `none` for one trusted team, with your own
-secret key and database password. Otherwise run jobs in containers (`podman`, `docker`),
-on remote execution nodes or in container groups. The server logs a warning at start
-when it uses `none` or the Compose example secrets.
+containers but processes. In the all-in-one image each job runs as a job user of its own
+(`awxjob0` to `awxjob127`), through `awxnext-jobexec`, a helper that only the server's group
+can run and that has the file capabilities setuid, setgid, chown and kill and no others
+([internal/jobexec](internal/jobexec/jobexec.go)):
+
+- the job sees its own directory (0700, its user's) and home, emptied before and after
+  it, and its temporary directory (`TMPDIR`);
+- it cannot read the server's files (project checkouts, other jobs' private data, the
+  server's environment), write to them, or list the jobs and projects directories;
+- it cannot reach another running job's files, nor its processes' environment, working
+  directory or open files in `/proc` (their command lines stay visible, as on any Linux);
+- it cannot gain privileges (no_new_privs: setuid binaries such as `su` do nothing);
+- when it ends or is canceled, every process of its user is killed, including those it
+  moved to another session, and its directory removed.
+
+Playbooks that wrote to a shared place, such as one `/tmp` file used by several jobs, now
+get "Operation not permitted" when the file was made by another job: use the job's own
+`TMPDIR`. Jobs can still reach the database and the API over the network, as in AWX.
+
+`AWXNEXT_JOB_ISOLATION` is `auto` (the default: job users when the helper works, else jobs
+run as the server's user with a warning at start), `users` (the server does not start
+without them) or `off`. The helper does not work where no_new_privs is set on the server
+(`allowPrivilegeEscalation: false`, Docker's `no-new-privileges`), and job users are refused
+where a directory above the jobs or projects directories is writable by others, such as the
+Helm chart's `emptyDir` volume (0777): on Kubernetes, run jobs in container groups. Without
+job users, use `none` for one trusted team only. Otherwise run jobs in containers
+(`podman`, `docker`), on remote execution nodes or in container groups. The server logs a
+warning at start when jobs run as its own user or with the Compose example secrets.
 
 ### Backup and restore
 

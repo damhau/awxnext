@@ -35,8 +35,8 @@ AWXNEXT_ADMIN_PASSWORD='a strong password' docker compose up -d --build
 Then open `http://localhost:8052` and sign in as `admin`. Set `AWXNEXT_BASE_URL` to the URL
 users reach it at (behind a TLS proxy: `https://awxnext.example.com`). The database password
 applies only when its volume is first created. Jobs run inside the awxnext container
-(runtime `none`), which suits one trusted team: see "Job isolation" in the
-[README](../README.md#job-isolation-and-the-none-runtime).
+(runtime `none`), each as a job user of its own; the log says "jobs run as job users" at
+start. See "Job isolation" in the [README](../README.md#job-isolation-and-the-none-runtime).
 
 ### Kubernetes with Helm
 
@@ -70,6 +70,9 @@ the admin password and, with the bundled PostgreSQL, its password, in the secret
 - `replicaCount: 2` or more (see [High availability](#high-availability));
 - jobs in container groups: create an instance group with **Container group** checked and no
   credential, and the chart's service account runs the job pods in the release's namespace.
+  Jobs that run on the replicas themselves (runtime `none`) run as the server's user there:
+  the chart's `emptyDir` is writable by others, so job users are refused (README, "Job
+  isolation").
 
 ### From the binary
 

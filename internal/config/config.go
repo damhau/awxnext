@@ -25,6 +25,11 @@ type Config struct {
 	DefaultEEImage string
 	// RunnerCommand is the ansible-runner binary used when ContainerRuntime is "none".
 	RunnerCommand string
+	// JobIsolation is how jobs on runtime "none" are kept apart: "auto"
+	// (as job users when the helper works), "users" (required) or "off".
+	JobIsolation string
+	// JobExec is the helper that runs a worker as a job user.
+	JobExec string
 	// UIDir serves a built UI from disk when set; otherwise the embedded UI is used.
 	UIDir string
 	// Capacity, when positive, replaces the forks this node's CPU and
@@ -57,6 +62,8 @@ func Load() *Config {
 		ContainerRuntime: env("AWXNEXT_CONTAINER_RUNTIME", "podman"),
 		DefaultEEImage:   env("AWXNEXT_DEFAULT_EE_IMAGE", "quay.io/ansible/awx-ee:latest"),
 		RunnerCommand:    env("AWXNEXT_RUNNER_CMD", "ansible-runner"),
+		JobIsolation:     env("AWXNEXT_JOB_ISOLATION", "auto"),
+		JobExec:          env("AWXNEXT_JOB_EXEC", "/usr/local/libexec/awxnext-jobexec"),
 		UIDir:            env("AWXNEXT_UI_DIR", ""),
 		Capacity:         envInt("AWXNEXT_CAPACITY", 0),
 		DevMode:          env("AWXNEXT_DEV", "") != "",

@@ -11,10 +11,12 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/damhau/awxnext/internal/agent"
 	"github.com/damhau/awxnext/internal/api"
+	"github.com/damhau/awxnext/internal/jobexec"
 	"github.com/damhau/awxnext/internal/jobs"
 	"github.com/damhau/awxnext/internal/resources"
 	"github.com/damhau/awxnext/internal/runnercmd"
@@ -44,6 +46,9 @@ type Run struct {
 	Timeout time.Duration
 	runtime string
 	base    string
+	// jobDir holds WorkDir, when the worker runs as a job user
+	// (jobexec), who owns it.
+	jobDir string
 	// agentNode is the remote execution node running the worker; pod a container group job pod.
 	agentNode string
 	pod       *agent.PodRequest
@@ -103,10 +108,10 @@ func NewRunFor(ctx context.Context, app *api.App, ident string, row jobs.Row) (*
 }
 
 func (r *Run) useRemote(runtime, root string) {
-	if r.WorkDir != "" {
+	if r.WorkDir != "" && r.jobDir == "" {
 		os.RemoveAll(r.WorkDir)
-		r.WorkDir = ""
 	}
+	r.WorkDir, r.jobDir = "", ""
 	r.runtime, r.Root = runtime, root
 }
 
@@ -122,6 +127,13 @@ func NewRun(app *api.App, ident string) (*Run, error) {
 	}
 	switch r.runtime {
 	case "none", "process", "":
+		if iso := jobexec.Default; iso != nil {
+			// Made by the helper, for the job user.
+			r.jobDir = iso.Dir(ident)
+			r.WorkDir = filepath.Join(r.jobDir, "pdd")
+			r.Root = r.WorkDir
+			break
+		}
 		r.WorkDir = filepath.Join(base, "work")
 		if err := os.MkdirAll(r.WorkDir, 0o700); err != nil {
 			return nil, err
@@ -181,11 +193,22 @@ type localWorker struct {
 	stdout  io.Reader
 	stderr  bytes.Buffer
 	cleanup func()
+	// jobUser: the helper kills the job user's processes and removes the
+	// job's directory on SIGTERM (the server cannot, they are not its).
+	jobUser bool
 }
 
 func (l *localWorker) Stdin() io.WriteCloser { return l.stdin }
 func (l *localWorker) Stdout() io.Reader     { return l.stdout }
-func (l *localWorker) Kill()                 { runnercmd.Kill(l.spec, l.cmd) }
+func (l *localWorker) Kill() {
+	if l.jobUser && l.cmd.Process != nil {
+		l.cmd.Process.Signal(syscall.SIGTERM)
+		p := l.cmd.Process
+		time.AfterFunc(30*time.Second, func() { p.Kill() })
+		return
+	}
+	runnercmd.Kill(l.spec, l.cmd)
+}
 func (l *localWorker) Wait() (string, error) {
 	err := l.cmd.Wait()
 	l.cleanup()
@@ -237,9 +260,21 @@ func (r *Run) startWorker(ctx context.Context, app *api.App) (worker, []string, 
 	if err != nil {
 		return nil, nil, err
 	}
+	env := runnercmd.Env()
+	jobUser := false
+	if iso := jobexec.Default; iso != nil && r.jobDir != "" {
+		u, err := iso.Acquire(ctx)
+		if err != nil {
+			cleanup()
+			return nil, nil, err
+		}
+		args, env, jobUser = iso.Command(u, r.jobDir, args), jobexec.Env(env, u, r.jobDir), true
+		done := cleanup
+		cleanup = func() { done(); iso.Release(u) }
+	}
 	cmd := exec.Command(args[0], args[1:]...)
-	cmd.Env = runnercmd.Env()
-	lw := &localWorker{cmd: cmd, spec: spec, cleanup: cleanup}
+	cmd.Env = env
+	lw := &localWorker{cmd: cmd, spec: spec, cleanup: cleanup, jobUser: jobUser}
 	if lw.stdin, err = cmd.StdinPipe(); err != nil {
 		cleanup()
 		return nil, nil, err

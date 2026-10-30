@@ -25,6 +25,8 @@ var Vars = []Var{
 	{"AWXNEXT_JOBS_ROOT", "/var/lib/awxnext/jobs", "Job working directories.", "Jobs"},
 	{"AWXNEXT_CONTAINER_RUNTIME", "podman", "How jobs run on control nodes: podman or docker (in the execution environment's image), or none (ansible-runner on the PATH).", "Jobs"},
 	{"AWXNEXT_RUNNER_CMD", "ansible-runner", "ansible-runner for runtime none.", "Jobs"},
+	{"AWXNEXT_JOB_ISOLATION", "auto", "Runtime none: auto (each job as a job user of its own when awxnext-jobexec works, else as the server's user), users (required: the server does not start without) or off.", "Jobs"},
+	{"AWXNEXT_JOB_EXEC", "/usr/local/libexec/awxnext-jobexec", "The helper that runs a job as a job user (awxjob0, awxjob1, ...).", "Jobs"},
 	{"AWXNEXT_DEFAULT_EE_IMAGE", "quay.io/ansible/awx-ee:latest", "Image of the default execution environment created at the first start.", "Jobs"},
 	{"AWXNEXT_CAPACITY", "", "Fixed forks capacity of this node, instead of the one its CPU and memory allow.", "Jobs"},
 	{"AWXNEXT_SHIM_IMAGE", "ghcr.io/damhau/awxnext:latest", "Image whose awxnext binary is copied into container group job pods.", "Jobs"},

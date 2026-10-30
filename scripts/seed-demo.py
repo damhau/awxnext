@@ -75,7 +75,9 @@ PLAYS = {
     - name: Render config
       ansible.builtin.copy:
         content: "version={{ app_version | default('v1') }}\\n"
-        dest: "/tmp/awxnext-demo-{{ inventory_hostname }}.conf"
+        # The job's own temporary directory: jobs run as job users of their
+        # own and cannot replace each other's files in /tmp.
+        dest: "{{ lookup('env', 'TMPDIR') | default('/tmp', true) }}/awxnext-demo-{{ inventory_hostname }}.conf"
     - name: Wait for /healthz
       ansible.builtin.assert:
         that: inventory_hostname not in (fail_hosts | default([]))
