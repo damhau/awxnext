@@ -888,6 +888,12 @@ func recordSyncActivity(ctx context.Context, app *api.App, invID int64, stats *I
 				'inventory', jsonb_build_array(jsonb_build_object('id', i.id, 'name', i.name))), i.organization_id
 		FROM unnest($2::text[], $3::text[], $4::bigint[], $5::text[]) AS x(op, typ, id, name), inventories i WHERE i.id = $1`,
 		invID, ops, types, ids, names)
+	if err == nil {
+		for i := range ids {
+			api.ActivityLog(ctx, ops[i], types[i], "inventory", "", nil, map[string]any{"name": names[i]},
+				map[string]any{types[i]: []any{map[string]any{"id": ids[i], "name": names[i]}}})
+		}
+	}
 	return err
 }
 

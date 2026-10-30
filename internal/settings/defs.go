@@ -96,15 +96,6 @@ func init() {
 		{Key: "MAX_UI_JOB_EVENTS", Category: "ui", Type: "integer", Default: 4000, Public: true, Label: "Max Job Events Retrieved by UI", Help: "Events the job output page loads at once; more can be loaded on demand, or the output downloaded. 0: all."},
 		{Key: "UI_LIVE_UPDATES_ENABLED", Category: "ui", Type: "boolean", Default: true, Public: true, Label: "Enable Live Updates in the UI", Help: "Off: the web UI opens no websocket; pages show new data when reloaded."},
 		{Key: "PENDO_TRACKING_STATE", Category: "ui", Type: "string", Default: "off", Public: true, CompatOnly: true, Help: "No effect in awxnext: the web UI sends no usage data."},
-
-		// logging
-		{Key: "LOG_AGGREGATOR_ENABLED", Category: "logging", Type: "boolean", Default: false, CompatOnly: true, Help: "No effect in awxnext yet (roadmap M6-03): logs are written as JSON to stderr."},
-		{Key: "LOG_AGGREGATOR_HOST", Nullable: true, Category: "logging", Type: "string", Default: "", CompatOnly: true, Help: "No effect in awxnext yet (roadmap M6-03): logs are written as JSON to stderr."},
-		{Key: "LOG_AGGREGATOR_PORT", Nullable: true, Category: "logging", Type: "integer", Default: nil, CompatOnly: true, Help: "No effect in awxnext yet (roadmap M6-03): logs are written as JSON to stderr."},
-		{Key: "LOG_AGGREGATOR_TYPE", Nullable: true, Category: "logging", Type: "string", Default: "", CompatOnly: true, Help: "No effect in awxnext yet (roadmap M6-03): logs are written as JSON to stderr."},
-		{Key: "LOG_AGGREGATOR_PROTOCOL", Category: "logging", Type: "string", Default: "https", CompatOnly: true, Help: "No effect in awxnext yet (roadmap M6-03): logs are written as JSON to stderr."},
-		{Key: "LOG_AGGREGATOR_LEVEL", Category: "logging", Type: "string", Default: "INFO", CompatOnly: true, Help: "No effect in awxnext yet (roadmap M6-03): logs are written as JSON to stderr."},
-		{Key: "LOG_AGGREGATOR_LOGGERS", Category: "logging", Type: "list", Default: []any{"awx", "activity_stream", "job_events", "system_tracking", "broadcast_websocket"}, CompatOnly: true, Help: "No effect in awxnext yet (roadmap M6-03): logs are written as JSON to stderr."},
 	} {
 		Register(d)
 	}

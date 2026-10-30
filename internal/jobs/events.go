@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/damhau/awxnext/internal/logship"
 	"github.com/damhau/awxnext/internal/metrics"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -37,6 +38,9 @@ type Event struct {
 // Output collects events for one job and writes them to the database in
 // batches with COPY. It is safe for concurrent use.
 type Output struct {
+	// Kind is the job's type, naming its field in events sent to the
+	// external log aggregator (job, project_update, ...).
+	Kind       string
 	db         *pgxpool.Pool
 	jobID      int64
 	jobCreated time.Time
@@ -179,6 +183,7 @@ func (o *Output) flush() {
 	metrics.Sub.Add("callback_receiver_events_insert_db_seconds", secs)
 	metrics.Sub.Observe("callback_receiver_batch_events_insert_db", float64(len(batch)))
 	metrics.Sub.Set("callback_receiver_event_processing_avg_seconds", secs/float64(len(batch)))
+	o.logEvents(ctx, batch)
 	o.db.Exec(ctx, "UPDATE unified_jobs SET emitted_events = $2 WHERE id = $1", o.jobID, total)
 	if o.onFlush != nil {
 		maxCounter := 0
@@ -186,6 +191,30 @@ func (o *Output) flush() {
 			maxCounter = max(maxCounter, e.Counter)
 		}
 		o.onFlush(maxCounter)
+	}
+}
+
+// logEvents sends stored events to the external log aggregator, as AWX's
+// awx.analytics.job_events logger: "Event data saved." with the event's
+// fields.
+func (o *Output) logEvents(ctx context.Context, batch []Event) {
+	if !logship.Takes(ctx, "awx.analytics.job_events", slog.LevelInfo) {
+		return
+	}
+	kind := o.Kind
+	if kind == "" {
+		kind = "job"
+	}
+	for _, e := range batch {
+		data := e.EventData
+		if data == nil {
+			data = map[string]any{}
+		}
+		logship.Emit(ctx, "awx.analytics.job_events", slog.LevelInfo, "Event data saved.", map[string]any{
+			kind: o.jobID, "job_created": o.jobCreated, "created": e.Created, "modified": e.Created, "event": e.Event, "event_data": data,
+			"failed": e.Failed, "changed": e.Changed, "uuid": e.UUID, "parent_uuid": e.ParentUUID, "host": e.HostID, "host_name": e.HostName,
+			"playbook": e.Playbook, "play": e.Play, "role": e.Role, "task": e.Task, "counter": e.Counter, "stdout": e.Stdout,
+			"start_line": e.StartLine, "end_line": e.EndLine, "verbosity": e.Verbosity, "event_display": EventDisplay(e.Event)})
 	}
 }
 

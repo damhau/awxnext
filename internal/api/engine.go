@@ -4,12 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/url"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/damhau/awxnext/internal/crypto"
+	"github.com/damhau/awxnext/internal/logship"
 	"github.com/damhau/awxnext/internal/rbac"
 	"github.com/jackc/pgx/v5"
 )
@@ -1257,7 +1259,21 @@ func Activity(c *Ctx, op string, res *Resource, obj Obj, changes Obj, res2 *Reso
 	_, err := c.DB().Exec(c, `INSERT INTO activity_stream (actor_id, operation, object1, object1_id, object2, object2_id, object_relationship_type, changes, summary, organization_id)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
 		actor, op, res.Type, id, o2, o2id, relationship, changes, summary, org)
+	if err == nil {
+		var name any
+		if actor != nil {
+			name = c.User.Username
+		}
+		ActivityLog(c, op, res.Type, o2, relationship, name, changes, summary)
+	}
 	return err
+}
+
+// ActivityLog is AWX's emit_activity_stream_change: an activity stream
+// entry sent to the external log aggregator.
+func ActivityLog(ctx context.Context, op, object1, object2, relationship string, actor any, changes, summary any) {
+	logship.Emit(ctx, "awx.analytics.activity_stream", slog.LevelInfo, "Activity Stream update entry for "+object1, map[string]any{
+		"changes": changes, "relationship": relationship, "actor": actor, "operation": op, "object1": object1, "object2": object2, "summary_fields": summary})
 }
 
 func asObjs(v any) []Obj {

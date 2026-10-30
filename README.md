@@ -63,6 +63,11 @@ these ratios, and `SYSTEM_TASK_ABS_CPU` (`2`, `1500m`) and `SYSTEM_TASK_ABS_MEM`
 control node's measured CPU and memory. An instance's `capacity_adjustment` goes from the smaller of
 its CPU and memory capacities (0) to the larger (1).
 
+External logging is set under Settings → Logging, as in AWX (`LOG_AGGREGATOR_*`): service logs,
+activity stream entries, job events and gathered facts go to logstash, Splunk, Loggly, Sumo Logic
+or any HTTPS/HTTP, TCP or UDP receiver, as JSON. Activity stream entries, job events and facts are
+INFO messages, so they need `LOG_AGGREGATOR_LEVEL` at INFO.
+
 Vault Transit: `AWXNEXT_KMS_VAULT_ADDR`, `_KEY`, `_MOUNT`, and `_TOKEN`, `_ROLE_ID`/`_SECRET_ID`
 or `_K8S_ROLE`. Azure Key Vault: `AWXNEXT_KMS_AZURE_VAULT_URL`, `_KEY`, `_TENANT_ID`, `_CLIENT_ID`,
 and `_CLIENT_SECRET`, workload identity, or `_MANAGED_IDENTITY=1`.

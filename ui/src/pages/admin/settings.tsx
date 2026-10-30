@@ -12,6 +12,7 @@ import { Empty, ErrorNote, Loading, PageHead, Panel } from '../../components/ui'
 import { humanize } from './common'
 import { grantReason, grantTarget, testerClaims, type MappedGrant } from '../../lib/mapping'
 import { ldapPrefix, ldapServer, ldapServerOn, ldapServerOrder } from '../../lib/ldapSettings'
+import { aggregatorTarget, loggingSection, loggingSections, testOutcome } from '../../lib/logging'
 
 interface Category {
   slug: string
@@ -92,6 +93,7 @@ function sectionOf(cat: string, key: string): string {
   if (cat === 'oidc') return key.startsWith('SOCIAL_AUTH_') ? 'Provider' : key === 'OIDC_MAPPING' ? 'Group mapping' : 'Claims and tokens'
   if (cat === 'authentication') return key.endsWith('_MAP') ? 'Organization and team maps' : key.startsWith('LOCAL_PASSWORD_') ? 'Local passwords' : 'Sessions and accounts'
   if (cat === 'ldap') return ldapServer(key)
+  if (cat === 'logging') return loggingSection(key)
   if (cat === 'saml') return /_MAP$|_ATTR$|FLAGS/.test(key) ? 'Organizations, teams and flags' : /IDPS|SECURITY|EXTRA_DATA/.test(key) ? 'Identity providers' : 'Service provider'
   if (cat === 'jobs') {
     if (/TIMEOUT/.test(key)) return 'Timeouts'
@@ -108,6 +110,35 @@ const sectionOrder: Record<string, string[]> = {
   ldap: ldapServerOrder,
   saml: ['Service provider', 'Identity providers', 'Organizations, teams and flags'],
   jobs: ['General', 'Timeouts', 'Content', 'Execution'],
+  logging: loggingSections,
+}
+
+/** AWX's logging test: a message sent with the saved settings. */
+function LoggingTest({ values, unsaved }: { values: Values; unsaved: boolean }) {
+  const [busy, setBusy] = useState(false)
+  const [outcome, setOutcome] = useState<{ ok: boolean; text: string } | null>(null)
+  const target = values.LOG_AGGREGATOR_ENABLED ? aggregatorTarget(values) : null
+  const run = async () => {
+    setBusy(true)
+    try {
+      await api.post('settings/logging/test/')
+      setOutcome(testOutcome(null))
+    } catch (e) {
+      setOutcome(testOutcome(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <>
+      <button className="btn" disabled={busy || unsaved} title={unsaved ? 'Save first: the test uses the saved settings.' : undefined} onClick={run}>
+        {busy ? 'Testing…' : 'Test'}
+      </button>
+      <span className={`small ${outcome?.ok === false ? '' : 'faint'}`} style={outcome?.ok === false ? { color: 'var(--fail-deep)' } : undefined} role="status">
+        {outcome ? outcome.text : target ? <>Sends to <span className="mono">{target}</span></> : values.LOG_AGGREGATOR_ENABLED ? '' : 'External logging is off.'}
+      </span>
+    </>
+  )
 }
 
 function CategoryForm({ cat, editable }: { cat: string; editable: boolean }) {
@@ -237,6 +268,7 @@ function CategoryForm({ cat, editable }: { cat: string; editable: boolean }) {
               Discard
             </button>
           )}
+          {cat === 'logging' && <LoggingTest values={values.data} unsaved={dirty.length > 0} />}
           <button className="btn ghost" style={{ marginLeft: 'auto' }} onClick={resetAll}>
             Reset category to defaults
           </button>
@@ -308,7 +340,8 @@ function SettingField({
     case 'choice':
       return (
         <Field label={label} help={help} error={error} htmlFor={id}>
-          <select id={id} className="select" disabled={disabled} value={String(value ?? '')} onChange={(e) => onChange(e.target.value)}>
+          <select id={id} className="select" disabled={disabled} value={String(value ?? '')} onChange={(e) => onChange(e.target.value === '' ? null : e.target.value)}>
+            {(meta.default === null || value === null || value === undefined) && <option value="">---------</option>}
             {(meta.choices ?? []).map(([v, l]) => (
               <option key={String(v)} value={String(v)}>
                 {l}

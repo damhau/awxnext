@@ -21,6 +21,7 @@ import (
 	"github.com/damhau/awxnext/internal/gitops"
 	"github.com/damhau/awxnext/internal/jobs"
 	"github.com/damhau/awxnext/internal/kms"
+	"github.com/damhau/awxnext/internal/logship"
 	"github.com/damhau/awxnext/internal/metrics"
 	"github.com/damhau/awxnext/internal/resources"
 	"github.com/damhau/awxnext/internal/runners/ansible"
@@ -91,6 +92,9 @@ func registerProcessMetrics(app *api.App) {
 	})
 }
 
+// logHandler is the handler ConfigureLogging installed.
+var logHandler slog.Handler
+
 // ConfigureLogging installs the default slog handler (text or JSON).
 func ConfigureLogging(cfg *config.Config) {
 	var level slog.Level
@@ -102,7 +106,8 @@ func ConfigureLogging(cfg *config.Config) {
 	if cfg.LogFormat == "json" {
 		h = slog.NewJSONHandler(os.Stderr, opts)
 	}
-	slog.SetDefault(slog.New(tracing.LogHandler(h)))
+	logHandler = tracing.LogHandler(h)
+	slog.SetDefault(slog.New(logHandler))
 }
 
 // Handler installs routes and returns the HTTP handler.
@@ -130,8 +135,18 @@ func Handler(app *api.App) http.Handler {
 	return r
 }
 
-// StartJobs registers runners and starts dispatching and running jobs on this node.
+// StartJobs registers runners and starts dispatching and running jobs on
+// this node, and shipping its logs to the external log aggregator.
 func StartJobs(ctx context.Context, app *api.App) *jobs.Manager {
+	// Not slog's own default handler: it writes through the log package,
+	// which a new default sends back to slog.
+	base := logHandler
+	if base == nil {
+		base = slog.NewTextHandler(os.Stderr, nil)
+	}
+	logship.Default = logship.New(func(ctx context.Context, k string) any { return app.Settings.Get(ctx, k) }, app.Crypto.Decrypt, app.Cfg.NodeName, base)
+	slog.SetDefault(slog.New(logship.Default.Handler(base)))
+	go logship.Default.Run(ctx)
 	gitsync.Register()
 	ansible.Register()
 	system.Register()

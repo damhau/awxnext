@@ -5,12 +5,17 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
+	"time"
 
 	"github.com/damhau/awxnext/internal/api"
 	"github.com/damhau/awxnext/internal/jobs"
+	"github.com/damhau/awxnext/internal/logship"
 )
 
 // Ansible's jsonfile cache keeps one file per host. ansible-core 2.19 and later
@@ -77,6 +82,11 @@ func saveFactCache(ctx context.Context, app *api.App, row jobs.Row, artifacts, i
 		return
 	}
 	inv := row.Int("inventory_id")
+	track := logship.Takes(ctx, "awx.analytics.system_tracking", slog.LevelInfo)
+	var invName string
+	if track {
+		app.DB.QueryRow(ctx, "SELECT name FROM inventories WHERE id = $1", inv).Scan(&invName)
+	}
 	present := map[string]bool{}
 	for _, e := range entries {
 		present[e.Name()] = true
@@ -90,15 +100,46 @@ func saveFactCache(ctx context.Context, app *api.App, row jobs.Row, artifacts, i
 		}
 		app.DB.Exec(ctx, `UPDATE hosts SET ansible_facts = $3, ansible_facts_modified = now() WHERE inventory_id = $1 AND name = $2`,
 			inv, host, facts)
+		if track {
+			logFacts(ctx, inv, invName, host, row.ID(), facts)
+		}
 	}
 	for host, files := range seeded {
 		for file := range files {
 			if !present[file] {
 				app.DB.Exec(ctx, `UPDATE hosts SET ansible_facts = '{}', ansible_facts_modified = now() WHERE inventory_id = $1 AND name = $2`,
 					inv, host)
+				if track {
+					logship.Emit(ctx, "awx.analytics.system_tracking", slog.LevelInfo, fmt.Sprintf("Facts cleared for inventory %s host %s", invName, host), nil)
+				}
 				break
 			}
 		}
+	}
+}
+
+// logFacts is AWX's awx.analytics.system_tracking logger for a host's new
+// facts, without the Python version AWX's formatter takes out; one
+// message per fact with LOG_AGGREGATOR_INDIVIDUAL_FACTS.
+func logFacts(ctx context.Context, inv int64, invName, host string, job int64, facts map[string]any) {
+	facts = maps.Clone(facts)
+	delete(facts, "ansible_python_version")
+	if py, ok := facts["ansible_python"].(map[string]any); ok {
+		py = maps.Clone(py)
+		delete(py, "version_info")
+		facts["ansible_python"] = py
+	}
+	msg := fmt.Sprintf("New fact for inventory %s host %s", invName, host)
+	fields := func(f map[string]any) map[string]any {
+		return map[string]any{"inventory_id": inv, "host_name": host, "ansible_facts": f, "job_id": job,
+			"ansible_facts_modified": time.Now().UTC().Format("2006-01-02T15:04:05.000000+00:00")}
+	}
+	if !logship.IndividualFacts(ctx) {
+		logship.Emit(ctx, "awx.analytics.system_tracking", slog.LevelInfo, msg, fields(facts))
+		return
+	}
+	for _, k := range slices.Sorted(maps.Keys(facts)) {
+		logship.Emit(ctx, "awx.analytics.system_tracking", slog.LevelInfo, msg, fields(map[string]any{k: facts[k]}))
 	}
 }
 

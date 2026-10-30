@@ -435,6 +435,7 @@ func (m *Manager) run(parent context.Context, id int64) {
 			// Viewers connected to other nodes fetch stored events when notified.
 			m.Notify(context.Background(), chEvents, fmt.Sprintf("%s|%s|%d|%d", m.Node, row.Str("type"), id, maxCounter))
 		})
+	out.Kind = row.Str("type")
 	var res Result
 	func() {
 		defer func() {

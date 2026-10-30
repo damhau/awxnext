@@ -3,9 +3,11 @@ package resources
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 
 	"github.com/damhau/awxnext/internal/api"
 	"github.com/damhau/awxnext/internal/crypto"
+	"github.com/damhau/awxnext/internal/logship"
 	"github.com/damhau/awxnext/internal/settings"
 	"github.com/go-chi/chi/v5"
 )
@@ -30,6 +32,7 @@ func installSettings(app *api.App) {
 				"name": field("Name", "Name of the category."),
 			}}})
 	})
+	app.Handle("POST", "/api/v2/settings/logging/test/", loggingTest)
 	app.Handle("GET", "/api/v2/settings/{cat}/", func(c *Ctx, w http.ResponseWriter, r *http.Request) {
 		defs, err := settingsCategory(c, chi.URLParam(r, "cat"), false)
 		if err != nil {
@@ -81,6 +84,12 @@ func installSettings(app *api.App) {
 			api.WriteError(w, err)
 			return
 		}
+		if cat == "logging" || cat == "all" {
+			if err := checkLogging(c, data); err != nil {
+				api.WriteError(w, err)
+				return
+			}
+		}
 		streamWasOn := c.App.Settings.Bool(c, "ACTIVITY_STREAM_ENABLED")
 		changes := Obj{}
 		for k, v := range data {
@@ -110,7 +119,9 @@ func installSettings(app *api.App) {
 		}
 		// Turning the activity stream off is itself recorded.
 		if len(changes) > 0 && (streamWasOn || c.App.Settings.Bool(c, "ACTIVITY_STREAM_ENABLED")) {
-			c.DB().Exec(c, `INSERT INTO activity_stream (actor_id, operation, object1, changes, summary) VALUES ($1, 'update', 'setting', $2, '{}')`, c.User.UserID, changes)
+			if _, err := c.DB().Exec(c, `INSERT INTO activity_stream (actor_id, operation, object1, changes, summary) VALUES ($1, 'update', 'setting', $2, '{}')`, c.User.UserID, changes); err == nil {
+				api.ActivityLog(c, "update", "setting", "", "", c.User.Username, changes, Obj{})
+			}
 		}
 		api.WriteJSON(w, 200, settingsValues(c, cat, defs))
 	}
@@ -206,6 +217,46 @@ func settingsValues(c *Ctx, slug string, defs []*settings.Def) Obj {
 		out[d.Key] = v
 	}
 	return out
+}
+
+// checkLogging is AWX's logging_validate: enabling the log aggregator
+// needs a host and a type, stored or given.
+func checkLogging(c *Ctx, data Obj) error {
+	if on, _ := data["LOG_AGGREGATOR_ENABLED"].(bool); !on {
+		return nil
+	}
+	var errs []string
+	for _, f := range []struct{ key, what string }{{"LOG_AGGREGATOR_HOST", "host"}, {"LOG_AGGREGATOR_TYPE", "type"}} {
+		stored := c.App.Settings.String(c, f.key) != ""
+		v, given := data[f.key]
+		cleared := given && (v == nil || v == "")
+		if (!stored && (!given || cleared)) || (stored && cleared) {
+			errs = append(errs, "Cannot enable log aggregator without providing "+f.what+".")
+		}
+	}
+	if len(errs) > 0 {
+		return &api.Error{Status: 400, Body: Obj{"non_field_errors": []string{strings.Join(errs, "\n")}}}
+	}
+	return nil
+}
+
+// loggingTest is AWX's /settings/logging/test/, for system administrators
+// and auditors.
+func loggingTest(c *Ctx, w http.ResponseWriter, r *http.Request) {
+	if !c.User.Superuser && !c.User.Auditor {
+		api.WriteError(w, api.ErrForbidden)
+		return
+	}
+	if logship.Default == nil {
+		api.WriteJSON(w, 409, Obj{"error": "Logging not enabled"})
+		return
+	}
+	status, body := logship.Default.Test(c)
+	if body == nil {
+		w.WriteHeader(status)
+		return
+	}
+	api.WriteJSON(w, status, body)
 }
 
 func validateSetting(d *settings.Def, v any) error {
