@@ -333,6 +333,7 @@ func registerInfrastructure() {
 		},
 	})
 	ee.SubLists = []*SubList{readOnlyChildSub("unified_job_templates", "unified_job_templates", "execution_environment_id")}
+	ee.Actions = append(ee.Actions, eeContentsAction())
 
 	ig := api.Register(&Resource{
 		Name:        "instance_groups",

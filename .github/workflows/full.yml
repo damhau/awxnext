@@ -30,6 +30,8 @@ jobs:
       AWXNEXT_TEST_S3_ACCESS_KEY: awxnext
       AWXNEXT_TEST_S3_SECRET_KEY: awxnext-test-secret
       AWXNEXT_TEST_AZURITE_BLOB_ENDPOINT: http://127.0.0.1:10000/devstoreaccount1
+      # A real execution environment's contents, read from its registry.
+      AWXNEXT_TEST_EE_IMAGE: quay.io/ansible/awx-ee:24.6.1
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5

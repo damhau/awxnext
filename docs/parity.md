@@ -79,7 +79,7 @@ The gaps fall in four groups:
 16. ~~Typed workflow node outputs~~ (done, roadmap M3-04).
 17. ~~Named URLs for credentials and other multi-hop formats, `related.named_url`~~ (done, roadmap M2-10).
 18. ~~Websocket groups `jobs-summary`, `schedules-changed` and `control-limit_reached_<user>` (subscribable, never published)~~ (done, roadmap M6-05).
-19. UI: EE contents view (promised in PLAN.md).
+19. ~~UI: credential types page, inventory source schedules, the ad hoc dialog's execution environment and passwords, node credentials and labels, EE contents view~~ (done, roadmap M7-01 to M7-07).
 20. Plan items not built yet: dark mode, saved views stored per user on the server (per-job event rate caps, S3 and Azure Blob event archives, the Helm chart and the [benchmarks against AWX](benchmarks.md) done, roadmap M6-06, M6-07, M6-10 and M6-11).
 
 ## Authentication, users, organizations, RBAC
@@ -135,7 +135,7 @@ The gaps fall in four groups:
 | Lookups: CyberArk Central Credential Provider and Conjur, Centrify Vault, Thycotic DevOps Secrets Vault and Secret Server, AWS Secrets Manager | Yes | Done | AWX 24.6's types (namespaces, inputs, metadata), test buttons and importer mapping, making the requests AWX's plugins (or their Delinea and AWS SDKs) make (roadmap M4-07). Secret Server follows python-tss-sdk 1.2 (Secret Server, not Delinea Platform); Centrify names are quoted in its query |
 | Lookups: CyberArk, Conjur, Thycotic, AWS Secrets Manager, Centrify | Yes | Later | |
 | Credentials: owners, input sources, test, copy, ASK | Yes | Done | |
-| Execution environments: pull policy, registry auth, org scope, resolution order | Yes | Done | |
+| Execution environments: pull policy, registry auth, org scope, resolution order | Yes | Done | Plus each environment's contents (roadmap M7-07, awxnext's `execution_environments/N/contents/`): its collections and versions, ansible-core and Python versions, platform and `ansible.cfg`, read from the image's registry with the environment's registry credential, without running the image or needing a container runtime, and reused for the same digest |
 | UI: inventories, hosts, groups, sources, credentials, EEs | Yes | Done | No credential types page |
 
 ## Projects, jobs and workflows
@@ -203,6 +203,7 @@ The gaps fall in four groups:
 
 ## Only in awxnext
 
+- Execution environment contents, read from the registry: collections, ansible-core, Python and `ansible.cfg` of each image.
 - Version history with diffs and one-click revert on every object.
 - Folders inside organizations, with roles inherited by everything below; nested teams.
 - GitOps sources applying YAML declarations atomically, with dry-run plans, pruning and locked managed objects.
