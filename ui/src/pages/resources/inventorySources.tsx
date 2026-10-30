@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react'
-import { Link, useSearchParams } from 'react-router'
+import { Link, useParams, useSearchParams } from 'react-router'
 import { api } from '../../api/client'
-import { useInvalidate, useOptions } from '../../api/hooks'
+import { useInvalidate, useObject, useOptions } from '../../api/hooks'
 import { useLive } from '../../api/live'
 import type { Base, Ref } from '../../api/types'
 import { Check, FormError, Lookup, SelectField, TextInput, VarsEditor, useForm, varsError } from '../../components/form'
@@ -9,7 +9,8 @@ import { Icon } from '../../components/icons'
 import { NotificationsDialog } from '../../components/NotificationsTab'
 import { Dialog, Menu, useConfirm, useToast } from '../../components/overlay'
 import { DataTable, type Column } from '../../components/table'
-import { Ago, Empty, RunBars, Status } from '../../components/ui'
+import { Ago, Empty, ErrorNote, Loading, RunBars, Status } from '../../components/ui'
+import { SchedulesTab } from '../automation/SchedulesTab'
 import { applyErrors, refOf } from './common'
 import { useSubList, type Inventory } from './inventories'
 import { enabledDefault, enabledHelp, isImportedFile, sourceChoices } from '../../lib/sourceDefaults'
@@ -174,6 +175,7 @@ export function InventorySourcesTab({ inv }: { inv: Inventory }) {
           <Menu label={`Actions for ${s.name}`} className="btn sm icon ghost">
             <button onClick={() => setEdit({ source: s })}>Edit…</button>
             <button onClick={() => setNotify(s.id)}>Notifications…</button>
+            {!isImportedFile(s.source) && <Link to={`/inventories/${inv.id}/sources/${s.id}/schedules`}>Schedules</Link>}
             <Link to={`/jobs?q=type:inventory_update ${encodeURIComponent(s.name)}`}>Update history</Link>
             {editable && (
               <>
@@ -241,6 +243,26 @@ export function InventorySourcesTab({ inv }: { inv: Inventory }) {
           }}
         />
       )}
+    </div>
+  )
+}
+
+/** One source's schedules (inventories/:id/sources/:sourceId/schedules):
+ * syncs at set times, created, edited and switched off as a template's. */
+export function InventorySourceSchedulesTab({ inv }: { inv: Inventory }) {
+  const { sourceId } = useParams()
+  const src = useObject<Source>(`inventory_sources/${sourceId}/`)
+  if (src.isPending) return <Loading />
+  if (src.error || !src.data || src.data.inventory !== inv.id) return <div className="page-body"><ErrorNote error={src.error ?? 'Not a source of this inventory'} /></div>
+  return (
+    <div className="page-body stack" style={{ gap: 12 }}>
+      <div className="row" style={{ gap: 8 }}>
+        <Link className="btn ghost sm" to={`/inventories/${inv.id}/sources`}>
+          <Icon name="arrowLeft" size={14} /> All sources
+        </Link>
+        <h2 style={{ margin: 0 }}>Schedules of {src.data.name}</h2>
+      </div>
+      <SchedulesTab template={{ id: src.data.id, type: 'inventory_source', name: src.data.name }} />
     </div>
   )
 }

@@ -34,9 +34,9 @@ The gaps fall in four groups:
    notification types other than email and webhook
    (backup and restore, and the Helm chart, are done, roadmap M6-09 and M6-10; CyberArk, Thycotic, AWS Secrets Manager and Centrify lookups are done,
    roadmap M4-07; archive projects, roadmap M4-10).
-4. **UI holes over a finished API**: inventory
-   instance groups, credential type management, inventory source schedules,
-   `start_at_task`, a few more listed below.
+4. **UI holes over a finished API**: credential type management, a few more
+   listed below (inventory instance groups, inventory source schedules and
+   `start_at_task` are done, roadmap M7-01 to M7-03).
 
 ## Fixed during the audit
 
@@ -79,7 +79,7 @@ The gaps fall in four groups:
 16. ~~Typed workflow node outputs~~ (done, roadmap M3-04).
 17. ~~Named URLs for credentials and other multi-hop formats, `related.named_url`~~ (done, roadmap M2-10).
 18. ~~Websocket groups `jobs-summary`, `schedules-changed` and `control-limit_reached_<user>` (subscribable, never published)~~ (done, roadmap M6-05).
-19. UI: credential types page, inventory source schedules tab, execution environment and passwords in the ad hoc dialog, node credentials and labels in the workflow editor, EE contents view (promised in PLAN.md).
+19. UI: credential types page, execution environment and passwords in the ad hoc dialog, node credentials and labels in the workflow editor, EE contents view (promised in PLAN.md).
 20. Plan items not built yet: dark mode, saved views stored per user on the server (per-job event rate caps, S3 and Azure Blob event archives, the Helm chart and the [benchmarks against AWX](benchmarks.md) done, roadmap M6-06, M6-07, M6-10 and M6-11).
 
 ## Authentication, users, organizations, RBAC
@@ -126,7 +126,7 @@ The gaps fall in four groups:
 | rhv, insights sources | Yes | Done | With AWX's Red Hat Virtualization (INI file and environment) and Insights credential types (roadmap M4-01) |
 | `file` source, `inventory_import` | Yes | Done | `awxnext inventory-import` takes `awx-manage inventory_import`'s options (`--inventory-name`/`--inventory-id`, `--source`, `--overwrite`, `--overwrite-vars`, `--enabled-var`/`--enabled-value`, `--group-filter`, `--host-filter`, `--exclude-empty-groups`, `--instance-id-var`, `-v`) and records each run as an update of a `file` source, which the API does not create or update (roadmap M4-05). It runs `ansible-inventory` on the machine running the command rather than in the default execution environment's image |
 | overwrite, overwrite_vars, enabled_var, host_filter, update on launch with cache | Yes | Done | |
-| Inventory updates: cancel, stdout, events, notifications, schedules | Yes | Done | UI has no schedules for sources; notifications are in the source's menu |
+| Inventory updates: cancel, stdout, events, notifications, schedules | Yes | Done | Notifications and schedules are in the source's menu; a source's schedules have their own page under the inventory's Sources tab (roadmap M7-03), created, edited and switched off as a template's |
 | Bulk host create/delete | Yes | Done | `bulk/host_create` (each host created as through `/hosts/`, all or none) and `bulk/host_delete`, with AWX's limits, checks and messages |
 | Host metrics | Yes | Partial | Collected per job and cleaned up. `/host_metrics/` (list, filter, soft delete) and `/host_metric_summary_monthly/`, for superusers and auditors, as in AWX; the summary is the `host_metric_summary_monthly` management job (weekly), where AWX runs a periodic task. No UI page yet (roadmap M7-08) |
 | Managed credential types | Yes | Partial | All of AWX's, Insights and Red Hat Virtualization included (M4-01). The Kubernetes bearer token is injected in code as in AWX, its CA data as a file in `K8S_AUTH_SSL_CA_CERT` (M4-02); unlike AWX, `verify_ssl` without CA data keeps verifying, against the system's CAs. As in AWX, an encrypted SSH key (OpenSSH with a cipher, PKCS#8 `ENCRYPTED PRIVATE KEY`, PEM `Proc-Type: 4,ENCRYPTED`) needs its passphrase and a passphrase needs an encrypted key, checked against the stored key on update |

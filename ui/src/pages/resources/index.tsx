@@ -30,6 +30,7 @@ const m_inventoryHosts = lazyModule(() => import('./inventoryHosts'))
 const InventoryHostsTab = m_inventoryHosts('InventoryHostsTab')
 const m_inventorySources = lazyModule(() => import('./inventorySources'))
 const InventorySourcesTab = m_inventorySources('InventorySourcesTab')
+const InventorySourceSchedulesTab = m_inventorySources('InventorySourceSchedulesTab')
 const m_projects = lazyModule(() => import('./projects'))
 const ProjectAccessTab = m_projects('ProjectAccessTab')
 const ProjectNotificationsTab = m_projects('ProjectNotificationsTab')
@@ -57,6 +58,7 @@ export function resourceRoutes() {
         <Route path="hosts" element={<InvTab tab={InventoryHostsTab} />} />
         <Route path="groups" element={<InvTab tab={InventoryGroupsTab} />} />
         <Route path="sources" element={<InvTab tab={InventorySourcesTab} />} />
+        <Route path="sources/:sourceId/schedules" element={<InvTab tab={InventorySourceSchedulesTab} />} />
         <Route path="jobs" element={<InvTab tab={InventoryJobsTab} />} />
         <Route path="access" element={<InvTab tab={InventoryAccessTab} />} />
       </Route>
