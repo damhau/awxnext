@@ -298,6 +298,7 @@ func TestExternalLogging(t *testing.T) {
 
 // LOG_AGGREGATOR_INDIVIDUAL_FACTS: a message per fact.
 func TestExternalLoggingIndividualFacts(t *testing.T) {
+	requireAnsible(t)
 	a := adminClient(t)
 	t.Cleanup(func() { a.delete("settings/logging/") })
 	web, srv := httpReceiver(t, false)
