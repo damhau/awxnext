@@ -66,7 +66,7 @@ The gaps fall in four groups:
 6. ~~Bulk API: `bulk/job_launch`, `bulk/host_create`, `bulk/host_delete`~~ (done, roadmap M2-02).
 7. ~~`?host_filter=` on `/hosts/`, `chain__` filters~~ (done, roadmap M1-13).
 8. ~~Host metrics API, `host_metric_summary_monthly`~~ (done, roadmap M2-04); the page is roadmap M7-08.
-9. Instance group policies (percentage, minimum, list) and `max_forks`; `max_concurrent_jobs` outside container groups.
+9. ~~Instance group policies (percentage, minimum, list) and `max_forks`; `max_concurrent_jobs` outside container groups~~ (done, roadmap M6-01).
 10. External log aggregation (logstash, splunk, ...) and its test endpoint.
 11. Password policy settings; activity stream entries for job launches and for role grants made through the role assignment API.
 12. ~~Dashboard endpoints (`/dashboard/`, `/dashboard/graphs/jobs/`)~~ (done, roadmap M2-03).
@@ -189,7 +189,7 @@ The gaps fall in four groups:
 | Instances: capacity, drain, jobs | Yes | Done | Control nodes use a fixed capacity; `capacity_adjustment` scales instead of interpolating |
 | Instance health check endpoint | Yes | Done | `instances/N/health_check/` (superusers; auditors read): an execution node's agent reports its resources again, or the node is marked unavailable when it does not answer; control nodes probe the database and the projects directory, which AWX does not offer. `health_check_started` and `health_check_pending` on instances |
 | Receptor mesh, peers, hop nodes, topology view | Yes | By design | Dial-back agent instead; install bundle replaced by an agent token |
-| Instance group policies, `max_forks` | Yes | Partial | Stored, not applied |
+| Instance group policies, `max_forks`, `max_concurrent_jobs` | Yes | Done | AWX's `apply_cluster_membership_policies` (list, then minimums, then percentages) runs when an instance joins, leaves or changes `managed_by_policy`, `hostname` or `capacity_adjustment`, and when a group's policies change. Attaching an instance lists it, detaching unlists it, so an instance the percentage selects comes back, as in AWX; `default` and `controlplane` take every instance and keep their names and policies. Both limits hold on every group, counted on its instances; a job that does not fit goes to the next group, and `default` joins the chain only when nothing else is selected, as AWX's `preferred_instance_groups`. The control task impact (`AWX_CONTROL_NODE_TASK_IMPACT`) counts only for control plane tasks (roadmap M6-01) |
 | Container groups with `pod_spec_override` | Yes | Done | Push-based shim, no log tailing |
 | Job isolation | Yes | Partial | AWX always runs jobs in containers. awxnext's `none` runtime runs them as processes of the server's user: the server's environment is hidden from them, other jobs' files are not (roadmap M6-13) |
 | Websockets | Yes | Partial | Three groups never published |

@@ -2,9 +2,13 @@ package resources
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
+
+	"github.com/jackc/pgx/v5"
 
 	"github.com/damhau/awxnext/internal/agent"
 	"github.com/damhau/awxnext/internal/api"
@@ -37,18 +41,177 @@ func SeedInfrastructure(ctx context.Context, app *api.App) error {
 		WHERE NOT EXISTS (SELECT 1 FROM execution_environments WHERE managed)`, app.Cfg.DefaultEEImage); err != nil {
 		return err
 	}
+	// AWX's installer registers both with every instance at each start
+	// (register_queue --instance_percent=100).
 	for _, g := range []string{"controlplane", "default"} {
-		var id int64
-		if err := app.DB.QueryRow(ctx, `INSERT INTO instance_groups (name) VALUES ($1)
-			ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name RETURNING id`, g).Scan(&id); err != nil {
-			return err
-		}
-		if _, err := app.DB.Exec(ctx, `INSERT INTO instance_group_instances (instance_group_id, instance_id)
-			SELECT $1, id FROM instances WHERE hostname = $2 AND managed_by_policy ON CONFLICT DO NOTHING`, id, app.Cfg.NodeName); err != nil {
+		if _, err := app.DB.Exec(ctx, `INSERT INTO instance_groups (name, policy_instance_percentage) VALUES ($1, 100)
+			ON CONFLICT (name) DO UPDATE SET policy_instance_percentage = 100`, g); err != nil {
 			return err
 		}
 	}
+	return pgx.BeginFunc(ctx, app.DB, func(tx pgx.Tx) error { return ApplyMembershipPolicies(ctx, tx) })
+}
+
+// installerGroup reports whether a group is one of the two the installer
+// creates, whose names and policies AWX does not let the API change.
+func installerGroup(name string) bool { return name == "controlplane" || name == "default" }
+
+// recomputeMembership applies the membership policies after a change to
+// an instance or a group.
+func recomputeMembership(c *Ctx) error {
+	return c.WithTx(func(c *Ctx) error { return ApplyMembershipPolicies(c, c.DB()) })
+}
+
+func percentage(c *Ctx, v any, data Obj) error {
+	if n, _ := api.ID(v); n > 100 {
+		return errors.New("Ensure this value is less than or equal to 100.")
+	}
+	return atLeast(0)(c, v, data)
+}
+
+func atLeast(min int64) func(c *Ctx, v any, data Obj) error {
+	return func(c *Ctx, v any, data Obj) error {
+		if n, _ := api.ID(v); n < min {
+			return fmt.Errorf("Ensure this value is greater than or equal to %d.", min)
+		}
+		return nil
+	}
+}
+
+// policyList is AWX's validate_policy_instance_list without the checks
+// against the stored group, which are in checkGroupPolicy.
+func policyList(c *Ctx, v any, data Obj) error {
+	list, ok := v.([]any)
+	if !ok {
+		return fmt.Errorf("Expected a list of items but got type %q.", pyType(v))
+	}
+	seen := map[string]bool{}
+	for _, h := range list {
+		host, ok := h.(string)
+		if !ok {
+			return errors.New("Not a valid string.")
+		}
+		if seen[host] {
+			return fmt.Errorf("Duplicate entry %s.", host)
+		}
+		seen[host] = true
+		if countQuery(c, "SELECT count(*) FROM instances WHERE hostname = $1", host) == 0 {
+			return fmt.Errorf("%s is not a valid hostname of an existing instance.", host)
+		}
+	}
 	return nil
+}
+
+func pyType(v any) string {
+	switch v.(type) {
+	case map[string]any:
+		return "dict"
+	case string:
+		return "str"
+	case bool:
+		return "bool"
+	case float64, int64, int:
+		return "int"
+	case nil:
+		return "NoneType"
+	}
+	return fmt.Sprintf("%T", v)
+}
+
+// checkGroupPolicy is the part of AWX's instance group validation that
+// depends on the stored group: the installer's groups keep their name,
+// kind and policies, and container groups take no policy.
+func checkGroupPolicy(c *Ctx, old, data Obj) error {
+	if old == nil {
+		return nil
+	}
+	name := str(old["name"])
+	fe := api.FieldErrors{}
+	changed := func(f string) bool {
+		v, ok := data[f]
+		if !ok {
+			return false
+		}
+		a, _ := json.Marshal(v)
+		b, _ := json.Marshal(old[f])
+		return string(a) != string(b)
+	}
+	set := func(f string) bool {
+		v, ok := data[f]
+		if !ok {
+			return false
+		}
+		if l, isList := v.([]any); isList {
+			return len(l) > 0
+		}
+		n, _ := api.ID(v)
+		return n != 0
+	}
+	container := boolv(old["is_container_group"])
+	if installerGroup(name) {
+		if changed("name") {
+			fe.Add("name", name+" instance group name may not be changed.")
+		}
+		if changed("is_container_group") {
+			fe.Add("is_container_group", name+" instance group is_container_group may not be changed.")
+		}
+		if changed("policy_instance_list") {
+			fe.Add("policy_instance_list", name+" instance group policy_instance_list may not be changed.")
+		}
+		if changed("policy_instance_percentage") {
+			fe.Add("policy_instance_percentage", name+" instance group policy_instance_percentage may not be changed from the initial value set by the installer.")
+		}
+	}
+	for _, f := range []string{"policy_instance_list", "policy_instance_percentage", "policy_instance_minimum"} {
+		if container && set(f) && len(fe[f]) == 0 {
+			fe.Add(f, "Containerized instances may not be managed via the API")
+		}
+	}
+	return fe.Err()
+}
+
+// changeMembership is AWX's InstanceGroupMembershipMixin: attaching an
+// instance lists it in the group's policy_instance_list, so the policies
+// keep it; detaching unlists it. The policies are then applied, which may
+// put a detached instance back when the group's minimum or percentage
+// still selects it. instanceSide picks the words of the instance's own
+// list of groups.
+func changeMembership(c *Ctx, gid, iid int64, add, instanceSide bool) error {
+	var host, kind, group string
+	if err := c.DB().QueryRow(c, "SELECT hostname, node_type FROM instances WHERE id = $1", iid).Scan(&host, &kind); err != nil {
+		return err
+	}
+	if err := c.DB().QueryRow(c, "SELECT name FROM instance_groups WHERE id = $1", gid).Scan(&group); err != nil {
+		return err
+	}
+	refuse := func(msg string) error { return &api.Error{Status: 400, Body: Obj{"msg": msg}} }
+	switch {
+	case kind == "control":
+		return refuse(fmt.Sprintf("Cannot change instance group membership of control-only node: %s.", host))
+	case kind == "hop":
+		return refuse(fmt.Sprintf("Cannot change instance group membership of hop node : %s.", host))
+	case !add && kind == "hybrid" && group == "controlplane" && instanceSide:
+		return refuse(fmt.Sprintf("Cannot disassociate hybrid instance %s from %s.", host, group))
+	case !add && kind == "hybrid" && group == "controlplane":
+		return refuse(fmt.Sprintf("Cannot disassociate hybrid node %s from %s.", host, group))
+	}
+	if add {
+		if _, err := c.DB().Exec(c, "INSERT INTO instance_group_instances (instance_group_id, instance_id) VALUES ($1, $2) ON CONFLICT DO NOTHING", gid, iid); err != nil {
+			return err
+		}
+		if _, err := c.DB().Exec(c, `UPDATE instance_groups SET policy_instance_list = policy_instance_list || to_jsonb($2::text)
+			WHERE id = $1 AND NOT policy_instance_list ? $2`, gid, host); err != nil {
+			return err
+		}
+	} else {
+		if _, err := c.DB().Exec(c, "DELETE FROM instance_group_instances WHERE instance_group_id = $1 AND instance_id = $2", gid, iid); err != nil {
+			return err
+		}
+		if _, err := c.DB().Exec(c, "UPDATE instance_groups SET policy_instance_list = policy_instance_list - $2::text WHERE id = $1", gid, host); err != nil {
+			return err
+		}
+	}
+	return ApplyMembershipPolicies(c, c.DB())
 }
 
 func registerInfrastructure() {
@@ -161,12 +324,12 @@ func registerInfrastructure() {
 			{Name: "name", Type: api.TString, Required: true, MaxLength: 250},
 			{Name: "is_container_group", Type: api.TBool, Default: false, Help: "Indicates whether instances in this group are containerized. Containerized groups have a designated Openshift or Kubernetes cluster."},
 			{Name: "credential", Type: api.TFK, Ref: "credentials", Nullable: true},
-			{Name: "policy_instance_percentage", Type: api.TInt, Default: 0, Help: "Minimum percentage of all instances that will be automatically assigned to this group when new instances come online."},
-			{Name: "policy_instance_minimum", Type: api.TInt, Default: 0, Help: "Static minimum number of Instances that will be automatically assign to this group when new instances come online."},
-			{Name: "policy_instance_list", Type: api.TJSON, Default: []any{}, Help: "List of exact-match Instances that will be assigned to this group"},
+			{Name: "policy_instance_percentage", Type: api.TInt, Default: 0, Validate: percentage, Help: "Minimum percentage of all instances that will be automatically assigned to this group when new instances come online."},
+			{Name: "policy_instance_minimum", Type: api.TInt, Default: 0, Validate: atLeast(0), Help: "Static minimum number of Instances that will be automatically assign to this group when new instances come online."},
+			{Name: "policy_instance_list", Type: api.TJSON, Default: []any{}, Validate: policyList, Help: "List of exact-match Instances that will be assigned to this group"},
 			{Name: "pod_spec_override", Type: api.TText, Default: ""},
-			{Name: "max_concurrent_jobs", Type: api.TInt, Default: 0, Help: "Maximum number of concurrent jobs to run on a group. When set to zero, no maximum is enforced."},
-			{Name: "max_forks", Type: api.TInt, Default: 0, Help: "Maximum number of forks to execute concurrently on a group. When set to zero, no maximum is enforced."},
+			{Name: "max_concurrent_jobs", Type: api.TInt, Default: 0, Validate: atLeast(0), Help: "Maximum number of concurrent jobs to run on a group. When set to zero, no maximum is enforced."},
+			{Name: "max_forks", Type: api.TInt, Default: 0, Validate: atLeast(0), Help: "Maximum number of forks to execute concurrently on a group. When set to zero, no maximum is enforced."},
 		},
 		SearchFields: []string{"name"},
 		View: func(c *Ctx, arg ArgFunc) string {
@@ -200,6 +363,27 @@ func registerInfrastructure() {
 			}
 			return nil
 		},
+		BeforeSave: checkGroupPolicy,
+		AfterCreate: func(c *Ctx, obj Obj) error {
+			if boolv(obj["is_container_group"]) {
+				return nil
+			}
+			return recomputeMembership(c)
+		},
+		AfterUpdate: func(c *Ctx, old, obj Obj) error {
+			for _, f := range []string{"policy_instance_list", "policy_instance_minimum", "policy_instance_percentage"} {
+				if fmt.Sprint(old[f]) != fmt.Sprint(obj[f]) && !boolv(obj["is_container_group"]) {
+					return recomputeMembership(c)
+				}
+			}
+			return nil
+		},
+		AfterDelete: func(c *Ctx, obj Obj) error {
+			if boolv(obj["is_container_group"]) {
+				return nil
+			}
+			return recomputeMembership(c)
+		},
 		Summary: func(c *Ctx, objs []Obj) error {
 			for _, o := range objs {
 				id := o["id"]
@@ -229,15 +413,9 @@ func registerInfrastructure() {
 			Filter: func(arg ArgFunc, pid int64) string {
 				return fmt.Sprintf("t.id IN (SELECT instance_id FROM instance_group_instances WHERE instance_group_id = %s)", arg(pid))
 			},
-			NoCreate: true,
-			Associate: func(c *Ctx, pid, iid int64) error {
-				_, err := c.DB().Exec(c, "INSERT INTO instance_group_instances (instance_group_id, instance_id) VALUES ($1, $2) ON CONFLICT DO NOTHING", pid, iid)
-				return err
-			},
-			Disassociate: func(c *Ctx, pid, iid int64) error {
-				_, err := c.DB().Exec(c, "DELETE FROM instance_group_instances WHERE instance_group_id = $1 AND instance_id = $2", pid, iid)
-				return err
-			},
+			NoCreate:     true,
+			Associate:    func(c *Ctx, pid, iid int64) error { return changeMembership(c, pid, iid, true, false) },
+			Disassociate: func(c *Ctx, pid, iid int64) error { return changeMembership(c, pid, iid, false, false) },
 		},
 		readOnlyChildSub("jobs", "unified_jobs", "instance_group_id"),
 	}
@@ -304,6 +482,18 @@ func registerInfrastructure() {
 			}
 			return nil
 		},
+		// AWX applies the policies when an instance joins or leaves, and when
+		// its POLICY_FIELDS change.
+		AfterCreate: func(c *Ctx, obj Obj) error { return recomputeMembership(c) },
+		AfterUpdate: func(c *Ctx, old, obj Obj) error {
+			for _, f := range []string{"managed_by_policy", "hostname", "capacity_adjustment"} {
+				if fmt.Sprint(old[f]) != fmt.Sprint(obj[f]) {
+					return recomputeMembership(c)
+				}
+			}
+			return nil
+		},
+		AfterDelete: func(c *Ctx, obj Obj) error { return recomputeMembership(c) },
 		Summary: func(c *Ctx, objs []Obj) error {
 			for _, o := range objs {
 				var consumed, running, total int64
@@ -348,7 +538,9 @@ func registerInfrastructure() {
 			Filter: func(arg ArgFunc, pid int64) string {
 				return fmt.Sprintf("t.id IN (SELECT instance_group_id FROM instance_group_instances WHERE instance_id = %s)", arg(pid))
 			},
-			ReadOnly: true,
+			NoCreate:     true,
+			Associate:    func(c *Ctx, pid, gid int64) error { return changeMembership(c, gid, pid, true, true) },
+			Disassociate: func(c *Ctx, pid, gid int64) error { return changeMembership(c, gid, pid, false, true) },
 		},
 	}
 

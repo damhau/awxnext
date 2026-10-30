@@ -42,7 +42,7 @@ func TestInstanceGroupsAndInstances(t *testing.T) {
 		t.Fatalf("default groups: %s", r.Raw)
 	}
 	def := r.results()[0]
-	if def["capacity"].(float64) <= 0 || def["instances"].(float64) != 1 {
+	if def["capacity"].(float64) <= 0 || def["instances"].(float64) < 1 {
 		t.Fatalf("default group capacity: %v", def)
 	}
 	must(t, a.delete(fmt.Sprintf("instance_groups/%d/", int64(def["id"].(float64)))), 403)
@@ -51,8 +51,9 @@ func TestInstanceGroupsAndInstances(t *testing.T) {
 	must(t, a.post("instances/", map[string]any{"hostname": "ctl.acme.internal", "node_type": "control"}), 400)
 	g := must(t, a.post("instance_groups/", map[string]any{"name": uniq("dmz")}), 201).id()
 	must(t, a.post(fmt.Sprintf("instance_groups/%d/instances/", g), map[string]any{"id": node}), 204)
+	// default takes every instance by policy; dmz lists it.
 	r = must(t, a.get(fmt.Sprintf("instances/%d/instance_groups/", node)), 200)
-	if r.count() != 1 {
+	if r.count() != 2 {
 		t.Fatalf("instance groups of node: %s", r.Raw)
 	}
 	// Container groups need a Kubernetes credential.

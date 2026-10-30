@@ -46,7 +46,8 @@ CREATE TABLE main_credential (id int PRIMARY KEY, name text, description text, o
 CREATE TABLE main_executionenvironment (id int PRIMARY KEY, name text, description text, image text, managed bool, organization_id int,
   credential_id int, pull text, created timestamptz, modified timestamptz, created_by_id int, modified_by_id int);
 CREATE TABLE main_instancegroup (id int PRIMARY KEY, name text, created timestamptz, modified timestamptz, is_container_group bool,
-  credential_id int, pod_spec_override text, policy_instance_percentage int, policy_instance_minimum int, max_concurrent_jobs int, max_forks int);
+  credential_id int, pod_spec_override text, policy_instance_percentage int, policy_instance_minimum int, max_concurrent_jobs int, max_forks int,
+  policy_instance_list text);
 CREATE TABLE main_label (id int PRIMARY KEY, name text, organization_id int, created timestamptz, modified timestamptz, created_by_id int, modified_by_id int);
 CREATE TABLE main_inventory (id int PRIMARY KEY, name text, description text, organization_id int, variables text, created timestamptz,
   modified timestamptz, created_by_id int, modified_by_id int, kind text, host_filter text, prevent_instance_group_fallback bool, pending_deletion bool);
@@ -118,7 +119,7 @@ INSERT INTO main_credentialtype VALUES (1,'Machine','','ssh','{}','{}',%[1]s,%[1
 INSERT INTO main_credential VALUES (42,'machine','',1,1,'{"username":"root","password":"%[4]s","become_method":"sudo"}',%[1]s,%[1]s,1,1,false),
   (43,'aws lookup','',1,2,'{}',%[1]s,%[1]s,1,1,false);
 INSERT INTO main_executionenvironment VALUES (1,'AWX EE (latest)','','quay.io/ansible/awx-ee:latest',true,NULL,NULL,'',%[1]s,%[1]s,NULL,NULL);
-INSERT INTO main_instancegroup VALUES (1,'default',%[1]s,%[1]s,false,NULL,'',100,0,0,0),(2,'remote-%[2]s',%[1]s,%[1]s,false,NULL,'',0,0,0,0);
+INSERT INTO main_instancegroup VALUES (1,'default',%[1]s,%[1]s,false,NULL,'',100,0,0,0,'[]'),(2,'remote-%[2]s',%[1]s,%[1]s,false,NULL,'',0,0,0,0,'["test-node", "awx-exec-1"]');
 INSERT INTO main_label VALUES (1,'prod',1,%[1]s,%[1]s,1,1);
 INSERT INTO main_inventory VALUES (1,'inv','',1,'env: prod',%[1]s,%[1]s,1,1,'','',false,false),
   (2,'smart','',1,'',%[1]s,%[1]s,1,1,'smart','name__icontains=web',false,false),
@@ -208,6 +209,13 @@ func TestImportAWX(t *testing.T) {
 		a.delete("settings/ldap/")
 		a.patch("settings/authentication/", map[string]any{"SOCIAL_AUTH_TEAM_MAP": nil})
 	})
+	// The policies apply to awxnext's instances; AWX's own stay listed.
+	remote := must(t, a.get("instance_groups/?name=remote-"+org), 200).results()
+	if len(remote) != 1 || fmt.Sprint(remote[0]["policy_instance_list"]) != "[test-node awx-exec-1]" {
+		t.Errorf("imported group: %v", remote)
+	} else if m := must(t, a.get(fmt.Sprintf("instance_groups/%d/instances/", int64(remote[0]["id"].(float64)))), 200).results(); len(m) != 1 || m[0]["hostname"] != "test-node" {
+		t.Errorf("imported group members: %v", m)
+	}
 	warnings := strings.Join(rep.Warnings, "\n")
 	for _, w := range []string{`user "admin" already exists`, "svn projects are not supported", "slack notifications are not supported",
 		`schedule "broken" imported disabled`, "setting RADIUS_SERVER skipped: not supported", "setting AUTH_LDAP_GROUP_TYPE_PARAMS skipped: Invalid key(s): \"colour\"."} {

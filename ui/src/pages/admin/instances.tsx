@@ -12,6 +12,7 @@ import { DataTable } from '../../components/table'
 import { Ago, Cell, Elapsed, Empty, ErrorNote, KV, Loading, PageHead, Panel, Status, Tab } from '../../components/ui'
 import type { CellState } from '../../lib/cells'
 import { jobPath, jobsNewestFirst } from '../../lib/format'
+import { checkGroupForm, describePolicy, installerGroup, memberReason, parseHosts } from '../../lib/instanceGroups'
 import { OneTimeSecret, useDelete } from './common'
 
 type Instance = Base & {
@@ -29,6 +30,7 @@ type Instance = Base & {
   memory: number
   errors: string
   managed: boolean
+  managed_by_policy: boolean
   capacity_adjustment: number
   agent_runtime?: string
   uuid: string
@@ -380,6 +382,26 @@ export function InstanceDetail() {
                   ['UUID', <span className="mono small">{i.uuid}</span>],
                   ['IP address', i.ip_address || '—'],
                   [
+                    'Policy',
+                    me.is_superuser && i.node_type !== 'hop' ? (
+                      <label className="check" title="Off: the instance joins only the groups that list it.">
+                        <input
+                          type="checkbox"
+                          checked={i.managed_by_policy}
+                          onChange={async (e) => {
+                            await api.patch(`instances/${id}/`, { managed_by_policy: e.target.checked }).catch((err) => toast((err as Error).message, 'error'))
+                            invalidate('instances', 'instance_groups')
+                          }}
+                        />
+                        <span>Managed by policy</span>
+                      </label>
+                    ) : i.managed_by_policy ? (
+                      'Managed by policy'
+                    ) : (
+                      'Listed groups only'
+                    ),
+                  ],
+                  [
                     'Groups',
                     groups.data?.results.length ? (
                       groups.data.results.map((g, n) => (
@@ -498,6 +520,7 @@ export function GroupDetail() {
                         ['Max forks', grp.max_forks || 'No limit'],
                         ...(!grp.is_container_group
                           ? ([
+                              ['Membership', describePolicy(grp)],
                               ['Policy: minimum nodes', grp.policy_instance_minimum],
                               ['Policy: share of nodes', `${grp.policy_instance_percentage}%`],
                               ['Always include', grp.policy_instance_list.length ? <span className="mono">{grp.policy_instance_list.join(', ')}</span> : '—'],
@@ -571,13 +594,26 @@ function GroupInstances({ group }: { group: Group }) {
           },
           { key: 'type', header: 'Type', render: (i) => i.node_type },
           { key: 'state', header: 'State', render: (i) => <NodeState i={i} /> },
+          {
+            key: 'why',
+            header: 'In the group',
+            render: (i) =>
+              memberReason(i.hostname, group) === 'listed' ? (
+                <span className="tag">Listed</span>
+              ) : (
+                <span className="tag" title="Chosen by the group's minimum or share of instances. It stays while they select it; turn off its policy management to take it out.">
+                  By policy
+                </span>
+              ),
+          },
           { key: 'cap', header: 'Capacity used', render: (i) => <CapacityBar used={i.consumed_capacity} total={i.capacity} label={`${i.hostname} capacity`} /> },
           {
             key: 'x',
             header: <span className="sr-only">Actions</span>,
             className: 'end',
             render: (i) =>
-              me.is_superuser && (
+              me.is_superuser &&
+              memberReason(i.hostname, group) === 'listed' && (
                 <button
                   className="btn sm ghost"
                   onClick={async () => {
@@ -606,7 +642,18 @@ function GroupInstances({ group }: { group: Group }) {
             </>
           }
         >
-          <MultiLookup label="Instances" resource="instances/" order="hostname" values={picked} onChange={setPicked} display={(r) => r.hostname} meta={(r) => r.node_type} full />
+          <MultiLookup
+            label="Instances"
+            resource="instances/"
+            order="hostname"
+            params={{ node_type__in: 'execution,hybrid' }}
+            values={picked}
+            onChange={setPicked}
+            display={(r) => r.hostname}
+            meta={(r) => r.node_type}
+            help="Added instances are listed in the group's policy, so they stay in it."
+            full
+          />
         </Dialog>
       )}
     </div>
@@ -669,11 +716,15 @@ function GroupFormInner({ group, credential, onDone }: { group?: Group; credenti
   const invalidate = useInvalidate()
   const nav = useNavigate()
   const podError = f.values.container ? varsError(f.values.pod_spec_override) : null
+  const checks = checkGroupForm(f.values)
+  const err = (k: keyof typeof checks) => checks[k] ?? f.errors[k]
+  // AWX keeps the installer's groups' names and policies.
+  const locked = !!group && installerGroup(group.name)
   const save = async () => {
     setBusy(true)
     setError(null)
     const body: Record<string, unknown> = {
-      name: f.values.name,
+      ...(locked ? {} : { name: f.values.name }),
       is_container_group: f.values.container,
       max_concurrent_jobs: Number(f.values.max_concurrent_jobs) || 0,
       max_forks: Number(f.values.max_forks) || 0,
@@ -683,11 +734,10 @@ function GroupFormInner({ group, credential, onDone }: { group?: Group; credenti
       body.pod_spec_override = f.values.pod_spec_override
     } else {
       body.policy_instance_minimum = Number(f.values.policy_instance_minimum) || 0
-      body.policy_instance_percentage = Number(f.values.policy_instance_percentage) || 0
-      body.policy_instance_list = f.values.policy_instance_list
-        .split(/[\s,]+/)
-        .map((s) => s.trim())
-        .filter(Boolean)
+      if (!locked) {
+        body.policy_instance_percentage = Number(f.values.policy_instance_percentage) || 0
+        body.policy_instance_list = parseHosts(f.values.policy_instance_list)
+      }
     }
     try {
       const saved = group ? await api.patch<Group>(`instance_groups/${group.id}/`, body) : await api.post<Group>('instance_groups/', body)
@@ -725,9 +775,31 @@ function GroupFormInner({ group, credential, onDone }: { group?: Group; credenti
         </div>
       )}
       <div className="form-grid">
-        <TextInput label="Name" value={f.values.name} onChange={(v) => f.set('name', v)} error={f.errors.name} autoFocus={!group} />
-        <TextInput label="Max concurrent jobs" type="number" value={f.values.max_concurrent_jobs} onChange={(v) => f.set('max_concurrent_jobs', v)} help="0 means no limit." error={f.errors.max_concurrent_jobs} />
-        <TextInput label="Max forks" type="number" value={f.values.max_forks} onChange={(v) => f.set('max_forks', v)} help="Total forks across running jobs. 0 means no limit." error={f.errors.max_forks} />
+        <TextInput
+          label="Name"
+          value={f.values.name}
+          onChange={(v) => f.set('name', v)}
+          error={f.errors.name}
+          autoFocus={!group}
+          disabled={locked}
+          help={locked ? 'Created by the installer; the name cannot change.' : undefined}
+        />
+        <TextInput
+          label="Max concurrent jobs"
+          type="number"
+          value={f.values.max_concurrent_jobs}
+          onChange={(v) => f.set('max_concurrent_jobs', v)}
+          help="Jobs running on the group's instances, whichever group sent them. 0 means no limit."
+          error={err('max_concurrent_jobs')}
+        />
+        <TextInput
+          label="Max forks"
+          type="number"
+          value={f.values.max_forks}
+          onChange={(v) => f.set('max_forks', v)}
+          help="Total forks across those jobs. 0 means no limit."
+          error={err('max_forks')}
+        />
         {f.values.container ? (
           <>
             <Lookup
@@ -753,15 +825,40 @@ function GroupFormInner({ group, credential, onDone }: { group?: Group; credenti
           </>
         ) : (
           <>
-            <TextInput label="Policy: minimum nodes" type="number" value={f.values.policy_instance_minimum} onChange={(v) => f.set('policy_instance_minimum', v)} help="Nodes automatically kept in this group." />
-            <TextInput label="Policy: share of nodes" type="number" value={f.values.policy_instance_percentage} onChange={(v) => f.set('policy_instance_percentage', v)} help="Percent of all nodes automatically in this group." />
-            <TextInput label="Always include" optional mono value={f.values.policy_instance_list} onChange={(v) => f.set('policy_instance_list', v)} help="Hostnames, comma separated." full />
+            <TextInput
+              label="Policy: minimum nodes"
+              type="number"
+              value={f.values.policy_instance_minimum}
+              onChange={(v) => f.set('policy_instance_minimum', v)}
+              help="Instances kept in this group, taken from those in the fewest groups."
+              error={err('policy_instance_minimum')}
+            />
+            <TextInput
+              label="Policy: share of nodes"
+              type="number"
+              value={f.values.policy_instance_percentage}
+              onChange={(v) => f.set('policy_instance_percentage', v)}
+              help={locked ? 'Every instance, as the installer set it.' : 'Percent of all instances kept in this group.'}
+              error={err('policy_instance_percentage')}
+              disabled={locked}
+            />
+            <TextInput
+              label="Always include"
+              optional
+              mono
+              value={f.values.policy_instance_list}
+              onChange={(v) => f.set('policy_instance_list', v)}
+              help={locked ? 'Set by the installer.' : 'Hostnames, comma separated. Instances added by hand are listed here.'}
+              error={err('policy_instance_list')}
+              disabled={locked}
+              full
+            />
           </>
         )}
       </div>
       <FormError error={error} />
       <div className="form-actions">
-        <button className="btn primary" disabled={busy || !f.values.name.trim() || !!podError}>
+        <button className="btn primary" disabled={busy || !f.values.name.trim() || !!podError || Object.keys(checks).length > 0}>
           {busy ? 'Saving…' : group ? 'Save changes' : 'Create group'}
         </button>
         <button type="button" className="btn ghost" onClick={() => nav(group ? `/instance-groups/${group.id}` : '/instances')}>

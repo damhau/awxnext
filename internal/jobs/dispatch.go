@@ -226,9 +226,10 @@ type instanceRow struct {
 	remaining int
 }
 
-// instanceGroupsFor returns the ordered instance group preference for a job:
-// template, inventory, organization, then "default". prevent_instance_group_fallback
-// on the template or inventory stops the chain.
+// instanceGroupsFor returns the ordered instance group preference for a job,
+// as AWX's preferred_instance_groups: template, inventory, organization,
+// prevent_instance_group_fallback on the template or inventory stopping the
+// chain, and "default" only when none of them has a group.
 func (m *Manager) instanceGroupsFor(ctx context.Context, row Row) ([]int64, error) {
 	var out []int64
 	add := func(ct string, id int64) error {
@@ -266,24 +267,24 @@ func (m *Manager) instanceGroupsFor(ctx context.Context, row Row) ([]int64, erro
 		}
 		m.DB().QueryRow(ctx, "SELECT prevent_instance_group_fallback FROM unified_job_templates WHERE id = $1", ujt).Scan(&tplNoFallback)
 	}
-	if tplNoFallback && len(out) > 0 {
-		return out, nil
-	}
-	if inv := row.Int("inventory_id"); inv != 0 {
-		if err := add("inventory", inv); err != nil {
-			return nil, err
+	if !tplNoFallback {
+		if inv := row.Int("inventory_id"); inv != 0 {
+			if err := add("inventory", inv); err != nil {
+				return nil, err
+			}
+			m.DB().QueryRow(ctx, "SELECT prevent_instance_group_fallback FROM inventories WHERE id = $1", inv).Scan(&invNoFallback)
 		}
-		m.DB().QueryRow(ctx, "SELECT prevent_instance_group_fallback FROM inventories WHERE id = $1", inv).Scan(&invNoFallback)
+		if !invNoFallback {
+			if err := add("organization", row.Int("organization_id")); err != nil {
+				return nil, err
+			}
+		}
 	}
-	if invNoFallback && len(out) > 0 {
-		return out, nil
-	}
-	if err := add("organization", row.Int("organization_id")); err != nil {
-		return nil, err
-	}
-	var def int64
-	if err := m.DB().QueryRow(ctx, "SELECT id FROM instance_groups WHERE name = 'default'").Scan(&def); err == nil {
-		out = append(out, def)
+	if len(out) == 0 {
+		var def int64
+		if err := m.DB().QueryRow(ctx, "SELECT id FROM instance_groups WHERE name = 'default'").Scan(&def); err == nil {
+			out = append(out, def)
+		}
 	}
 	return dedupe(out), nil
 }
@@ -316,19 +317,15 @@ func (m *Manager) place(ctx context.Context, row Row, sp *TypeSpec, impact int) 
 	}
 	for _, g := range groups {
 		var isContainer bool
-		var maxJobs int
-		if err := m.DB().QueryRow(ctx, "SELECT is_container_group, max_concurrent_jobs FROM instance_groups WHERE id = $1", g).Scan(&isContainer, &maxJobs); err != nil {
+		var maxJobs, maxForks int
+		if err := m.DB().QueryRow(ctx, "SELECT is_container_group, max_concurrent_jobs, max_forks FROM instance_groups WHERE id = $1", g).Scan(&isContainer, &maxJobs, &maxForks); err != nil {
+			continue
+		}
+		if !m.groupFits(ctx, g, isContainer, maxJobs, maxForks, impact, sp.ControlPlane) {
 			continue
 		}
 		gid := g
 		if isContainer {
-			if maxJobs > 0 {
-				var n int
-				m.DB().QueryRow(ctx, "SELECT count(*) FROM unified_jobs WHERE instance_group_id = $1 AND status IN ('waiting','running')", g).Scan(&n)
-				if n >= maxJobs {
-					continue
-				}
-			}
 			ctl, err := m.controlNode(ctx)
 			if err != nil || ctl == "" {
 				continue
@@ -367,6 +364,40 @@ func (m *Manager) place(ctx context.Context, row Row, sp *TypeSpec, impact int) 
 		}
 	}
 	return nil, "Waiting for capacity in the job's instance groups.", nil
+}
+
+// controlTaskImpact is AWX_CONTROL_NODE_TASK_IMPACT's default: the forks a
+// control plane task counts for against its group's max_forks.
+const controlTaskImpact = 1
+
+// groupFits is AWX's has_remaining_capacity: whether a job fits under its
+// group's max_concurrent_jobs and max_forks, zero meaning no limit. A
+// group's jobs and forks are those running on its ready, enabled
+// instances, whichever group sent them there; a container group's are the
+// jobs it runs. A control plane task counts as controlTaskImpact forks and
+// no job.
+func (m *Manager) groupFits(ctx context.Context, g int64, container bool, maxJobs, maxForks, impact int, controlPlane bool) bool {
+	if maxJobs == 0 && maxForks == 0 {
+		return true
+	}
+	jobImpact := 1
+	if controlPlane {
+		impact, jobImpact = controlTaskImpact, 0
+	}
+	on := "j.instance_group_id = $1"
+	if !container {
+		on = `j.execution_node IN (SELECT i.hostname FROM instances i JOIN instance_group_instances gi ON gi.instance_id = i.id
+			WHERE gi.instance_group_id = $1 AND i.enabled AND i.node_state = 'ready')`
+	}
+	var jobs, forks int
+	if err := m.DB().QueryRow(ctx, `SELECT count(*), coalesce(sum(j.task_impact), 0) FROM unified_jobs j
+		WHERE j.status IN ('waiting', 'running') AND `+on, g).Scan(&jobs, &forks); err != nil {
+		return false
+	}
+	if maxJobs > 0 && maxJobs-jobs-jobImpact < 0 {
+		return false
+	}
+	return maxForks == 0 || maxForks-forks-impact >= 0
 }
 
 func (m *Manager) candidates(ctx context.Context, group int64, controlPlane bool) ([]instanceRow, error) {

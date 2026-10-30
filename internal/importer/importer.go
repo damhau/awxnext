@@ -565,7 +565,7 @@ func (i *imp) instanceGroups() error {
 		i.col("main_instancegroup", "is_container_group", "false"), i.col("main_instancegroup", "credential_id", "NULL"),
 		i.col("main_instancegroup", "pod_spec_override", "''"), i.col("main_instancegroup", "policy_instance_percentage", "0"),
 		i.col("main_instancegroup", "policy_instance_minimum", "0"), i.col("main_instancegroup", "max_concurrent_jobs", "0"),
-		i.col("main_instancegroup", "max_forks", "0")}, ", ") + ` FROM main_instancegroup t ORDER BY t.id`)
+		i.col("main_instancegroup", "max_forks", "0"), i.col("main_instancegroup", "policy_instance_list", "'[]'")}, ", ") + ` FROM main_instancegroup t ORDER BY t.id`)
 	if err != nil {
 		return err
 	}
@@ -578,11 +578,32 @@ func (i *imp) instanceGroups() error {
 		if _, err := i.insert("instance_groups", "instance_groups", id(r["id"]), map[string]any{"name": r["name"], "created": r["created"], "modified": r["modified"],
 			"is_container_group": boolv(r["is_container_group"]), "credential_id": i.ref("credentials", r["credential_id"]),
 			"pod_spec_override": str(r["pod_spec_override"]), "policy_instance_percentage": id(r["policy_instance_percentage"]),
-			"policy_instance_minimum": id(r["policy_instance_minimum"]), "max_concurrent_jobs": id(r["max_concurrent_jobs"]), "max_forks": id(r["max_forks"])}); err != nil {
+			"policy_instance_minimum": id(r["policy_instance_minimum"]), "max_concurrent_jobs": id(r["max_concurrent_jobs"]), "max_forks": id(r["max_forks"]),
+			"policy_instance_list": hostList(r["policy_instance_list"])}); err != nil {
 			return err
 		}
 	}
-	return nil
+	// The instances are awxnext's own: the imported policies choose among
+	// them, and the listed hostnames apply to nodes registered under the
+	// same names.
+	return resources.ApplyMembershipPolicies(i.ctx, i.tx)
+}
+
+// hostList reads AWX's policy_instance_list, a JSON list kept in a text
+// column.
+func hostList(v any) []string {
+	out := []string{}
+	switch x := v.(type) {
+	case string:
+		json.Unmarshal([]byte(x), &out)
+	case []any:
+		for _, h := range x {
+			if s, ok := h.(string); ok {
+				out = append(out, s)
+			}
+		}
+	}
+	return out
 }
 
 func (i *imp) labels() error {
