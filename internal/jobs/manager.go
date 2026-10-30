@@ -441,6 +441,7 @@ func (m *Manager) run(parent context.Context, id int64) {
 			m.Notify(context.Background(), chEvents, fmt.Sprintf("%s|%s|%d|%d", m.Node, row.Str("type"), id, maxCounter))
 		})
 	out.Kind = row.Str("type")
+	out.RateLimit = m.App.Settings.Int(ctx, "JOB_EVENT_MAX_RATE")
 	var res Result
 	func() {
 		defer func() {

@@ -1,5 +1,11 @@
 package settings
 
+import (
+	"errors"
+	"fmt"
+	"strconv"
+)
+
 func init() {
 	for _, d := range []*Def{
 		// system
@@ -39,6 +45,8 @@ func init() {
 		{Key: "GALAXY_IGNORE_CERTS", Category: "jobs", Type: "boolean", Default: false},
 		{Key: "STDOUT_MAX_BYTES_DISPLAY", Category: "jobs", Type: "integer", Default: 1048576},
 		{Key: "EVENT_STDOUT_MAX_BYTES_DISPLAY", Category: "jobs", Type: "integer", Default: 1024, CompatOnly: true, Help: "No effect in awxnext: job output shows events in full; MAX_UI_JOB_EVENTS limits how many load at once."},
+		{Key: "JOB_EVENT_MAX_RATE", Category: "jobs", Type: "integer", Default: 1000, Validate: atLeastZero, Label: "Job Event Maximum Rate",
+			Help: "Events one job stores per second. Beyond it, consecutive verbose events (plain output lines) are folded into one, so a very verbose job cannot starve the others; its output stays complete. 0: no limit."},
 		{Key: "MAX_WEBSOCKET_EVENT_RATE", Category: "jobs", Type: "integer", Default: 30, Label: "Job Event Maximum Websocket Messages Per Second", Help: "Job events sent live to each browser per second; the job page fetches the rest from the API. 0: no limit."},
 		{Key: "BULK_JOB_MAX_LAUNCH", Category: "jobs", Type: "integer", Default: 100, Label: "Max jobs to allow bulk jobs to launch"},
 		{Key: "BULK_HOST_MAX_CREATE", Category: "jobs", Type: "integer", Default: 100, Label: "Max number of hosts to allow to be created in a single bulk action"},
@@ -99,4 +107,11 @@ func init() {
 	} {
 		Register(d)
 	}
+}
+
+func atLeastZero(v any) error {
+	if n, err := strconv.ParseFloat(fmt.Sprint(v), 64); err == nil && n < 0 {
+		return errors.New("Ensure this value is greater than or equal to 0.")
+	}
+	return nil
 }

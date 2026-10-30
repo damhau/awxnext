@@ -135,6 +135,7 @@ func ImportFile(ctx context.Context, app *api.App, o FileImport, log io.Writer) 
 	app.DB.QueryRow(ctx, "SELECT created FROM unified_jobs WHERE id = $1", updateID).Scan(&created)
 	out := jobs.NewOutput(app.DB, updateID, created, nil, nil, nil)
 	out.Kind = "inventory_update"
+	out.RateLimit = app.Settings.Int(ctx, "JOB_EVENT_MAX_RATE")
 	say := func(format string, a ...any) {
 		line := fmt.Sprintf(format, a...)
 		fmt.Fprintln(log, line)

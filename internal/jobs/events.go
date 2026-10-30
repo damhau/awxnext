@@ -41,7 +41,11 @@ type Event struct {
 type Output struct {
 	// Kind is the job's type, naming its field in events sent to the
 	// external log aggregator (job, project_update, ...).
-	Kind       string
+	Kind string
+	// RateLimit is how many events a second the job stores (0: no limit):
+	// beyond it, consecutive verbose events are folded into one, so a noisy
+	// job cannot starve the others. Set before the first Emit.
+	RateLimit  int
 	db         *pgxpool.Pool
 	jobID      int64
 	jobCreated time.Time
@@ -58,7 +62,18 @@ type Output struct {
 	done    chan struct{}
 	stopped chan struct{}
 	err     error
+
+	// The rate limit's token bucket, and how many counted events were
+	// folded: stored counters are the emitted ones less that, so they stay
+	// contiguous.
+	tokens  float64
+	refill  time.Time
+	shifted int
+	folded  int
 }
+
+// foldMax bounds the output a folded event holds; past it, a new one starts.
+const foldMax = 64 << 10
 
 const (
 	flushEvery = 250 * time.Millisecond
@@ -77,12 +92,6 @@ func NewOutput(db *pgxpool.Pool, jobID int64, jobCreated time.Time, hostIDs map[
 // Emit records an event. Counter and line numbers are assigned when missing.
 func (o *Output) Emit(e Event) {
 	o.mu.Lock()
-	if e.Counter == 0 {
-		o.counter++
-		e.Counter = o.counter
-	} else if e.Counter > o.counter {
-		o.counter = e.Counter
-	}
 	if e.Created.IsZero() {
 		e.Created = time.Now()
 	}
@@ -96,6 +105,23 @@ func (o *Output) Emit(e Event) {
 	}
 	if e.EndLine > o.line {
 		o.line = e.EndLine
+	}
+	if o.fold(e) {
+		// The previous verbose event took this one's output: viewers get it
+		// again, whole, under its counter.
+		merged := o.buf[len(o.buf)-1]
+		o.mu.Unlock()
+		metrics.Sub.Add("callback_receiver_events_popped_redis", 1)
+		if o.publish != nil {
+			o.publish(merged)
+		}
+		return
+	}
+	if e.Counter == 0 {
+		o.counter++
+		e.Counter = o.counter
+	} else if e.Counter -= o.shifted; e.Counter > o.counter {
+		o.counter = e.Counter
 	}
 	if e.HostID == nil && e.HostName != "" {
 		if id, ok := o.hostIDs[e.HostName]; ok {
@@ -118,6 +144,48 @@ func (o *Output) Emit(e Event) {
 		default:
 		}
 	}
+}
+
+// fold takes a verbose event into the previous one, still buffered, when
+// the job is over its RateLimit; o.mu is held.
+func (o *Output) fold(e Event) bool {
+	if o.RateLimit <= 0 {
+		return false
+	}
+	now := time.Now()
+	if o.refill.IsZero() {
+		o.tokens, o.refill = float64(o.RateLimit), now
+	}
+	o.tokens = min(float64(o.RateLimit), o.tokens+now.Sub(o.refill).Seconds()*float64(o.RateLimit))
+	o.refill = now
+	if o.tokens >= 1 {
+		o.tokens--
+		return false
+	}
+	n := len(o.buf)
+	if e.Event != "verbose" || n == 0 || o.buf[n-1].Event != "verbose" || len(o.buf[n-1].Stdout)+len(e.Stdout) > foldMax {
+		// Other events are always stored, and count against the budget.
+		o.tokens--
+		return false
+	}
+	last := &o.buf[n-1]
+	if last.Stdout != "" && e.Stdout != "" {
+		last.Stdout += "\n"
+	}
+	last.Stdout += e.Stdout
+	last.EndLine = e.EndLine
+	if e.Counter > 0 {
+		o.shifted++
+	}
+	o.folded++
+	return true
+}
+
+// Folded returns how many events were folded into others.
+func (o *Output) Folded() int {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return o.folded
 }
 
 // Line emits a plain output line as a verbose event (used by native runners).
@@ -236,12 +304,13 @@ func (o *Output) Close() error {
 	return err
 }
 
-// Position returns the last assigned event counter and output line, so a
-// second execution streamed into the same job can continue after them.
+// Position returns the last event counter, as emitted (before folding),
+// and output line, so a second execution streamed into the same job can
+// continue after them.
 func (o *Output) Position() (counter, line int) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	return o.counter, o.line
+	return o.counter + o.shifted, o.line
 }
 
 // Counter returns the last assigned event counter.

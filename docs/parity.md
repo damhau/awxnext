@@ -80,7 +80,7 @@ The gaps fall in four groups:
 17. ~~Named URLs for credentials and other multi-hop formats, `related.named_url`~~ (done, roadmap M2-10).
 18. ~~Websocket groups `jobs-summary`, `schedules-changed` and `control-limit_reached_<user>` (subscribable, never published)~~ (done, roadmap M6-05).
 19. UI: `start_at_task`, `prevent_instance_group_fallback` and instance groups on templates and inventories, webhook key display, credential types page, inventory source schedules tab, execution environment and passwords in the ad hoc dialog, node credentials and labels in the workflow editor, EE contents view (promised in PLAN.md).
-20. Plan items not built yet: per-job event rate caps, S3/Azure Blob event archives, benchmarks, Helm chart, dark mode, saved views stored per user on the server.
+20. Plan items not built yet: S3/Azure Blob event archives, benchmarks, Helm chart, dark mode, saved views stored per user on the server (per-job event rate caps done, roadmap M6-06).
 
 ## Authentication, users, organizations, RBAC
 
@@ -193,7 +193,7 @@ The gaps fall in four groups:
 | Container groups with `pod_spec_override` | Yes | Done | Push-based shim, no log tailing |
 | Job isolation | Yes | Partial | AWX always runs jobs in containers. awxnext's `none` runtime runs them as processes of the server's user: the server's environment is hidden from them, other jobs' files are not (roadmap M6-13) |
 | Websockets | Yes | Done | Every AWX group is published, to subscribers on every node: `jobs-summary` once a job's events are stored (with `final_counter`, AWX's EOF), `schedules-changed` when a schedule's next run, start or end moves (created, changed, run by the scheduler), and `control-limit_reached_<user>` when a login beyond `SESSIONS_PER_USER` ends that user's oldest sessions; the UI then signs those tabs out (roadmap M6-05) |
-| Event processing | Yes | Done | Batched COPY into daily partitions, archived after N days |
+| Event processing | Yes | Done | Batched COPY into daily partitions, archived after N days. Per-job rate cap (`JOB_EVENT_MAX_RATE`, awxnext's, 1000 a second): beyond it, consecutive verbose events are folded into one, stdout unchanged and counters contiguous, so a noisy job leaves others' event latency within 750 ms (p95) in a test (roadmap M6-06) |
 | HA, task and dependency manager | Yes | Done | PostgreSQL only, no Redis |
 | `awx-manage` commands | Yes | Partial | `inventory_import` as `awxnext inventory-import`; no instance provisioning commands |
 | Backup/restore, operator, Helm | Yes | Missing | Docker image and Compose only; key escrow commands |

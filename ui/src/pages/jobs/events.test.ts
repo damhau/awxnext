@@ -108,6 +108,19 @@ describe('addWithin', () => {
     expect(store.get(2)!.stdout).toBe('new')
   })
 
+  it('takes a folded event again, grown, and leaves no gap', () => {
+    // Over JOB_EVENT_MAX_RATE the server folds verbose lines into the event
+    // before, and sends it again whole under its counter.
+    counter = 0
+    const store = new Map<number, JobEvent>()
+    addWithin(store, [ev('a'), ev('b')], 0)
+    addWithin(store, [{ ...store.get(2)!, stdout: 'b\nc\nd' }], 0)
+    addWithin(store, [ev('e')], 0)
+    expect(store.get(2)!.stdout).toBe('b\nc\nd')
+    expect([...store.keys()]).toEqual([1, 2, 3])
+    expect(firstGap(store.keys())).toBeNull()
+  })
+
   it('has no limit at 0', () => {
     counter = 0
     const store = new Map<number, JobEvent>()
