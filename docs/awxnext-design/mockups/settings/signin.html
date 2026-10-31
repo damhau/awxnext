@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sign-in · settings mockup · awxnext</title>
+<!-- Mockup for roadmap M8 (issue #94). Uses the app's own styles; see README.md. -->
+<link rel="stylesheet" href="../../../../ui/node_modules/@fontsource/bricolage-grotesque/latin-700.css">
+<link rel="stylesheet" href="../../../../ui/node_modules/@fontsource/schibsted-grotesk/400.css">
+<link rel="stylesheet" href="../../../../ui/node_modules/@fontsource/schibsted-grotesk/500.css">
+<link rel="stylesheet" href="../../../../ui/node_modules/@fontsource/schibsted-grotesk/600.css">
+<link rel="stylesheet" href="../../../../ui/node_modules/@fontsource/jetbrains-mono/400.css">
+<link rel="stylesheet" href="../../../../ui/node_modules/@fontsource/jetbrains-mono/500.css">
+<link rel="stylesheet" href="../../../../ui/src/styles.css">
+<link rel="stylesheet" href="../../../../ui/src/pages/admin/admin.css">
+<link rel="stylesheet" href="settings-mockup.css">
+</head>
+<body>
+<div id="root"><div><div class="shell">
+<header class="topbar"><button class="bar-button icon nav-open" aria-label="Menu" aria-expanded="false" aria-controls="main-nav"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h11"></path></svg></button><a class="brand" aria-label="awxnext home" href="/"><span class="brand-mark" aria-hidden="true"><i class="live"></i><i class=""></i><i class=""></i><i class=""></i><i class="changed"></i><i class=""></i><i class=""></i><i class=""></i><i class="live"></i></span><span>awxnext</span></a><button class="bar-button jump" aria-label="Jump to template, host, job"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 11.5a4.5 4.5 0 1 0 0-9 4.5 4.5 0 0 0 0 9zM10.5 10.5 14 14"></path></svg><span class="grow">Jump to template, host, job…</span><span class="kbd">Ctrl K</span></button><div class="topbar-right"><a class="live-count" title="Jobs running and waiting for capacity" aria-label="0 running, 0 queued" href="/jobs?q=status:running"><span aria-hidden="true" class="live-dot idle"></span><span class="live-long" aria-hidden="true">0 running · 0 queued</span><span class="live-short" aria-hidden="true">0·0</span></a><div class="menu"><button type="button" class="avatar" aria-haspopup="menu" aria-expanded="false" aria-label="Account: admin"><span class="avatar " aria-hidden="true" style="background: rgb(227, 201, 168);">AD</span></button></div></div></header><div class="body"><nav id="main-nav" aria-label="Main" class="nav  "><div class="nav-group"><div class="nav-label">Automation</div><a class="" href="/"><span class="mark" aria-hidden="true"></span><span>Now</span></a><a class="" href="/templates"><span class="mark" aria-hidden="true"></span><span>Templates</span></a><a class="" href="/jobs"><span class="mark" aria-hidden="true"></span><span>Jobs</span></a><a class="" href="/schedules"><span class="mark" aria-hidden="true"></span><span>Schedules</span></a><a class="" href="/approvals"><span class="mark" aria-hidden="true"></span><span>Approvals</span></a></div><div class="nav-group"><div class="nav-label">Resources</div><a class="" href="/inventories"><span class="mark" aria-hidden="true"></span><span>Inventories</span></a><a class="" href="/hosts"><span class="mark" aria-hidden="true"></span><span>Hosts</span></a><a class="" href="/projects"><span class="mark" aria-hidden="true"></span><span>Projects</span></a><a class="" href="/credentials"><span class="mark" aria-hidden="true"></span><span>Credentials</span></a><a class="" href="/execution-environments"><span class="mark" aria-hidden="true"></span><span>Execution environments</span></a></div><div class="nav-group"><div class="nav-label">Access</div><a class="" href="/organizations"><span class="mark" aria-hidden="true"></span><span>Organizations</span></a><a class="" href="/folders"><span class="mark" aria-hidden="true"></span><span>Folders</span></a><a class="" href="/teams"><span class="mark" aria-hidden="true"></span><span>Teams</span></a><a class="" href="/users"><span class="mark" aria-hidden="true"></span><span>Users</span></a></div><div class="nav-group"><div class="nav-label">Admin</div><a class="" href="/instances"><span class="mark" aria-hidden="true"></span><span>Instances</span></a><a class="" href="/credential-types"><span class="mark" aria-hidden="true"></span><span>Credential types</span></a><a class="" href="/roles"><span class="mark" aria-hidden="true"></span><span>Roles</span></a><a class="" href="/host-metrics"><span class="mark" aria-hidden="true"></span><span>Host metrics</span></a><a class="" href="/notifications"><span class="mark" aria-hidden="true"></span><span>Notifications</span></a><a class="" href="/gitops"><span class="mark" aria-hidden="true"></span><span>GitOps</span></a><a class="" href="/management-jobs"><span class="mark" aria-hidden="true"></span><span>Management jobs</span></a><a class="" href="/activity"><span class="mark" aria-hidden="true"></span><span>Activity</span></a><a aria-current="page" class="active" href="/settings"><span class="mark" aria-hidden="true"></span><span>Settings</span></a></div><button class="nav-toggle" aria-label="Collapse navigation">« Collapse</button></nav><main class="main"><div class="page settings"><nav class="sidelist settings-nav" aria-label="Settings"><label class="s-search"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M7 11.5a4.5 4.5 0 1 0 0-9 4.5 4.5 0 0 0 0 9zM10.5 10.5 14 14"></path></svg><input class="input" placeholder="Search settings" aria-label="Search settings"><span class="key">/</span></label><div class="group"><div class="group-head"><span>Settings</span></div><a href="#">System</a><a class="active" aria-current="page" href="signin.html">Sign-in</a><div class="sub"><a href="#"><span class="cell" data-size="xs" data-state="ok"></span>OpenID Connect</a><a href="#"><span class="cell" data-size="xs" data-state="ok"></span>LDAP</a><a href="#"><span class="cell" data-size="xs" data-state="none"></span>SAML</a><a href="github.html"><span class="cell" data-size="xs" data-state="ok"></span>GitHub</a><a href="#"><span class="cell" data-size="xs" data-state="none"></span>Google</a><a href="#"><span class="cell" data-size="xs" data-state="none"></span>Microsoft Entra ID</a></div><a href="jobs.html">Jobs</a><a href="#">Logging</a><a href="#">Login page and UI</a></div><div class="group"><a class="changed-link" href="#"><span class="cell" data-size="xs" data-state="changed"></span>Changed from default<span class="n">7</span></a></div></nav><div class="settings-main">
+  <header class="page-head">
+    <div class="title-row center"><div class="grow"><h1>Sign-in</h1>
+      <p class="subtitle">How people log in, how long their sessions last, and what local passwords must contain.</p></div></div>
+    <nav class="s-index" aria-label="On this page"><a href="#methods">Login methods</a><a href="#sessions">Sessions</a><a href="#local">Local accounts</a><a href="#maps">Default maps</a></nav>
+  </header>
+  <div class="page-body">
+
+    <section class="s-section" id="methods">
+      <h2>Login methods</h2>
+      <p class="s-intro">Each method on is offered on the login page. People who sign in through one are created on their first login and placed in organizations and teams by its maps.</p>
+      <div class="methods">
+        <a class="method on" href="#"><div class="m-head"><span class="cell" data-state="ok"></span><b>Local accounts</b><span class="m-state">On</span></div>
+          <p class="m-what">12 users with a password</p><p class="m-sub">Passwords kept by awxnext. Superusers keep them even when they are off for others.</p></a>
+        <a class="method on" href="#"><div class="m-head"><span class="cell" data-state="ok"></span><b>OpenID Connect</b><span class="m-state">On</span></div>
+          <p class="m-what">sso.corp.example/realms/ops</p><p class="m-sub">3 mapping rules · API bearer tokens accepted</p><span class="btn sm">Edit</span></a>
+        <a class="method on" href="#"><div class="m-head"><span class="cell" data-state="ok"></span><b>LDAP</b><span class="m-state">On</span></div>
+          <p class="m-what">ldap1.corp.example, ad.corp.example</p><p class="m-sub">2 servers of 6, tried in order · 4 maps</p><span class="btn sm">Edit</span></a>
+        <a class="method on" href="github.html"><div class="m-head"><span class="cell" data-state="ok"></span><b>GitHub</b><span class="m-state">On</span></div>
+          <p class="m-what">github.com · members of acme</p><p class="m-sub">Organization map: everyone joins Default</p><span class="btn sm">Edit</span></a>
+        <a class="method off" href="#"><div class="m-head"><span class="cell" data-state="none"></span><b>SAML</b><span class="m-state">Off</span></div>
+          <p class="m-sub">Identity providers such as Okta, ADFS or Keycloak.</p><span class="btn sm">Set up</span></a>
+        <a class="method off" href="#"><div class="m-head"><span class="cell" data-state="none"></span><b>Google</b><span class="m-state">Off</span></div>
+          <p class="m-sub">Google accounts, of some domains only if you choose.</p><span class="btn sm">Set up</span></a>
+        <a class="method off" href="#"><div class="m-head"><span class="cell" data-state="none"></span><b>Microsoft Entra ID</b><span class="m-state">Off</span></div>
+          <p class="m-sub">Accounts of a Microsoft Entra ID (Azure AD) tenant.</p><span class="btn sm">Set up</span></a>
+      </div>
+    </section>
+
+    <section class="s-section" id="sessions">
+      <h2>Sessions</h2>
+      <div class="s-rows">
+        <div class="srow">
+          <div><div class="s-name">Sign out after inactivity</div>
+            <p class="s-help">A session with no activity for this long ends. At least 1 minute.</p>
+            <div class="s-meta"><button class="s-key" title="Copy">SESSION_COOKIE_AGE</button></div></div>
+          <div class="s-control"><div class="amount"><input class="input" value="30" aria-label="Amount"><select class="select" aria-label="Unit"><option>minutes</option></select></div></div>
+        </div>
+        <div class="srow">
+          <div><div class="s-name">Sessions per person</div>
+            <p class="s-help">Signing in once more than this ends the person's oldest session.</p>
+            <div class="s-meta"><button class="s-key" title="Copy">SESSIONS_PER_USER</button></div></div>
+          <div class="s-control"><div class="amount"><input class="input" value="" disabled aria-label="Sessions"><label class="check"><input type="checkbox" checked> No limit</label></div></div>
+        </div>
+        <div class="srow">
+          <div><div class="s-name">Username and password in API calls</div>
+            <p class="s-help">HTTP Basic authentication. The <code>awx</code> CLI and the <code>awx.awx</code> collection use it when given a username and password; tokens work either way.</p>
+            <div class="s-meta"><button class="s-key" title="Copy">AUTH_BASIC_ENABLED</button></div></div>
+          <div class="s-control"><label class="switch"><input type="checkbox" checked><span class="track"></span>Accepted</label></div>
+        </div>
+        <div class="srow">
+          <div><div class="s-name">Where signed-out people are sent</div>
+            <p class="s-help">Instead of the login page, for example straight to your single sign-on.</p>
+            <div class="s-meta"><button class="s-key" title="Copy">LOGIN_REDIRECT_OVERRIDE</button></div></div>
+          <div class="s-control"><input class="input mono" placeholder="The login page" aria-label="URL"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="s-section" id="local">
+      <h2>Local accounts</h2>
+      <div class="s-rows">
+        <div class="srow">
+          <div><div class="s-name">Password login for everyone</div>
+            <p class="s-help">Off: only superusers sign in with a password, to get in when single sign-on is down. Everyone else uses a login method.</p>
+            <div class="s-meta"><button class="s-key" title="Copy">DISABLE_LOCAL_AUTH</button></div></div>
+          <div class="s-control"><label class="switch"><input type="checkbox" checked><span class="track"></span>On</label></div>
+        </div>
+        <div class="srow edited">
+          <div><div class="s-name"><span class="cell" data-size="xs" data-state="changed" title="Changed from its default"></span>Passwords must have at least <span class="unsaved">unsaved</span></div>
+            <p class="s-help">Checked when a password is set or changed. Existing passwords are not affected.</p>
+            <div class="s-meta"><button class="s-key" title="Copy">LOCAL_PASSWORD_MIN_*</button><span class="s-default">Default: <b>no rules</b> · <button class="link-btn">Reset</button></span></div></div>
+          <div class="s-control"><div class="amounts amounts-4">
+            <label>Characters<input class="input" value="12"></label>
+            <label>Digits<input class="input" value="1"></label>
+            <label>Uppercase<input class="input" value="1"></label>
+            <label>Symbols<input class="input" value="0"></label></div>
+            <span class="note">0: no minimum.</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="s-section" id="maps">
+      <h2>Default organization and team maps</h2>
+      <p class="s-intro">For GitHub, Google, Microsoft Entra ID and SAML when they have no maps of their own. OIDC and LDAP use their own.</p>
+      <div class="s-rows">
+        <div class="srow">
+          <div><div class="s-name">Organizations and teams</div>
+            <p class="s-help">None yet: people from these methods join no organization, and see nothing until someone grants them access.</p>
+            <div class="s-meta"><button class="s-key" title="Copy">SOCIAL_AUTH_ORGANIZATION_MAP</button><button class="s-key" title="Copy">SOCIAL_AUTH_TEAM_MAP</button></div></div>
+          <div class="s-control"><button class="btn sm">Add an organization</button></div>
+        </div>
+      </div>
+    </section>
+
+    <p class="s-hidden">2 AWX settings that have no effect in awxnext are hidden. <button class="link-btn">Show them</button></p>
+  </div>
+  <div class="s-savebar"><span class="what"><b>1 change</b> not saved</span><button class="btn ghost">Discard</button><button class="btn primary">Save</button></div>
+</div>
+</div></main></div></div></div></div>
+</body>
+</html>

@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jobs · settings mockup · awxnext</title>
+<!-- Mockup for roadmap M8 (issue #94). Uses the app's own styles; see README.md. -->
+<link rel="stylesheet" href="../../../../ui/node_modules/@fontsource/bricolage-grotesque/latin-700.css">
+<link rel="stylesheet" href="../../../../ui/node_modules/@fontsource/schibsted-grotesk/400.css">
+<link rel="stylesheet" href="../../../../ui/node_modules/@fontsource/schibsted-grotesk/500.css">
+<link rel="stylesheet" href="../../../../ui/node_modules/@fontsource/schibsted-grotesk/600.css">
+<link rel="stylesheet" href="../../../../ui/node_modules/@fontsource/jetbrains-mono/400.css">
+<link rel="stylesheet" href="../../../../ui/node_modules/@fontsource/jetbrains-mono/500.css">
+<link rel="stylesheet" href="../../../../ui/src/styles.css">
+<link rel="stylesheet" href="../../../../ui/src/pages/admin/admin.css">
+<link rel="stylesheet" href="settings-mockup.css">
+</head>
+<body>
+<div id="root"><div><div class="shell">
+<header class="topbar"><button class="bar-button icon nav-open" aria-label="Menu" aria-expanded="false" aria-controls="main-nav"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h11"></path></svg></button><a class="brand" aria-label="awxnext home" href="/"><span class="brand-mark" aria-hidden="true"><i class="live"></i><i class=""></i><i class=""></i><i class=""></i><i class="changed"></i><i class=""></i><i class=""></i><i class=""></i><i class="live"></i></span><span>awxnext</span></a><button class="bar-button jump" aria-label="Jump to template, host, job"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 11.5a4.5 4.5 0 1 0 0-9 4.5 4.5 0 0 0 0 9zM10.5 10.5 14 14"></path></svg><span class="grow">Jump to template, host, job…</span><span class="kbd">Ctrl K</span></button><div class="topbar-right"><a class="live-count" title="Jobs running and waiting for capacity" aria-label="0 running, 0 queued" href="/jobs?q=status:running"><span aria-hidden="true" class="live-dot idle"></span><span class="live-long" aria-hidden="true">0 running · 0 queued</span><span class="live-short" aria-hidden="true">0·0</span></a><div class="menu"><button type="button" class="avatar" aria-haspopup="menu" aria-expanded="false" aria-label="Account: admin"><span class="avatar " aria-hidden="true" style="background: rgb(227, 201, 168);">AD</span></button></div></div></header><div class="body"><nav id="main-nav" aria-label="Main" class="nav  "><div class="nav-group"><div class="nav-label">Automation</div><a class="" href="/"><span class="mark" aria-hidden="true"></span><span>Now</span></a><a class="" href="/templates"><span class="mark" aria-hidden="true"></span><span>Templates</span></a><a class="" href="/jobs"><span class="mark" aria-hidden="true"></span><span>Jobs</span></a><a class="" href="/schedules"><span class="mark" aria-hidden="true"></span><span>Schedules</span></a><a class="" href="/approvals"><span class="mark" aria-hidden="true"></span><span>Approvals</span></a></div><div class="nav-group"><div class="nav-label">Resources</div><a class="" href="/inventories"><span class="mark" aria-hidden="true"></span><span>Inventories</span></a><a class="" href="/hosts"><span class="mark" aria-hidden="true"></span><span>Hosts</span></a><a class="" href="/projects"><span class="mark" aria-hidden="true"></span><span>Projects</span></a><a class="" href="/credentials"><span class="mark" aria-hidden="true"></span><span>Credentials</span></a><a class="" href="/execution-environments"><span class="mark" aria-hidden="true"></span><span>Execution environments</span></a></div><div class="nav-group"><div class="nav-label">Access</div><a class="" href="/organizations"><span class="mark" aria-hidden="true"></span><span>Organizations</span></a><a class="" href="/folders"><span class="mark" aria-hidden="true"></span><span>Folders</span></a><a class="" href="/teams"><span class="mark" aria-hidden="true"></span><span>Teams</span></a><a class="" href="/users"><span class="mark" aria-hidden="true"></span><span>Users</span></a></div><div class="nav-group"><div class="nav-label">Admin</div><a class="" href="/instances"><span class="mark" aria-hidden="true"></span><span>Instances</span></a><a class="" href="/credential-types"><span class="mark" aria-hidden="true"></span><span>Credential types</span></a><a class="" href="/roles"><span class="mark" aria-hidden="true"></span><span>Roles</span></a><a class="" href="/host-metrics"><span class="mark" aria-hidden="true"></span><span>Host metrics</span></a><a class="" href="/notifications"><span class="mark" aria-hidden="true"></span><span>Notifications</span></a><a class="" href="/gitops"><span class="mark" aria-hidden="true"></span><span>GitOps</span></a><a class="" href="/management-jobs"><span class="mark" aria-hidden="true"></span><span>Management jobs</span></a><a class="" href="/activity"><span class="mark" aria-hidden="true"></span><span>Activity</span></a><a aria-current="page" class="active" href="/settings"><span class="mark" aria-hidden="true"></span><span>Settings</span></a></div><button class="nav-toggle" aria-label="Collapse navigation">« Collapse</button></nav><main class="main"><div class="page settings"><nav class="sidelist settings-nav" aria-label="Settings"><label class="s-search"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M7 11.5a4.5 4.5 0 1 0 0-9 4.5 4.5 0 0 0 0 9zM10.5 10.5 14 14"></path></svg><input class="input" placeholder="Search settings" aria-label="Search settings"><span class="key">/</span></label><div class="group"><div class="group-head"><span>Settings</span></div><a href="#">System</a><a href="signin.html">Sign-in</a><div class="sub"><a href="#"><span class="cell" data-size="xs" data-state="ok"></span>OpenID Connect</a><a href="#"><span class="cell" data-size="xs" data-state="ok"></span>LDAP</a><a href="#"><span class="cell" data-size="xs" data-state="none"></span>SAML</a><a href="github.html"><span class="cell" data-size="xs" data-state="ok"></span>GitHub</a><a href="#"><span class="cell" data-size="xs" data-state="none"></span>Google</a><a href="#"><span class="cell" data-size="xs" data-state="none"></span>Microsoft Entra ID</a></div><a class="active" aria-current="page" href="jobs.html">Jobs</a><div class="sub"><a href="#safety">Launch safety</a><a href="#limits">Limits and timeouts</a><a href="#content">Content</a><a href="#execution">Execution</a><a href="#output">Output and events</a></div><a href="#">Logging</a><a href="#">Login page and UI</a></div><div class="group"><a class="changed-link" href="#"><span class="cell" data-size="xs" data-state="changed"></span>Changed from default<span class="n">7</span></a></div></nav><div class="settings-main">
+  <header class="page-head">
+    <div class="title-row center"><div class="grow"><h1>Jobs</h1>
+      <p class="subtitle">What launchers may change, limits and timeouts, and where jobs get their content and keep their output.</p></div></div>
+    <nav class="s-index" aria-label="On this page"><a href="#safety">Launch safety</a><a href="#limits">Limits and timeouts</a><a href="#content">Content</a><a href="#execution">Execution</a><a href="#output">Output and events</a></nav>
+  </header>
+  <div class="page-body">
+
+    <section class="s-section safety" id="safety">
+      <h2><svg aria-hidden="true" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M8 1.5 2.5 3.5v4c0 3.2 2.3 5.9 5.5 7 3.2-1.1 5.5-3.8 5.5-7v-4L8 1.5z"/></svg>Launch safety</h2>
+      <p class="s-intro">What someone who may launch a template, but not change it, can make the job do. The defaults keep a launcher to the template's own playbook.</p>
+      <div class="s-rows">
+        <div class="srow">
+          <div><div class="s-name">Variables named <code>ansible_*</code> at launch</div>
+            <p class="s-help">In extra variables, survey answers, schedules and ad hoc commands. Variables on templates, inventories and hosts are not affected.</p>
+            <div class="s-meta"><button class="s-key" title="Copy">ALLOW_ANSIBLE_VARS_AT_LAUNCH</button></div></div>
+          <div class="s-control"><div class="segmented"><label class="on"><input type="radio" name="av" checked>Refused</label><label><input type="radio" name="av">Allowed</label></div>
+            <span class="s-consequence">Allowed lets a launcher change how Ansible connects and escalates, for example <code>ansible_ssh_common_args</code> or <code>ansible_become_exe</code>, and so run other commands than the playbook's.</span></div>
+        </div>
+        <div class="srow">
+          <div><div class="s-name">Launch fields the template does not prompt for</div>
+            <p class="s-help">A limit, an inventory, extra variables… sent at launch when the template does not ask for them.</p>
+            <div class="s-meta"><button class="s-key" title="Copy">IGNORE_UNPROMPTED_LAUNCH_FIELDS</button></div></div>
+          <div class="s-control"><div class="segmented"><label class="on"><input type="radio" name="uf" checked>Refused</label><label><input type="radio" name="uf">Ignored, as in AWX</label></div>
+            <span class="note">Ignored: the job starts without them, and the response lists them in <code>ignored_fields</code>. For clients written for AWX that send every field.</span></div>
+        </div>
+        <div class="srow">
+          <div><div class="s-name">Jinja in extra variables</div>
+            <p class="s-help">Whether <code>{{ … }}</code> in extra variables is evaluated by Ansible.</p>
+            <div class="s-meta"><button class="s-key" title="Copy">ALLOW_JINJA_IN_EXTRA_VARS</button></div></div>
+          <div class="s-control"><select class="select" aria-label="Jinja"><option>Only in the template's own variables</option><option>Never</option><option>Also in a launcher's variables</option></select>
+            <span class="note">A launcher's Jinja runs where the playbook runs, and its lookups can read files and run commands there.</span></div>
+        </div>
+        <div class="srow">
+          <div><div class="s-name">Modules for ad hoc commands</div>
+            <p class="s-help">The modules people with the run commands permission may use. <code>command</code> and <code>shell</code> run anything.</p>
+            <div class="s-meta"><button class="s-key" title="Copy">AD_HOC_COMMANDS</button></div></div>
+          <div class="s-control"><div class="chips">
+            <span class="chip">command<button aria-label="Remove">×</button></span><span class="chip">shell<button aria-label="Remove">×</button></span><span class="chip">yum<button aria-label="Remove">×</button></span><span class="chip">apt<button aria-label="Remove">×</button></span><span class="chip">service<button aria-label="Remove">×</button></span><span class="chip">group<button aria-label="Remove">×</button></span><span class="chip">user<button aria-label="Remove">×</button></span><span class="chip">ping<button aria-label="Remove">×</button></span><span class="chip">setup<button aria-label="Remove">×</button></span><span class="chip">win_ping<button aria-label="Remove">×</button></span><button class="add">+ 9 more</button><button class="add">+ Add</button></div></div>
+        </div>
+        <div class="srow">
+          <div><div class="s-name">Projects from the server's own files</div>
+            <p class="s-help">Git projects with a <code>file://</code> URL or a local path.</p>
+            <div class="s-meta"><button class="s-key" title="Copy">PROJECT_ALLOW_FILE_URLS</button></div></div>
+          <div class="s-control"><label class="switch"><input type="checkbox"><span class="track"></span>Not allowed</label>
+            <span class="note">Allowed lets anyone who may create a project check out any directory the server can read. Only for single-tenant installs you trust.</span></div>
+        </div>
+        <div class="srow">
+          <div><div class="s-name">Symbolic links in projects</div>
+            <p class="s-help">When awxnext lists a project's playbooks and inventory files.</p>
+            <div class="s-meta"><button class="s-key" title="Copy">AWX_SHOW_PLAYBOOK_LINKS</button></div></div>
+          <div class="s-control"><div class="segmented"><label class="on"><input type="radio" name="pl" checked>Inside the project only</label><label><input type="radio" name="pl">Followed anywhere, as in AWX</label></div>
+            <span class="note">Followed anywhere lets a project link to files elsewhere on the server and have them listed.</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="s-section" id="limits">
+      <h2>Limits and timeouts</h2>
+      <div class="s-rows">
+        <div class="srow edited">
+          <div><div class="s-name"><span class="cell" data-size="xs" data-state="changed" title="Changed from its default"></span>Job timeout</div>
+            <p class="s-help">A job still running after this long is canceled. Templates may set their own.</p>
+            <div class="s-meta"><button class="s-key" title="Copy">DEFAULT_JOB_TIMEOUT</button><span class="s-default">Default: <b>no limit</b> · <button class="link-btn">Reset</button></span></div></div>
+          <div class="s-control"><div class="amount"><input class="input" value="2" aria-label="Amount"><select class="select" aria-label="Unit"><option>hours</option></select><label class="check"><input type="checkbox"> No limit</label></div></div>
+        </div>
+        <div class="srow">
+          <div><div class="s-name">Idle timeout</div>
+            <p class="s-help">A job that prints nothing for this long is canceled.</p>
+            <div class="s-meta"><button class="s-key" title="Copy">DEFAULT_JOB_IDLE_TIMEOUT</button></div></div>
+          <div class="s-control"><div class="amount"><input class="input" disabled aria-label="Amount"><select class="select" disabled aria-label="Unit"><option>minutes</option></select><label class="check"><input type="checkbox" checked> No limit</label></div></div>
+        </div>
+        <div class="srow">
+          <div><div class="s-name">Sync timeouts</div>
+            <p class="s-help">For project and inventory syncs whose project or source sets none.</p>
+            <div class="s-meta"><button class="s-key" title="Copy">DEFAULT_PROJECT_UPDATE_TIMEOUT</button><button class="s-key" title="Copy">DEFAULT_INVENTORY_UPDATE_TIMEOUT</button></div></div>
+          <div class="s-control">
+            <div class="amount-l"><span>Project syncs</span><div class="amount"><input class="input" disabled aria-label="Amount"><select class="select" disabled aria-label="Unit"><option>minutes</option></select><label class="check"><input type="checkbox" checked> No limit</label></div></div>
+            <div class="amount-l"><span>Inventory syncs</span><div class="amount"><input class="input" disabled aria-label="Amount"><select class="select" disabled aria-label="Unit"><option>minutes</option></select><label class="check"><input type="checkbox" checked> No limit</label></div></div></div>
+        </div>
+        <div class="srow">
+          <div><div class="s-name">How long gathered facts stay valid</div>
+            <p class="s-help">For templates that use the fact cache: older facts are gathered again.</p>
+            <div class="s-meta"><button class="s-key" title="Copy">ANSIBLE_FACT_CACHE_TIMEOUT</button></div></div>
+          <div class="s-control"><div class="amount"><input class="input" disabled aria-label="Amount"><select class="select" disabled aria-label="Unit"><option>hours</option></select><label class="check"><input type="checkbox" checked> Always valid</label></div></div>
+        </div>
+        <div class="srow">
+          <div><div class="s-name">Forks per job, at most</div>
+            <p class="s-help">The most forks a template, a launch, a schedule, a workflow step or an ad hoc command may ask for.</p>
+            <div class="s-meta"><button class="s-key" title="Copy">MAX_FORKS</button></div></div>
+          <div class="s-control"><div class="amount"><input class="input" value="200" aria-label="Forks"><label class="check"><input type="checkbox"> No limit</label></div></div>
+        </div>
+        <div class="srow">
+          <div><div class="s-name">Waiting jobs per schedule</div>
+            <p class="s-help">A schedule launches nothing while this many jobs of its template are waiting to run.</p>
+            <div class="s-meta"><button class="s-key" title="Copy">SCHEDULE_MAX_JOBS</button></div></div>
+          <div class="s-control"><div class="amount"><input class="input" value="10" aria-label="Jobs"></div></div>
+        </div>
+        <div class="srow">
+          <div><div class="s-name">Bulk API, per request</div>
+            <p class="s-help">The most a single call to <code>bulk/</code> may do.</p>
+            <div class="s-meta"><button class="s-key" title="Copy">BULK_HOST_MAX_CREATE</button><button class="s-key" title="Copy">BULK_HOST_MAX_DELETE</button><button class="s-key" title="Copy">BULK_JOB_MAX_LAUNCH</button></div></div>
+          <div class="s-control"><div class="amounts"><label>Hosts created<input class="input" value="100"></label><label>Hosts deleted<input class="input" value="250"></label><label>Jobs launched<input class="input" value="100"></label></div></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="s-section" id="content">
+      <h2>Content</h2>
+      <p class="s-intro">Roles and collections a project's <code>requirements.yml</code> lists are installed when a job starts.</p>
+      <div class="s-rows">
+        <div class="srow">
+          <div><div class="s-name">Install from requirements files</div>
+            <div class="s-meta"><button class="s-key" title="Copy">AWX_ROLES_ENABLED</button><button class="s-key" title="Copy">AWX_COLLECTIONS_ENABLED</button></div></div>
+          <div class="s-control"><label class="switch"><input type="checkbox" checked><span class="track"></span>Roles</label><label class="switch"><input type="checkbox" checked><span class="track"></span>Collections</label></div>
+        </div>
+        <div class="srow">
+          <div><div class="s-name">Galaxy server certificates</div>
+            <p class="s-help">Checked by default. Skip the check only for a server with a self-signed certificate.</p>
+            <div class="s-meta"><button class="s-key" title="Copy">GALAXY_IGNORE_CERTS</button></div></div>
+          <div class="s-control"><label class="switch"><input type="checkbox" checked><span class="track"></span>Checked</label></div>
+        </div>
+        <div class="srow">
+          <div><div class="s-name">Environment of installs</div>
+            <p class="s-help">Variables set while roles and collections are installed.</p>
+            <div class="s-meta"><button class="s-key" title="Copy">GALAXY_TASK_ENV</button></div></div>
+          <div class="s-control"><div class="kv"><span class="head">Variable</span><span class="head">Value</span><span></span>
+            <input class="input" value="ANSIBLE_FORCE_COLOR"><input class="input" value="false"><button class="icon-x" aria-label="Remove">×</button>
+            <input class="input" value="GIT_SSH_COMMAND"><input class="input" value="ssh -o StrictHostKeyChecking=no"><button class="icon-x" aria-label="Remove">×</button></div>
+            <button class="btn sm ghost">+ Add a variable</button></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="s-section" id="execution">
+      <h2>Execution</h2>
+      <div class="s-rows">
+        <div class="srow">
+          <div><div class="s-name">Environment of jobs</div>
+            <p class="s-help">Variables added to the environment of every job.</p>
+            <div class="s-meta"><button class="s-key" title="Copy">AWX_TASK_ENV</button></div></div>
+          <div class="s-control"><span class="note">None.</span><button class="btn sm ghost">+ Add a variable</button></div>
+        </div>
+        <div class="srow">
+          <div><div class="s-name">Host paths mounted into jobs</div>
+            <p class="s-help">Directories of the host made visible inside execution environment containers.</p>
+            <div class="s-meta"><button class="s-key" title="Copy">AWX_ISOLATION_SHOW_PATHS</button></div></div>
+          <div class="s-control"><div class="kv kv-paths"><span class="head">Host path</span><span class="head">In the container</span><span class="head">Options</span><span></span>
+            <input class="input" value="/etc/pki/ca-trust"><input class="input" placeholder="Same path"><input class="input" value="ro"><button class="icon-x" aria-label="Remove">×</button></div>
+            <button class="btn sm ghost">+ Add a path</button>
+            <label class="switch"><input type="checkbox"><span class="track"></span>Also in container group pods</label></div>
+        </div>
+        <div class="srow">
+          <div><div class="s-name">Keepalive for quiet remote jobs</div>
+            <p class="s-help">After this long without output, a job on a remote node or in a container group sends a keepalive, so idle connections are not cut.</p>
+            <div class="s-meta"><button class="s-key" title="Copy">AWX_RUNNER_KEEPALIVE_SECONDS</button></div></div>
+          <div class="s-control"><div class="amount"><input class="input" disabled aria-label="Amount"><select class="select" disabled aria-label="Unit"><option>seconds</option></select><label class="check"><input type="checkbox" checked> Never</label></div></div>
+        </div>
+        <div class="srow">
+          <div><div class="s-name">Extra callback plugins</div>
+            <p class="s-help">Paths searched for callback plugins, in addition to the execution environment's.</p>
+            <div class="s-meta"><button class="s-key" title="Copy">AWX_ANSIBLE_CALLBACK_PLUGINS</button></div></div>
+          <div class="s-control"><span class="note">None.</span><button class="btn sm ghost">+ Add a path</button></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="s-section" id="output">
+      <h2>Output and events</h2>
+      <div class="s-rows">
+        <div class="srow">
+          <div><div class="s-name">Events stored per second, per job</div>
+            <p class="s-help">Beyond it, consecutive plain output lines are folded into one, so a very verbose job cannot starve the others.</p>
+            <div class="s-meta"><button class="s-key" title="Copy">JOB_EVENT_MAX_RATE</button></div></div>
+          <div class="s-control"><div class="amount"><input class="input" value="1000" aria-label="Events"><span class="note">events per second</span><label class="check"><input type="checkbox"> No limit</label></div></div>
+        </div>
+        <div class="srow">
+          <div><div class="s-name">Live events per second, per browser</div>
+            <p class="s-help">The job page fetches the rest from the API.</p>
+            <div class="s-meta"><button class="s-key" title="Copy">MAX_WEBSOCKET_EVENT_RATE</button></div></div>
+          <div class="s-control"><div class="amount"><input class="input" value="30" aria-label="Events"><span class="note">events per second</span><label class="check"><input type="checkbox"> No limit</label></div></div>
+        </div>
+        <div class="srow">
+          <div><div class="s-name">Largest output the API returns inline</div>
+            <p class="s-help">Larger output, asked for at a job's <code>stdout/</code>, is only offered as a download. The job page is not limited by it.</p>
+            <div class="s-meta"><button class="s-key" title="Copy">STDOUT_MAX_BYTES_DISPLAY</button></div></div>
+          <div class="s-control"><div class="amount"><input class="input" value="1" aria-label="Size"><select class="select" aria-label="Unit"><option>MiB</option></select></div></div>
+        </div>
+        <div class="srow">
+          <div><div class="s-name">Event archives</div>
+            <p class="s-help">After 14 days in the database, a job's events are compressed into an archive, kept here.</p>
+            <div class="s-meta"><button class="s-key" title="Copy">JOB_EVENTS_HOT_DAYS</button><button class="s-key" title="Copy">JOB_EVENTS_ARCHIVE_STORAGE</button></div></div>
+          <div class="s-control"><div class="amount"><input class="input" value="14" aria-label="Days"><span class="note">days in the database first</span></div>
+            <div class="segmented"><label class="on"><input type="radio" name="st" checked>Database</label><label><input type="radio" name="st">Amazon S3</label><label><input type="radio" name="st">Azure Blob Storage</label></div>
+            <span class="note">S3 and Azure ask for a bucket or container, an endpoint, a region, a prefix and a credential.</span></div>
+        </div>
+      </div>
+    </section>
+
+    <p class="s-hidden">4 AWX settings that have no effect in awxnext are hidden. <button class="link-btn">Show them</button></p>
+  </div>
+  <div class="s-savebar"><span class="what"><b>1 change</b> not saved</span><button class="btn ghost">Discard</button><button class="btn primary">Save</button></div>
+</div>
+</div></main></div></div></div></div>
+</body>
+</html>
