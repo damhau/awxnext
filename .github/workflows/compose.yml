@@ -1,0 +1,43 @@
+name: Compose
+
+# The all-in-one image with Compose (deploy/compose): jobs run as job users of
+# their own (internal/jobexec), tested by test/isolation. On pushes that change
+# the image, the Compose file or the job helper, and from full.yml. helm.yml
+# tests the chart.
+on:
+  push:
+    paths:
+      - Dockerfile
+      - deploy/docker-entrypoint.sh
+      - deploy/compose/**
+      - internal/jobexec/**
+      - cmd/awxnext-jobexec/**
+      - test/isolation/**
+      - .github/workflows/compose.yml
+  workflow_call:
+  workflow_dispatch:
+
+jobs:
+  compose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: start
+        working-directory: deploy/compose
+        env:
+          AWXNEXT_SECRET_KEY: ci-compose-secret-key
+          AWXNEXT_DB_PASSWORD: cicompose
+          AWXNEXT_ADMIN_PASSWORD: ci-compose-admin
+        run: docker compose up -d --build --wait
+      - name: jobs as job users
+        run: |
+          docker compose -f deploy/compose/docker-compose.yml logs awxnext | grep "jobs run as job users"
+          export AWXNEXT_TEST_ISOLATION_URL=http://127.0.0.1:8052 AWXNEXT_TEST_ISOLATION_PASSWORD=ci-compose-admin
+          go test -count=1 -v ./test/isolation/
+      - name: diagnostics
+        if: failure()
+        run: docker compose -f deploy/compose/docker-compose.yml logs --tail 300 || true
+

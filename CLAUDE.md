@@ -27,7 +27,7 @@ Run the tests of what you changed, and nothing else: CI runs the rest on push.
 - **UI (`ui/`):** `cd ui && npx tsc --noEmit -p . && npx vitest run`, then check the page in
   the browser (below).
 - **The Helm chart:** `helm lint deploy/helm/awxnext`, and `helm template` with the values you
-  changed. `deploy.yml` installs it in kind on push.
+  changed. `helm.yml` installs it in kind on push.
 - **Workflows, Compose, docs:** check that the file parses; there is nothing to run locally.
   A workflow is tested by its first run. A new setting or environment variable is Go code:
   `make test` checks `docs/configuration.md` and `config.Vars`.
@@ -54,7 +54,8 @@ CI and the browser:
     short suite and the UI. On main, it then publishes the all-in-one image as
     `main-<commit time>-<commit>`. Argo CD Image Updater deploys that image to the permanent
     instance (the `awxnext` app in damhau/k8s-argocd), so a green push to main goes live.
-  - `deploy.yml` runs when the Dockerfile, `deploy/`, the job helper or the agent change.
+  - `helm.yml` (the chart in kind) runs when the chart, the Dockerfile or the agent change;
+    `compose.yml` (the image with Compose) when Compose, the Dockerfile or the job helper do.
 - **Checking the UI in a browser:** use the compat stack at http://localhost:8053
   (`admin` / `compat`), started with the UI override:
 

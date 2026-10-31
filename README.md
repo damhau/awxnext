@@ -222,9 +222,10 @@ CI runs in tiers:
 
 | Workflow | When | What |
 |---|---|---|
-| `ci.yml` | every push | gofmt, vet, the short suite, the UI's typecheck, unit tests and build |
-| `deploy.yml` | pushes that change the Dockerfile, `deploy/`, the job helper or the agent | the Helm chart in kind, the all-in-one image with Compose |
-| `full.yml` | nightly, and by hand before a milestone closes (`gh workflow run full.yml`) | every Go test with the race detector, MinIO and Azurite; `deploy.yml`; the compatibility suites (`compat.yml`), a job each |
+| `ci.yml` | every push | gofmt, vet, the short suite, the UI's typecheck, unit tests and build; on `main`, then publishes the all-in-one image as `main-<commit time>-<commit>` |
+| `helm.yml` | pushes that change the chart, the Dockerfile or the agent | the Helm chart in kind: a job in a container group, upgrade, backup and restore |
+| `compose.yml` | pushes that change Compose, the Dockerfile or the job helper | the all-in-one image with Compose: jobs as job users |
+| `full.yml` | nightly, and by hand before a milestone closes (`gh workflow run full.yml`) | every Go test with the race detector, MinIO and Azurite; `helm.yml` and `compose.yml`; the compatibility suites (`compat.yml`), a job each |
 | `bench.yml` | by hand | the [benchmarks against AWX](docs/benchmarks.md) |
 
 Licensed under the Apache License 2.0.

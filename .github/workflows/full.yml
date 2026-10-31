@@ -1,7 +1,8 @@
 name: Full
 
 # Everything: the whole Go suite with the race detector (job tests, object
-# storage against MinIO and Azurite), the images and the chart (deploy.yml)
+# storage against MinIO and Azurite), the chart (helm.yml), the image with
+# Compose (compose.yml)
 # and AWX's clients (compat.yml, a job per suite). Nightly, and by hand before
 # a milestone is closed: gh workflow run full.yml
 on:
@@ -59,8 +60,11 @@ jobs:
       - name: test
         run: go test -race -count=1 ./...
 
-  deploy:
-    uses: ./.github/workflows/deploy.yml
+  helm:
+    uses: ./.github/workflows/helm.yml
+
+  compose:
+    uses: ./.github/workflows/compose.yml
 
   compat:
     strategy:
