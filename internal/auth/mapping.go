@@ -57,8 +57,11 @@ type MappingResult struct {
 	// KeepRoles keeps every assignment of these role definitions from
 	// earlier logins, except those in Revoke (SAML's remove options).
 	KeepRoles []string `json:"-"`
-	Revoke    []Grant  `json:"-"`
-	Errors    []string `json:"errors"`
+	// Revoke lists the mapped roles a login takes away. A login removes
+	// every role it gave that it neither grants nor keeps, so only
+	// KeepRoles needs it; the maps also fill it for the map tester.
+	Revoke []Grant  `json:"-"`
+	Errors []string `json:"errors"`
 }
 
 // Mapping is how an external login maps to access: awxnext's rules over

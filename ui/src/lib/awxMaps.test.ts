@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
   asPattern,
+  lines,
+  mapLogin,
+  parseAttributes,
   describeExpr,
   formatFlags,
   formatMaps,
@@ -170,5 +173,42 @@ describe('SAML attribute maps', () => {
     expect(f.auditor.remove).toBe(false)
     expect(formatSamlFlags(f)).toEqual(v)
     expect(formatSamlFlags(parseSamlFlags({}))).toEqual({})
+  })
+})
+
+describe('trying the maps', () => {
+  it('finds the login of each organization map, with the settings it reads', () => {
+    expect(mapLogin('SOCIAL_AUTH_ORGANIZATION_MAP')).toEqual({ login: 'default', kind: 'social', keys: ['SOCIAL_AUTH_ORGANIZATION_MAP', 'SOCIAL_AUTH_TEAM_MAP'] })
+    expect(mapLogin('SOCIAL_AUTH_GITHUB_ENTERPRISE_TEAM_ORGANIZATION_MAP')?.login).toBe('github-enterprise-team')
+    expect(mapLogin('SOCIAL_AUTH_GITHUB_ORGANIZATION_MAP')?.keys).toEqual(['SOCIAL_AUTH_GITHUB_ORGANIZATION_MAP', 'SOCIAL_AUTH_GITHUB_TEAM_MAP'])
+    expect(mapLogin('SOCIAL_AUTH_AZUREAD_OAUTH2_ORGANIZATION_MAP')?.login).toBe('azuread-oauth2')
+    expect(mapLogin('SOCIAL_AUTH_SAML_ORGANIZATION_MAP')).toEqual({
+      login: 'saml',
+      kind: 'saml',
+      keys: ['SOCIAL_AUTH_SAML_ORGANIZATION_MAP', 'SOCIAL_AUTH_SAML_TEAM_MAP', 'SOCIAL_AUTH_SAML_ORGANIZATION_ATTR', 'SOCIAL_AUTH_SAML_TEAM_ATTR', 'SOCIAL_AUTH_SAML_USER_FLAGS_BY_ATTR'],
+    })
+    expect(mapLogin('AUTH_LDAP_ORGANIZATION_MAP')).toEqual({ login: 'ldap', kind: 'ldap', keys: ['AUTH_LDAP_ORGANIZATION_MAP', 'AUTH_LDAP_TEAM_MAP', 'AUTH_LDAP_USER_FLAGS_BY_GROUP'] })
+    expect(mapLogin('AUTH_LDAP_3_ORGANIZATION_MAP')?.keys).toEqual(['AUTH_LDAP_3_ORGANIZATION_MAP', 'AUTH_LDAP_3_TEAM_MAP', 'AUTH_LDAP_3_USER_FLAGS_BY_GROUP'])
+    expect(mapLogin('AUTH_LDAP_3_ORGANIZATION_MAP')?.login).toBe('ldap3')
+  })
+
+  it('knows no other map', () => {
+    expect(mapLogin('SOCIAL_AUTH_TEAM_MAP')).toBeNull()
+    expect(mapLogin('SOCIAL_AUTH_GITLAB_ORGANIZATION_MAP')).toBeNull()
+    expect(mapLogin('AUTH_LDAP_6_ORGANIZATION_MAP')).toBeNull()
+    expect(mapLogin('SOCIAL_AUTH_toString_ORGANIZATION_MAP')).toBeNull()
+  })
+
+  it('reads groups one distinguished name per line', () => {
+    expect(lines(' CN=Eng, OU=Groups,DC=example,DC=com \n\n cn=ops,dc=example,dc=com')).toEqual(['CN=Eng, OU=Groups,DC=example,DC=com', 'cn=ops,dc=example,dc=com'])
+  })
+
+  it('reads SAML attributes one value per line', () => {
+    expect(
+      parseAttributes('memberOf = CN=Eng,DC=example,DC=com\nmemberOf=ops\nurn:oid:0.9.2342.19200300.100.1.3 = alice@example.com\nRole = \njust a line\n= value'),
+    ).toEqual({
+      attributes: { memberOf: ['CN=Eng,DC=example,DC=com', 'ops'], 'urn:oid:0.9.2342.19200300.100.1.3': ['alice@example.com'], Role: [''] },
+      bad: ['just a line', '= value'],
+    })
   })
 })

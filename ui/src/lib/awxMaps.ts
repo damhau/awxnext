@@ -335,3 +335,70 @@ export function problemText(p: string): string {
 
 /** A pattern as AWX writes it: /pattern/flags. */
 export const asPattern = (s: string) => (isPattern(s) ? s : `/${s}/`)
+
+/**
+ * A login whose maps the server can try on a sample user
+ * (POST settings/maps/test/): its name there, how it matches users, and the
+ * settings it reads, sent with their values not saved yet.
+ */
+export interface MapLogin {
+  login: string
+  kind: 'social' | 'ldap' | 'saml'
+  keys: string[]
+}
+
+const socialLogins: Record<string, string> = {
+  '': 'default',
+  GITHUB_: 'github',
+  GITHUB_ORG_: 'github-org',
+  GITHUB_TEAM_: 'github-team',
+  GITHUB_ENTERPRISE_: 'github-enterprise',
+  GITHUB_ENTERPRISE_ORG_: 'github-enterprise-org',
+  GITHUB_ENTERPRISE_TEAM_: 'github-enterprise-team',
+  GOOGLE_OAUTH2_: 'google-oauth2',
+  AZUREAD_OAUTH2_: 'azuread-oauth2',
+  SAML_: 'saml',
+}
+
+/** The login of an organization map setting, or null. */
+export function mapLogin(orgKey: string): MapLogin | null {
+  const ldap = /^AUTH_LDAP_(?:([1-5])_)?ORGANIZATION_MAP$/.exec(orgKey)
+  if (ldap) {
+    const p = ldap[1] ? `AUTH_LDAP_${ldap[1]}_` : 'AUTH_LDAP_'
+    return { login: `ldap${ldap[1] ?? ''}`, kind: 'ldap', keys: [`${p}ORGANIZATION_MAP`, `${p}TEAM_MAP`, `${p}USER_FLAGS_BY_GROUP`] }
+  }
+  const social = /^SOCIAL_AUTH_(.*)ORGANIZATION_MAP$/.exec(orgKey)
+  const login = social && Object.hasOwn(socialLogins, social[1]) ? socialLogins[social[1]] : null
+  if (!social || !login) return null
+  const p = `SOCIAL_AUTH_${social[1]}`
+  const keys = [`${p}ORGANIZATION_MAP`, `${p}TEAM_MAP`]
+  if (login === 'saml') return { login, kind: 'saml', keys: [...keys, `${p}ORGANIZATION_ATTR`, `${p}TEAM_ATTR`, `${p}USER_FLAGS_BY_ATTR`] }
+  return { login, kind: 'social', keys }
+}
+
+/** Non-blank lines, trimmed: distinguished names have commas. */
+export const lines = (text: string) =>
+  text
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean)
+
+/**
+ * SAML attributes written one value per line, `name = value`: a name given
+ * twice has both values. Names can hold colons (URNs, claim URLs), values
+ * equal signs (DNs), so the first = splits them. Lines without one are bad.
+ */
+export function parseAttributes(text: string): { attributes: Record<string, string[]>; bad: string[] } {
+  const attributes: Record<string, string[]> = {}
+  const bad: string[] = []
+  for (const line of lines(text)) {
+    const i = line.indexOf('=')
+    const name = line.slice(0, i).trim()
+    if (i < 0 || !name) {
+      bad.push(line)
+      continue
+    }
+    ;(attributes[name] ??= []).push(line.slice(i + 1).trim())
+  }
+  return { attributes, bad }
+}

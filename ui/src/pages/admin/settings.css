@@ -204,3 +204,10 @@
 .settings .srow.target { background: var(--lime-wash); }
 .settings .s-word { max-width: 360px; overflow-wrap: anywhere; }
 .settings .s-word.muted { color: var(--muted-2); }
+/* Trying a login's maps on a sample user, under the map editor. */
+.settings details.map-test { margin: 12px 8px 2px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface-2); }
+.settings details.map-test > summary { cursor: pointer; font-size: 13px; font-weight: 600; list-style: none; }
+.settings details.map-test > summary::-webkit-details-marker { display: none; }
+.settings details.map-test > summary::before { content: '▸ '; color: var(--muted-2); font-size: 11px; }
+.settings details.map-test[open] > summary { margin-bottom: 10px; }
+.settings details.map-test[open] > summary::before { content: '▾ '; }

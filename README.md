@@ -155,7 +155,8 @@ awxnext keys rewrap               # move to a new master key (old one in AWXNEXT
 
 The API follows AWX `/api/v2` so the `awx` CLI, the `awx.awx` collection and the Terraform
 provider work against it. Additions: `/api/v2/folders/`, `/<resource>/<id>/history/`
-(diff and revert), `/api/v2/openapi.json`, `/api/v2/settings/oidc/test/` (mapping dry-run).
+(diff and revert), `/api/v2/openapi.json`, `/api/v2/settings/oidc/test/` (mapping dry-run),
+`/api/v2/settings/maps/test/` (organization and team maps dry-run).
 
 ### Importing an inventory file
 

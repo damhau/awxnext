@@ -436,7 +436,24 @@ func (o *OIDC) dryRun(c *api.Ctx, w http.ResponseWriter, r *http.Request) {
 	// An existing user is matched with the username and email it has.
 	c.App.DB.QueryRow(c, "SELECT email FROM users WHERE username = $1 AND email <> ''", name).Scan(&email)
 	res := Mapping{Rules: cfg.Rules, AWX: cfg.AWX}.Evaluate(Identity{Username: name, Email: email, Groups: groups})
-	// Report objects that would be created.
+	creates := wouldCreate(c, res.Grants)
+	api.WriteJSON(w, 200, api.Obj{
+		"username":     name,
+		"email":        email,
+		"groups_claim": cfg.GroupsClaim,
+		"groups":       groups,
+		"superuser":    res.Superuser,
+		"auditor":      res.Auditor,
+		"grants":       res.Grants,
+		"kept":         res.Keep,
+		"would_create": creates,
+		"errors":       nonNilStrings(res.Errors),
+	})
+}
+
+// wouldCreate lists the organizations and teams that granting grants would
+// create, for the dry runs.
+func wouldCreate(c *api.Ctx, grants []Grant) []string {
 	creates := []string{}
 	listed := map[string]bool{}
 	create := func(what string) {
@@ -445,7 +462,7 @@ func (o *OIDC) dryRun(c *api.Ctx, w http.ResponseWriter, r *http.Request) {
 			creates = append(creates, what)
 		}
 	}
-	for _, g := range res.Grants {
+	for _, g := range grants {
 		if !g.Create {
 			continue
 		}
@@ -462,18 +479,7 @@ func (o *OIDC) dryRun(c *api.Ctx, w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	api.WriteJSON(w, 200, api.Obj{
-		"username":     name,
-		"email":        email,
-		"groups_claim": cfg.GroupsClaim,
-		"groups":       groups,
-		"superuser":    res.Superuser,
-		"auditor":      res.Auditor,
-		"grants":       res.Grants,
-		"kept":         res.Keep,
-		"would_create": creates,
-		"errors":       nonNilStrings(res.Errors),
-	})
+	return creates
 }
 
 func nonNilStrings(s []string) []string {

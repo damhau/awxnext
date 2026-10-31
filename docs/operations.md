@@ -371,6 +371,19 @@ are saved in AWX's format, without the options left at their default, so AWX's c
 them unchanged. LDAP's superusers and auditors by group, and SAML's organizations, teams and
 flags from attributes, are forms too.
 
+**Try with a user**, under each login's maps, shows what signing in would give someone: give a
+username, and an email (for LDAP, the groups the user is a member of, one distinguished name
+per line; for SAML, its attributes, one `name = value` per line). The server evaluates the maps
+as shown, unsaved edits included, with the code a login runs, and saves nothing. It answers with
+the superuser and auditor flags, the roles granted and why, those left as they are, those taken
+away if the user has them, and the organizations and teams that would be created. An existing
+user's email is used when none is given. The API is `POST /api/v2/settings/maps/test/`, for
+superusers: `login` is `default` (the maps OIDC uses), `github`, `github-org`, `github-team`,
+`github-enterprise`, `github-enterprise-org`, `github-enterprise-team`, `google-oauth2`,
+`azuread-oauth2`, `saml`, or `ldap`, `ldap1`... `ldap5`; `settings` holds the values not saved
+yet, of that login's map settings only, checked as saving them would check them; `groups` and
+`attributes` describe the user for LDAP and SAML.
+
 Only three settings with no effect, whose shape is free-form, are still JSON:
 `OAUTH2_PROVIDER`, `SOCIAL_AUTH_SAML_SP_EXTRA` and `SOCIAL_AUTH_SAML_EXTRA_DATA`.
 

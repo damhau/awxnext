@@ -2821,5 +2821,19 @@
   "More settings match: add a word.": "D’autres paramètres correspondent : ajoutez un mot.",
   "Changed from its default": "Modifié par rapport à sa valeur par défaut",
   "Default:": "Par défaut :",
-  "Default for {part}:": "Par défaut pour {part} :"
+  "Default for {part}:": "Par défaut pour {part} :",
+  "Not a superuser: taken away if they were one.": "Pas superutilisateur : ce statut lui est retiré s’il l’avait.",
+  "Not a system auditor: taken away if they were one.": "Pas auditeur système : ce statut lui est retiré s’il l’avait.",
+  "Taken away if the user has them:": "Retirés si l’utilisateur les a :",
+  "Try with a user": "Essayer avec un utilisateur",
+  "Nothing is saved or changed: this is what signing in would give a user in these groups, from the maps as shown, unsaved edits included.": "Rien n’est enregistré ni modifié : voici ce qu’une connexion donnerait à un utilisateur de ces groupes, d’après les correspondances affichées, modifications non enregistrées comprises.",
+  "Nothing is saved or changed: this is what signing in would give a user with these attributes, from the maps as shown, unsaved edits included.": "Rien n’est enregistré ni modifié : voici ce qu’une connexion donnerait à un utilisateur ayant ces attributs, d’après les correspondances affichées, modifications non enregistrées comprises.",
+  "Nothing is saved or changed: this is what signing in would give this user, from the maps as shown, unsaved edits included.": "Rien n’est enregistré ni modifié : voici ce qu’une connexion donnerait à cet utilisateur, d’après les correspondances affichées, modifications non enregistrées comprises.",
+  "Groups, one distinguished name per line": "Groupes, un nom distinctif par ligne",
+  "Groups, one distinguished name per line: CN=Engineering,OU=Groups,DC=example,DC=com": "Groupes, un nom distinctif par ligne : CN=Engineering,OU=Groups,DC=example,DC=com",
+  "Attributes, one value per line": "Attributs, une valeur par ligne",
+  "Attributes, one value per line: memberOf = Engineering": "Attributs, une valeur par ligne : memberOf = Engineering",
+  "Not read, write name = value: {lines}": "Non lu, écrivez nom = valeur : {lines}",
+  "Try": "Essayer",
+  "Nothing matches: the user could sign in, with no access from these maps.": "Aucune correspondance : l’utilisateur pourrait se connecter, sans aucun accès venant de ces correspondances."
 }

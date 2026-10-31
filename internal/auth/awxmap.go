@@ -358,7 +358,9 @@ func sortedKeys(m map[string]any) []string {
 // Evaluate applies the maps: a matched expression grants its role, an
 // unmatched one revokes it unless its remove option is false, and a null
 // one leaves it as it is. Like AWX, a team map makes the user a member of
-// the team only, not of its organization.
+// the team only, not of its organization. The roles revoked are listed in
+// Revoke, for the map tester: a login removes every mapped role it neither
+// grants nor keeps.
 func (m AWXMaps) Evaluate(match Matcher, res *MappingResult) {
 	decide := func(e mapExpr, remove bool, g Grant) {
 		switch {
@@ -368,6 +370,8 @@ func (m AWXMaps) Evaluate(match Matcher, res *MappingResult) {
 			res.Grants = append(res.Grants, g)
 		case !remove:
 			res.Keep = append(res.Keep, g)
+		default:
+			res.Revoke = append(res.Revoke, g)
 		}
 	}
 	for _, o := range m.Orgs {

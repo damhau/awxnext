@@ -21,10 +21,13 @@ import {
   formatSamlTeamAttr,
   grantRows,
   isPattern,
+  lines,
+  mapLogin,
   mapProblems,
   newOrg,
   newTeam,
   orgRoles,
+  parseAttributes,
   parseFlags,
   parseMaps,
   parseSamlFlags,
@@ -1468,6 +1471,7 @@ function MapsControl({ row, ctx }: { row: Row; ctx: Ctx }) {
           </button>
         </div>
       )}
+      {ctx.editable && <MapTester orgKey={orgKey} ctx={ctx} />}
     </div>
   )
 }
@@ -2117,18 +2121,144 @@ function clean(r: Rule): Rule {
   return out
 }
 
-interface DryRun {
-  username: string
-  email?: string
-  groups: string[]
-  groups_claim: string
+/** What a sign-in would give a user, as the dry runs answer. */
+interface MapResult {
   superuser: boolean | null
   auditor: boolean | null
   grants: MappedGrant[] | null
   kept?: MappedGrant[] | null
+  removed?: MappedGrant[] | null
   would_create: string[] | null
   errors?: string[] | null
 }
+
+interface DryRun extends MapResult {
+  username: string
+  email?: string
+  groups: string[]
+  groups_claim: string
+}
+
+interface MapTest extends MapResult {
+  username: string
+  email: string
+}
+
+const roleList = (l: MappedGrant[]) => l.map((g) => `${g.role_definition} on ${grantTarget(g)}`).join(', ')
+
+/** A dry run's answer: flags, the roles granted, kept and removed, and what would be created. */
+function MappedResult({ result, none, flagsLost = false }: { result: MapResult; none: string; flagsLost?: boolean }) {
+  const lost = flagsLost ? [result.superuser === false && tr('Not a superuser: taken away if they were one.'), result.auditor === false && tr('Not a system auditor: taken away if they were one.')].filter(Boolean) : []
+  return (
+    <>
+      {(result.superuser || result.auditor) && <div className="notice accent">{result.superuser ? tr('Becomes a superuser.') : tr('Becomes a system auditor.')}</div>}
+      {lost.length ? <div className="small muted">{lost.join(' ')}</div> : null}
+      {result.grants?.length ? (
+        <table className="data">
+          <thead>
+            <tr>
+              <th scope="col">{tr('Role')}</th>
+              <th scope="col">{tr('On')}</th>
+              <th scope="col">{tr('Because of')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {result.grants.map((g, i) => (
+              <tr key={i}>
+                <td>{g.role_definition}</td>
+                <td>{grantTarget(g)}</td>
+                <td className="mono small">{grantReason(g)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : (
+        !result.superuser && !result.auditor && <div className="notice">{none}</div>
+      )}
+      {result.kept?.length ? (
+        <div className="small muted">
+          {tr('Left as they are (kept if the user has them from an earlier login):')} {roleList(result.kept)}
+        </div>
+      ) : null}
+      {result.removed?.length ? (
+        <div className="small muted">
+          {tr('Taken away if the user has them:')} {roleList(result.removed)}
+        </div>
+      ) : null}
+      {result.would_create?.length ? <div className="small muted">{tr('Would create:')} {result.would_create.join(', ')}</div> : null}
+      {result.errors?.length ? <div className="form-error">{result.errors.join('; ')}</div> : null}
+    </>
+  )
+}
+
+/** Tries a login's maps on a sample user, unsaved edits included, with the server's own evaluation. */
+function MapTester({ orgKey, ctx }: { orgKey: string; ctx: Ctx }) {
+  const [user, setUser] = useState('')
+  const [email, setEmail] = useState('')
+  const [more, setMore] = useState('')
+  const [result, setResult] = useState<MapTest | null>(null)
+  const [error, setError] = useState<unknown>(null)
+  const login = mapLogin(orgKey)
+  if (!login) return null
+  const attrs = login.kind === 'saml' ? parseAttributes(more) : null
+  const run = async () => {
+    if (!user.trim()) return
+    setError(null)
+    const body: Record<string, unknown> = {
+      login: login.login,
+      username: user,
+      email,
+      settings: Object.fromEntries(login.keys.filter((k) => k in ctx.values).map((k) => [k, ctx.values[k]])),
+    }
+    if (login.kind === 'ldap') body.groups = lines(more)
+    if (attrs) body.attributes = attrs.attributes
+    try {
+      setResult(await api.post<MapTest>('settings/maps/test/', body))
+    } catch (e) {
+      setError(e)
+      setResult(null)
+    }
+  }
+  return (
+    <details className="map-test">
+      <summary>{tr('Try with a user')}</summary>
+      <div className="stack" style={{ gap: 10 }}>
+        <p className="small muted" style={{ margin: 0 }}>
+          {login.kind === 'ldap'
+            ? tr('Nothing is saved or changed: this is what signing in would give a user in these groups, from the maps as shown, unsaved edits included.')
+            : login.kind === 'saml'
+              ? tr('Nothing is saved or changed: this is what signing in would give a user with these attributes, from the maps as shown, unsaved edits included.')
+              : tr('Nothing is saved or changed: this is what signing in would give this user, from the maps as shown, unsaved edits included.')}
+        </p>
+        <div className="row" style={{ flexWrap: 'wrap' }}>
+          <input className="input mono" style={{ flex: '1 1 10rem', width: 'auto' }} aria-label={tr('Username')} placeholder={tr('Username')} value={user} onChange={(e) => setUser(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && run()} />
+          {login.kind !== 'ldap' && (
+            <input className="input mono" style={{ flex: '1 1 12rem', width: 'auto' }} aria-label={tr('Email')} placeholder={tr('email (optional)')} value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && run()} />
+          )}
+        </div>
+        {login.kind === 'ldap' && (
+          <textarea className="textarea mono" rows={3} spellCheck={false} aria-label={tr('Groups, one distinguished name per line')} placeholder={tr('Groups, one distinguished name per line: CN=Engineering,OU=Groups,DC=example,DC=com')} value={more} onChange={(e) => setMore(e.target.value)} />
+        )}
+        {login.kind === 'saml' && (
+          <textarea className="textarea mono" rows={3} spellCheck={false} aria-label={tr('Attributes, one value per line')} placeholder={tr('Attributes, one value per line: memberOf = Engineering')} value={more} onChange={(e) => setMore(e.target.value)} />
+        )}
+        {attrs?.bad.length ? <div className="small err">{tr('Not read, write name = value: {lines}', { lines: attrs.bad.join(', ') })}</div> : null}
+        <div>
+          <button type="button" className="btn" onClick={run} disabled={!user.trim()}>
+            {tr('Try')}
+          </button>
+        </div>
+        <FormError error={error} />
+        {result && (
+          <div className="stack" style={{ gap: 8 }}>
+            <MappedResult result={result} none={tr('Nothing matches: the user could sign in, with no access from these maps.')} flagsLost />
+          </div>
+        )}
+      </div>
+    </details>
+  )
+}
+
 
 /** Evaluates the unsaved rules against sample token claims. */
 function MappingTester({ rules, groupsClaim }: { rules: Rule[]; groupsClaim: string }) {
@@ -2183,36 +2313,7 @@ function MappingTester({ rules, groupsClaim }: { rules: Rule[]; groupsClaim: str
               <span className="mono">{result.username}</span>
               {result.email ? <span className="mono faint"> ({result.email})</span> : null} {tr('with groups')} {result.groups.length ? result.groups.map((g) => <span key={g} className="chip" style={{ marginRight: 4 }}>{g}</span>) : <span className="faint">{tr('none')}</span>}
             </div>
-            {(result.superuser || result.auditor) && <div className="notice accent">{result.superuser ? tr('Becomes a superuser.') : tr('Becomes a system auditor.')}</div>}
-            {result.grants?.length ? (
-              <table className="data">
-                <thead>
-                  <tr>
-                    <th scope="col">{tr('Role')}</th>
-                    <th scope="col">{tr('On')}</th>
-                    <th scope="col">{tr('Because of')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {result.grants.map((g, i) => (
-                    <tr key={i}>
-                      <td>{g.role_definition}</td>
-                      <td>{grantTarget(g)}</td>
-                      <td className="mono small">{grantReason(g)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            ) : (
-              !result.superuser && !result.auditor && <div className="notice">{tr('No rule matches: the user could sign in but would have no access.')}</div>
-            )}
-            {result.kept?.length ? (
-              <div className="small muted">
-                {tr('Left as they are (kept if the user has them from an earlier login):')} {result.kept.map((g) => `${g.role_definition} on ${grantTarget(g)}`).join(', ')}
-              </div>
-            ) : null}
-            {result.would_create?.length ? <div className="small muted">{tr('Would create:')} {result.would_create.join(', ')}</div> : null}
-            {result.errors?.length ? <div className="form-error">{result.errors.join('; ')}</div> : null}
+            <MappedResult result={result} none={tr('No rule matches: the user could sign in but would have no access.')} />
           </div>
         )}
       </div>

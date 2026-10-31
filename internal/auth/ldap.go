@@ -697,25 +697,40 @@ func (u *ldapUser) isMember(groupDN string) (bool, error) {
 // mapping evaluates the user's flags, then (with the groups the search
 // finds, as AWX loads them before its maps) the organization and team maps.
 func (u *ldapUser) mapping() (MappingResult, error) {
-	var res MappingResult
-	flags := map[string]*bool{}
-	for flag, dns := range u.server.flags {
+	flags, err := ldapFlagValues(u.server.flags, u.isMember)
+	if err != nil {
+		return MappingResult{}, err
+	}
+	if err := u.loadGroups(); err != nil {
+		return MappingResult{}, err
+	}
+	return ldapResult(u.server.maps, flags, u.inGroups), nil
+}
+
+// ldapFlagValues sets each user flag of USER_FLAGS_BY_GROUP: true when the
+// user is a member of one of its groups.
+func ldapFlagValues(flags map[string][]string, isMember func(dn string) (bool, error)) (map[string]*bool, error) {
+	out := map[string]*bool{}
+	for flag, dns := range flags {
 		value := false
 		for _, dn := range dns {
-			m, err := u.isMember(dn)
+			m, err := isMember(dn)
 			if err != nil {
-				return res, err
+				return nil, err
 			}
 			value = value || m
 		}
-		flags[flag] = &value
+		out[flag] = &value
 	}
-	if err := u.loadGroups(); err != nil {
-		return res, err
-	}
-	res = Mapping{AWX: u.server.maps}.Evaluate(Identity{Match: func(lit string, _ *regexp.Regexp) bool { return u.inGroups(lit) }})
+	return out, nil
+}
+
+// ldapResult evaluates an LDAP server's maps, whose expressions are group
+// DNs, with the user flags already set.
+func ldapResult(maps AWXMaps, flags map[string]*bool, inGroups func(dn string) bool) MappingResult {
+	res := Mapping{AWX: maps}.Evaluate(Identity{Match: func(lit string, _ *regexp.Regexp) bool { return inGroups(lit) }})
 	res.Superuser, res.Auditor = flags["is_superuser"], flags["is_system_auditor"]
-	return res, nil
+	return res
 }
 
 // LDAP logs users in with AWX's LDAP settings.
