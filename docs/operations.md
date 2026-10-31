@@ -318,6 +318,26 @@ The pages are drawn from `ui/src/lib/settingsLayout.ts`, which places each setti
 a section, in order, with its label and its control. A setting it does not place is still shown,
 under "Other settings" on its category's page.
 
+Each kind of value has its control, and is saved in AWX's format:
+
+- **Durations and sizes** are typed in a unit (minutes, hours, MiB...) and stored in seconds or
+  bytes. The value that means none, such as 0 for "No limit" or -1 for any number of sessions, is
+  a checkbox.
+- **Secrets** (passwords, client secrets, private keys) show "Set" once set, never their value:
+  Replace types a new one, Remove empties it on save. AWX's clients read them as `$encrypted$`.
+- **Lists** are chips, or checkboxes when their items are known (the loggers sent to the
+  aggregator). **Environment variables** and **LDAP connection options** are names and values;
+  the options keep their numbers.
+- **LDAP searches** are a base DN, a scope and a filter; a user search may have several, of which
+  exactly one must find the user. **SAML's identity providers** and its organization by language
+  are cards, its contacts and security small forms; the keys a form does not show are kept.
+- **The logo** is an image file (GIF, PNG or JPEG), stored as a data URL. Callback URLs, the
+  metadata URL and the installation's ID are read-only, with a copy button.
+
+The organization and team maps and the user flags are still JSON. So are three settings with no
+effect whose shape is free-form: `OAUTH2_PROVIDER`, `SOCIAL_AUTH_SAML_SP_EXTRA` and
+`SOCIAL_AUTH_SAML_EXTRA_DATA`.
+
 ## Observe
 
 - **Metrics:** `/metrics` (Prometheus; `AWXNEXT_METRICS_TOKEN` to protect it) and

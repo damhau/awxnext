@@ -1,13 +1,11 @@
-import { tr } from './i18n'
+import { asIs, tr } from './i18n'
+import type { Field, Kind, UnitKind } from './settingValues'
 
 // The settings pages, laid out by what an admin sets up rather than by AWX's
 // categories: every setting the API has is placed here, once, on a page, in
 // a section, in order, with its label and the control that edits it. The
 // API's categories and keys do not change; a page saves its changes to the
 // categories they belong to.
-
-/** How a setting is edited, when its type alone does not say. */
-export type Control = 'json' | 'oidc-mapping' | 'archive-credential'
 
 export interface Row {
   /** The settings the row edits: one, or several edited together. */
@@ -18,7 +16,30 @@ export interface Row {
   help?: string
   /** In a row of several settings, each one's own label, in the keys' order. */
   parts?: string[]
-  control?: Control
+  /** How the setting is edited, when its type alone does not say (see
+   * settingValues.ts). In a row of several, the first setting's. */
+  control?: Kind
+  /** An amount's unit: durations (stored in seconds) and sizes (in bytes)
+   * are shown in a unit chosen from theirs; other words follow the number. */
+  unit?: UnitKind | string
+  /** The amount that means none, and what it is called ("No limit"). */
+  none?: [number, string]
+  /** A list's possible items: each one's value and label. */
+  options?: [string, string][]
+  /** Text on several lines: a certificate, the login page's text. */
+  lines?: boolean
+  /** Names and values: the two columns' headings; whether numbers and
+   * true or false are stored as such (coerce) rather than as text. */
+  columns?: [string, string]
+  coerce?: boolean
+  /** An object edited as a form, or each of a set of named objects. */
+  fields?: Field[]
+  /** What a named object's name is ("Language"). */
+  name?: string
+  /** The words of the button that adds an item, a variable, a record. */
+  add?: string
+  /** LDAP searches: several may be given. */
+  multiple?: boolean
   /** A switch's words for off and on. */
   states?: [string, string]
   /** The switch is on when the setting is false (DISABLE_LOCAL_AUTH). */
@@ -56,6 +77,7 @@ export interface SettingsPage {
 
 const row = (key: string, more: Partial<Row> = {}): Row => ({ keys: [key], ...more })
 const filled = (v: unknown) => typeof v === 'string' && v.trim() !== ''
+const envVars: Partial<Row> = { control: 'pairs', columns: [tr('Variable'), tr('Value')], add: tr('Add a variable') }
 
 // AWX's six LDAP servers: AUTH_LDAP_* is the default one, AUTH_LDAP_1_* to
 // AUTH_LDAP_5_* the others, tried in order. Fields in the order they are set up.
@@ -78,12 +100,38 @@ const ldapFields = [
   'CONNECTION_OPTIONS',
 ]
 
+// How an LDAP server's settings that are not text are edited.
+const ldapControls: Record<string, Partial<Row>> = {
+  USER_SEARCH: {
+    control: 'ldap-search',
+    multiple: true,
+    help: tr('Where users are found: a base DN, a scope, and a filter in which %(user)s is the name typed. With several searches, exactly one must find the user.'),
+  },
+  USER_ATTR_MAP: {
+    control: 'fields',
+    help: tr('The LDAP attributes the user\'s name and email are read from, at each login.'),
+    fields: [
+      { key: 'first_name', label: tr('First name'), placeholder: asIs('givenName') },
+      { key: 'last_name', label: tr('Last name'), placeholder: asIs('sn') },
+      { key: 'email', label: tr('Email'), placeholder: asIs('mail') },
+    ],
+  },
+  GROUP_SEARCH: { control: 'ldap-search', help: tr('Where the user\'s groups are. Organization and team maps only see the groups it finds.') },
+  GROUP_TYPE_PARAMS: { control: 'pairs', columns: [tr('Parameter'), tr('Value')], add: tr('Add a parameter'), help: tr('Parameters of the group type, such as member_attr and name_attr.') },
+  CONNECTION_OPTIONS: {
+    control: 'pairs',
+    columns: [tr('Option'), tr('Value')],
+    coerce: true,
+    add: tr('Add an option'),
+    help: tr('python-ldap options. Used: OPT_NETWORK_TIMEOUT (seconds), OPT_X_TLS_REQUIRE_CERT (0: the server\'s certificate is not checked) and OPT_X_TLS_CACERTFILE. Referrals are never followed.'),
+  },
+}
+
 const ldapSections: Section[] = ['', '1_', '2_', '3_', '4_', '5_'].map((p, n) => ({
   id: n ? `server-${n}` : 'default-server',
   title: n ? tr('Server {n}', { n }) : tr('Default server'),
   on: n ? (v) => filled(v[`AUTH_LDAP_${p}SERVER_URI`]) : undefined,
-  // LDAP searches are [base, scope, filter], or a list of them.
-  rows: ldapFields.map((f) => row(`AUTH_LDAP_${p}${f}`, f.endsWith('_SEARCH') ? { control: 'json' } : {})),
+  rows: ldapFields.map((f) => row(`AUTH_LDAP_${p}${f}`, ldapControls[f])),
 }))
 
 // GitHub's six AWX categories: github.com or GitHub Enterprise, then any
@@ -107,8 +155,8 @@ const githubSections: Section[] = githubVariants.map(([slug, p, title, extra]) =
   }
 })
 
-const oauth = (p: string, extra: string[] = []): Section[] => [
-  { id: 'provider', title: tr('Provider'), rows: ['CALLBACK_URL', 'KEY', 'SECRET', ...extra].map((f) => row(`SOCIAL_AUTH_${p}${f}`)) },
+const oauth = (p: string, extra: Row[] = []): Section[] => [
+  { id: 'provider', title: tr('Provider'), rows: [...['CALLBACK_URL', 'KEY', 'SECRET'].map((f) => row(`SOCIAL_AUTH_${p}${f}`)), ...extra] },
   { id: 'maps', title: tr('Organizations and teams'), rows: ['ORGANIZATION_MAP', 'TEAM_MAP'].map((f) => row(`SOCIAL_AUTH_${p}${f}`)) },
 ]
 
@@ -150,8 +198,8 @@ export const settingsPages: SettingsPage[] = [
         id: 'sessions',
         title: tr('Sessions'),
         rows: [
-          row('SESSION_COOKIE_AGE', { label: tr('Sign out after inactivity'), help: tr('Seconds without activity after which a session ends. At least 60.') }),
-          row('SESSIONS_PER_USER', { label: tr('Sessions per person'), help: tr('Signing in once more than this ends the person\'s oldest session. -1: no limit.') }),
+          row('SESSION_COOKIE_AGE', { label: tr('Sign out after inactivity'), help: tr('A session ends after this long without activity: a minute at least.'), unit: 'duration' }),
+          row('SESSIONS_PER_USER', { label: tr('Sessions per person'), help: tr('Signing in once more than this ends the person\'s oldest session.'), none: [-1, tr('No limit')] }),
           row('AUTH_BASIC_ENABLED', {
             label: tr('Username and password in API calls'),
             help: tr('HTTP Basic authentication. The awx CLI and the awx.awx collection use it when given a username and password; tokens work either way.'),
@@ -226,9 +274,92 @@ export const settingsPages: SettingsPage[] = [
       {
         id: 'service-provider',
         title: tr('Service provider'),
-        rows: ['SP_ENTITY_ID', 'CALLBACK_URL', 'METADATA_URL', 'SP_PUBLIC_CERT', 'SP_PRIVATE_KEY', 'ORG_INFO', 'TECHNICAL_CONTACT', 'SUPPORT_CONTACT'].map((f) => row(`SOCIAL_AUTH_SAML_${f}`)),
+        rows: [
+          ...['SP_ENTITY_ID', 'CALLBACK_URL', 'METADATA_URL'].map((f) => row(`SOCIAL_AUTH_SAML_${f}`)),
+          row('SOCIAL_AUTH_SAML_SP_PUBLIC_CERT', { lines: true }),
+          row('SOCIAL_AUTH_SAML_SP_PRIVATE_KEY', { lines: true }),
+          row('SOCIAL_AUTH_SAML_ORG_INFO', {
+            control: 'records',
+            help: tr('Your organization, as the service provider\'s metadata names it, by language: en-US at least.'),
+            name: tr('Language'),
+            add: tr('Add a language'),
+            fields: [
+              { key: 'name', label: tr('Name') },
+              { key: 'displayname', label: tr('Display name') },
+              { key: 'url', label: tr('URL') },
+            ],
+          }),
+          ...['TECHNICAL_CONTACT', 'SUPPORT_CONTACT'].map((f) =>
+            row(`SOCIAL_AUTH_SAML_${f}`, {
+              control: 'fields',
+              help: tr('Published in the service provider\'s metadata.'),
+              fields: [
+                { key: 'givenName', label: tr('Name') },
+                { key: 'emailAddress', label: tr('Email') },
+              ],
+            }),
+          ),
+        ],
       },
-      { id: 'identity-providers', title: tr('Identity providers'), rows: [row('SOCIAL_AUTH_SAML_ENABLED_IDPS'), row('SOCIAL_AUTH_SAML_SECURITY_CONFIG')] },
+      {
+        id: 'identity-providers',
+        title: tr('Identity providers'),
+        rows: [
+          row('SOCIAL_AUTH_SAML_ENABLED_IDPS', {
+            control: 'records',
+            wide: true,
+            help: tr('Each identity provider, by a name of your choice: its entity ID, its single sign-on URL and its signing certificate, and the attributes users are read from. Empty attributes are the standard ones.'),
+            name: tr('Name'),
+            add: tr('Add an identity provider'),
+            fields: [
+              { key: 'entity_id', label: tr('Entity ID') },
+              { key: 'url', label: tr('Single sign-on URL') },
+              { key: 'x509cert', label: tr('Signing certificate'), kind: 'lines' },
+              { key: 'attr_user_permanent_id', label: tr('User ID attribute'), placeholder: asIs('name_id') },
+              { key: 'attr_username', label: tr('Username attribute') },
+              { key: 'attr_email', label: tr('Email attribute') },
+              { key: 'attr_first_name', label: tr('First name attribute') },
+              { key: 'attr_last_name', label: tr('Last name attribute') },
+            ],
+          }),
+          row('SOCIAL_AUTH_SAML_SECURITY_CONFIG', {
+            control: 'fields',
+            help: tr('How requests are signed, and what responses must hold. A response or its assertion must always be signed.'),
+            fields: [
+              { key: 'authnRequestsSigned', label: tr('Sign authentication requests'), kind: 'switch' },
+              {
+                key: 'signatureAlgorithm',
+                label: tr('Signature algorithm'),
+                kind: 'choice',
+                choices: [
+                  ['', tr('RSA-SHA256 (default)')],
+                  ['http://www.w3.org/2000/09/xmldsig#rsa-sha1', 'RSA-SHA1'],
+                  ['http://www.w3.org/2001/04/xmldsig-more#rsa-sha256', 'RSA-SHA256'],
+                  ['http://www.w3.org/2001/04/xmldsig-more#rsa-sha384', 'RSA-SHA384'],
+                  ['http://www.w3.org/2001/04/xmldsig-more#rsa-sha512', 'RSA-SHA512'],
+                ],
+              },
+              { key: 'wantMessagesSigned', label: tr('Responses must be signed'), kind: 'switch' },
+              { key: 'wantAssertionsSigned', label: tr('Assertions must be signed'), kind: 'switch' },
+              { key: 'wantAssertionsEncrypted', label: tr('Assertions must be encrypted'), kind: 'switch' },
+              { key: 'wantNameId', label: tr('A NameID is required'), kind: 'switch' },
+              { key: 'requestedAuthnContext', label: tr('Authentication context asked for'), placeholder: tr('None'), empty: false },
+              {
+                key: 'requestedAuthnContextComparison',
+                label: tr('Compared as'),
+                kind: 'choice',
+                choices: [
+                  ['', tr('exact (default)')],
+                  ['exact', 'exact'],
+                  ['minimum', 'minimum'],
+                  ['maximum', 'maximum'],
+                  ['better', 'better'],
+                ],
+              },
+            ],
+          }),
+        ],
+      },
       {
         id: 'maps',
         title: tr('Organizations, teams and flags'),
@@ -250,7 +381,15 @@ export const settingsPages: SettingsPage[] = [
     blurb: tr('Login with Google accounts, optionally of some domains only.'),
     parent: 'signin',
     categories: ['google-oauth2'],
-    sections: oauth('GOOGLE_OAUTH2_', ['WHITELISTED_DOMAINS', 'AUTH_EXTRA_ARGUMENTS']),
+    sections: oauth('GOOGLE_OAUTH2_', [
+      row('SOCIAL_AUTH_GOOGLE_OAUTH2_WHITELISTED_DOMAINS'),
+      row('SOCIAL_AUTH_GOOGLE_OAUTH2_AUTH_EXTRA_ARGUMENTS', {
+        control: 'pairs',
+        columns: [tr('Parameter'), tr('Value')],
+        add: tr('Add a parameter'),
+        help: tr('Added to the authorization request, such as hd with a domain to offer only the accounts of a Google Workspace domain.'),
+      }),
+    ]),
   },
   {
     slug: 'azuread-oauth2',
@@ -302,19 +441,27 @@ export const settingsPages: SettingsPage[] = [
         id: 'limits',
         title: tr('Limits and timeouts'),
         rows: [
-          row('DEFAULT_JOB_TIMEOUT', { label: tr('Job timeout'), help: tr('Seconds after which a job still running is canceled. Templates may set their own. 0: no limit.') }),
-          row('DEFAULT_JOB_IDLE_TIMEOUT', { label: tr('Idle timeout'), help: tr('Seconds without output after which a job is canceled. 0: no limit.') }),
+          row('DEFAULT_JOB_TIMEOUT', { label: tr('Job timeout'), help: tr('A job still running after this long is canceled. Templates may set their own.'), unit: 'duration', none: [0, tr('No limit')] }),
+          row('DEFAULT_JOB_IDLE_TIMEOUT', { label: tr('Idle timeout'), help: tr('A job that prints nothing for this long is canceled.'), unit: 'duration', none: [0, tr('No limit')] }),
           {
             keys: ['DEFAULT_PROJECT_UPDATE_TIMEOUT', 'DEFAULT_INVENTORY_UPDATE_TIMEOUT'],
             label: tr('Sync timeouts'),
-            help: tr('Seconds, for project and inventory syncs whose project or source sets none. 0: no limit.'),
+            help: tr('For project and inventory syncs whose project or source sets none.'),
             parts: [tr('Project syncs'), tr('Inventory syncs')],
+            unit: 'duration',
+            none: [0, tr('No limit')],
           },
           row('ANSIBLE_FACT_CACHE_TIMEOUT', {
             label: tr('How long gathered facts stay valid'),
-            help: tr('Seconds, for templates that use the fact cache: older facts are gathered again. 0: always valid.'),
+            help: tr('For templates that use the fact cache: older facts are gathered again.'),
+            unit: 'duration',
+            none: [0, tr('Always valid')],
           }),
-          row('MAX_FORKS', { label: tr('Forks per job, at most') }),
+          row('MAX_FORKS', {
+            label: tr('Forks per job, at most'),
+            help: tr('The most forks a template, a launch, a schedule, a workflow step or an ad hoc command may ask for.'),
+            none: [0, tr('No limit')],
+          }),
           row('SCHEDULE_MAX_JOBS', { label: tr('Waiting jobs per schedule') }),
           {
             keys: ['BULK_HOST_MAX_CREATE', 'BULK_HOST_MAX_DELETE', 'BULK_JOB_MAX_LAUNCH'],
@@ -336,21 +483,27 @@ export const settingsPages: SettingsPage[] = [
             states: [tr('Not checked'), tr('Checked')],
             invert: true,
           }),
-          row('GALAXY_TASK_ENV', { label: tr('Environment of installs'), help: tr('Variables set while roles and collections are installed.') }),
+          row('GALAXY_TASK_ENV', { label: tr('Environment of installs'), help: tr('Variables set while roles and collections are installed.'), ...envVars }),
         ],
       },
       {
         id: 'execution',
         title: tr('Execution'),
         rows: [
-          row('AWX_TASK_ENV', { label: tr('Environment of jobs'), help: tr('Variables added to the environment of every job.') }),
+          row('AWX_TASK_ENV', { label: tr('Environment of jobs'), help: tr('Variables added to the environment of every job.'), ...envVars }),
           {
             keys: ['AWX_ISOLATION_SHOW_PATHS', 'AWX_MOUNT_ISOLATED_PATHS_ON_K8S'],
             label: tr('Host paths mounted into jobs'),
-            help: tr('Directories of the host made visible inside execution environment containers, one per line: HOST-DIR[:CONTAINER-DIR[:OPTIONS]].'),
+            help: tr('Directories of the host made visible inside execution environment containers. Options are those of a container volume, such as ro or z.'),
             parts: [tr('Paths'), tr('Also in container group pods')],
+            control: 'paths',
           },
-          row('AWX_RUNNER_KEEPALIVE_SECONDS', { label: tr('Keepalive for quiet remote jobs') }),
+          row('AWX_RUNNER_KEEPALIVE_SECONDS', {
+            label: tr('Keepalive for quiet remote jobs'),
+            help: tr('After this long without output, a job on a remote node or in a container group sends a keepalive, so that idle connections are not cut.'),
+            unit: 'duration',
+            none: [0, tr('Never')],
+          }),
           row('AWX_ANSIBLE_CALLBACK_PLUGINS', { label: tr('Extra callback plugins'), help: tr('Paths searched for callback plugins, in addition to the execution environment\'s.') }),
         ],
       },
@@ -358,17 +511,29 @@ export const settingsPages: SettingsPage[] = [
         id: 'output',
         title: tr('Output and events'),
         rows: [
-          row('JOB_EVENT_MAX_RATE', { label: tr('Events stored per second, per job') }),
-          row('MAX_WEBSOCKET_EVENT_RATE', { label: tr('Live events per second, per browser') }),
+          row('JOB_EVENT_MAX_RATE', {
+            label: tr('Events stored per second, per job'),
+            help: tr('Beyond it, consecutive plain output lines are folded into one, so that a very verbose job cannot starve the others.'),
+            unit: tr('events per second'),
+            none: [0, tr('No limit')],
+          }),
+          row('MAX_WEBSOCKET_EVENT_RATE', {
+            label: tr('Live events per second, per browser'),
+            help: tr('The job page fetches the rest from the API.'),
+            unit: tr('events per second'),
+            none: [0, tr('No limit')],
+          }),
           row('STDOUT_MAX_BYTES_DISPLAY', {
             label: tr('Largest output the API returns inline'),
-            help: tr('Bytes. Larger output, asked for at a job\'s stdout/, is only offered as a download. The job page is not limited by it.'),
+            help: tr('Larger output, asked for at a job\'s stdout/, is only offered as a download. The job page is not limited by it.'),
+            unit: 'size',
           }),
           {
             keys: ['JOB_EVENTS_HOT_DAYS', 'JOB_EVENTS_ARCHIVE_STORAGE'],
             label: tr('Event archives'),
             help: tr('After this many days in the database, a job\'s events are compressed into an archive, kept here.'),
-            parts: [tr('Days in the database first'), tr('Archives kept in')],
+            parts: [tr('In the database first'), tr('Archives kept in')],
+            unit: tr('days'),
           },
           row('JOB_EVENTS_ARCHIVE_BUCKET'),
           row('JOB_EVENTS_ARCHIVE_ENDPOINT'),
@@ -388,10 +553,30 @@ export const settingsPages: SettingsPage[] = [
       {
         id: 'aggregator',
         title: tr('Aggregator'),
-        rows: ['ENABLED', 'TYPE', 'PROTOCOL', 'HOST', 'PORT', 'VERIFY_CERT', 'TCP_TIMEOUT', 'USERNAME', 'PASSWORD'].map((f) => row(`LOG_AGGREGATOR_${f}`)),
+        rows: [
+          ...['ENABLED', 'TYPE', 'PROTOCOL', 'HOST', 'PORT', 'VERIFY_CERT'].map((f) => row(`LOG_AGGREGATOR_${f}`)),
+          row('LOG_AGGREGATOR_TCP_TIMEOUT', { help: tr('How long a connection to the aggregator may take, over HTTPS or TCP, and the wait between retries.'), unit: 'duration' }),
+          ...['USERNAME', 'PASSWORD'].map((f) => row(`LOG_AGGREGATOR_${f}`)),
+        ],
       },
-      { id: 'messages', title: tr('Messages'), rows: ['LOGGERS', 'LEVEL', 'INDIVIDUAL_FACTS', 'TOWER_UUID'].map((f) => row(`LOG_AGGREGATOR_${f}`)) },
-      { id: 'queue', title: tr('Queue'), rows: [row('LOG_AGGREGATOR_ACTION_QUEUE_SIZE'), row('LOG_AGGREGATOR_RSYSLOGD_DEBUG')] },
+      {
+        id: 'messages',
+        title: tr('Messages'),
+        rows: [
+          row('LOG_AGGREGATOR_LOGGERS', {
+            help: tr('What is sent to the aggregator.'),
+            options: [
+              ['awx', tr('Service logs')],
+              ['activity_stream', tr('Activity stream records')],
+              ['job_events', tr('Job events')],
+              ['system_tracking', tr('Facts gathered by jobs')],
+              ['broadcast_websocket', tr('Websocket broadcasts: none in awxnext')],
+            ],
+          }),
+          ...['LEVEL', 'INDIVIDUAL_FACTS', 'TOWER_UUID'].map((f) => row(`LOG_AGGREGATOR_${f}`)),
+        ],
+      },
+      { id: 'queue', title: tr('Queue'), rows: [row('LOG_AGGREGATOR_ACTION_QUEUE_SIZE', { unit: tr('messages') }), row('LOG_AGGREGATOR_RSYSLOGD_DEBUG')] },
     ],
   },
   {
@@ -400,8 +585,12 @@ export const settingsPages: SettingsPage[] = [
     blurb: tr('What the login page shows, and how job output loads.'),
     categories: ['ui'],
     sections: [
-      { id: 'login-page', title: tr('Login page'), rows: [row('CUSTOM_LOGO'), row('CUSTOM_LOGIN_INFO')] },
-      { id: 'job-output', title: tr('Job output'), rows: [row('UI_LIVE_UPDATES_ENABLED'), row('MAX_UI_JOB_EVENTS')] },
+      {
+        id: 'login-page',
+        title: tr('Login page'),
+        rows: [row('CUSTOM_LOGO', { control: 'image', help: tr('Shown on the login page: a GIF, PNG or JPEG image.') }), row('CUSTOM_LOGIN_INFO', { lines: true })],
+      },
+      { id: 'job-output', title: tr('Job output'), rows: [row('UI_LIVE_UPDATES_ENABLED'), row('MAX_UI_JOB_EVENTS', { unit: tr('events'), none: [0, tr('All')] })] },
     ],
   },
 ]
@@ -444,6 +633,12 @@ export function settingPlace(key: string, category: string, noEffect = false): P
   if (placed) return placed
   const page = settingsPages.find((p) => p.categories.includes(category))
   return page && { page: page.slug, section: noEffect ? 'no-effect' : 'other', anchor: key }
+}
+
+/** The row a setting is placed in. */
+export function layoutRow(key: string): Row | undefined {
+  for (const p of settingsPages) for (const s of p.sections) for (const r of s.rows) if (r.keys.includes(key)) return r
+  return undefined
 }
 
 /** The layout's label for a setting, if it gives one: a row's label, with

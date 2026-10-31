@@ -151,3 +151,27 @@
 .settings .settings-nav { position: sticky; top: 52px; align-self: flex-start; max-height: calc(100vh - 52px); overflow-y: auto; }
 .settings .s-control .input.num { max-width: 160px; }
 .settings .amounts .input.num { max-width: none; }
+
+/* A control for each kind of value: lists as chips or checkboxes, small
+   forms, named records, LDAP searches, an image, read-only values. */
+.settings .chip-input { width: 140px; height: 26px; padding: 2px 8px; font-family: var(--mono); font-size: 12px; }
+.settings .checks { display: flex; flex-direction: column; gap: 6px; }
+.settings .checks code { margin-left: 6px; font-size: 11px; color: var(--muted-2); }
+.settings .s-list { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; width: 100%; }
+.settings .s-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 12px; width: 100%; max-width: 460px; align-items: end; }
+.settings .s-fields .switch, .settings .s-field.full { grid-column: 1 / -1; }
+.settings .s-field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); min-width: 0; }
+.settings .s-field .input, .settings .s-field .select, .settings .s-field .textarea { width: 100%; max-width: none; }
+.settings .record { display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 560px; min-width: 0; margin: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); }
+.settings .record .s-fields { max-width: none; }
+.settings .record-head { display: flex; align-items: flex-end; gap: 8px; }
+.settings .record-head .s-field { flex: 1; max-width: 260px; }
+.settings .record-head .icon-x { margin-left: auto; }
+.settings .kv.kv-search { grid-template-columns: minmax(0, 1.4fr) auto minmax(0, 1.2fr) auto; max-width: 640px; }
+.settings .kv.kv-ro { grid-template-columns: auto minmax(0, 1fr); gap: 4px 12px; }
+.settings .kv.kv-ro code { font-size: 12px; overflow-wrap: anywhere; }
+.settings .s-image { display: flex; align-items: center; gap: 10px; }
+.settings .s-image img { max-width: 200px; max-height: 48px; padding: 4px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+.settings details.s-value summary { cursor: pointer; color: var(--muted); }
+.settings details.s-value pre { max-height: 320px; overflow: auto; margin: 6px 0 0; }
+.settings .amount .check { font-size: 13px; color: var(--ink); }

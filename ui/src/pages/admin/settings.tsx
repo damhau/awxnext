@@ -14,6 +14,32 @@ import { grantReason, grantTarget, testerClaims, type MappedGrant } from '../../
 import { aggregatorTarget, testOutcome } from '../../lib/logging'
 import { archiveCredentialParams } from '../../lib/jobSettings'
 import {
+  addItems,
+  amountText,
+  amountValue,
+  bestUnit,
+  controlKind,
+  ENCRYPTED,
+  fieldValue,
+  isSecret,
+  mountsOf,
+  mountsValue,
+  pairsOf,
+  pairsValue,
+  recordsOf,
+  recordsValue,
+  searchesOf,
+  searchesValue,
+  searchScopes,
+  unitsOf,
+  withField,
+  type Field,
+  type Mount,
+  type NamedRecord,
+  type Pair,
+  type Search,
+} from '../../lib/settingValues'
+import {
   categoryPage,
   changesByCategory,
   childPages,
@@ -28,7 +54,7 @@ import {
   type Section,
   type SettingsPage,
 } from '../../lib/settingsLayout'
-import { tr, trn } from '../../lib/i18n'
+import { asIs, tr, trn } from '../../lib/i18n'
 import './settings.css'
 
 // The settings pages are drawn from the layout (lib/settingsLayout.ts): its
@@ -45,7 +71,6 @@ interface AllSettings {
   categories: Record<string, string>
 }
 
-const isSecret = (key: string) => /SECRET|PASSWORD/.test(key)
 const same = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null)
 const metaLabel = (k: string, m?: FieldMeta) => (m?.label && m.label !== k ? m.label : humanize(k))
 const defaultOf = (m: FieldMeta) => m.default ?? (m.type === 'boolean' ? false : m.type === 'list' ? [] : '')
@@ -371,24 +396,27 @@ function SettingRow({ row, ctx }: { row: Row; ctx: Ctx }) {
 
 /** A setting's AWX key, copied on click. */
 function KeyButton({ k }: { k: string }) {
-  const toast = useToast()
+  const copy = useCopy()
   return (
-    <button type="button" className="s-key" title={tr('Copy')} onClick={() => navigator.clipboard?.writeText(k).then(() => toast(tr('Copied {key}', { key: k })), () => {})}>
+    <button type="button" className="s-key" title={tr('Copy')} onClick={() => copy(k, k)}>
       {k}
     </button>
   )
 }
 
-/** The settings of a row of several, each with its part's label. */
+/** The settings of a row of several, each with its part's label. The
+ * row's amount unit applies to each; its control to the first. */
 function Parts({ row, ctx }: { row: Row; ctx: Ctx }) {
   const meta = (k: string) => ctx.data.meta[k]
-  if (row.keys.every((k) => ['integer', 'float'].includes(meta(k)?.type)))
+  const part = (i: number): Row => ({ ...row, keys: [row.keys[i]], control: i === 0 ? row.control : undefined })
+  const label = (k: string, i: number) => row.parts?.[i] ?? metaLabel(k, meta(k))
+  if (!row.unit && !row.none && row.keys.every((k) => ['integer', 'float'].includes(meta(k)?.type)))
     return (
       <div className={`amounts amounts-${row.keys.length}`}>
         {row.keys.map((k, i) => (
           <label key={k}>
-            {row.parts?.[i] ?? metaLabel(k, meta(k))}
-            <SettingControl k={k} row={{ keys: [k] }} ctx={ctx} />
+            {label(k, i)}
+            <SettingControl k={k} row={part(i)} ctx={ctx} />
           </label>
         ))}
       </div>
@@ -397,11 +425,11 @@ function Parts({ row, ctx }: { row: Row; ctx: Ctx }) {
     <div className="s-parts">
       {row.keys.map((k, i) =>
         meta(k)?.type === 'boolean' ? (
-          <SettingControl key={k} k={k} row={{ keys: [k], states: [row.parts?.[i] ?? metaLabel(k, meta(k)), row.parts?.[i] ?? metaLabel(k, meta(k))] }} ctx={ctx} />
+          <SettingControl key={k} k={k} row={{ ...part(i), states: [label(k, i), label(k, i)] }} ctx={ctx} />
         ) : (
           <div key={k} className="amount-l">
-            <label htmlFor={`s-${k}`}>{row.parts?.[i] ?? metaLabel(k, meta(k))}</label>
-            <SettingControl k={k} row={{ keys: [k] }} ctx={ctx} />
+            <label htmlFor={`s-${k}`}>{label(k, i)}</label>
+            <SettingControl k={k} row={part(i)} ctx={ctx} />
           </div>
         ),
       )}
@@ -409,24 +437,24 @@ function Parts({ row, ctx }: { row: Row; ctx: Ctx }) {
   )
 }
 
-/** The control that edits a setting, from the layout's control or its type. */
+/** The control that edits a setting, from the layout's row and its type (lib/settingValues.ts). */
 function SettingControl({ k, row, ctx }: { k: string; row: Row; ctx: Ctx }) {
   const meta = ctx.data.meta[k]
   const value = ctx.values[k]
-  const disabled = !ctx.editable || !ctx.data.writable.has(k)
+  const disabled = !ctx.editable
   const onChange = (v: unknown) => ctx.set(k, v)
   const id = `s-${k}`
   if (!meta) return null
-  switch (row.control) {
+  switch (controlKind(k, meta.type, row, ctx.data.writable.has(k), value)) {
+    case 'readonly':
+      return <ReadOnlyValue value={value} />
     case 'oidc-mapping':
       return <MappingEditor value={(value as Rule[]) ?? []} onChange={onChange} editable={!disabled} groupsClaim={String(ctx.values.OIDC_GROUPS_CLAIM ?? 'groups')} />
     case 'archive-credential':
       return <ObjectControl id={id} resource="credentials/" params={archiveCredentialParams(ctx.values.JOB_EVENTS_ARCHIVE_STORAGE)} value={value as number | null} onChange={onChange} disabled={disabled} />
-    case 'json':
-      return <JsonControl id={id} value={value} onChange={onChange} disabled={disabled} />
-  }
-  switch (meta.type) {
-    case 'boolean': {
+    case 'secret':
+      return <SecretControl id={id} value={value} saved={ctx.saved[k]} onChange={onChange} disabled={disabled} lines={row.lines} />
+    case 'switch': {
       const on = row.invert ? !value : !!value
       const [off, yes] = row.states ?? [tr('Disabled'), tr('Enabled')]
       return (
@@ -437,9 +465,8 @@ function SettingControl({ k, row, ctx }: { k: string; row: Row; ctx: Ctx }) {
         </label>
       )
     }
-    case 'integer':
-    case 'float':
-      return <input id={id} className="input mono num" type="number" disabled={disabled} value={value === null || value === undefined ? '' : String(value)} onChange={(e) => onChange(e.target.value === '' ? null : Number(e.target.value))} />
+    case 'amount':
+      return <AmountControl id={id} value={value} onChange={onChange} disabled={disabled} unit={row.unit} none={row.none} />
     case 'choice':
       return (
         <select id={id} className="select" disabled={disabled} value={String(value ?? '')} onChange={(e) => onChange(e.target.value === '' ? null : e.target.value)}>
@@ -451,19 +478,33 @@ function SettingControl({ k, row, ctx }: { k: string; row: Row; ctx: Ctx }) {
           ))}
         </select>
       )
-    case 'list':
-      return <ListControl id={id} value={value} onChange={onChange} disabled={disabled} />
-    case 'nested object':
-    case 'dict':
-      return <JsonControl id={id} value={value} onChange={onChange} disabled={disabled} />
-    case 'field':
+    case 'object':
       return <ObjectControl id={id} resource="execution_environments/" value={value as number | null} onChange={onChange} disabled={disabled} meta={(r) => r.image} />
+    case 'chips':
+      return <ChipsControl id={id} value={value} onChange={onChange} disabled={disabled} />
+    case 'checks':
+      return <ChecksControl value={value} options={row.options ?? []} onChange={onChange} disabled={disabled} />
+    case 'pairs':
+      return <PairsControl id={id} value={value} onChange={onChange} disabled={disabled} columns={row.columns ?? [tr('Name'), tr('Value')]} coerce={row.coerce} add={row.add} />
+    case 'fields':
+      return <FieldsControl id={id} value={value} fields={row.fields ?? []} onChange={onChange} disabled={disabled} />
+    case 'records':
+      return <RecordsControl id={id} value={value} fields={row.fields ?? []} name={row.name ?? tr('Name')} add={row.add ?? tr('Add')} onChange={onChange} disabled={disabled} />
+    case 'paths':
+      return <PathsControl id={id} value={value} onChange={onChange} disabled={disabled} />
+    case 'ldap-search':
+      return <SearchControl id={id} value={value} onChange={onChange} disabled={disabled} multiple={row.multiple} />
+    case 'image':
+      return <ImageControl id={id} value={value} onChange={onChange} disabled={disabled} />
+    case 'lines':
+      return <LinesControl id={id} value={value} onChange={onChange} disabled={disabled} mono={/CERT|KEY/.test(k)} />
+    case 'json':
+      return <JsonControl id={id} value={value} onChange={onChange} disabled={disabled} />
   }
   return (
     <input
       id={id}
-      className={`input ${/URL|PATH|HOST|CLAIM|ENDPOINT|KEY|ENTITY/.test(k) ? 'mono' : ''}`}
-      type={isSecret(k) ? 'password' : 'text'}
+      className={`input ${/URL|PATH|HOST|CLAIM|ENDPOINT|KEY|ENTITY|_DN|URI/.test(k) ? 'mono' : ''}`}
       disabled={disabled}
       autoComplete="off"
       value={String(value ?? '')}
@@ -472,29 +513,511 @@ function SettingControl({ k, row, ctx }: { k: string; row: Row; ctx: Ctx }) {
   )
 }
 
-/** Lists of strings edited one per line; lists of objects as JSON. */
-function ListControl({ id, value, onChange, disabled }: { id: string; value: unknown; onChange: (v: unknown) => void; disabled: boolean }) {
-  const list = Array.isArray(value) ? value : []
-  if (!list.every((x) => typeof x === 'string' || typeof x === 'number')) return <JsonControl id={id} value={value} onChange={onChange} disabled={disabled} />
+/** Text written to the clipboard, said in a toast. */
+function useCopy() {
+  const toast = useToast()
+  return (text: string, what?: string) => navigator.clipboard?.writeText(text).then(() => toast(what ? tr('Copied {key}', { key: what }) : tr('Copied')), () => {})
+}
+
+/** A value awxnext sets, to give somewhere else: a callback URL, the installation's ID. */
+function ReadOnlyValue({ value }: { value: unknown }) {
+  const copy = useCopy()
+  if (value === null || value === undefined || value === '') return <span className="note">{tr('Not set')}</span>
+  if (typeof value === 'string' || typeof value === 'number')
+    return (
+      <div className="copyval">
+        <code>{String(value)}</code>
+        <button type="button" className="btn sm" onClick={() => copy(String(value))}>
+          {tr('Copy')}
+        </button>
+      </div>
+    )
+  const entries = value && typeof value === 'object' && !Array.isArray(value) ? Object.entries(value) : []
+  if (entries.length && entries.every(([, v]) => typeof v === 'string'))
+    return (
+      <div className="kv kv-ro">
+        {entries.map(([k, v]) => (
+          <Fragment key={k}>
+            <code>{k}</code>
+            <code>{String(v)}</code>
+          </Fragment>
+        ))}
+      </div>
+    )
   return (
-    <>
-      <textarea
-        id={id}
-        className="textarea mono"
-        rows={Math.min(8, Math.max(2, list.length + 1))}
-        disabled={disabled}
-        value={list.join('\n')}
-        onChange={(e) =>
-          onChange(
-            e.target.value
-              .split('\n')
-              .map((s) => s.trim())
-              .filter(Boolean),
+    <details className="s-value">
+      <summary>{tr('Show')}</summary>
+      <pre>{JSON.stringify(value, null, 2)}</pre>
+    </details>
+  )
+}
+
+/** A secret: set or not, replaced rather than edited, since the API never returns it. */
+function SecretControl({ id, value, saved, onChange, disabled, lines }: { id: string; value: unknown; saved: unknown; onChange: (v: unknown) => void; disabled: boolean; lines?: boolean }) {
+  const [replacing, setReplacing] = useState(false)
+  useEffect(() => {
+    if (value === saved) setReplacing(false)
+  }, [value, saved])
+  const input = (onText: (t: string) => void, text: string, autoFocus = false) =>
+    lines ? (
+      <textarea id={id} className="textarea mono" rows={5} disabled={disabled} spellCheck={false} autoFocus={autoFocus} value={text} onChange={(e) => onText(e.target.value)} />
+    ) : (
+      <input id={id} className="input mono" type="password" autoComplete="new-password" disabled={disabled} autoFocus={autoFocus} value={text} onChange={(e) => onText(e.target.value)} />
+    )
+  if (saved !== ENCRYPTED) return input(onChange, String(value ?? ''))
+  if (value === '')
+    return (
+      <div className="secret">
+        <span className="set">{tr('Removed when saved')}</span>
+        <button type="button" className="link-btn" onClick={() => onChange(ENCRYPTED)}>
+          {tr('Undo')}
+        </button>
+      </div>
+    )
+  if (!replacing && value === ENCRYPTED)
+    return (
+      <div className="secret">
+        <span className="set">
+          <span className="cell" data-size="xs" data-state="ok" />
+          {tr('Set')}
+        </span>
+        <button type="button" className="btn sm" disabled={disabled} onClick={() => setReplacing(true)}>
+          {tr('Replace…')}
+        </button>
+        <button type="button" className="link-btn" disabled={disabled} onClick={() => onChange('')}>
+          {tr('Remove')}
+        </button>
+      </div>
+    )
+  // Typing the new value; emptied, the one set stays.
+  return (
+    <div className="s-list">
+      {input((t) => onChange(t === '' ? ENCRYPTED : t), value === ENCRYPTED ? '' : String(value ?? ''), true)}
+      <button
+        type="button"
+        className="link-btn"
+        onClick={() => {
+          setReplacing(false)
+          onChange(ENCRYPTED)
+        }}
+      >
+        {tr('Keep the one set')}
+      </button>
+    </div>
+  )
+}
+
+/** A number in its unit, with what stands for none ("No limit") as a checkbox. */
+function AmountControl({ id, value, onChange, disabled, unit, none }: { id: string; value: unknown; onChange: (v: unknown) => void; disabled: boolean; unit?: string; none?: [number, string] }) {
+  const kind = unit === 'duration' || unit === 'size' ? unit : undefined
+  const isNone = !!none && value === none[0]
+  const [factor, setFactor] = useState(() => (kind ? bestUnit(value, kind) : 1))
+  const [limited, setLimited] = useState(!isNone)
+  const [text, setText] = useState(() => (isNone ? '' : amountText(value, factor)))
+  // A value set from elsewhere (discarded, back to its default): shown in its own unit.
+  useEffect(() => {
+    if (none) setLimited(value !== none[0])
+    if (amountValue(text, factor) === value) return
+    const f = kind && (typeof value !== 'number' || value % factor !== 0) ? bestUnit(value, kind) : factor
+    setFactor(f)
+    setText(none && value === none[0] ? '' : amountText(value, f))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value])
+  const type = (t: string) => {
+    setText(t)
+    const v = amountValue(t, factor)
+    if (t.trim() === '') onChange(none ? none[0] : null)
+    else if (v !== null) onChange(v)
+  }
+  const off = disabled || !limited
+  return (
+    <div className="amount">
+      <input id={id} className="input" inputMode="decimal" autoComplete="off" disabled={off} value={limited ? text : ''} onChange={(e) => type(e.target.value)} />
+      {kind ? (
+        <select
+          className="select"
+          aria-label={tr('Unit')}
+          disabled={off}
+          value={factor}
+          onChange={(e) => {
+            const f = Number(e.target.value)
+            setFactor(f)
+            const v = amountValue(text, f)
+            if (v !== null) onChange(v)
+          }}
+        >
+          {unitsOf(kind).map(([l, f]) => (
+            <option key={f} value={f}>
+              {l}
+            </option>
+          ))}
+        </select>
+      ) : (
+        unit && <span className="note">{unit}</span>
+      )}
+      {none && (
+        <label className="check">
+          <input
+            type="checkbox"
+            checked={!limited}
+            disabled={disabled}
+            onChange={(e) => {
+              setLimited(!e.target.checked)
+              if (e.target.checked) onChange(none[0])
+              else window.setTimeout(() => document.getElementById(id)?.focus())
+            }}
+          />
+          {none[1]}
+        </label>
+      )}
+    </div>
+  )
+}
+
+/** Local rows of an editor whose value only holds complete ones (a variable
+ * needs a name): reset when the value changes from elsewhere. */
+function useDraft<T>(value: unknown, parse: (v: unknown) => T[], format: (rows: T[]) => unknown, onChange: (v: unknown) => void) {
+  const [rows, setRows] = useState<T[]>(() => parse(value))
+  useEffect(() => {
+    if (!same(format(rows), value)) setRows(parse(value))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value])
+  const update = (next: T[]) => {
+    setRows(next)
+    const v = format(next)
+    if (!same(v, value)) onChange(v)
+  }
+  return [rows, update] as const
+}
+
+/** A list of words or paths, as chips. */
+function ChipsControl({ id, value, onChange, disabled }: { id: string; value: unknown; onChange: (v: unknown) => void; disabled: boolean }) {
+  const list = Array.isArray(value) ? value.map(String) : []
+  const [text, setText] = useState('')
+  const [all, setAll] = useState(false)
+  const shown = all ? list : list.slice(0, 12)
+  const commit = () => {
+    if (!text.trim()) return
+    onChange(addItems(list, text))
+    setText('')
+  }
+  return (
+    <div className="chips">
+      {shown.map((x) => (
+        <span key={x} className="chip">
+          {x}
+          {!disabled && (
+            <button type="button" aria-label={tr('Remove {item}', { item: x })} onClick={() => onChange(list.filter((y) => y !== x))}>
+              ×
+            </button>
+          )}
+        </span>
+      ))}
+      {list.length > shown.length && (
+        <button type="button" className="add" onClick={() => setAll(true)}>
+          {tr('+ {n} more', { n: list.length - shown.length })}
+        </button>
+      )}
+      {!list.length && disabled && <span className="note">{tr('None.')}</span>}
+      {!disabled && (
+        <input
+          id={id}
+          className="input chip-input"
+          value={text}
+          placeholder={tr('Add…')}
+          onChange={(e) => setText(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ',') {
+              e.preventDefault()
+              commit()
+            }
+          }}
+          onPaste={(e) => {
+            const t = e.clipboardData.getData('text')
+            if (!/[\n,]/.test(t)) return
+            e.preventDefault()
+            onChange(addItems(list, text + t))
+            setText('')
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+/** A list of known items, each one on or off, in the options' order. */
+function ChecksControl({ value, options, onChange, disabled }: { value: unknown; options: [string, string][]; onChange: (v: unknown) => void; disabled: boolean }) {
+  const list = Array.isArray(value) ? value.map(String) : []
+  const others = list.filter((x) => !options.some(([v]) => v === x))
+  const toggle = (v: string, on: boolean) => {
+    const next = new Set(list)
+    if (on) next.add(v)
+    else next.delete(v)
+    onChange([...options.map(([o]) => o).filter((o) => next.has(o)), ...others])
+  }
+  return (
+    <div className="checks">
+      {options.map(([v, l]) => (
+        <label key={v} className="check">
+          <input type="checkbox" checked={list.includes(v)} disabled={disabled} onChange={(e) => toggle(v, e.target.checked)} />
+          <span>
+            {l}
+            <code>{v}</code>
+          </span>
+        </label>
+      ))}
+    </div>
+  )
+}
+
+/** Names and their values: environment variables, parameters, options. */
+function PairsControl({ id, value, onChange, disabled, columns, coerce, add }: {
+  id: string
+  value: unknown
+  onChange: (v: unknown) => void
+  disabled: boolean
+  columns: [string, string]
+  coerce?: boolean
+  add?: string
+}) {
+  const [rows, update] = useDraft(value, pairsOf, (r) => pairsValue(r, coerce), onChange)
+  const edit = (i: number, p: Partial<Pair>) => update(rows.map((r, j) => (j === i ? { ...r, ...p } : r)))
+  return (
+    <div className="s-list">
+      {rows.length ? (
+        <div className="kv">
+          <span className="head">{columns[0]}</span>
+          <span className="head">{columns[1]}</span>
+          <span />
+          {rows.map((r, i) => (
+            <Fragment key={i}>
+              <input id={i === 0 ? id : undefined} className="input" aria-label={columns[0]} disabled={disabled} value={r.key} onChange={(e) => edit(i, { key: e.target.value })} />
+              <input className="input" aria-label={columns[1]} disabled={disabled} value={r.value} onChange={(e) => edit(i, { value: e.target.value })} />
+              <button type="button" className="icon-x" aria-label={tr('Remove')} disabled={disabled} onClick={() => update(rows.filter((_, j) => j !== i))}>
+                ×
+              </button>
+            </Fragment>
+          ))}
+        </div>
+      ) : (
+        <span className="note">{tr('None.')}</span>
+      )}
+      {!disabled && (
+        <button type="button" className="btn sm ghost" onClick={() => update([...rows, { key: '', value: '' }])}>
+          + {add ?? tr('Add')}
+        </button>
+      )}
+    </div>
+  )
+}
+
+/** An object edited as a small form; the keys it does not show are kept. */
+function FieldsControl({ id, value, fields, onChange, disabled }: { id: string; value: unknown; fields: Field[]; onChange: (v: unknown) => void; disabled: boolean }) {
+  return (
+    <div className="s-fields">
+      {fields.map((f, i) => {
+        const v = fieldValue(value, f)
+        const fid = i === 0 ? id : `${id}-${f.key}`
+        const set = (x: string | boolean) => onChange(withField(value, f, x))
+        if (f.kind === 'switch')
+          return (
+            <label key={f.key} className="switch">
+              <input id={fid} type="checkbox" checked={v === true} disabled={disabled} onChange={(e) => set(e.target.checked)} />
+              <span className="track" aria-hidden="true" />
+              {f.label}
+            </label>
           )
-        }
-      />
-      <span className="note">{tr('One per line.')}</span>
-    </>
+        const choices = f.choices ?? []
+        return (
+          <label key={f.key} className={`s-field${f.kind === 'lines' ? ' full' : ''}`}>
+            <span>{f.label}</span>
+            {f.kind === 'choice' ? (
+              <select id={fid} className="select" disabled={disabled} value={String(v)} onChange={(e) => set(e.target.value)}>
+                {!choices.some(([c]) => c === v) && <option value={String(v)}>{String(v)}</option>}
+                {choices.map(([c, l]) => (
+                  <option key={c} value={c}>
+                    {l}
+                  </option>
+                ))}
+              </select>
+            ) : f.kind === 'lines' ? (
+              <textarea id={fid} className="textarea mono" rows={4} spellCheck={false} disabled={disabled} value={String(v)} onChange={(e) => set(e.target.value)} />
+            ) : (
+              <input id={fid} className="input mono" autoComplete="off" disabled={disabled} placeholder={f.placeholder} value={String(v)} onChange={(e) => set(e.target.value)} />
+            )}
+          </label>
+        )
+      })}
+    </div>
+  )
+}
+
+/** Objects by name, each edited as a form: SAML's identity providers. */
+function RecordsControl({ id, value, fields, name, add, onChange, disabled }: {
+  id: string
+  value: unknown
+  fields: Field[]
+  name: string
+  add: string
+  onChange: (v: unknown) => void
+  disabled: boolean
+}) {
+  const [list, update] = useDraft(value, recordsOf, recordsValue, onChange)
+  const edit = (i: number, r: Partial<NamedRecord>) => update(list.map((x, j) => (j === i ? { ...x, ...r } : x)))
+  return (
+    <div className="s-list">
+      {list.map((r, i) => (
+        <fieldset key={i} className="record">
+          <div className="record-head">
+            <label className="s-field">
+              <span>{name}</span>
+              <input id={i === 0 ? id : undefined} className="input mono" autoComplete="off" disabled={disabled} value={r.name} onChange={(e) => edit(i, { name: e.target.value })} />
+            </label>
+            <button type="button" className="icon-x" aria-label={tr('Remove')} disabled={disabled} onClick={() => update(list.filter((_, j) => j !== i))}>
+              ×
+            </button>
+          </div>
+          <FieldsControl id={`${id}-${i}`} value={r.value} fields={fields} onChange={(v) => edit(i, { value: v as Record<string, unknown> })} disabled={disabled} />
+        </fieldset>
+      ))}
+      {!list.length && <span className="note">{tr('None.')}</span>}
+      {!disabled && (
+        <button type="button" className="btn sm ghost" onClick={() => update([...list, { name: '', value: {} }])}>
+          + {add}
+        </button>
+      )}
+    </div>
+  )
+}
+
+/** Host directories mounted into job containers. */
+function PathsControl({ id, value, onChange, disabled }: { id: string; value: unknown; onChange: (v: unknown) => void; disabled: boolean }) {
+  const [rows, update] = useDraft(value, mountsOf, mountsValue, onChange)
+  const edit = (i: number, m: Partial<Mount>) => update(rows.map((r, j) => (j === i ? { ...r, ...m } : r)))
+  return (
+    <div className="s-list">
+      {rows.length ? (
+        <div className="kv kv-paths">
+          <span className="head">{tr('Host path')}</span>
+          <span className="head">{tr('In the container')}</span>
+          <span className="head">{tr('Options')}</span>
+          <span />
+          {rows.map((r, i) => (
+            <Fragment key={i}>
+              <input id={i === 0 ? id : undefined} className="input" aria-label={tr('Host path')} disabled={disabled} value={r.host} onChange={(e) => edit(i, { host: e.target.value })} />
+              <input className="input" aria-label={tr('In the container')} placeholder={tr('Same path')} disabled={disabled} value={r.container} onChange={(e) => edit(i, { container: e.target.value })} />
+              <input className="input" aria-label={tr('Options')} placeholder={asIs('ro')} disabled={disabled} value={r.options} onChange={(e) => edit(i, { options: e.target.value })} />
+              <button type="button" className="icon-x" aria-label={tr('Remove')} disabled={disabled} onClick={() => update(rows.filter((_, j) => j !== i))}>
+                ×
+              </button>
+            </Fragment>
+          ))}
+        </div>
+      ) : (
+        <span className="note">{tr('None.')}</span>
+      )}
+      {!disabled && (
+        <button type="button" className="btn sm ghost" onClick={() => update([...rows, { host: '', container: '', options: '' }])}>
+          + {tr('Add a path')}
+        </button>
+      )}
+    </div>
+  )
+}
+
+const scopeLabels: Record<string, string> = { SCOPE_SUBTREE: tr('Subtree'), SCOPE_ONELEVEL: tr('One level'), SCOPE_BASE: tr('Base only') }
+
+/** LDAP searches: a base DN, a scope and a filter; with `multiple`, several. */
+function SearchControl({ id, value, onChange, disabled, multiple }: { id: string; value: unknown; onChange: (v: unknown) => void; disabled: boolean; multiple?: boolean }) {
+  const [rows, update] = useDraft(value, searchesOf, searchesValue, onChange)
+  const blank: Search = { base: '', scope: 'SCOPE_SUBTREE', filter: '' }
+  const shown = rows.length ? rows : [blank]
+  const edit = (i: number, s: Partial<Search>) => update(shown.map((r, j) => (j === i ? { ...r, ...s } : r)))
+  return (
+    <div className="s-list">
+      <div className="kv kv-search">
+        <span className="head">{tr('Base DN')}</span>
+        <span className="head">{tr('Scope')}</span>
+        <span className="head">{tr('Filter')}</span>
+        <span />
+        {shown.map((r, i) => (
+          <Fragment key={i}>
+            <input id={i === 0 ? id : undefined} className="input" aria-label={tr('Base DN')} placeholder={asIs('OU=Users,DC=example,DC=com')} disabled={disabled} value={r.base} onChange={(e) => edit(i, { base: e.target.value })} />
+            <select className="select" aria-label={tr('Scope')} disabled={disabled} value={r.scope} onChange={(e) => edit(i, { scope: e.target.value })}>
+              {[...new Set([...searchScopes, r.scope])].map((s) => (
+                <option key={s} value={s}>
+                  {scopeLabels[s] ?? s}
+                </option>
+              ))}
+            </select>
+            <input className="input" aria-label={tr('Filter')} placeholder={asIs(multiple ? '(uid=%(user)s)' : '(objectClass=group)')} disabled={disabled} value={r.filter} onChange={(e) => edit(i, { filter: e.target.value })} />
+            {multiple && shown.length > 1 ? (
+              <button type="button" className="icon-x" aria-label={tr('Remove')} disabled={disabled} onClick={() => update(shown.filter((_, j) => j !== i))}>
+                ×
+              </button>
+            ) : (
+              <span />
+            )}
+          </Fragment>
+        ))}
+      </div>
+      {multiple && !disabled && (
+        <button type="button" className="btn sm ghost" onClick={() => update([...shown, blank])}>
+          + {tr('Add a search')}
+        </button>
+      )}
+    </div>
+  )
+}
+
+/** An image, stored as a data URL. */
+function ImageControl({ id, value, onChange, disabled }: { id: string; value: unknown; onChange: (v: unknown) => void; disabled: boolean }) {
+  const src = typeof value === 'string' ? value : ''
+  return (
+    <div className="s-image">
+      {src ? <img src={src} alt={tr('The logo')} /> : <span className="note">{tr('None.')}</span>}
+      {!disabled && (
+        <label className="btn sm">
+          {src ? tr('Replace…') : tr('Choose an image…')}
+          <input
+            id={id}
+            type="file"
+            accept="image/gif,image/png,image/jpeg"
+            hidden
+            onChange={(e) => {
+              const f = e.target.files?.[0]
+              e.target.value = ''
+              if (!f) return
+              const r = new FileReader()
+              r.onload = () => onChange(String(r.result))
+              r.readAsDataURL(f)
+            }}
+          />
+        </label>
+      )}
+      {!disabled && src && (
+        <button type="button" className="link-btn" onClick={() => onChange('')}>
+          {tr('Remove')}
+        </button>
+      )}
+    </div>
+  )
+}
+
+/** Text on several lines: a certificate, the login page's text. */
+function LinesControl({ id, value, onChange, disabled, mono }: { id: string; value: unknown; onChange: (v: unknown) => void; disabled: boolean; mono: boolean }) {
+  const text = String(value ?? '')
+  return (
+    <textarea
+      id={id}
+      className={`textarea${mono ? ' mono' : ''}`}
+      rows={Math.min(10, Math.max(3, text.split('\n').length + 1))}
+      spellCheck={!mono}
+      disabled={disabled}
+      value={text}
+      onChange={(e) => onChange(e.target.value)}
+    />
   )
 }
 

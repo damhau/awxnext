@@ -1088,8 +1088,8 @@ rather than edited; read-only values (callback URLs, SAML metadata) as text
 with a copy button. Fields follow the layout's order, not their names.
 
 **Done when:** no setting is edited as raw JSON except those whose shape is
-free-form, listed in the closing comment. Durations show their unit, and
-what 0 means.
+free-form, listed in the closing comment, and the organization and team maps,
+which M8-03 edits. Durations show their unit, and what 0 means.
 
 ### M8-06 Search and changes across settings
 **Labels:** feature, ui, settings · **Size:** M · [#99](https://github.com/damhau/awxnext/issues/99)
