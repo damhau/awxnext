@@ -31,6 +31,7 @@ be matched.
 | [M5 Authentication](#m5-authentication) | Every login method AWX has, except RADIUS and TACACS+ | 6 |
 | [M6 Operations and scale](#m6-operations-and-scale) | Run awxnext in production: policies, logging, Helm, backup, job isolation | 13 |
 | [M7 UI completeness](#m7-ui-completeness) | Every API feature reachable from the UI; the remaining UI goals | 17 |
+| [M8 Settings that make sense](#m8-settings-that-make-sense) | Settings laid out by task, without JSON or AWX's jargon; the settings API unchanged | 9 |
 
 ---
 
@@ -1006,6 +1007,145 @@ its permissions.
 
 ---
 
+## M8 Settings that make sense
+
+**Exit:** an admin can set up every login method, and find and change any
+setting, without reading AWX's docs or writing JSON. The settings API is
+unchanged: AWX's clients and the compat suites pass as before.
+
+### M8-01 Settings laid out by task, with mockups first
+**Labels:** feature, ui, settings · **Size:** M · [#94](https://github.com/damhau/awxnext/issues/94)
+
+The settings page shows AWX's categories as pages and their keys as fields
+sorted by name: 18 entries in its menu, 12 of them about signing in. Lay it
+out by what an admin sets up instead: sign-in, jobs, system, logging, and
+the login page. One declarative layout file in the UI places each of the 263
+settings (page, section, order, label, control), and the page is drawn from
+it instead of the per-category section maps it uses today. The API's
+categories and keys do not change. Mockups of the two hardest screens, the
+sign-in overview and the jobs page, are approved before the rest of the
+milestone is built.
+
+**Done when:** the mockups of the sign-in overview and the jobs page are
+approved. The settings page is drawn from the layout file, and every setting
+is reachable from it.
+
+### M8-02 Sign-in overview
+**Labels:** feature, ui, auth, settings · **Size:** L · [#95](https://github.com/damhau/awxnext/issues/95)
+
+One page for everything about signing in: local accounts, sessions and the
+password policy, then a card for each login method (OIDC, LDAP, SAML,
+GitHub, Google, Azure AD) saying whether it is on, and opening its form.
+GitHub's six categories become one card: github.com or GitHub Enterprise,
+then any account, the members of an organization, or the members of a team;
+it writes the matching AWX category. Each form is in the order the provider
+is set up, and ends with what to give the provider (callback URL, SAML
+service provider metadata), with copy buttons.
+
+**Done when:** each login method can be set up from its card, and the
+overview shows which ones are on. The GitHub card covers its six AWX
+categories.
+
+### M8-03 One mapping editor and tester for every login method
+**Labels:** feature, ui, auth, api · **Size:** L · [#96](https://github.com/damhau/awxnext/issues/96)
+
+Organization and team maps are JSON text boxes for every login method but
+OIDC: `SOCIAL_AUTH_*_ORGANIZATION_MAP` and `_TEAM_MAP`, each LDAP server's
+maps and user flags, SAML's attribute maps. Edit them all with one editor:
+an organization or team; who gets it (everyone, these users, names matching
+a pattern, members of these groups); as admin or member; and whether they
+lose it when no longer matched. Test them against a sample user with a dry
+run evaluated by the server's own mapping code (`internal/auth/awxmap.go`),
+as `settings/oidc/test/` does for OIDC.
+
+**Done when:** every organization and team map can be edited without writing
+JSON. Each can be tested against a sample user, with the server's own
+evaluation. A map saved by the editor is stored in AWX's format, so AWX's
+clients read it unchanged.
+
+### M8-04 Jobs settings by purpose
+**Labels:** feature, ui, jobs, settings · **Size:** M · [#97](https://github.com/damhau/awxnext/issues/97)
+
+The 39 jobs settings are one form whose "General" section mixes security
+switches with display options. Split them by purpose: launch safety
+(`ALLOW_ANSIBLE_VARS_AT_LAUNCH`, `IGNORE_UNPROMPTED_LAUNCH_FIELDS`,
+`ALLOW_JINJA_IN_EXTRA_VARS`, `PROJECT_ALLOW_FILE_URLS`), each saying what
+turning it on lets a launcher or a project do; limits and timeouts; content
+(Galaxy, collections, roles); execution and paths; output, events and
+archives.
+
+**Done when:** every jobs setting is in a section named for its purpose.
+Each launch safety switch says what turning it on allows.
+
+### M8-05 A control for each kind of value
+**Labels:** feature, ui, settings · **Size:** M · [#98](https://github.com/damhau/awxnext/issues/98)
+
+81 settings are edited as raw JSON and timeouts as bare numbers. Give each
+kind of value its control: durations with their unit and "0: no limit"; key
+and value editors for environment variables (`AWX_TASK_ENV`,
+`GALAXY_TASK_ENV`); list editors; secrets shown as set or not, and replaced
+rather than edited; read-only values (callback URLs, SAML metadata) as text
+with a copy button. Fields follow the layout's order, not their names.
+
+**Done when:** no setting is edited as raw JSON except those whose shape is
+free-form, listed in the closing comment. Durations show their unit, and
+what 0 means.
+
+### M8-06 Search and changes across settings
+**Labels:** feature, ui, settings · **Size:** M · [#99](https://github.com/damhau/awxnext/issues/99)
+
+Search every setting by label, key or help text, from the settings page and
+the command palette. Mark settings changed from their default where they
+are, with the default shown and a reset for that one setting. Warn before
+leaving a form with unsaved changes. A page saves all its changes at once,
+across the AWX categories it shows. This is the PLAN.md goal "searchable
+sections showing non-default values".
+
+**Done when:** any setting can be found by its label or its key. Changed
+settings, and their defaults, show where they are. Leaving a form with
+unsaved changes asks first.
+
+### M8-07 Hide what has no effect; labels and help in plain words
+**Labels:** feature, ui, settings · **Size:** M · [#100](https://github.com/damhau/awxnext/issues/100)
+
+15 settings exist only so AWX's clients can read and write them, and do
+nothing in awxnext; they are editable fields among the others. Hide them
+behind "Show AWX settings with no effect". Label every setting by what it
+does ("Keepalive for quiet remote jobs" rather than "K8S Ansible Runner
+Keep-Alive Message Interval"), with its key still shown, and write help for
+the 32 that have none. The API keeps AWX's labels, which clients may match;
+help added on the server also shows in OPTIONS.
+
+**Done when:** settings with no effect are hidden unless asked for. Every
+setting has a plain label and help text.
+
+### M8-08 Connection tests for LDAP, OIDC and SAML
+**Labels:** feature, api, auth, ui · **Size:** M · [#101](https://github.com/damhau/awxnext/issues/101)
+
+Logging is the only part of the settings that can be tested. Add tests for
+the login methods, run with the form's values so a configuration can be
+tried before it is saved: LDAP binds and looks up a user, and reports the
+user's DN, groups, and the organizations and teams they would get; OIDC
+fetches the discovery document and the signing keys; SAML reads each
+identity provider's metadata and checks its certificate. Superusers only,
+like the logging test.
+
+**Done when:** each test reports success, or the step that failed and why.
+Each runs in Go tests against a real server or provider.
+
+### M8-09 Every setting placed in the layout
+**Labels:** chore, ui, settings · **Size:** S · [#102](https://github.com/damhau/awxnext/issues/102)
+
+A test fails CI when a setting the API has is missing from the layout, or
+the layout names one the API does not have, as the server's tests already do
+for `docs/configuration.md` and for settings with no effect. The list of
+settings the UI test reads is generated from the settings definitions, and
+checked to be current.
+
+**Done when:** adding a setting without placing it in the layout fails CI.
+
+---
+
 ## Proposed out of scope
 
 These stay out unless you want any of them back:
@@ -1042,10 +1182,17 @@ Taken on 2026-10-29:
 
 8. Subversion projects are dropped (M4-09, issue #40 closed as not planned).
 
+Taken on 2026-10-31:
+
+9. M8 redoes the settings page, which was a port of AWX's. The UI lays the
+   settings out by task; the settings API keeps AWX's categories, keys and
+   labels, so its clients are unaffected.
+
 ## On GitHub
 
 Created on 2026-10-27 on `damhau/awxnext`: the type, area and size labels,
 one milestone per section, and one issue per task (#1 to #80), each with a
 **Done when** checklist (one box per lookup for M4-07). M2-14 to M2-26
 (#81 to #93) were added on 2026-10-28 from the compatibility harness's first
-runs. This file stays the index; when a task changes, change its issue too.
+runs. M8 (#94 to #102) was added on 2026-10-31. This file stays the index;
+when a task changes, change its issue too.
