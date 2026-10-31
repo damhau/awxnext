@@ -61,8 +61,8 @@ The tests run in tiers.
   passing, remove it from `compat/known-failures.yml`.
 - The roadmap is `docs/ROADMAP.md`, tracked on GitHub as milestones and issues. Keep the two in
   sync.
-- New dependencies, Go or images, must pin a version that is at least two weeks old. For
-  Python, use `uv`.
+- New dependencies, Go or images, pin an exact version; the latest stable release is fine.
+  For Python, use `uv`.
 
 ## Git
 
