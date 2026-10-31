@@ -12,19 +12,20 @@ import { Ago, Elapsed, Empty, Status } from '../../components/ui'
 import { active, jobApi, jobPath, jobsNewestFirst, typeLabel, userName } from '../../lib/format'
 import { useRelaunch } from '../../components/RelaunchDialog'
 import { compile, statusValue, type KeyTable } from '../../lib/query'
+import { tr, trn } from '../../lib/i18n'
 
 export const jobKeys: KeyTable = {
-  status: { field: 'status', map: statusValue, help: 'failed' },
+  status: { field: 'status', map: statusValue, help: tr('failed') },
   type: {
     field: 'type',
     map: (v) =>
       ({ playbook: 'job', job: 'job', workflow: 'workflow_job', sync: 'project_update', project: 'project_update', inventory: 'inventory_update', command: 'ad_hoc_command', system: 'system_job' })[v] ?? v,
-    help: 'workflow',
+    help: tr('workflow'),
   },
-  template: { field: 'name', help: 'deploy*' },
-  by: { field: 'created_by__username', help: 'user' },
-  node: { field: 'execution_node', help: 'host' },
-  launch: { field: 'launch_type', help: 'scheduled' },
+  template: { field: 'name', help: tr('deploy*') },
+  by: { field: 'created_by__username', help: tr('user') },
+  node: { field: 'execution_node', help: tr('host') },
+  launch: { field: 'launch_type', help: tr('scheduled') },
   id: { field: 'id', help: '42' },
 }
 
@@ -49,17 +50,17 @@ export function JobsTable({ fixed = {}, filter = true, compact = false }: { fixe
   const cancel = async (js: Job[]) => {
     const running = js.filter((j) => active(j.status))
     if (!running.length) return
-    if (!(await confirm({ title: running.length === 1 ? `Cancel #${running[0].id}?` : `Cancel ${running.length} jobs?`, body: 'Running playbooks are stopped; hosts may be left part-way through a task.', confirm: 'Cancel jobs', danger: true }))) return
+    if (!(await confirm({ title: running.length === 1 ? tr('Cancel #{id}?', { id: running[0].id }) : tr('Cancel {count} jobs?', { count: running.length }), body: tr('Running playbooks are stopped; hosts may be left part-way through a task.'), confirm: tr('Cancel jobs'), danger: true }))) return
     await Promise.allSettled(running.map((j) => api.post(`${jobApi(j.type, j.id)}cancel/`, {})))
     invalidate('unified_jobs')
     setSelected(new Set())
   }
 
   const columns: Column<Job>[] = [
-    { key: 'status', header: 'Status', sort: 'status', className: 'nowrap', render: (j) => <Status status={j.status} /> },
+    { key: 'status', header: tr('Status'), sort: 'status', className: 'nowrap', render: (j) => <Status status={j.status} /> },
     {
       key: 'name',
-      header: 'Job',
+      header: tr('Job'),
       sort: 'name',
       render: (j) => (
         <>
@@ -75,27 +76,27 @@ export function JobsTable({ fixed = {}, filter = true, compact = false }: { fixe
     },
     {
       key: 'by',
-      header: 'Started by',
+      header: tr('Started by'),
       className: 'nowrap',
-      render: (j) => (j.launch_type === 'scheduled' ? <span className="muted">schedule</span> : j.launch_type === 'webhook' ? <span className="muted">webhook</span> : j.launch_type === 'workflow' ? <span className="muted">workflow</span> : userName(j.summary_fields.created_by)),
+      render: (j) => (j.launch_type === 'scheduled' ? <span className="muted">{tr('schedule')}</span> : j.launch_type === 'webhook' ? <span className="muted">{tr('webhook')}</span> : j.launch_type === 'workflow' ? <span className="muted">{tr('workflow')}</span> : userName(j.summary_fields.created_by)),
     },
-    ...(compact ? [] : [{ key: 'node', header: 'Node', className: 'nowrap mono small', render: (j: Job) => j.execution_node || '—' }]),
-    { key: 'started', header: 'Started', sort: 'started', className: 'nowrap small', render: (j) => <Ago at={j.started ?? j.created} /> },
-    { key: 'dur', header: 'Duration', sort: 'elapsed', className: 'nowrap', render: (j) => (j.started ? <Elapsed job={j} /> : <span className="faint">—</span>) },
+    ...(compact ? [] : [{ key: 'node', header: tr('Node'), className: 'nowrap mono small', render: (j: Job) => j.execution_node || '—' }]),
+    { key: 'started', header: tr('Started'), sort: 'started', className: 'nowrap small', render: (j) => <Ago at={j.started ?? j.created} /> },
+    { key: 'dur', header: tr('Duration'), sort: 'elapsed', className: 'nowrap', render: (j) => (j.started ? <Elapsed job={j} /> : <span className="faint">—</span>) },
     {
       key: 'act',
-      header: <span className="sr-only">Actions</span>,
+      header: <span className="sr-only">{tr('Actions')}</span>,
       className: 'end nowrap',
       render: (j) =>
         active(j.status) ? (
           <button className="btn sm" onClick={() => cancel([j])}>
             <Icon name="stop" size={10} />
-            Cancel
+            {tr('Cancel')}
           </button>
         ) : j.type !== 'workflow_approval' ? (
-          <button className="btn sm" onClick={() => relaunch(j)} title="Relaunch with the same values">
+          <button className="btn sm" onClick={() => relaunch(j)} title={tr('Relaunch with the same values')}>
             <Icon name="refresh" size={12} />
-            Relaunch
+            {tr('Relaunch')}
           </button>
         ) : null,
     },
@@ -104,32 +105,32 @@ export function JobsTable({ fixed = {}, filter = true, compact = false }: { fixe
   return (
     <div className="stack" style={{ gap: 10 }}>
       {relaunchDialog}
-      {filter && <FilterBar value={ls.q} onChange={ls.setQ} keys={jobKeys} placeholder="name…  try  status:failed  type:workflow  by:priya" />}
+      {filter && <FilterBar value={ls.q} onChange={ls.setQ} keys={jobKeys} placeholder={tr('name…  try  status:failed  type:workflow  by:priya')} />}
       {selected.size > 0 && (
-        <div className="bulkbar" role="region" aria-label="Bulk actions">
-          <span className="n">{selected.size} selected</span>
+        <div className="bulkbar" role="region" aria-label={tr('Bulk actions')}>
+          <span className="n">{selected.size} {tr('selected')}</span>
           <button className="btn warn" onClick={() => cancel(rows.filter((j) => selected.has(j.id)))}>
-            Cancel running
+            {tr('Cancel running')}
           </button>
           <button
             className="btn"
             onClick={async () => {
               const js = rows.filter((j) => selected.has(j.id) && !active(j.status))
-              if (!(await confirm({ title: `Delete ${js.length} finished jobs?`, body: 'Their output and events are removed.', confirm: 'Delete', danger: true }))) return
+              if (!(await confirm({ title: tr('Delete {count} finished jobs?', { count: js.length }), body: tr('Their output and events are removed.'), confirm: tr('Delete'), danger: true }))) return
               await Promise.allSettled(js.map((j) => api.del(jobApi(j.type, j.id))))
               invalidate('unified_jobs')
               setSelected(new Set())
             }}
           >
-            Delete
+            {tr('Delete')}
           </button>
           <button className="btn clear" onClick={() => setSelected(new Set())}>
-            Clear
+            {tr('Clear')}
           </button>
         </div>
       )}
       <DataTable
-        label="Jobs"
+        label={tr('Jobs')}
         rows={rows}
         columns={columns}
         loading={list.isPending}
@@ -141,12 +142,12 @@ export function JobsTable({ fixed = {}, filter = true, compact = false }: { fixe
         onOrder={ls.setOrder}
         keys={{ r: relaunch }}
         minWidth={compact ? 640 : 860}
-        empty={<Empty title={ls.q ? 'No jobs match' : 'No jobs yet'}>{ls.q ? 'Remove a filter to see more.' : 'Jobs appear here when templates run.'}</Empty>}
+        empty={<Empty title={ls.q ? tr('No jobs match') : tr('No jobs yet')}>{ls.q ? tr('Remove a filter to see more.') : tr('Jobs appear here when templates run.')}</Empty>}
         footer={
           <div className="table-foot">
-            <span>{list.data ? `${list.data.count} job${list.data.count === 1 ? '' : 's'}` : ''}</span>
+            <span>{list.data ? trn(list.data.count, '{n} job', '{n} jobs') : ''}</span>
             <Pager count={list.data?.count ?? 0} page={ls.page} pageSize={ls.pageSize} onPage={ls.setPage} />
-            <span className="mono">j/k move · ↵ open · r relaunch</span>
+            <span className="mono">{tr('j/k move · ↵ open · r relaunch')}</span>
           </div>
         }
       />

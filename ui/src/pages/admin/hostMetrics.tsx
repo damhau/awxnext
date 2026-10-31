@@ -13,6 +13,7 @@ import { Ago, Empty, PageHead, Panel } from '../../components/ui'
 import { plural } from '../../lib/format'
 import { metricsQuery, monthLabel } from '../../lib/hostMetrics'
 import { FilterBox, KindTag } from '../resources/common'
+import { tr } from '../../lib/i18n'
 
 interface HostMetric extends Omit<Base, 'name'> {
   hostname: string
@@ -45,42 +46,42 @@ export function HostMetrics() {
   const invalidate = useInvalidate()
   const remove = async (m: HostMetric) => {
     const ok = await confirm({
-      title: `Delete ${m.hostname} from host metrics?`,
-      body: <p style={{ margin: 0 }}>It stops counting as automated until a job automates it again. Its history stays.</p>,
-      confirm: 'Delete',
+      title: tr('Delete {hostname} from host metrics?', { hostname: m.hostname }),
+      body: <p style={{ margin: 0 }}>{tr('It stops counting as automated until a job automates it again. Its history stays.')}</p>,
+      confirm: tr('Delete'),
       danger: true,
     })
     if (!ok) return
     try {
       await api.del(`host_metrics/${m.id}/`)
       invalidate('host_metrics')
-      toast(`Deleted ${m.hostname} from host metrics`)
+      toast(tr('Deleted {hostname} from host metrics', { hostname: m.hostname }))
     } catch (e) {
-      toast(e instanceof Error ? e.message : 'Delete failed', 'error')
+      toast(e instanceof Error ? e.message : tr('Delete failed'), 'error')
     }
   }
   const cols: Column<HostMetric>[] = [
     {
       key: 'host',
-      header: 'Host',
+      header: tr('Host'),
       render: (m) => (
         <span className="row" style={{ gap: 6 }}>
           <span className="cell-title mono">{m.hostname}</span>
-          {m.deleted && <KindTag>deleted</KindTag>}
+          {m.deleted && <KindTag>{tr('deleted')}</KindTag>}
         </span>
       ),
     },
-    { key: 'first', header: 'First automated', render: (m) => <span className="small nowrap"><Ago at={m.first_automation} /></span> },
-    { key: 'last', header: 'Last automated', render: (m) => <span className="small nowrap"><Ago at={m.last_automation} /></span> },
-    { key: 'count', header: 'Times automated', className: 'num', render: (m) => <span className="small">{m.automated_counter}</span> },
-    { key: 'inv', header: 'Inventories', className: 'num', render: (m) => <span className="small muted">{m.used_in_inventories ?? '—'}</span> },
+    { key: 'first', header: tr('First automated'), render: (m) => <span className="small nowrap"><Ago at={m.first_automation} /></span> },
+    { key: 'last', header: tr('Last automated'), render: (m) => <span className="small nowrap"><Ago at={m.last_automation} /></span> },
+    { key: 'count', header: tr('Times automated'), className: 'num', render: (m) => <span className="small">{m.automated_counter}</span> },
+    { key: 'inv', header: tr('Inventories'), className: 'num', render: (m) => <span className="small muted">{m.used_in_inventories ?? '—'}</span> },
     {
       key: 'deleted',
-      header: 'Deleted',
+      header: tr('Deleted'),
       render: (m) =>
         m.deleted_counter ? (
           <span className="small muted">
-            {plural(m.deleted_counter, 'time', 'times')}, last <Ago at={m.last_deleted} />
+            {plural(m.deleted_counter, 'time', 'times')}{tr(', last')} <Ago at={m.last_deleted} />
           </span>
         ) : (
           <span className="faint small">—</span>
@@ -88,13 +89,13 @@ export function HostMetrics() {
     },
     {
       key: 'menu',
-      header: <span className="sr-only">Actions</span>,
+      header: <span className="sr-only">{tr('Actions')}</span>,
       className: 'end',
       render: (m) =>
         me?.is_superuser && !m.deleted ? (
-          <Menu label={`Actions for ${m.hostname}`} className="btn sm icon ghost">
+          <Menu label={tr('Actions for {hostname}', { hostname: m.hostname })} className="btn sm icon ghost">
             <button className="danger" onClick={() => remove(m)}>
-              Delete…
+              {tr('Delete…')}
             </button>
           </Menu>
         ) : null,
@@ -103,22 +104,22 @@ export function HostMetrics() {
   return (
     <div className="page">
       <PageHead
-        title="Host metrics"
-        subtitle="Every host jobs have automated, when first and last, and how often: the count of unique managed hosts."
+        title={tr('Host metrics')}
+        subtitle={tr('Every host jobs have automated, when first and last, and how often: the count of unique managed hosts.')}
         bordered={false}
       />
       <div className="page-body stack" style={{ gap: 20 }}>
         <div className="row wrap" style={{ gap: 12 }}>
-          <FilterBox value={ls.q} onApply={ls.setQ} placeholder="host name…" />
-          <Check label="Show deleted hosts" checked={showDeleted} onChange={setShowDeleted} />
+          <FilterBox value={ls.q} onApply={ls.setQ} placeholder={tr('host name…')} />
+          <Check label={tr('Show deleted hosts')} checked={showDeleted} onChange={setShowDeleted} />
         </div>
         <DataTable
-          label="Host metrics"
+          label={tr('Host metrics')}
           rows={list.data?.results}
           columns={cols}
           loading={list.isPending}
           error={list.error}
-          empty={<Empty title={ls.q ? 'No host matches' : 'No host automated yet'}>Jobs add the hosts they run on.</Empty>}
+          empty={<Empty title={ls.q ? tr('No host matches') : tr('No host automated yet')}>{tr('Jobs add the hosts they run on.')}</Empty>}
           footer={
             <div className="table-foot">
               <span>{list.data ? plural(list.data.count, 'host', 'hosts') : ''}</span>
@@ -126,20 +127,20 @@ export function HostMetrics() {
             </div>
           }
         />
-        <Panel title="Monthly summary" pad={false}>
+        <Panel title={tr('Monthly summary')} pad={false}>
           <DataTable
-            label="Monthly summary"
+            label={tr('Monthly summary')}
             rows={summary.data?.results}
             columns={[
-              { key: 'month', header: 'Month', render: (s) => <span className="small">{monthLabel(s.date)}</span> },
-              { key: 'consumed', header: 'Hosts automated', className: 'num', render: (s) => <span className="small">{s.license_consumed}</span> },
-              { key: 'added', header: 'Added', className: 'num', render: (s) => <span className="small">{s.hosts_added}</span> },
-              { key: 'deleted', header: 'Deleted', className: 'num', render: (s) => <span className="small">{s.hosts_deleted}</span> },
-              { key: 'indirect', header: 'Indirectly managed', className: 'num', render: (s) => <span className="small muted">{s.indirectly_managed_hosts}</span> },
+              { key: 'month', header: tr('Month'), render: (s) => <span className="small">{monthLabel(s.date)}</span> },
+              { key: 'consumed', header: tr('Hosts automated'), className: 'num', render: (s) => <span className="small">{s.license_consumed}</span> },
+              { key: 'added', header: tr('Added'), className: 'num', render: (s) => <span className="small">{s.hosts_added}</span> },
+              { key: 'deleted', header: tr('Deleted'), className: 'num', render: (s) => <span className="small">{s.hosts_deleted}</span> },
+              { key: 'indirect', header: tr('Indirectly managed'), className: 'num', render: (s) => <span className="small muted">{s.indirectly_managed_hosts}</span> },
             ]}
             loading={summary.isPending}
             error={summary.error}
-            empty={<Empty title="No summary yet">The weekly management job “Host metric summary monthly” fills it.</Empty>}
+            empty={<Empty title={tr('No summary yet')}>{tr('The weekly management job “Host metric summary monthly” fills it.')}</Empty>}
           />
         </Panel>
       </div>

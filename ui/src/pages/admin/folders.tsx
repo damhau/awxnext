@@ -16,6 +16,7 @@ import { DataTable, type Column } from '../../components/table'
 import { Empty, ErrorNote, Loading, PageHead, Panel, Tab } from '../../components/ui'
 import { buildTree, directCounts, flatten, totalObjects, useFolders, type FolderNode } from '../../lib/folders'
 import { plural } from '../../lib/format'
+import { tr } from '../../lib/i18n'
 
 interface Kind {
   res: string
@@ -27,12 +28,12 @@ interface Kind {
 
 /** Object types a folder can hold, in display order. */
 const kinds: Kind[] = [
-  { res: 'job_templates', label: 'Job templates', one: 'job template', path: (id) => `/templates/job/${id}`, sub: (o) => o.playbook },
-  { res: 'workflow_job_templates', label: 'Workflow templates', one: 'workflow template', path: (id) => `/templates/workflow/${id}`, sub: (o) => o.description },
-  { res: 'inventories', label: 'Inventories', one: 'inventory', path: (id) => `/inventories/${id}`, sub: (o) => [o.kind || 'inventory', plural(o.total_hosts ?? 0, 'host')].join(' · ') },
-  { res: 'projects', label: 'Projects', one: 'project', path: (id) => `/projects/${id}`, sub: (o) => o.scm_url || 'manual' },
-  { res: 'credentials', label: 'Credentials', one: 'credential', path: (id) => `/credentials/${id}`, sub: (o) => o.summary_fields?.credential_type?.name },
-  { res: 'notification_templates', label: 'Notification templates', one: 'notification template', path: (id) => `/notifications/${id}`, sub: (o) => o.notification_type },
+  { res: 'job_templates', label: tr('Job templates'), one: 'job template', path: (id) => `/templates/job/${id}`, sub: (o) => o.playbook },
+  { res: 'workflow_job_templates', label: tr('Workflow templates'), one: 'workflow template', path: (id) => `/templates/workflow/${id}`, sub: (o) => o.description },
+  { res: 'inventories', label: tr('Inventories'), one: 'inventory', path: (id) => `/inventories/${id}`, sub: (o) => [o.kind || 'inventory', plural(o.total_hosts ?? 0, 'host')].join(' · ') },
+  { res: 'projects', label: tr('Projects'), one: 'project', path: (id) => `/projects/${id}`, sub: (o) => o.scm_url || 'manual' },
+  { res: 'credentials', label: tr('Credentials'), one: 'credential', path: (id) => `/credentials/${id}`, sub: (o) => o.summary_fields?.credential_type?.name },
+  { res: 'notification_templates', label: tr('Notification templates'), one: 'notification template', path: (id) => `/notifications/${id}`, sub: (o) => o.notification_type },
 ]
 
 const keyOf = (res: string, id: number) => `${res}:${id}`
@@ -61,10 +62,10 @@ function FolderTree({ selected }: { selected?: number }) {
   const nav = useNavigate()
   const multi = groups.length > 1
   return (
-    <aside className="sidelist" aria-label="Folders">
+    <aside className="sidelist" aria-label={tr('Folders')}>
       <div className="group">
         <button className={`item ${!selected ? 'active' : ''}`} onClick={() => nav('/folders')}>
-          All folders
+          {tr('All folders')}
         </button>
       </div>
       {groups.map((g) => (
@@ -107,7 +108,7 @@ export function FolderList() {
   const columns: Column<FolderNode>[] = [
     {
       key: 'name',
-      header: 'Folder',
+      header: tr('Folder'),
       render: (n) => (
         <div style={{ paddingLeft: n.depth * 18 }}>
           <Link to={`/folders/${n.folder.id}`} className="cell-title row" style={{ gap: 6, display: 'inline-flex' }}>
@@ -118,31 +119,31 @@ export function FolderList() {
         </div>
       ),
     },
-    ...(multi ? [{ key: 'org', header: 'Organization', className: 'small', render: (n: FolderNode) => n.folder.summary_fields?.organization?.name }] : []),
-    { key: 'tpl', header: 'Templates', className: 'end', render: (n) => <CountCell n={directCounts(n.folder).templates} /> },
-    { key: 'inv', header: 'Inventories', className: 'end', render: (n) => <CountCell n={directCounts(n.folder).inventories} /> },
-    { key: 'proj', header: 'Projects', className: 'end', render: (n) => <CountCell n={directCounts(n.folder).projects} /> },
-    { key: 'cred', header: 'Credentials', className: 'end', render: (n) => <CountCell n={directCounts(n.folder).credentials} /> },
-    { key: 'sub', header: 'Subfolders', className: 'end', render: (n) => <CountCell n={n.children.length} /> },
+    ...(multi ? [{ key: 'org', header: tr('Organization'), className: 'small', render: (n: FolderNode) => n.folder.summary_fields?.organization?.name }] : []),
+    { key: 'tpl', header: tr('Templates'), className: 'end', render: (n) => <CountCell n={directCounts(n.folder).templates} /> },
+    { key: 'inv', header: tr('Inventories'), className: 'end', render: (n) => <CountCell n={directCounts(n.folder).inventories} /> },
+    { key: 'proj', header: tr('Projects'), className: 'end', render: (n) => <CountCell n={directCounts(n.folder).projects} /> },
+    { key: 'cred', header: tr('Credentials'), className: 'end', render: (n) => <CountCell n={directCounts(n.folder).credentials} /> },
+    { key: 'sub', header: tr('Subfolders'), className: 'end', render: (n) => <CountCell n={n.children.length} /> },
   ]
   return (
     <div className="body" style={{ minHeight: '100%' }}>
       <FolderTree />
       <div className="page" style={{ minWidth: 0 }}>
         <PageHead
-          title="Folders"
-          subtitle="Group templates, inventories, projects and credentials. A role granted on a folder applies to everything in it and in its subfolders."
+          title={tr('Folders')}
+          subtitle={tr('Group templates, inventories, projects and credentials. A role granted on a folder applies to everything in it and in its subfolders.')}
           bordered={false}
           actions={
             <button className="btn primary" onClick={() => setCreating(true)}>
               <Icon name="plus" size={14} />
-              New folder
+              {tr('New folder')}
             </button>
           }
         />
         <div className="page-body">
           <DataTable
-            label="Folders"
+            label={tr('Folders')}
             rows={rows}
             columns={columns}
             rowKey={(n) => n.folder.id}
@@ -150,15 +151,15 @@ export function FolderList() {
             error={error}
             onOpen={(n) => nav(`/folders/${n.folder.id}`)}
             empty={
-              <Empty title="No folders yet" action={<button className="btn primary" onClick={() => setCreating(true)}>New folder</button>}>
-                For example <span className="mono">apps/checkout</span>: put the checkout templates, inventory and credentials in it, then give the team that owns them the Admin role on the folder.
+              <Empty title={tr('No folders yet')} action={<button className="btn primary" onClick={() => setCreating(true)}>{tr('New folder')}</button>}>
+                {tr('For example')} <span className="mono">{tr('apps/checkout')}</span>{tr(': put the checkout templates, inventory and credentials in it, then give the team that owns them the Admin role on the folder.')}
               </Empty>
             }
             footer={
               rows.length > 0 && (
                 <div className="table-foot">
                   <span>{plural(rows.length, 'folder')}</span>
-                  <span>Counts are objects directly in each folder.</span>
+                  <span>{tr('Counts are objects directly in each folder.')}</span>
                 </div>
               )
             }
@@ -219,7 +220,7 @@ export function FolderDetail() {
       setDialog('not-empty')
       return
     }
-    if (!(await confirm({ title: `Delete folder ${path.map((p) => p.name).join('/')}?`, body: 'Roles granted on this folder are removed with it.', confirm: 'Delete folder', danger: true }))) return
+    if (!(await confirm({ title: tr('Delete folder {list}?', { list: path.map((p) => p.name).join('/') }), body: tr('Roles granted on this folder are removed with it.'), confirm: tr('Delete folder'), danger: true }))) return
     try {
       await api.del(`folders/${id}/`)
       invalidate('folders')
@@ -234,7 +235,7 @@ export function FolderDetail() {
       <FolderTree selected={id} />
       <div className="page" style={{ minWidth: 0 }}>
         <PageHead
-          crumbs={[{ label: 'Folders', to: '/folders' }, ...path.slice(0, -1).map((p) => ({ label: p.name, to: `/folders/${p.id}` }))]}
+          crumbs={[{ label: tr('Folders'), to: '/folders' }, ...path.slice(0, -1).map((p) => ({ label: p.name, to: `/folders/${p.id}` }))]}
           title={f.name}
           badge={<span className="small muted">{f.summary_fields?.organization?.name}</span>}
           subtitle={f.description || undefined}
@@ -242,16 +243,16 @@ export function FolderDetail() {
             canEdit && (
               <>
                 <button className="btn" onClick={() => setDialog('new')}>
-                  New subfolder
+                  {tr('New subfolder')}
                 </button>
                 <button className="btn" onClick={() => setDialog('edit')} disabled={!node}>
-                  Rename or move
+                  {tr('Rename or move')}
                 </button>
-                <Menu label="More actions">
-                  <Link to={`/templates?folder=${id}`}>Show in Templates</Link>
+                <Menu label={tr('More actions')}>
+                  <Link to={`/templates?folder=${id}`}>{tr('Show in Templates')}</Link>
                   <hr />
                   <button className="danger" onClick={remove}>
-                    Delete folder
+                    {tr('Delete folder')}
                   </button>
                 </Menu>
               </>
@@ -260,12 +261,12 @@ export function FolderDetail() {
           tabs={
             <>
               <Tab to={base} end n={contents.data ? objects : undefined}>
-                Contents
+                {tr('Contents')}
               </Tab>
               <Tab to={`${base}/subfolders`} n={subfolders || undefined}>
-                Subfolders
+                {tr('Subfolders')}
               </Tab>
-              <Tab to={`${base}/access`}>Access</Tab>
+              <Tab to={`${base}/access`}>{tr('Access')}</Tab>
             </>
           }
         />
@@ -277,7 +278,7 @@ export function FolderDetail() {
             element={
               <div className="page-body">
                 <p className="muted" style={{ margin: 0 }}>
-                  These roles apply to every template, inventory, project and credential in <span className="mono">{path.map((p) => p.name).join('/')}</span> and in its subfolders, including objects added later.
+                  {tr('These roles apply to every template, inventory, project and credential in')} <span className="mono">{path.map((p) => p.name).join('/')}</span> {tr('and in its subfolders, including objects added later.')}
                 </p>
                 <AccessTab resource="folders" id={f.id} name={path.map((p) => p.name).join('/')} />
               </div>
@@ -300,12 +301,12 @@ export function FolderDetail() {
       )}
       {dialog === 'not-empty' && (
         <Dialog
-          title="This folder isn't empty"
+          title={tr('This folder isn\'t empty')}
           onClose={() => setDialog(null)}
           footer={
             <>
               <button className="btn" onClick={() => setDialog(null)}>
-                Close
+                {tr('Close')}
               </button>
               <button
                 className="btn primary"
@@ -314,12 +315,12 @@ export function FolderDetail() {
                   nav(objects ? base : `${base}/subfolders`)
                 }}
               >
-                Show {objects ? 'contents' : 'subfolders'}
+                {tr('Show')} {objects ? tr('contents') : tr('subfolders')}
               </button>
             </>
           }
         >
-          <p style={{ margin: 0 }}>Move or delete what's inside first:</p>
+          <p style={{ margin: 0 }}>{tr('Move or delete what\'s inside first:')}</p>
           <ul style={{ margin: 0, paddingLeft: 18 }}>
             {(contents.data ?? [])
               .filter((c) => c.count > 0)
@@ -360,8 +361,8 @@ function ContentsTab({
       return api.patch(`${res}/${id}/`, { folder: target })
     }))
     const failed = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected')
-    if (failed.length) toast(`${verb}: ${failed.length} of ${results.length} failed: ${(failed[0].reason as Error).message}`, 'error')
-    else toast(`${verb}: ${plural(results.length, 'object')}`)
+    if (failed.length) toast(tr('{verb}: {count} of {count2} failed: {message}', { verb, count: failed.length, count2: results.length, message: (failed[0].reason as Error).message }), 'error')
+    else toast(tr('{verb}: {count}', { verb, count: plural(results.length, 'object') }))
     setSelected(new Set())
     invalidate('folders', 'unified_job_templates', ...kinds.map((k) => k.res))
   }
@@ -369,36 +370,36 @@ function ContentsTab({
   return (
     <div className="page-body">
       <div className="row wrap">
-        <span className="muted">Objects directly in this folder. Subfolders have their own contents.</span>
+        <span className="muted">{tr('Objects directly in this folder. Subfolders have their own contents.')}</span>
         <button className="btn" style={{ marginLeft: 'auto' }} onClick={() => setDialog('add')}>
           <Icon name="plus" size={14} />
-          Add objects…
+          {tr('Add objects…')}
         </button>
       </div>
       {selected.size > 0 && (
-        <div className="bulkbar" role="region" aria-label="Bulk actions">
-          <span className="n">{selected.size} selected</span>
+        <div className="bulkbar" role="region" aria-label={tr('Bulk actions')}>
+          <span className="n">{selected.size} {tr('selected')}</span>
           <button className="btn" onClick={() => setDialog('move')}>
-            Move to folder…
+            {tr('Move to folder…')}
           </button>
           <button
             className="btn"
             onClick={async () => {
-              if (!(await confirm({ title: `Take ${plural(selected.size, 'object')} out of the folder?`, body: 'They stay in the organization, without the access granted on this folder.', confirm: 'Take out' }))) return
-              moveObjects([...selected], null, 'Taken out')
+              if (!(await confirm({ title: tr('Take {count} out of the folder?', { count: plural(selected.size, 'object') }), body: tr('They stay in the organization, without the access granted on this folder.'), confirm: tr('Take out') }))) return
+              moveObjects([...selected], null, tr('Taken out'))
             }}
           >
-            Take out of folder
+            {tr('Take out of folder')}
           </button>
           <button className="btn clear" onClick={() => setSelected(new Set())}>
-            Clear
+            {tr('Clear')}
           </button>
         </div>
       )}
       {sections.length === 0 ? (
         <Panel>
-          <Empty title="Nothing in this folder" action={<button className="btn primary" onClick={() => setDialog('add')}>Add objects…</button>}>
-            Add templates, inventories, projects or credentials of {folder.summary_fields?.organization?.name ?? 'the organization'}. You can also pick the folder in an object's edit form.
+          <Empty title={tr('Nothing in this folder')} action={<button className="btn primary" onClick={() => setDialog('add')}>{tr('Add objects…')}</button>}>
+            {tr('Add templates, inventories, projects or credentials of')} {folder.summary_fields?.organization?.name ?? tr('the organization')}{tr('. You can also pick the folder in an object\'s edit form.')}
           </Empty>
         </Panel>
       ) : (
@@ -417,15 +418,15 @@ function ContentsTab({
               columns={[
                 {
                   key: 'name',
-                  header: 'Name',
+                  header: tr('Name'),
                   render: (o) => (
                     <>
                       <Link to={c.kind.path(o.id)} className="cell-title">
                         {o.name}
                       </Link>
                       {o.managed_by && (
-                        <span className="tag" style={{ marginLeft: 6 }} title={`Managed by ${o.managed_by}: move it in its repository`}>
-                          git
+                        <span className="tag" style={{ marginLeft: 6 }} title={tr('Managed by {managed_by}: move it in its repository', { managed_by: o.managed_by })}>
+                          {tr('git')}
                         </span>
                       )}
                       {c.kind.sub(o) && <div className="cell-sub">{c.kind.sub(o)}</div>}
@@ -433,7 +434,7 @@ function ContentsTab({
                   ),
                 },
               ]}
-              footer={c.count > c.items.length && <div className="table-foot">Showing the first {c.items.length} of {c.count}.</div>}
+              footer={c.count > c.items.length && <div className="table-foot">{tr('Showing the first')} {c.items.length} {tr('of')} {c.count}.</div>}
             />
           </section>
         ))
@@ -469,25 +470,25 @@ function MoveDialog({ folder, roots, count, onClose, onMove }: { folder: Folder;
   const [target, setTarget] = useState(options[0] ? String(options[0].folder.id) : '')
   return (
     <Dialog
-      title={`Move ${plural(count, 'object')}`}
+      title={tr('Move {count}', { count: plural(count, 'object') })}
       onClose={onClose}
       footer={
         <>
           <button className="btn" onClick={onClose}>
-            Cancel
+            {tr('Cancel')}
           </button>
           <button className="btn primary" onClick={() => onMove(target ? Number(target) : null)}>
-            Move
+            {tr('Move')}
           </button>
         </>
       }
     >
       <SelectField
-        label="To"
+        label={tr('To')}
         value={target}
         onChange={setTarget}
-        options={[...options.map((n): [string, string] => [String(n.folder.id), `${'   '.repeat(n.depth)}${n.path}`]), ['', 'No folder (organization level)']]}
-        help="Objects take on the access granted on their new folder, and lose what this folder gave them."
+        options={[...options.map((n): [string, string] => [String(n.folder.id), `${'   '.repeat(n.depth)}${n.path}`]), ['', tr('No folder (organization level)')]]}
+        help={tr('Objects take on the access granted on their new folder, and lose what this folder gave them.')}
       />
     </Dialog>
   )
@@ -499,21 +500,21 @@ function AddDialog({ folder, onClose, onAdd }: { folder: Folder; onClose: () => 
   const kind = kinds.find((k) => k.res === res)!
   return (
     <Dialog
-      title={`Add to ${folder.name}`}
+      title={tr('Add to {name}', { name: folder.name })}
       onClose={onClose}
       footer={
         <>
           <button className="btn" onClick={onClose}>
-            Cancel
+            {tr('Cancel')}
           </button>
           <button className="btn primary" disabled={!items.length} onClick={() => onAdd(res, items)}>
-            Add {items.length ? plural(items.length, kind.one) : ''}
+            {tr('Add')} {items.length ? plural(items.length, kind.one) : ''}
           </button>
         </>
       }
     >
       <SelectField
-        label="Type"
+        label={tr('Type')}
         value={res}
         onChange={(v) => {
           setRes(v)
@@ -529,7 +530,7 @@ function AddDialog({ folder, onClose, onAdd }: { folder: Folder; onClose: () => 
         values={items}
         onChange={setItems}
         meta={(o) => o.summary_fields?.folder?.name ?? ''}
-        help={`Only objects of ${folder.summary_fields?.organization?.name ?? 'this organization'} can go in this folder. Picking one already in another folder moves it.`}
+        help={folder.summary_fields?.organization?.name ? tr('Only objects of {org} can go in this folder. Picking one already in another folder moves it.', { org: folder.summary_fields.organization.name }) : tr('Only objects of this organization can go in this folder. Picking one already in another folder moves it.')}
       />
     </Dialog>
   )
@@ -541,14 +542,14 @@ function SubfoldersTab({ node, onNew, canEdit }: { node?: FolderNode; onNew: () 
   return (
     <div className="page-body">
       <DataTable
-        label="Subfolders"
+        label={tr('Subfolders')}
         rows={children}
         rowKey={(n) => n.folder.id}
         onOpen={(n) => nav(`/folders/${n.folder.id}`)}
         columns={[
           {
             key: 'name',
-            header: 'Folder',
+            header: tr('Folder'),
             render: (n) => (
               <>
                 <Link to={`/folders/${n.folder.id}`} className="cell-title">
@@ -558,12 +559,12 @@ function SubfoldersTab({ node, onNew, canEdit }: { node?: FolderNode; onNew: () 
               </>
             ),
           },
-          { key: 'objects', header: 'Objects, with subfolders', className: 'end', render: (n) => <CountCell n={totalObjects(n)} /> },
-          { key: 'sub', header: 'Subfolders', className: 'end', render: (n) => <CountCell n={n.children.length} /> },
+          { key: 'objects', header: tr('Objects, with subfolders'), className: 'end', render: (n) => <CountCell n={totalObjects(n)} /> },
+          { key: 'sub', header: tr('Subfolders'), className: 'end', render: (n) => <CountCell n={n.children.length} /> },
         ]}
         empty={
-          <Empty title="No subfolders" action={canEdit && <button className="btn" onClick={onNew}>New subfolder</button>}>
-            Subfolders inherit the roles granted on this folder and can add their own.
+          <Empty title={tr('No subfolders')} action={canEdit && <button className="btn" onClick={onNew}>{tr('New subfolder')}</button>}>
+            {tr('Subfolders inherit the roles granted on this folder and can add their own.')}
           </Empty>
         }
       />

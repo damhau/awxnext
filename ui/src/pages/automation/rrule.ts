@@ -1,3 +1,4 @@
+import { tr } from '../../lib/i18n'
 // A friendly model of the schedule rules AWX accepts, converted to and from
 // the iCalendar text the API stores:
 //
@@ -9,7 +10,7 @@
 export type Freq = 'once' | 'MINUTELY' | 'HOURLY' | 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'YEARLY'
 export type Day = 'MO' | 'TU' | 'WE' | 'TH' | 'FR' | 'SA' | 'SU'
 export const DAYS: Day[] = ['MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU']
-export const DAY_NAMES: Record<Day, string> = { MO: 'Monday', TU: 'Tuesday', WE: 'Wednesday', TH: 'Thursday', FR: 'Friday', SA: 'Saturday', SU: 'Sunday' }
+export const DAY_NAMES: Record<Day, string> = { MO: tr('Monday'), TU: tr('Tuesday'), WE: tr('Wednesday'), TH: tr('Thursday'), FR: tr('Friday'), SA: tr('Saturday'), SU: tr('Sunday') }
 export const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 const ORDINAL: Record<number, string> = { 1: 'first', 2: 'second', 3: 'third', 4: 'fourth', [-1]: 'last' }
 
@@ -176,35 +177,35 @@ export function parseRRule(text: string): Parsed {
     const up = f.toUpperCase()
     if (up.startsWith('DTSTART')) {
       const x = f.match(/^DTSTART(?:;TZID=([^:]+))?:(\d{8}T\d{6})(Z?)$/i)
-      if (!x) return { model: null, reason: 'DTSTART is not in a supported form.' }
+      if (!x) return { model: null, reason: tr('DTSTART is not in a supported form.') }
       m.tz = x[1] ?? 'UTC'
       m.start = expand(x[2])
       sawStart = true
     } else if (up.startsWith('RRULE:')) {
-      if (rrule !== null) return { model: null, reason: 'The rule combines several RRULE lines.' }
+      if (rrule !== null) return { model: null, reason: tr('The rule combines several RRULE lines.') }
       rrule = f.slice(6)
     } else if (up.startsWith('EXDATE')) {
       const value = f.slice(f.indexOf(':') + 1)
       for (const d of value.split(',')) {
-        if (!/^\d{8}T\d{6}Z?$/i.test(d)) return { model: null, reason: 'Exceptions use a format the form does not support.' }
+        if (!/^\d{8}T\d{6}Z?$/i.test(d)) return { model: null, reason: tr('Exceptions use a format the form does not support.') }
         exdates.push(expand(d).slice(0, 10))
       }
     } else {
-      return { model: null, reason: `The rule uses ${f.split(/[:;]/)[0]}.` }
+      return { model: null, reason: tr('The rule uses {v}.', { v: f.split(/[:;]/)[0] }) }
     }
   }
-  if (!sawStart || rrule === null) return { model: null, reason: 'The rule needs a DTSTART and an RRULE.' }
+  if (!sawStart || rrule === null) return { model: null, reason: tr('The rule needs a DTSTART and an RRULE.') }
   const parts: Record<string, string> = {}
   for (const kv of rrule.split(';')) {
     const [k, v] = kv.split('=')
-    if (!k || v === undefined) return { model: null, reason: 'The RRULE is malformed.' }
+    if (!k || v === undefined) return { model: null, reason: tr('The RRULE is malformed.') }
     parts[k.toUpperCase()] = v.toUpperCase()
   }
   const known = new Set(['FREQ', 'INTERVAL', 'BYDAY', 'BYMONTHDAY', 'BYMONTH', 'COUNT', 'UNTIL', 'WKST'])
   const extra = Object.keys(parts).find((k) => !known.has(k))
-  if (extra) return { model: null, reason: `The RRULE uses ${extra}.` }
+  if (extra) return { model: null, reason: tr('The RRULE uses {extra}.', { extra }) }
   const freq = parts.FREQ as Freq
-  if (!['MINUTELY', 'HOURLY', 'DAILY', 'WEEKLY', 'MONTHLY', 'YEARLY'].includes(freq)) return { model: null, reason: `Frequency ${parts.FREQ ?? '(none)'} is not supported here.` }
+  if (!['MINUTELY', 'HOURLY', 'DAILY', 'WEEKLY', 'MONTHLY', 'YEARLY'].includes(freq)) return { model: null, reason: tr('Frequency {v} is not supported here.', { v: parts.FREQ ?? '(none)' }) }
   m.interval = Number(parts.INTERVAL ?? 1) || 1
   m.exdates = exdates
   if (freq === 'MINUTELY' && m.interval === 1 && parts.COUNT === '1' && !parts.BYDAY) {
@@ -220,25 +221,25 @@ export function parseRRule(text: string): Parsed {
   if (parts.BYDAY) {
     const days = parts.BYDAY.split(',')
     if (freq === 'WEEKLY') {
-      if (!days.every((d) => DAYS.includes(d as Day))) return { model: null, reason: 'Weekly days use a format the form does not support.' }
+      if (!days.every((d) => DAYS.includes(d as Day))) return { model: null, reason: tr('Weekly days use a format the form does not support.') }
       m.byday = days as Day[]
     } else if (freq === 'MONTHLY' && days.length === 1) {
       const x = days[0].match(/^(-1|[1-4])(MO|TU|WE|TH|FR|SA|SU)$/)
-      if (!x) return { model: null, reason: 'The monthly weekday is not supported by the form.' }
+      if (!x) return { model: null, reason: tr('The monthly weekday is not supported by the form.') }
       m.monthly = 'weekday'
       m.setpos = Number(x[1])
       m.setposDay = x[2] as Day
     } else {
-      return { model: null, reason: 'BYDAY is only supported for weekly and monthly rules.' }
+      return { model: null, reason: tr('BYDAY is only supported for weekly and monthly rules.') }
     }
   }
   if (parts.BYMONTHDAY) {
-    if (freq !== 'MONTHLY' && freq !== 'YEARLY') return { model: null, reason: 'BYMONTHDAY is only supported for monthly and yearly rules.' }
+    if (freq !== 'MONTHLY' && freq !== 'YEARLY') return { model: null, reason: tr('BYMONTHDAY is only supported for monthly and yearly rules.') }
     m.monthday = Number(parts.BYMONTHDAY)
-    if (!(m.monthday >= 1 && m.monthday <= 31)) return { model: null, reason: 'Negative month days are not supported by the form.' }
+    if (!(m.monthday >= 1 && m.monthday <= 31)) return { model: null, reason: tr('Negative month days are not supported by the form.') }
   }
   if (parts.BYMONTH) {
-    if (freq !== 'YEARLY' || parts.BYMONTH.includes(',')) return { model: null, reason: 'BYMONTH is only supported for yearly rules on one month.' }
+    if (freq !== 'YEARLY' || parts.BYMONTH.includes(',')) return { model: null, reason: tr('BYMONTH is only supported for yearly rules on one month.') }
     m.month = Number(parts.BYMONTH)
   }
   if (parts.COUNT) {
@@ -246,7 +247,7 @@ export function parseRRule(text: string): Parsed {
     m.count = Number(parts.COUNT)
   } else if (parts.UNTIL) {
     const u = parts.UNTIL.match(/^(\d{8}T\d{6})Z$/)
-    if (!u) return { model: null, reason: 'UNTIL must be a UTC time.' }
+    if (!u) return { model: null, reason: tr('UNTIL must be a UTC time.') }
     m.end = 'until'
     const instant = new Date(expand(u[1]) + ':00Z')
     m.until = localString(instant, m.tz).slice(0, 10)
@@ -274,13 +275,13 @@ export function describe(m: RuleModel, withZone = true): string {
   let s: string
   switch (m.freq) {
     case 'MINUTELY':
-      s = n === 1 ? 'Every minute' : `Every ${n} minutes`
+      s = n === 1 ? tr('Every minute') : `Every ${n} minutes`
       break
     case 'HOURLY':
-      s = n === 1 ? 'Every hour' : `Every ${n} hours`
+      s = n === 1 ? tr('Every hour') : `Every ${n} hours`
       break
     case 'DAILY':
-      s = (n === 1 ? 'Every day' : `Every ${n} days`) + ' ' + at
+      s = (n === 1 ? tr('Every day') : `Every ${n} days`) + ' ' + at
       break
     case 'WEEKLY': {
       const days = DAYS.filter((d) => m.byday.includes(d))
@@ -312,7 +313,7 @@ export function describe(m: RuleModel, withZone = true): string {
 export function describeText(text: string | null | undefined): string {
   if (!text) return '—'
   const p = parseRRule(text)
-  return p.model ? describe(p.model) : 'Custom rule'
+  return p.model ? describe(p.model) : tr('Custom rule')
 }
 
 /** A few words for a list column: "every 3 h", "weekdays 06:00", "Mon, Thu 06:00". */

@@ -14,6 +14,7 @@ import { SurveyFields, useSurveyChoices, validateSurvey, type Survey } from './S
 import { visibleQuestions } from './surveyLogic'
 import { resOf, type Kind } from './TemplateDetail'
 import { passwordLabel } from '../../lib/jobs'
+import { asIs, tr } from '../../lib/i18n'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 interface LaunchInfo {
@@ -63,11 +64,11 @@ function Catalog({ current }: { current?: string }) {
   const list = useList<Template>('unified_job_templates/', { type__in: 'job_template,workflow_job_template', search: q || undefined, order_by: 'name', page_size: 50, ...scope })
   const items = (list.data?.results ?? []).filter((t) => t.summary_fields.user_capabilities?.start !== false)
   return (
-    <aside aria-label="Catalog" className="sidelist" style={{ flexBasis: 280, background: 'var(--surface-2)', gap: 12 }}>
+    <aside aria-label={tr('Catalog')} className="sidelist" style={{ flexBasis: 280, background: 'var(--surface-2)', gap: 12 }}>
       <label htmlFor="cat-search" className="nav-label" style={{ padding: 0 }}>
-        What do you want to do?
+        {tr('What do you want to do?')}
       </label>
-      <input id="cat-search" className="input" placeholder="deploy, restart, certificate…" value={q} onChange={(e) => setQ(e.target.value)} />
+      <input id="cat-search" className="input" placeholder={tr('deploy, restart, certificate…')} value={q} onChange={(e) => setQ(e.target.value)} />
       <div className="stack" style={{ gap: 2 }}>
         {items.map((t) => {
           const key = `${t.type === 'workflow_job_template' ? 'workflow' : 'job'}:${t.id}`
@@ -86,7 +87,7 @@ function Catalog({ current }: { current?: string }) {
             </Link>
           )
         })}
-        {list.data && items.length === 0 && <span className="small muted">Nothing you can run matches.</span>}
+        {list.data && items.length === 0 && <span className="small muted">{tr('Nothing you can run matches.')}</span>}
       </div>
     </aside>
   )
@@ -107,14 +108,14 @@ export function RunHome() {
   return (
     <div className="page ground">
       <div className="page-body" style={{ padding: '20px 28px 32px', maxWidth: 1180 }}>
-        <h1 style={{ fontSize: 20, margin: '0 0 4px' }}>What do you want to do?</h1>
+        <h1 style={{ fontSize: 20, margin: '0 0 4px' }}>{tr('What do you want to do?')}</h1>
         <p className="muted" style={{ margin: '0 0 14px' }}>
-          Everything you are allowed to run. Each one asks only what it needs; the rest is set by its owner.
+          {tr('Everything you are allowed to run. Each one asks only what it needs; the rest is set by its owner.')}
         </p>
-        <input className="input" style={{ maxWidth: 440, marginBottom: 20 }} aria-label="Search" placeholder="deploy, restart, certificate…" value={q} onChange={(e) => setQ(e.target.value)} autoFocus />
+        <input className="input" style={{ maxWidth: 440, marginBottom: 20 }} aria-label={tr('Search')} placeholder={tr('deploy, restart, certificate…')} value={q} onChange={(e) => setQ(e.target.value)} autoFocus />
         {list.isPending && <Loading rows={3} />}
         {list.data && items.length === 0 && (
-          <Empty title={q ? 'Nothing you can run matches' : 'Nothing to run yet'}>{q ? 'Try another word.' : 'Ask a template owner to give you the Execute role on what you need.'}</Empty>
+          <Empty title={q ? tr('Nothing you can run matches') : tr('Nothing to run yet')}>{q ? tr('Try another word.') : tr('Ask a template owner to give you the Execute role on what you need.')}</Empty>
         )}
         {names.map((name) => (
           <section key={name} style={{ marginBottom: 22 }} aria-label={name}>
@@ -128,14 +129,14 @@ export function RunHome() {
                 return (
                   <Link key={`${t.type}:${t.id}`} className="tile" to={`/run/${kind}/${t.id}`}>
                     <span className="tile-title">{t.name}</span>
-                    <span className="small muted tile-desc">{t.description || (kind === 'workflow' ? 'Workflow' : 'Playbook')}</span>
+                    <span className="small muted tile-desc">{t.description || (kind === 'workflow' ? tr('Workflow') : tr('Playbook'))}</span>
                     <span className="small faint row" style={{ gap: 6, marginTop: 'auto' }}>
                       {last ? (
                         <>
-                          <Status status={last.status} /> {last.finished ? ago(last.finished) : 'running'}
+                          <Status status={last.status} /> {last.finished ? ago(last.finished) : tr('running')}
                         </>
                       ) : (
-                        'Never run'
+                        tr('Never run')
                       )}
                     </span>
                   </Link>
@@ -212,20 +213,20 @@ function LaunchForm({ kind, tpl, info, survey, operator }: { kind: Kind; tpl: Te
         const prev = rows.get(name)
         // An unchanged prefilled value still comes from where it was defined.
         if (prev && prev.value === (typeof value === 'string' ? value : JSON.stringify(value))) continue
-        rows.set(name, { name, value: secret.has(name) ? '••••••••' : typeof value === 'string' ? value : JSON.stringify(value), source, secret: secret.has(name), note: prev && prev.value !== String(value) ? `overrides ${JSON.stringify(prev.value).slice(0, 40)} from ${prev.source}` : prev?.note })
+        rows.set(name, { name, value: secret.has(name) ? '••••••••' : typeof value === 'string' ? value : JSON.stringify(value), source, secret: secret.has(name), note: prev && prev.value !== String(value) ? tr('overrides {slice} from {source}', { slice: JSON.stringify(prev.value).slice(0, 40), source: prev.source }) : prev?.note })
       }
     }
-    add(invVars.data ?? {}, inventory ? `inventory ${inventory.name}` : 'inventory')
-    add(parseVars(varsText(tpl.extra_vars)), 'template')
-    if (asks('variables')) add(parseVars(fields.extra_vars), 'launch variables')
+    add(invVars.data ?? {}, inventory ? tr('inventory {name}', { name: inventory.name }) : tr('inventory'))
+    add(parseVars(varsText(tpl.extra_vars)), tr('template'))
+    if (asks('variables')) add(parseVars(fields.extra_vars), tr('launch variables'))
     const secret = new Set(questions.filter((q) => q.type === 'password').map((q) => q.variable))
     const surveyVals: Record<string, unknown> = {}
     for (const q of visibleQuestions(questions, answers)) {
       const v = answers[q.variable] ?? q.default
       if (v !== undefined && v !== '') surveyVals[q.variable] = v
     }
-    add(surveyVals, 'your answer', secret)
-    const order = ['your answer', 'launch variables', 'template']
+    add(surveyVals, tr('your answer'), secret)
+    const order = [tr('your answer'), tr('launch variables'), tr('template')]
     return [...rows.values()].sort((a, b) => {
       const ia = order.indexOf(a.source)
       const ib = order.indexOf(b.source)
@@ -268,39 +269,39 @@ function LaunchForm({ kind, tpl, info, survey, operator }: { kind: Kind; tpl: Te
 
   const prompts: ReactNode[] = []
   if (asks('inventory'))
-    prompts.push(<Lookup key="inv" label="Inventory" resource="inventories/" value={inventory} onChange={setInventory} meta={(i) => `${i.total_hosts ?? 0} hosts`} />)
+    prompts.push(<Lookup key="inv" label={tr('Inventory')} resource="inventories/" value={inventory} onChange={setInventory} meta={(i) => `${i.total_hosts ?? 0} hosts`} />)
   if (asks('limit'))
     prompts.push(
       <div key="limit" className="field">
-        <label htmlFor="lim">Limit</label>
-        <input id="lim" className="input mono" value={fields.limit} onChange={(e) => set('limit', e.target.value)} placeholder="all hosts" style={{ maxWidth: 440 }} />
-        <span className="help">Host pattern, e.g. web01,web02 or web:&eu</span>
+        <label htmlFor="lim">{tr('Limit')}</label>
+        <input id="lim" className="input mono" value={fields.limit} onChange={(e) => set('limit', e.target.value)} placeholder={tr('all hosts')} style={{ maxWidth: 440 }} />
+        <span className="help">{tr('Host pattern, e.g. web01,web02 or web:&eu')}</span>
       </div>,
     )
-  if (asks('credential')) prompts.push(<MultiLookup key="cred" label="Credentials" resource="credentials/" values={credentials} onChange={setCredentials} meta={(c) => c.kind ?? ''} />)
+  if (asks('credential')) prompts.push(<MultiLookup key="cred" label={tr('Credentials')} resource="credentials/" values={credentials} onChange={setCredentials} meta={(c) => c.kind ?? ''} />)
   if (asks('start_at_task'))
     prompts.push(
       <div key="start" className="field">
-        <label htmlFor="start-at">Start at task</label>
-        <input id="start-at" className="input mono" value={fields.start_at_task} onChange={(e) => set('start_at_task', e.target.value)} placeholder="the first task" style={{ maxWidth: 440 }} />
-        <span className="help">Name of the task to start from; empty runs the whole playbook.</span>
+        <label htmlFor="start-at">{tr('Start at task')}</label>
+        <input id="start-at" className="input mono" value={fields.start_at_task} onChange={(e) => set('start_at_task', e.target.value)} placeholder={tr('the first task')} style={{ maxWidth: 440 }} />
+        <span className="help">{tr('Name of the task to start from; empty runs the whole playbook.')}</span>
       </div>,
     )
   if (asks('scm_branch'))
     prompts.push(
       <div key="branch" className="field">
-        <label htmlFor="br">Branch, tag or commit</label>
+        <label htmlFor="br">{tr('Branch, tag or commit')}</label>
         <input id="br" className="input mono" value={fields.scm_branch} onChange={(e) => set('scm_branch', e.target.value)} style={{ maxWidth: 440 }} />
       </div>,
     )
   if (asks('job_type'))
     prompts.push(
       <fieldset key="jt">
-        <legend>Mode</legend>
+        <legend>{tr('Mode')}</legend>
         <div className="segmented">
           {[
-            ['run', 'Run'],
-            ['check', 'Check only (dry run)'],
+            ['run', tr('Run')],
+            ['check', tr('Check only (dry run)')],
           ].map(([v, l]) => (
             <label key={v} className={fields.job_type === v ? 'on' : ''}>
               <input type="radio" name="jt" checked={fields.job_type === v} onChange={() => set('job_type', v)} />
@@ -310,12 +311,12 @@ function LaunchForm({ kind, tpl, info, survey, operator }: { kind: Kind; tpl: Te
         </div>
       </fieldset>,
     )
-  if (asks('execution_environment')) prompts.push(<Lookup key="ee" label="Execution environment" resource="execution_environments/" value={ee} onChange={setEe} placeholder="Default" />)
-  if (asks('instance_groups')) prompts.push(<MultiLookup key="ig" label="Instance groups" resource="instance_groups/" values={igs} onChange={setIgs} ordered />)
-  if (asks('labels')) prompts.push(<MultiLookup key="lab" label="Labels" resource="labels/" values={labels} onChange={setLabels} />)
+  if (asks('execution_environment')) prompts.push(<Lookup key="ee" label={tr('Execution environment')} resource="execution_environments/" value={ee} onChange={setEe} placeholder={tr('Default')} />)
+  if (asks('instance_groups')) prompts.push(<MultiLookup key="ig" label={tr('Instance groups')} resource="instance_groups/" values={igs} onChange={setIgs} ordered />)
+  if (asks('labels')) prompts.push(<MultiLookup key="lab" label={tr('Labels')} resource="labels/" values={labels} onChange={setLabels} />)
   for (const [f, label] of [
-    ['tags', 'Tags'],
-    ['skip_tags', 'Skip tags'],
+    ['tags', tr('Tags')],
+    ['skip_tags', tr('Skip tags')],
   ] as const)
     if (asks(f))
       prompts.push(
@@ -325,10 +326,10 @@ function LaunchForm({ kind, tpl, info, survey, operator }: { kind: Kind; tpl: Te
         </div>,
       )
   for (const [f, label, help] of [
-    ['verbosity', 'Verbosity', '0 normal … 5 WinRM debug'],
-    ['forks', 'Forks', '0 uses the default'],
-    ['timeout', 'Timeout (seconds)', '0 means none'],
-    ['job_slice_count', 'Job slices', 'parallel jobs over the inventory'],
+    ['verbosity', tr('Verbosity'), '0 normal … 5 WinRM debug'],
+    ['forks', tr('Forks'), '0 uses the default'],
+    ['timeout', tr('Timeout (seconds)'), '0 means none'],
+    ['job_slice_count', tr('Job slices'), 'parallel jobs over the inventory'],
   ] as const)
     if (asks(f))
       prompts.push(
@@ -338,25 +339,25 @@ function LaunchForm({ kind, tpl, info, survey, operator }: { kind: Kind; tpl: Te
           <span className="help">{help}</span>
         </div>,
       )
-  if (asks('diff_mode')) prompts.push(<Check key="diff" label="Show changes (--diff)" checked={fields.diff_mode} onChange={(v) => set('diff_mode', v)} />)
+  if (asks('diff_mode')) prompts.push(<Check key="diff" label={tr('Show changes (--diff)')} checked={fields.diff_mode} onChange={(v) => set('diff_mode', v)} />)
 
   const hidden = operator && !showAll
   const essentialKeys = new Set(['inv', 'limit', 'branch', 'jt', ...(info.credential_needed_to_start ? ['cred'] : [])])
   const isEssential = (p: ReactNode) => isValidElement(p) && essentialKeys.has(String(p.key))
   const advanced = prompts.filter((p) => !isEssential(p))
   const hostCount = inv.data?.total_hosts as number | undefined
-  const launchLabel = kind === 'workflow' ? 'Launch workflow' : hostCount !== undefined ? `Launch on ${fields.limit && asks('limit') ? 'limited hosts' : plural(hostCount, 'host')}` : 'Launch'
+  const launchLabel = kind === 'workflow' ? tr('Launch workflow') : hostCount !== undefined ? tr('Launch on {hosts}', { hosts: fields.limit && asks('limit') ? tr('limited hosts') : plural(hostCount, 'host') }) : tr('Launch')
   const approvals = (nodes.data?.results ?? []).filter((n) => n.summary_fields?.unified_job_template?.unified_job_type === 'workflow_approval').length
 
   return (
     <main className="page-body" style={{ padding: '20px 28px 32px' }}>
       {!operator && (
         <div className="crumbs">
-          <Link to="/templates">Templates</Link>
+          <Link to="/templates">{tr('Templates')}</Link>
           <span aria-hidden="true">/</span>
           <Link to={`/templates/${kind}/${tpl.id}`}>{tpl.name}</Link>
           <span aria-hidden="true">/</span>
-          <span className="here">Launch</span>
+          <span className="here">{tr('Launch')}</span>
         </div>
       )}
       <div className="split" style={{ gap: 24 }}>
@@ -373,7 +374,7 @@ function LaunchForm({ kind, tpl, info, survey, operator }: { kind: Kind; tpl: Te
             <h1 id="launch-title" style={{ fontSize: 18 }}>
               {tpl.name}
             </h1>
-            <p className="subtitle">{tpl.description || (kind === 'workflow' ? 'Workflow' : `Runs ${tpl.playbook}`)}</p>
+            <p className="subtitle">{tpl.description || (kind === 'workflow' ? tr('Workflow') : tr('Runs {playbook}', { playbook: tpl.playbook }))}</p>
           </div>
           <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 20 }}>
             <FormError error={error} />
@@ -384,74 +385,74 @@ function LaunchForm({ kind, tpl, info, survey, operator }: { kind: Kind; tpl: Te
               <div key={p} className="field">
                 <label htmlFor={p}>{passwordLabel(p)}</label>
                 <input id={p} className="input" type="password" autoComplete="off" value={passwords[p] ?? ''} onChange={(e) => setPasswords((x) => ({ ...x, [p]: e.target.value }))} style={{ maxWidth: 320 }} />
-                <span className="help">A credential of this template asks for it at launch; it is not stored.</span>
+                <span className="help">{tr('A credential of this template asks for it at launch; it is not stored.')}</span>
               </div>
             ))}
             {prompts.filter(isEssential)}
             {!hidden && advanced}
-            {!hidden && asks('variables') && <VarsEditor label="Extra variables" value={fields.extra_vars} onChange={(v) => set('extra_vars', v)} rows={6} />}
+            {!hidden && asks('variables') && <VarsEditor label={tr('Extra variables')} value={fields.extra_vars} onChange={(v) => set('extra_vars', v)} rows={6} />}
             {questions.length === 0 && prompts.length === 0 && !asks('variables') && !(info.passwords_needed_to_start ?? []).length && (
               <p className="muted" style={{ margin: 0 }}>
-                Nothing to answer: this template runs with its saved settings.
+                {tr('Nothing to answer: this template runs with its saved settings.')}
               </p>
             )}
             {operator && (advanced.length > 0 || asks('variables')) && (
               <p className="small muted" style={{ margin: 0, borderTop: '1px solid var(--line-soft)', paddingTop: 12 }}>
-                {hidden ? 'Credentials, environment and other settings are preset by the template owner. ' : ''}
+                {hidden ? tr('Credentials, environment and other settings are preset by the template owner. ') : ''}
                 <button type="button" className="link-btn" onClick={() => setShowAll((s) => !s)}>
-                  {hidden ? 'Show advanced settings' : 'Hide advanced settings'}
+                  {hidden ? tr('Show advanced settings') : tr('Hide advanced settings')}
                 </button>
               </p>
             )}
           </div>
         </form>
 
-        <aside aria-label="What will happen" className="narrow stack" style={{ flex: '2 1 380px', gap: 16 }}>
-          <Panel title="What will happen">
+        <aside aria-label={tr('What will happen')} className="narrow stack" style={{ flex: '2 1 380px', gap: 16 }}>
+          <Panel title={tr('What will happen')}>
             <ol style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 8, lineHeight: 1.45 }}>
               {kind === 'job' ? (
                 <>
                   <li>
-                    {fields.job_type === 'check' && asks('job_type') ? 'Check (no changes) ' : 'Run '}
-                    <span className="mono">{tpl.playbook}</span> from{' '}
+                    {fields.job_type === 'check' && asks('job_type') ? tr('Check (no changes) ') : tr('Run ')}
+                    <span className="mono">{tpl.playbook}</span> {tr('from')}{' '}
                     <span className="mono">
                       {project.data?.name ?? '…'}
-                      {(asks('scm_branch') && fields.scm_branch) || project.data?.scm_branch ? `@${(asks('scm_branch') && fields.scm_branch) || project.data?.scm_branch}` : ''}
-                      {project.data?.scm_revision ? ` (${shortSha(project.data.scm_revision as string)})` : ''}
+                      {(asks('scm_branch') && fields.scm_branch) || project.data?.scm_branch ? asIs('@' + ((asks('scm_branch') && fields.scm_branch) || project.data?.scm_branch)) : ''}
+                      {project.data?.scm_revision ? tr(' ({shortSha})', { shortSha: shortSha(project.data.scm_revision as string) }) : ''}
                     </span>
                   </li>
                   <li>
-                    On {inventory ? <span className="mono">{inventory.name}</span> : <b>no inventory yet</b>}
-                    {hostCount !== undefined && ` · ${plural(hostCount, 'host')}`}
-                    {asks('limit') && fields.limit ? <> limited to <span className="mono">{fields.limit}</span></> : tpl.limit ? <> limited to <span className="mono">{tpl.limit}</span></> : ''}
+                    {tr('On')} {inventory ? <span className="mono">{inventory.name}</span> : <b>{tr('no inventory yet')}</b>}
+                    {hostCount !== undefined && tr(' · {count}', { count: plural(hostCount, 'host') })}
+                    {asks('limit') && fields.limit ? <> {tr('limited to')} <span className="mono">{fields.limit}</span></> : tpl.limit ? <> {tr('limited to')} <span className="mono">{tpl.limit}</span></> : ''}
                   </li>
-                  {credentials.length > 0 && <li>Connect with {credentials.map((c) => c.name).join(', ')}</li>}
+                  {credentials.length > 0 && <li>{tr('Connect with')} {credentials.map((c) => c.name).join(', ')}</li>}
                 </>
               ) : (
                 <>
-                  <li>Run {plural(nodes.data?.count ?? 0, 'step')} in order, following success and failure paths</li>
-                  {approvals > 0 && <li>Pause for {plural(approvals, 'approval')} before continuing</li>}
-                  {inventory && <li>Use inventory <span className="mono">{inventory.name}</span> for every step that asks</li>}
+                  <li>{tr('Run')} {plural(nodes.data?.count ?? 0, 'step')} {tr('in order, following success and failure paths')}</li>
+                  {approvals > 0 && <li>{tr('Pause for')} {plural(approvals, 'approval')} {tr('before continuing')}</li>}
+                  {inventory && <li>{tr('Use inventory')} <span className="mono">{inventory.name}</span> {tr('for every step that asks')}</li>}
                 </>
               )}
             </ol>
             <dl className="kv small" style={{ marginTop: 14 }}>
-              <dt>Takes</dt>
-              <dd>{median ? `about ${duration(median)} (median of the last ${durations.length})` : 'no finished runs to estimate from'}</dd>
-              <dt>Last run</dt>
+              <dt>{tr('Takes')}</dt>
+              <dd>{median ? tr('about {duration} (median of the last {count})', { duration: duration(median), count: durations.length }) : tr('no finished runs to estimate from')}</dd>
+              <dt>{tr('Last run')}</dt>
               <dd>
                 {last ? (
                   <Link to={jobPath(last)} className="row" style={{ gap: 6, display: 'inline-flex' }}>
                     <Status status={last.status} /> {ago(last.finished)}
                   </Link>
                 ) : (
-                  'never'
+                  tr('never')
                 )}
               </dd>
               {inv.data && (inv.data.hosts_with_active_failures as number) > 0 && (
                 <>
-                  <dt>Watch out</dt>
-                  <dd className="fail-text">{plural(inv.data.hosts_with_active_failures as number, 'host')} failed in their last run</dd>
+                  <dt>{tr('Watch out')}</dt>
+                  <dd className="fail-text">{plural(inv.data.hosts_with_active_failures as number, 'host')} {tr('failed in their last run')}</dd>
                 </>
               )}
             </dl>
@@ -460,18 +461,18 @@ function LaunchForm({ kind, tpl, info, survey, operator }: { kind: Kind; tpl: Te
           {kind === 'job' && (
             <section className="panel">
               <div className="panel-head">
-                <h2>Variables this run will see</h2>
-                <span className="small muted" style={{ marginLeft: 'auto' }} title="Survey answers override launch variables, which override template extra variables, which override inventory variables.">
-                  highest first
+                <h2>{tr('Variables this run will see')}</h2>
+                <span className="small muted" style={{ marginLeft: 'auto' }} title={tr('Survey answers override launch variables, which override template extra variables, which override inventory variables.')}>
+                  {tr('highest first')}
                 </span>
               </div>
               {varRows.length ? (
                 <table className="data small vars-table">
                   <thead>
                     <tr>
-                      <th>name</th>
-                      <th>value</th>
-                      <th>set by</th>
+                      <th>{tr('name')}</th>
+                      <th>{tr('value')}</th>
+                      <th>{tr('set by')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -491,7 +492,7 @@ function LaunchForm({ kind, tpl, info, survey, operator }: { kind: Kind; tpl: Te
                 </table>
               ) : (
                 <p className="small muted" style={{ margin: 0, padding: 14 }}>
-                  No variables beyond the playbook’s own defaults.
+                  {tr('No variables beyond the playbook’s own defaults.')}
                 </p>
               )}
             </section>
@@ -500,14 +501,14 @@ function LaunchForm({ kind, tpl, info, survey, operator }: { kind: Kind; tpl: Te
           <div className="stack" style={{ gap: 6 }}>
             <button className="btn primary lg block" disabled={busy || (touched && blocking)} onClick={launch}>
               <Icon name="play" size={12} />
-              {busy ? 'Launching…' : launchLabel}
+              {busy ? tr('Launching…') : launchLabel}
             </button>
             {touched && blocking && (
               <span className="small fail-text" style={{ textAlign: 'center' }}>
-                {missing.length ? `Provide ${missing.join(', ')} to launch.` : varsErr ? 'Fix the extra variables to launch.' : `Answer ${plural(Object.keys(surveyErrors).length, 'question')} to launch.`}
+                {missing.length ? tr('Provide {list} to launch.', { list: missing.join(', ') }) : varsErr ? tr('Fix the extra variables to launch.') : tr('Answer {count} to launch.', { count: plural(Object.keys(surveyErrors).length, 'question') })}
               </span>
             )}
-            {statusKind(last?.status) === 'run' && !tpl.allow_simultaneous && <span className="small muted" style={{ textAlign: 'center' }}>A run is in progress; this one waits until it finishes.</span>}
+            {statusKind(last?.status) === 'run' && !tpl.allow_simultaneous && <span className="small muted" style={{ textAlign: 'center' }}>{tr('A run is in progress; this one waits until it finishes.')}</span>}
           </div>
         </aside>
       </div>

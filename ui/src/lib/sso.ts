@@ -1,3 +1,4 @@
+import { tr } from './i18n'
 // The single sign-on buttons of the login page, from /api/v2/auth/: OIDC,
 // the OAuth2 logins (GitHub's, by name), then each SAML identity provider
 // ("saml:<name>").
@@ -21,16 +22,16 @@ function withNext(url: string, next: string): string {
 export function ssoLogins(backends: Record<string, Backend> | undefined, next: string): SSOLogin[] {
   if (!backends) return []
   const out: SSOLogin[] = []
-  if (backends.oidc) out.push({ key: 'oidc', label: 'Continue with single sign-on', href: withNext(backends.oidc.login_url, next) })
+  if (backends.oidc) out.push({ key: 'oidc', label: tr('Continue with single sign-on'), href: withNext(backends.oidc.login_url, next) })
   const keys = Object.keys(backends).sort()
   for (const key of keys) {
     if (key === 'oidc' || key.startsWith('saml:')) continue
-    out.push({ key, label: `Continue with ${backends[key].name ?? key}`, href: withNext(backends[key].login_url, next) })
+    out.push({ key, label: tr('Continue with {v}', { v: backends[key].name ?? key }), href: withNext(backends[key].login_url, next) })
   }
   for (const key of keys) {
     if (!key.startsWith('saml:')) continue
     const name = backends[key].name ?? key.slice(5)
-    out.push({ key, label: `Continue with ${name} (SAML)`, href: withNext(backends[key].login_url, next) })
+    out.push({ key, label: tr('Continue with {name} (SAML)', { name }), href: withNext(backends[key].login_url, next) })
   }
   return out
 }

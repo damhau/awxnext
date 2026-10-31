@@ -11,6 +11,7 @@ import { Ago, Cell, Empty, ErrorNote, KV, Loading, PageHead, Panel, Tab } from '
 import type { CellState } from '../../lib/cells'
 import { shortSha } from '../../lib/format'
 import { ListPage, useDelete } from './common'
+import { tr } from '../../lib/i18n'
 
 interface Change {
   action: 'create' | 'update' | 'delete' | 'unchanged' | 'error'
@@ -48,7 +49,7 @@ type Source = Base & {
 
 function SourceStatus({ s }: { s: Source }) {
   const state: CellState = !s.enabled ? 'canceled' : s.status === 'successful' ? 'ok' : s.status === 'failed' ? 'failed' : 'empty'
-  const label = !s.enabled ? 'Paused' : s.status === 'never synced' ? 'Never synced' : s.status === 'successful' ? 'In sync' : s.status === 'failed' ? 'Failed' : s.status
+  const label = !s.enabled ? 'Paused' : s.status === 'never synced' ? tr('Never synced') : s.status === 'successful' ? tr('In sync') : s.status === 'failed' ? 'Failed' : s.status
   return (
     <span className="status" title={s.last_error || undefined}>
       <Cell state={state} />
@@ -72,26 +73,26 @@ export function GitOpsList() {
   const { scope } = useOrg()
   return (
     <ListPage<Source>
-      title="GitOps"
+      title={tr('GitOps')}
       subtitle={
         <>
-          Declare templates, inventories, schedules and teams as YAML in git; each source keeps an organization in sync with a project. <a href="https://github.com/damhau/awxnext/blob/main/docs/gitops.md" target="_blank" rel="noreferrer">Format reference</a>
+          {tr('Declare templates, inventories, schedules and teams as YAML in git; each source keeps an organization in sync with a project.')} <a href="https://github.com/damhau/awxnext/blob/main/docs/gitops.md" target="_blank" rel="noreferrer">{tr('Format reference')}</a>
         </>
       }
       path="gitops_sources/"
       params={scope}
-      placeholder="Filter sources…"
+      placeholder={tr('Filter sources…')}
       actions={
         <Link to="/gitops/new" className="btn primary">
           <Icon name="plus" size={14} />
-          New source
+          {tr('New source')}
         </Link>
       }
       onOpen={(s) => nav(`/gitops/${s.id}`)}
       columns={[
         {
           key: 'name',
-          header: 'Source',
+          header: tr('Source'),
           sort: 'name',
           render: (s) => (
             <div>
@@ -99,18 +100,18 @@ export function GitOpsList() {
                 {s.name}
               </Link>
               <div className="cell-sub">
-                {s.summary_fields.project?.name ?? 'no project'}
-                {s.path ? ` : ${s.path}` : ''}
+                {s.summary_fields.project?.name ?? tr('no project')}
+                {s.path ? tr(' : {path}', { path: s.path }) : ''}
               </div>
             </div>
           ),
         },
-        { key: 'org', header: 'Applies to', render: (s) => [s.summary_fields.organization?.name, s.summary_fields.folder?.name].filter(Boolean).join(' / ') },
-        { key: 'status', header: 'Status', render: (s) => <SourceStatus s={s} /> },
-        { key: 'rev', header: 'Revision', className: 'num', render: (s) => shortSha(s.last_revision) || <span className="faint">—</span> },
-        { key: 'sync', header: 'Last sync', sort: 'last_sync', className: 'small nowrap', render: (s) => <Ago at={s.last_sync} /> },
+        { key: 'org', header: tr('Applies to'), render: (s) => [s.summary_fields.organization?.name, s.summary_fields.folder?.name].filter(Boolean).join(' / ') },
+        { key: 'status', header: tr('Status'), render: (s) => <SourceStatus s={s} /> },
+        { key: 'rev', header: tr('Revision'), className: 'num', render: (s) => shortSha(s.last_revision) || <span className="faint">—</span> },
+        { key: 'sync', header: tr('Last sync'), sort: 'last_sync', className: 'small nowrap', render: (s) => <Ago at={s.last_sync} /> },
       ]}
-      empty={<Empty title="No GitOps sources">Point a source at a project directory with YAML declarations to manage objects from git.</Empty>}
+      empty={<Empty title={tr('No GitOps sources')}>{tr('Point a source at a project directory with YAML declarations to manage objects from git.')}</Empty>}
     />
   )
 }
@@ -118,7 +119,7 @@ export function GitOpsList() {
 export function GitOpsNew() {
   return (
     <div className="page">
-      <PageHead crumbs={[{ label: 'GitOps', to: '/gitops' }, { label: 'New' }]} title="New GitOps source" />
+      <PageHead crumbs={[{ label: tr('GitOps'), to: '/gitops' }, { label: tr('New') }]} title={tr('New GitOps source')} />
       <div className="page-body">
         <SourceForm />
       </div>
@@ -145,7 +146,7 @@ export function GitOpsDetail() {
       const r = await runSync(id, dry)
       if (dry) setPlan(r)
       else {
-        toast(r.error ? `Sync failed: ${r.error}` : `Synced ${shortSha(r.revision)}: ${describeSummary(r.summary)}`, r.error ? 'error' : 'info')
+        toast(r.error ? tr('Sync failed: {error}', { error: r.error }) : tr('Synced {shortSha}: {describeSummary}', { shortSha: shortSha(r.revision), describeSummary: describeSummary(r.summary) }), r.error ? 'error' : 'info')
         invalidate('gitops_sources')
       }
     } catch (e) {
@@ -157,22 +158,22 @@ export function GitOpsDetail() {
   return (
     <div className="page">
       <PageHead
-        crumbs={[{ label: 'GitOps', to: '/gitops' }, { label: s.name }]}
+        crumbs={[{ label: tr('GitOps'), to: '/gitops' }, { label: s.name }]}
         title={s.name}
         badge={<SourceStatus s={s} />}
         subtitle={s.description || undefined}
         actions={
           <>
             <button className="btn" disabled={!!busy || !s.project} onClick={() => sync(true)}>
-              {busy === 'plan' ? 'Comparing…' : 'Preview changes'}
+              {busy === 'plan' ? tr('Comparing…') : tr('Preview changes')}
             </button>
             <button className="btn primary" disabled={!!busy || !s.project} onClick={() => sync(false)}>
               <Icon name="refresh" size={14} />
-              {busy === 'sync' ? 'Syncing…' : 'Sync now'}
+              {busy === 'sync' ? tr('Syncing…') : tr('Sync now')}
             </button>
             {s.summary_fields.user_capabilities?.edit && (
               <Link className="btn" to={`${base}/settings`}>
-                Edit
+                {tr('Edit')}
               </Link>
             )}
             {s.summary_fields.user_capabilities?.delete && (
@@ -182,13 +183,13 @@ export function GitOpsDetail() {
                   del({
                     path: `gitops_sources/${id}/`,
                     name: s.name,
-                    what: 'source',
+                    what: tr('source'),
                     then: '/gitops',
-                    body: <p style={{ margin: 0 }}>Objects it created are kept and become editable in the UI again.</p>,
+                    body: <p style={{ margin: 0 }}>{tr('Objects it created are kept and become editable in the UI again.')}</p>,
                   })
                 }
               >
-                Delete
+                {tr('Delete')}
               </button>
             )}
           </>
@@ -196,9 +197,9 @@ export function GitOpsDetail() {
         tabs={
           <>
             <Tab to={base} end>
-              Last sync
+              {tr('Last sync')}
             </Tab>
-            <Tab to={`${base}/settings`}>Settings</Tab>
+            <Tab to={`${base}/settings`}>{tr('Settings')}</Tab>
           </>
         }
       />
@@ -211,28 +212,28 @@ export function GitOpsDetail() {
                 <div className="wide stack" style={{ gap: 16 }}>
                   {s.last_error && <div className="form-error">{s.last_error}</div>}
                   {report ? (
-                    <PlanView report={report} title={`Applied ${report.revision ? shortSha(report.revision) : ''}`} hideUnchanged />
+                    <PlanView report={report} title={report.revision ? tr('Applied {revision}', { revision: shortSha(report.revision) }) : tr('Applied')} hideUnchanged />
                   ) : (
                     <Panel>
-                      <Empty title="Not synced yet" action={<button className="btn" onClick={() => sync(true)}>Preview changes</button>}>
-                        Preview to see what the declarations would create, then sync.
+                      <Empty title={tr('Not synced yet')} action={<button className="btn" onClick={() => sync(true)}>{tr('Preview changes')}</button>}>
+                        {tr('Preview to see what the declarations would create, then sync.')}
                       </Empty>
                     </Panel>
                   )}
                 </div>
                 <div className="narrow">
-                  <Panel title="Source">
+                  <Panel title={tr('Source')}>
                     <KV
                       items={[
-                        ['Project', s.project ? <Link to={`/projects/${s.project}`}>{s.summary_fields.project?.name}</Link> : <span className="fail-text">Missing</span>],
-                        ['Directory', <span className="mono">{s.path || '/'}</span>],
-                        ['Revision', s.last_revision ? <span className="mono">{shortSha(s.last_revision)}</span> : '—'],
-                        ['Last sync', <Ago at={s.last_sync} />],
-                        ['Organization', <Link to={`/organizations/${s.organization}`}>{s.summary_fields.organization?.name}</Link>],
-                        ['Folder', s.summary_fields.folder?.name ?? <span className="faint">None</span>],
-                        ['On project update', s.sync_on_project_update ? 'Sync automatically' : 'Manual'],
-                        ['Prune', s.prune ? 'Delete objects removed from git' : 'Keep removed objects'],
-                        ['Adopt existing', s.adopt_existing ? 'Take over same-named objects' : 'Fail on name conflicts'],
+                        [tr('Project'), s.project ? <Link to={`/projects/${s.project}`}>{s.summary_fields.project?.name}</Link> : <span className="fail-text">{tr('Missing')}</span>],
+                        [tr('Directory'), <span className="mono">{s.path || '/'}</span>],
+                        [tr('Revision'), s.last_revision ? <span className="mono">{shortSha(s.last_revision)}</span> : '—'],
+                        [tr('Last sync'), <Ago at={s.last_sync} />],
+                        [tr('Organization'), <Link to={`/organizations/${s.organization}`}>{s.summary_fields.organization?.name}</Link>],
+                        [tr('Folder'), s.summary_fields.folder?.name ?? <span className="faint">{tr('None')}</span>],
+                        [tr('On project update'), s.sync_on_project_update ? tr('Sync automatically') : tr('Manual')],
+                        [tr('Prune'), s.prune ? tr('Delete objects removed from git') : tr('Keep removed objects')],
+                        [tr('Adopt existing'), s.adopt_existing ? tr('Take over same-named objects') : tr('Fail on name conflicts')],
                       ]}
                     />
                   </Panel>
@@ -252,13 +253,13 @@ export function GitOpsDetail() {
       </div>
       {plan && (
         <Dialog
-          title="Preview: what a sync would change"
+          title={tr('Preview: what a sync would change')}
           wide
           onClose={() => setPlan(null)}
           footer={
             <>
               <button className="btn" onClick={() => setPlan(null)}>
-                Close
+                {tr('Close')}
               </button>
               <button
                 className="btn primary"
@@ -268,12 +269,12 @@ export function GitOpsDetail() {
                   await sync(false)
                 }}
               >
-                Apply these changes
+                {tr('Apply these changes')}
               </button>
             </>
           }
         >
-          <PlanView report={plan} title={`Revision ${shortSha(plan.revision)}`} hideUnchanged />
+          <PlanView report={plan} title={tr('Revision {shortSha}', { shortSha: shortSha(plan.revision) })} hideUnchanged />
         </Dialog>
       )}
     </div>
@@ -287,11 +288,11 @@ function describeSummary(s: Record<string, number> | undefined): string {
 }
 
 const marks: Record<Change['action'], { glyph: string; cls: string; label: string }> = {
-  create: { glyph: '+', cls: 'ok-text', label: 'create' },
-  update: { glyph: '~', cls: '', label: 'update' },
-  delete: { glyph: '−', cls: 'fail-text', label: 'delete' },
-  unchanged: { glyph: '=', cls: 'faint', label: 'unchanged' },
-  error: { glyph: '!', cls: 'fail-text', label: 'error' },
+  create: { glyph: '+', cls: 'ok-text', label: tr('create') },
+  update: { glyph: '~', cls: '', label: tr('update') },
+  delete: { glyph: '−', cls: 'fail-text', label: tr('delete') },
+  unchanged: { glyph: '=', cls: 'faint', label: tr('unchanged') },
+  error: { glyph: '!', cls: 'fail-text', label: tr('error') },
 }
 
 const kindOrder = ['Label', 'Team', 'Project', 'Inventory', 'InventorySource', 'NotificationTemplate', 'JobTemplate', 'WorkflowJobTemplate', 'Schedule']
@@ -312,14 +313,14 @@ export function PlanView({ report, title, hideUnchanged }: { report: Report; tit
         {same > 0 && (
           <label className="check small" style={{ marginLeft: 'auto' }}>
             <input type="checkbox" checked={showSame} onChange={(e) => setShowSame(e.target.checked)} />
-            Show {same} unchanged
+            {tr('Show')} {same} {tr('unchanged')}
           </label>
         )}
       </div>
       {report.error && (
         <div style={{ padding: '10px 14px 0' }}>
           <div className="form-error">{report.error}</div>
-          <p className="small muted" style={{ margin: '8px 0 0' }}>A sync is all or nothing: nothing was changed.</p>
+          <p className="small muted" style={{ margin: '8px 0 0' }}>{tr('A sync is all or nothing: nothing was changed.')}</p>
         </div>
       )}
       <div className="plan">
@@ -348,7 +349,7 @@ export function PlanView({ report, title, hideUnchanged }: { report: Report; tit
             </div>
           )
         })}
-        {!kinds.length && <div className="empty">The directory declares nothing.</div>}
+        {!kinds.length && <div className="empty">{tr('The directory declares nothing.')}</div>}
       </div>
     </section>
   )
@@ -423,52 +424,52 @@ function SourceForm({ source }: { source?: Source }) {
       }}
     >
       <div className="form-grid">
-        <TextInput label="Name" value={f.values.name} onChange={(v) => f.set('name', v)} error={f.errors.name} autoFocus={!source} />
+        <TextInput label={tr('Name')} value={f.values.name} onChange={(v) => f.set('name', v)} error={f.errors.name} autoFocus={!source} />
         {source ? (
           <div className="field">
-            <span className="label">Organization</span>
+            <span className="label">{tr('Organization')}</span>
             <span style={{ padding: '7px 0' }}>{source.summary_fields.organization?.name}</span>
-            <span className="help">Fixed once the source exists.</span>
+            <span className="help">{tr('Fixed once the source exists.')}</span>
           </div>
         ) : (
-          <Lookup label="Organization" resource="organizations/" value={f.values.organization} onChange={(v) => f.set('organization', v)} error={f.errors.organization} />
+          <Lookup label={tr('Organization')} resource="organizations/" value={f.values.organization} onChange={(v) => f.set('organization', v)} error={f.errors.organization} />
         )}
         <Lookup
           key={'p' + orgId}
-          label="Project"
+          label={tr('Project')}
           resource="projects/"
           params={orgId ? { organization: orgId } : undefined}
           value={f.values.project}
           onChange={(v) => f.set('project', v)}
           error={f.errors.project}
-          help="Its synced revision is applied."
+          help={tr('Its synced revision is applied.')}
         />
-        <TextInput label="Directory" optional mono value={f.values.path} onChange={(v) => f.set('path', v)} placeholder="awx/" help="Scanned recursively for YAML with a kind. Playbooks are ignored." error={f.errors.path} />
+        <TextInput label={tr('Directory')} optional mono value={f.values.path} onChange={(v) => f.set('path', v)} placeholder={tr('awx/')} help={tr('Scanned recursively for YAML with a kind. Playbooks are ignored.')} error={f.errors.path} />
         <Lookup
           key={'f' + orgId}
-          label="Folder"
+          label={tr('Folder')}
           optional
           resource="folders/"
           params={orgId ? { organization: orgId } : undefined}
           value={f.values.folder}
           onChange={(v) => f.set('folder', v)}
-          help="Declared objects are placed here."
+          help={tr('Declared objects are placed here.')}
         />
-        <TextArea label="Description" optional rows={2} value={f.values.description} onChange={(v) => f.set('description', v)} />
+        <TextArea label={tr('Description')} optional rows={2} value={f.values.description} onChange={(v) => f.set('description', v)} />
       </div>
       <div className="stack" style={{ gap: 10 }}>
-        <Check label="Sync after each successful project update" checked={f.values.sync_on_project_update} onChange={(v) => f.set('sync_on_project_update', v)} />
-        <Check label="Prune" checked={f.values.prune} onChange={(v) => f.set('prune', v)} help="Delete objects of this source that were removed from git." />
-        <Check label="Adopt existing objects" checked={f.values.adopt_existing} onChange={(v) => f.set('adopt_existing', v)} help="Take over unmanaged objects with a declared name instead of failing." />
-        <Check label="Enabled" checked={f.values.enabled} onChange={(v) => f.set('enabled', v)} help="Paused sources are not synced automatically." />
+        <Check label={tr('Sync after each successful project update')} checked={f.values.sync_on_project_update} onChange={(v) => f.set('sync_on_project_update', v)} />
+        <Check label={tr('Prune')} checked={f.values.prune} onChange={(v) => f.set('prune', v)} help={tr('Delete objects of this source that were removed from git.')} />
+        <Check label={tr('Adopt existing objects')} checked={f.values.adopt_existing} onChange={(v) => f.set('adopt_existing', v)} help={tr('Take over unmanaged objects with a declared name instead of failing.')} />
+        <Check label={tr('Enabled')} checked={f.values.enabled} onChange={(v) => f.set('enabled', v)} help={tr('Paused sources are not synced automatically.')} />
       </div>
       <FormError error={error} />
       <div className="form-actions">
         <button className="btn primary" disabled={busy || !f.values.name.trim() || !f.values.project || !orgId}>
-          {busy ? 'Saving…' : source ? 'Save changes' : 'Create source'}
+          {busy ? tr('Saving…') : source ? tr('Save changes') : tr('Create source')}
         </button>
         <button type="button" className="btn ghost" onClick={() => nav(source ? `/gitops/${source.id}` : '/gitops')}>
-          Cancel
+          {tr('Cancel')}
         </button>
       </div>
     </form>

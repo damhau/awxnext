@@ -8,6 +8,7 @@ import { Icon } from '../components/icons'
 import { ago, jobPath, statusKind, statusLabel, templatePath, typeLabel } from '../lib/format'
 import { load, save } from '../lib/storage'
 import { useOrg, useSession } from './context'
+import { tr, trn } from '../lib/i18n'
 
 interface Item {
   key: string
@@ -87,25 +88,25 @@ export function Palette({ onClose, onAbout, onShortcuts }: { onClose: () => void
   const commands: Item[] = useMemo(
     () =>
       [
-        ['New job template', '/templates/new/job'],
-        ['New workflow template', '/templates/new/workflow'],
-        ['New inventory', '/inventories/new'],
-        ['New project', '/projects/new'],
-        ['New credential', '/credentials/new'],
-        ['Go to jobs that failed today', '/jobs?q=status:failed'],
-        ['Go to running jobs', '/jobs?q=status:running'],
-        ['Go to approvals', '/approvals'],
-        ['Go to settings', '/settings'],
-        ['Go to activity stream', '/activity'],
+        [tr('New job template'), '/templates/new/job'],
+        [tr('New workflow template'), '/templates/new/workflow'],
+        [tr('New inventory'), '/inventories/new'],
+        [tr('New project'), '/projects/new'],
+        [tr('New credential'), '/credentials/new'],
+        [tr('Go to jobs that failed today'), '/jobs?q=status:failed'],
+        [tr('Go to running jobs'), '/jobs?q=status:running'],
+        [tr('Go to approvals'), '/approvals'],
+        [tr('Go to settings'), '/settings'],
+        [tr('Go to activity stream'), '/activity'],
       ]
-        .map(([title, path]): Item => ({ key: 'c' + path, group: 'Commands', glyph: '›', tone: 'act' as const, title, run: () => go(path, title, '›') }))
+        .map(([title, path]): Item => ({ key: 'c' + path, group: tr('Commands'), glyph: '›', tone: 'act' as const, title, run: () => go(path, title, '›') }))
         .concat(
           [
-            ['Keyboard shortcuts', onShortcuts, '?'],
-            ['About awxnext', onAbout, undefined],
+            [tr('Keyboard shortcuts'), onShortcuts, '?'],
+            [tr('About awxnext'), onAbout, undefined],
           ]
             .filter((x): x is [string, () => void, string | undefined] => !!x[1])
-            .map(([title, fn, hint]) => ({ key: 'c-' + title, group: 'Commands', glyph: '›', tone: 'act' as const, title, hint, run: () => (onClose(), fn()) })),
+            .map(([title, fn, hint]) => ({ key: 'c-' + title, group: tr('Commands'), glyph: '›', tone: 'act' as const, title, hint, run: () => (onClose(), fn()) })),
         ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
@@ -117,8 +118,8 @@ export function Palette({ onClose, onAbout, onShortcuts }: { onClose: () => void
       const cmds = commands.filter((c) => c.title.toLowerCase().includes(term.toLowerCase()))
       if (!term && !commandMode) {
         const recent = load<{ title: string; path: string; glyph: string; meta?: string }[]>('palette-recent', [])
-        recent.forEach((r) => out.push({ key: 'r' + r.path, group: 'Recent', glyph: r.glyph, title: r.title, meta: r.meta, run: () => go(r.path, r.title, r.glyph, r.meta) }))
-        out.push({ key: 'c-signout', group: 'Commands', glyph: '›', tone: 'act', title: 'Sign out', run: () => logout() })
+        recent.forEach((r) => out.push({ key: 'r' + r.path, group: tr('Recent'), glyph: r.glyph, title: r.title, meta: r.meta, run: () => go(r.path, r.title, r.glyph, r.meta) }))
+        out.push({ key: 'c-signout', group: tr('Commands'), glyph: '›', tone: 'act', title: tr('Sign out'), run: () => logout() })
       }
       out.push(...cmds)
       return out
@@ -128,14 +129,14 @@ export function Palette({ onClose, onAbout, onShortcuts }: { onClose: () => void
     for (const t of d.tpls.slice(0, 3)) {
       if (!t.summary_fields?.user_capabilities?.start) continue
       const launch = () => go(`/launch/${t.type === 'workflow_job_template' ? 'workflow' : 'job'}/${t.id}`, `Launch ${t.name}`, '▶')
-      out.push({ key: 'l' + t.id, group: 'Actions', glyph: '▶', tone: 'act', title: `Launch ${t.name}…`, meta: 'opens launch form', hint: '⌘↵', run: launch })
+      out.push({ key: 'l' + t.id, group: tr('Actions'), glyph: '▶', tone: 'act', title: tr('Launch {name}…', { name: t.name }), meta: tr('opens launch form'), hint: '⌘↵', run: launch })
     }
     for (const t of d.tpls) {
       const path = templatePath(t)
       const folder = t.summary_fields?.folder?.name
       out.push({
         key: 't' + t.id,
-        group: 'Templates',
+        group: tr('Templates'),
         glyph: t.type === 'workflow_job_template' ? 'W' : 'T',
         tone: 'tpl',
         title: t.name,
@@ -148,18 +149,18 @@ export function Palette({ onClose, onAbout, onShortcuts }: { onClose: () => void
       const k = statusKind(j.status)
       out.push({
         key: 'j' + j.id,
-        group: 'Jobs',
+        group: tr('Jobs'),
         glyph: '#',
         tone: k === 'fail' || k === 'error' ? 'bad' : k === 'ok' ? 'good' : undefined,
-        title: `${j.id} ${j.name}`,
-        meta: `${statusLabel(j.status).toLowerCase()} ${ago(j.finished ?? j.started ?? j.created)} · ${typeLabel(j.type)}`,
+        title: tr('{id} {name}', { id: j.id, name: j.name }),
+        meta: tr('{toLowerCase} {ago} · {typeLabel}', { toLowerCase: statusLabel(j.status).toLowerCase(), ago: ago(j.finished ?? j.started ?? j.created), typeLabel: typeLabel(j.type) }),
         run: () => go(jobPath(j), `#${j.id} ${j.name}`, '#'),
       })
     }
     for (const h of d.hosts) {
       out.push({
         key: 'h' + h.id,
-        group: 'Hosts',
+        group: tr('Hosts'),
         glyph: 'H',
         title: h.name,
         meta: h.summary_fields?.inventory?.name,
@@ -167,7 +168,7 @@ export function Palette({ onClose, onAbout, onShortcuts }: { onClose: () => void
       })
     }
     for (const i of d.invs) {
-      out.push({ key: 'i' + i.id, group: 'Inventories', glyph: 'I', title: i.name, meta: `${i.total_hosts ?? 0} hosts`, run: () => go(`/inventories/${i.id}`, i.name, 'I') })
+      out.push({ key: 'i' + i.id, group: tr('Inventories'), glyph: 'I', title: i.name, meta: trn(i.total_hosts ?? 0, '{n} host', '{n} hosts'), run: () => go(`/inventories/${i.id}`, i.name, 'I') })
     }
     return out
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -202,18 +203,18 @@ export function Palette({ onClose, onAbout, onShortcuts }: { onClose: () => void
   let lastGroup = ''
   return createPortal(
     <div className="overlay" style={{ paddingTop: 96 }} onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="palette" role="dialog" aria-modal="true" aria-label="Command palette">
+      <div className="palette" role="dialog" aria-modal="true" aria-label={tr('Command palette')}>
         <div className="palette-input">
           <Icon name="search" />
           <label htmlFor="palette" className="sr-only">
-            Search or run a command
+            {tr('Search or run a command')}
           </label>
           <input
             id="palette"
             ref={input}
             autoFocus
             value={q}
-            placeholder="Search templates, jobs, hosts…  or > for commands"
+            placeholder={tr('Search templates, jobs, hosts…  or > for commands')}
             onChange={(e) => setQ(e.target.value)}
             onKeyDown={onKey}
             role="combobox"
@@ -222,12 +223,12 @@ export function Palette({ onClose, onAbout, onShortcuts }: { onClose: () => void
             autoComplete="off"
           />
           <span className="small faint nowrap">
-            {scope !== 'all' ? `only ${scope}` : org ? `in ${org.name}` : 'everywhere'}
+            {scope !== 'all' ? tr('only {scope}', { scope }) : org ? tr('in {name}', { name: org.name }) : tr('everywhere')}
           </span>
         </div>
         <div className="palette-results" role="listbox" id="palette-results">
           {items.length === 0 && (
-            <div className="palette-item faint">{term ? (search.isFetching ? 'Searching…' : 'Nothing matches. Try fewer letters, or press Tab to narrow the scope.') : 'Type to search.'}</div>
+            <div className="palette-item faint">{term ? (search.isFetching ? tr('Searching…') : tr('Nothing matches. Try fewer letters, or press Tab to narrow the scope.')) : tr('Type to search.')}</div>
           )}
           {items.map((it, i) => {
             const head = it.group !== lastGroup ? <div className="palette-group">{it.group}</div> : null
@@ -257,19 +258,19 @@ export function Palette({ onClose, onAbout, onShortcuts }: { onClose: () => void
         </div>
         <div className="palette-foot">
           <span>
-            <span className="mono">↑↓</span> move
+            <span className="mono">↑↓</span> {tr('move')}
           </span>
           <span>
-            <span className="mono">↵</span> open
+            <span className="mono">↵</span> {tr('open')}
           </span>
           <span>
-            <span className="mono">⌘↵</span> launch
+            <span className="mono">⌘↵</span> {tr('launch')}
           </span>
           <span>
-            <span className="mono">tab</span> only templates · jobs · hosts
+            <span className="mono">{tr('tab')}</span> {tr('only templates · jobs · hosts')}
           </span>
           <span style={{ marginLeft: 'auto' }}>
-            <span className="mono">&gt;</span> commands
+            <span className="mono">{tr('>')}</span> {tr('commands')}
           </span>
         </div>
       </div>

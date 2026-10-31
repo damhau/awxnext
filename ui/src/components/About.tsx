@@ -3,9 +3,11 @@
 import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 import { api } from '../api/client'
+import { dateTimeText } from '../lib/format'
 import { isMac, keyCaps, SHORTCUTS } from '../lib/shortcuts'
 import { Dialog } from './overlay'
 import { KV, Loading } from './ui'
+import { tr } from '../lib/i18n'
 
 interface Config {
   version: string
@@ -27,7 +29,7 @@ export function AboutDialog({ onClose }: { onClose: () => void }) {
     : ''
   return (
     <Dialog
-      title="About awxnext"
+      title={tr('About awxnext')}
       onClose={onClose}
       footer={
         <>
@@ -41,11 +43,11 @@ export function AboutDialog({ onClose }: { onClose: () => void }) {
                   .catch(() => setCopied(false))
               }
             >
-              {copied ? 'Copied' : 'Copy details'}
+              {copied ? tr('Copied') : tr('Copy details')}
             </button>
           )}
           <button className="btn primary" onClick={onClose}>
-            Done
+            {tr('Done')}
           </button>
         </>
       }
@@ -53,29 +55,29 @@ export function AboutDialog({ onClose }: { onClose: () => void }) {
       {config.isPending ? (
         <Loading rows={3} />
       ) : !c ? (
-        <p className="small muted">The server’s version could not be read.</p>
+        <p className="small muted">{tr('The server’s version could not be read.')}</p>
       ) : (
         <div className="stack" style={{ gap: 14 }}>
-          <p style={{ margin: 0 }}>An automation controller that speaks AWX’s API: the awx CLI, the awx.awx collection and the Terraform provider work against it.</p>
+          <p style={{ margin: 0 }}>{tr('An automation controller that speaks AWX’s API: the awx CLI, the awx.awx collection and the Terraform provider work against it.')}</p>
           <KV
             items={[
-              ['Version', own ? (own.version === 'dev' ? 'development build' : own.version) : '—'],
+              [tr('Version'), own ? (own.version === 'dev' ? tr('development build') : own.version) : '—'],
               [
-                'Build',
+                tr('Build'),
                 own?.commit ? (
                   <span>
                     <a href={`${REPO}/commit/${own.commit}`} target="_blank" rel="noreferrer" className="mono">
                       {own.commit.slice(0, 12)}
                     </a>
-                    {own.modified && <span className="faint"> with local changes</span>}
-                    {built && !isNaN(built.getTime()) && <span className="faint"> · {built.toLocaleString()}</span>}
+                    {own.modified && <span className="faint"> {tr('with local changes')}</span>}
+                    {built && !isNaN(built.getTime()) && <span className="faint"> · {dateTimeText(built)}</span>}
                   </span>
                 ) : (
-                  <span className="faint">not recorded</span>
+                  <span className="faint">{tr('not recorded')}</span>
                 ),
               ],
-              ['AWX API', <span key="awx" className="mono">{c.version}</span>],
-              ['Go', <span key="go" className="mono">{own?.go ?? '—'}</span>],
+              [tr('AWX API'), <span key="awx" className="mono">{c.version}</span>],
+              [tr('Go'), <span key="go" className="mono">{own?.go ?? '—'}</span>],
             ]}
           />
         </div>
@@ -88,12 +90,12 @@ export function ShortcutsDialog({ onClose }: { onClose: () => void }) {
   const mac = isMac()
   return (
     <Dialog
-      title="Keyboard shortcuts"
+      title={tr('Keyboard shortcuts')}
       wide
       onClose={onClose}
       footer={
         <button className="btn primary" onClick={onClose}>
-          Done
+          {tr('Done')}
         </button>
       }
     >
@@ -107,7 +109,7 @@ export function ShortcutsDialog({ onClose }: { onClose: () => void }) {
                   <dt>
                     {s.keys.map((k, i) => (
                       <span key={i}>
-                        {i > 0 && <span className="faint">{s.keys[0] === 'g' ? ' then ' : ' '}</span>}
+                        {i > 0 && <span className="faint">{s.keys[0] === 'g' ? tr(' then ') : ' '}</span>}
                         {keyCaps(k, mac).map((cap, j) => (
                           <kbd key={j} className="keycap">
                             {cap}

@@ -3,6 +3,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { api } from '../api/client'
 import { BrandMark } from '../components/ui'
 import { ssoLogins, type Backend } from '../lib/sso'
+import { tr } from '../lib/i18n'
 
 export function Login({ onDone, expired, replaced }: { onDone: () => void; expired?: boolean; replaced?: boolean }) {
   const [username, setUsername] = useState('')
@@ -31,7 +32,7 @@ export function Login({ onDone, expired, replaced }: { onDone: () => void; expir
       await api.post('/api/login/', { username, password })
       onDone()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Sign in failed')
+      setError(err instanceof Error ? err.message : tr('Sign in failed'))
     } finally {
       setBusy(false)
     }
@@ -45,16 +46,16 @@ export function Login({ onDone, expired, replaced }: { onDone: () => void; expir
       <form className="login-card" onSubmit={submit} aria-labelledby="login-title">
         <div className="brand">
           <BrandMark />
-          <span>awxnext</span>
+          <span>{tr('awxnext')}</span>
         </div>
         {root.data?.custom_logo && <img className="login-logo" src={root.data.custom_logo} alt="" />}
         <div>
           <h1 id="login-title" style={{ fontSize: 18 }}>
-            {expired ? 'Your session ended' : 'Sign in'}
+            {expired ? tr('Your session ended') : tr('Sign in')}
           </h1>
           {expired && (
             <p className="subtitle">
-              {replaced ? 'You signed in elsewhere, beyond the sessions allowed per user. ' : ''}Sign in again to continue where you were.
+              {replaced ? tr('You signed in elsewhere, beyond the sessions allowed per user. ') : ''}{tr('Sign in again to continue where you were.')}
             </p>
           )}
         </div>
@@ -65,15 +66,15 @@ export function Login({ onDone, expired, replaced }: { onDone: () => void; expir
                 {s.label}
               </a>
             ))}
-            <div className="divider">or with a local account</div>
+            <div className="divider">{tr('or with a local account')}</div>
           </>
         )}
         <div className="field">
-          <label htmlFor="u">Username</label>
+          <label htmlFor="u">{tr('Username')}</label>
           <input id="u" className="input" autoComplete="username" value={username} onChange={(e) => setUsername(e.target.value)} autoFocus />
         </div>
         <div className="field">
-          <label htmlFor="p">Password</label>
+          <label htmlFor="p">{tr('Password')}</label>
           <input id="p" className="input" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
         </div>
         {error && (
@@ -82,7 +83,7 @@ export function Login({ onDone, expired, replaced }: { onDone: () => void; expir
           </div>
         )}
         <button className={`btn ${sso.length ? '' : 'primary'} lg block`} disabled={busy || !username || !password}>
-          {busy ? 'Signing in…' : 'Sign in'}
+          {busy ? tr('Signing in…') : tr('Sign in')}
         </button>
         {root.data?.custom_login_info && <p className="login-info">{root.data.custom_login_info}</p>}
       </form>

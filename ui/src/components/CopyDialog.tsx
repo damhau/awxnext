@@ -4,6 +4,7 @@ import { api, ApiError } from '../api/client'
 import { useInvalidate } from '../api/hooks'
 import { TextInput } from './form'
 import { Dialog, useToast } from './overlay'
+import { tr } from '../lib/i18n'
 
 interface Copyable {
   id: number
@@ -44,7 +45,7 @@ export function CopyDialog({
     setError(undefined)
     try {
       const r = await api.post<Copyable>(`${resource}/${obj.id}/copy/`, { name: name.trim() })
-      toast(`Copied to "${r.name}"`)
+      toast(tr('Copied to "{name}"', { name: r.name }))
       invalidate(resource, ...invalidates)
       onClose()
       if (to) nav(to(r.id))
@@ -56,21 +57,21 @@ export function CopyDialog({
   }
   return (
     <Dialog
-      title={`Copy ${obj.name}`}
+      title={tr('Copy {name}', { name: obj.name })}
       onClose={onClose}
       footer={
         <>
           <button className="btn" onClick={onClose}>
-            Cancel
+            {tr('Cancel')}
           </button>
           <button className="btn primary" disabled={!name.trim() || busy} onClick={() => submit()}>
-            Copy
+            {tr('Copy')}
           </button>
         </>
       }
     >
       <form onSubmit={submit}>
-        <TextInput label="Name of the copy" value={name} onChange={setName} error={error} autoFocus />
+        <TextInput label={tr('Name of the copy')} value={name} onChange={setName} error={error} autoFocus />
         {what && <p className="small muted" style={{ margin: '8px 0 0' }}>{what}</p>}
       </form>
     </Dialog>

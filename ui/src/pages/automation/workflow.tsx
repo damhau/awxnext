@@ -18,6 +18,7 @@ import { edgePath, layout, type Box, type EdgeKind, type GraphNode, type Layout 
 import { itemLabel, loopProgress, type Iteration, type LoopProgress } from './loops'
 import { SavedLabelsAndGroupsFields, useSavedLabelsAndGroups } from './SavedLabelsAndGroups'
 import { PromptField, PROMPTS, SurveyField, useTemplatePrompts } from './ScheduleForm'
+import { tr, trn } from '../../lib/i18n'
 
 const KINDS: EdgeKind[] = ['success', 'failure', 'always']
 const KIND_LABEL: Record<EdgeKind, string> = { success: 'on success', failure: 'on failure', always: 'always' }
@@ -29,12 +30,12 @@ const EDGE_STYLE: Record<EdgeKind | 'start', { stroke: string; dash?: string; wi
 }
 
 const NODE_TYPE: Record<string, string> = {
-  job_template: 'Playbook',
-  workflow_job_template: 'Workflow',
-  project: 'Project sync',
-  inventory_source: 'Inventory sync',
-  workflow_approval_template: 'Approval',
-  system_job_template: 'Management job',
+  job_template: tr('Playbook'),
+  workflow_job_template: tr('Workflow'),
+  project: tr('Project sync'),
+  inventory_source: tr('Inventory sync'),
+  workflow_approval_template: tr('Approval'),
+  system_job_template: tr('Management job'),
 }
 
 const NODE_TEMPLATE_TYPES = 'job_template,workflow_job_template,project,inventory_source,system_job_template'
@@ -69,7 +70,7 @@ function toGraph(nodes: WfNode[]): GraphNode[] {
 }
 
 function nodeName(n: WfNode): string {
-  return n.summary_fields?.unified_job_template?.name ?? (n.unified_job_template ? `Template #${n.unified_job_template}` : 'No template')
+  return n.summary_fields?.unified_job_template?.name ?? (n.unified_job_template ? `Template #${n.unified_job_template}` : tr('No template'))
 }
 
 function nodeType(n: WfNode): string {
@@ -81,9 +82,9 @@ function OutputChips({ items, onPick }: { items: OutputSuggestion[]; onPick: (re
   if (!items.length) return null
   return (
     <div className="row wrap" style={{ gap: 4, marginTop: -6 }}>
-      <span className="small muted">Outputs of earlier steps:</span>
+      <span className="small muted">{tr('Outputs of earlier steps:')}</span>
       {items.map((s) => (
-        <button key={s.ref} type="button" className="chip" style={{ cursor: 'pointer' }} title={`Insert ${s.ref}`} onClick={() => onPick(s.ref)}>
+        <button key={s.ref} type="button" className="chip" style={{ cursor: 'pointer' }} title={tr('Insert {ref}', { ref: s.ref })} onClick={() => onPick(s.ref)}>
           {s.step}.{s.output.name}
           <span className="faint">
             {s.output.type}
@@ -157,7 +158,7 @@ function EdgeLayer({ lay, nodes, highlight, dim }: { lay: Layout; nodes: WfNode[
             />
             {(e.kind === 'failure' || e.kind === 'always') && (
               <text className="wf-edge-label" x={p.mx} y={p.my - 5} textAnchor="middle">
-                {e.kind === 'failure' ? 'fail' : 'always'}
+                {e.kind === 'failure' ? tr('fail') : tr('always')}
               </text>
             )}
           </g>
@@ -175,9 +176,9 @@ function Legend({ extra }: { extra?: ReactNode }) {
   )
   return (
     <div className="wf-legend">
-      <span>{sample('success')} on success</span>
-      <span>{sample('failure')} on failure</span>
-      <span>{sample('always')} always</span>
+      <span>{sample('success')} {tr('on success')}</span>
+      <span>{sample('failure')} {tr('on failure')}</span>
+      <span>{sample('always')} {tr('always')}</span>
       {extra}
     </div>
   )
@@ -203,16 +204,16 @@ function useZoom(lay: Layout) {
 function ZoomControls({ zoom, fitted, setZoom }: { zoom: number; fitted: boolean; setZoom: (z: number | null) => void }) {
   return (
     <div className="row" style={{ gap: 4 }}>
-      <button className="btn sm" aria-pressed={fitted} onClick={() => setZoom(null)} title="Fit the graph to the width">
-        Fit
+      <button className="btn sm" aria-pressed={fitted} onClick={() => setZoom(null)} title={tr('Fit the graph to the width')}>
+        {tr('Fit')}
       </button>
-      <button className="btn sm icon" aria-label="Zoom out" disabled={zoom <= 0.5} onClick={() => setZoom(Math.max(0.5, Math.round((zoom - 0.1) * 10) / 10))}>
+      <button className="btn sm icon" aria-label={tr('Zoom out')} disabled={zoom <= 0.5} onClick={() => setZoom(Math.max(0.5, Math.round((zoom - 0.1) * 10) / 10))}>
         −
       </button>
       <span className="mono small" style={{ minWidth: 40, textAlign: 'center' }} aria-live="polite">
         {Math.round(zoom * 100)}%
       </span>
-      <button className="btn sm icon" aria-label="Zoom in" disabled={zoom >= 1.4} onClick={() => setZoom(Math.min(1.4, Math.round((zoom + 0.1) * 10) / 10))}>
+      <button className="btn sm icon" aria-label={tr('Zoom in')} disabled={zoom >= 1.4} onClick={() => setZoom(Math.min(1.4, Math.round((zoom + 0.1) * 10) / 10))}>
         +
       </button>
     </div>
@@ -317,14 +318,14 @@ export function WorkflowVisualizer({ templateId, editable }: { templateId: numbe
   const remove = async (n: WfNode) => {
     const kids = KINDS.flatMap((k) => n[`${k}_nodes`] as number[]).length
     const ok = await confirm({
-      title: `Remove “${nodeName(n)}”?`,
+      title: tr('Remove “{nodeName}”?', { nodeName: nodeName(n) }),
       body: (
         <p style={{ margin: 0 }}>
-          The step and its links are removed.
-          {kids > 0 && ' Steps that followed it run from the start unless another step leads to them.'}
+          {tr('The step and its links are removed.')}
+          {kids > 0 && tr(' Steps that followed it run from the start unless another step leads to them.')}
         </p>
       ),
-      confirm: 'Remove step',
+      confirm: tr('Remove step'),
       danger: true,
     })
     if (!ok) return
@@ -333,7 +334,7 @@ export function WorkflowVisualizer({ templateId, editable }: { templateId: numbe
       setSelected(null)
       await refresh()
     } catch (e) {
-      toast(e instanceof Error ? e.message : 'Could not remove the step', 'error')
+      toast(e instanceof Error ? e.message : tr('Could not remove the step'), 'error')
     }
   }
 
@@ -379,29 +380,29 @@ export function WorkflowVisualizer({ templateId, editable }: { templateId: numbe
             {canEdit && (
               <button className="btn sm primary" onClick={() => setAdding({ parent: null, kind: 'success' })}>
                 <Icon name="plus" size={14} />
-                Add step
+                {tr('Add step')}
               </button>
             )}
           </div>
         </div>
         {managed && (
           <div className="notice small">
-            Managed by <span className="mono">{managed}</span>. Change the workflow at its source; the graph here is read-only.
+            {tr('Managed by')} <span className="mono">{managed}</span>{tr('. Change the workflow at its source; the graph here is read-only.')}
           </div>
         )}
         {nodes.length === 0 ? (
           <div className="wf-canvas" style={{ height: 'auto' }}>
             <Empty
-              title="This workflow has no steps"
+              title={tr('This workflow has no steps')}
               action={
                 canEdit ? (
                   <button className="btn primary" onClick={() => setAdding({ parent: null, kind: 'success' })}>
-                    Add the first step
+                    {tr('Add the first step')}
                   </button>
                 ) : undefined
               }
             >
-              Steps run templates, syncs or wait for an approval. Link them to run on success, on failure or always.
+              {tr('Steps run templates, syncs or wait for an approval. Link them to run on success, on failure or always.')}
             </Empty>
           </div>
         ) : (
@@ -410,7 +411,7 @@ export function WorkflowVisualizer({ templateId, editable }: { templateId: numbe
             nodes={nodes}
             zoom={zoom}
             highlight={typeof selected === 'number' ? selected : null}
-            label="Workflow steps"
+            label={tr('Workflow steps')}
             onKeyDown={onKeyDown}
             start={
               <button
@@ -419,7 +420,7 @@ export function WorkflowVisualizer({ templateId, editable }: { templateId: numbe
                 onClick={() => setSelected('start')}
                 aria-pressed={selected === 'start'}
               >
-                Start
+                {tr('Start')}
               </button>
             }
             renderNode={(n, b) => {
@@ -436,7 +437,7 @@ export function WorkflowVisualizer({ templateId, editable }: { templateId: numbe
                 >
                   <span className="k">
                     {t === 'workflow_approval_template' ? <Icon name="approve" size={12} /> : t === 'workflow_job_template' ? <Icon name="workflow" size={12} /> : <Icon name="play" size={10} />}
-                    {NODE_TYPE[t] ?? 'Missing template'}
+                    {NODE_TYPE[t] ?? tr('Missing template')}
                   </span>
                   <span className="t" title={nodeName(n)}>
                     {nodeName(n)}
@@ -448,10 +449,10 @@ export function WorkflowVisualizer({ templateId, editable }: { templateId: numbe
           />
         )}
         <div className="wf-hint">
-          {canEdit ? 'Click a step to edit it · arrows move · a add a step · Delete removes · Esc deselects' : 'Click a step to see its settings · arrows move between steps'}
+          {canEdit ? tr('Click a step to edit it · arrows move · a add a step · Delete removes · Esc deselects') : tr('Click a step to see its settings · arrows move between steps')}
         </div>
       </div>
-      <aside className="wf-side" aria-label="Step details">
+      <aside className="wf-side" aria-label={tr('Step details')}>
         {sel ? (
           <NodePanel
             key={sel.id}
@@ -467,18 +468,18 @@ export function WorkflowVisualizer({ templateId, editable }: { templateId: numbe
         ) : selected === 'start' ? (
           <section className="panel">
             <div className="panel-head">
-              <h2>Start</h2>
+              <h2>{tr('Start')}</h2>
             </div>
             <div className="panel-body">
               <p className="muted" style={{ margin: 0 }}>
                 {lay.columns[1]?.length
-                  ? `${lay.columns[1].length} step${lay.columns[1].length === 1 ? '' : 's'} run as soon as the workflow starts.`
-                  : 'Nothing runs at the start yet.'}
+                  ? trn(lay.columns[1].length, '{n} step runs as soon as the workflow starts.', '{n} steps run as soon as the workflow starts.')
+                  : tr('Nothing runs at the start yet.')}
               </p>
               {canEdit && (
                 <button className="btn" onClick={() => setAdding({ parent: null, kind: 'success' })}>
                   <Icon name="plus" size={14} />
-                  Add a step at the start
+                  {tr('Add a step at the start')}
                 </button>
               )}
             </div>
@@ -486,16 +487,15 @@ export function WorkflowVisualizer({ templateId, editable }: { templateId: numbe
         ) : (
           <section className="panel">
             <div className="panel-head">
-              <h2>{wf.data?.name ?? 'Workflow'}</h2>
+              <h2>{wf.data?.name ?? tr('Workflow')}</h2>
             </div>
             <div className="panel-body small">
               <p className="muted" style={{ margin: 0 }}>
-                {nodes.length} step{nodes.length === 1 ? '' : 's'}, {nodes.filter((n) => nodeType(n) === 'workflow_approval_template').length} approval
-                {nodes.filter((n) => nodeType(n) === 'workflow_approval_template').length === 1 ? '' : 's'}. Select a step to {canEdit ? 'edit it, link it or add what follows' : 'see what it runs'}.
+                {nodes.length} {tr('step')}{nodes.length === 1 ? '' : 's'}, {nodes.filter((n) => nodeType(n) === 'workflow_approval_template').length} {tr('approval')}
+                {nodes.filter((n) => nodeType(n) === 'workflow_approval_template').length === 1 ? '' : 's'}{tr('. Select a step to')} {canEdit ? tr('edit it, link it or add what follows') : tr('see what it runs')}.
               </p>
               <p className="muted" style={{ margin: 0 }}>
-                A step runs when a step before it ends the way its link says: on success, on failure, or always. Steps marked “waits for all parents” run only when every
-                link into them fired.
+                {tr('A step runs when a step before it ends the way its link says: on success, on failure, or always. Steps marked “waits for all parents” run only when every link into them fired.')}
               </p>
             </div>
           </section>
@@ -622,7 +622,7 @@ function NodePanel({
         })
       }
       await onChanged()
-      toast('Step saved')
+      toast(tr('Step saved'))
     } catch (e) {
       if (e instanceof ApiError && Object.keys(e.fields).length) setErrors(e.fields)
       setError(e)
@@ -636,7 +636,7 @@ function NodePanel({
       await api.post(`workflow_job_template_nodes/${node.id}/${kind}_nodes/`, disassociate ? { id: to, disassociate: true } : { id: to })
       await onChanged()
     } catch (e) {
-      toast(e instanceof Error ? e.message : 'Could not change the link', 'error')
+      toast(e instanceof Error ? e.message : tr('Could not change the link'), 'error')
     }
   }
   const changeKind = async (to: number, from: EdgeKind, kind: EdgeKind) => {
@@ -644,7 +644,7 @@ function NodePanel({
     try {
       await api.post(`workflow_job_template_nodes/${node.id}/${from}_nodes/`, { id: to, disassociate: true })
     } catch (e) {
-      toast(e instanceof Error ? `Could not change the link: ${e.message}` : 'Could not change the link', 'error')
+      toast(e instanceof Error ? tr('Could not change the link: {message}', { message: e.message }) : tr('Could not change the link'), 'error')
       await onChanged()
       return
     }
@@ -653,7 +653,7 @@ function NodePanel({
     } catch (e) {
       // Put the original link back so the graph does not lose an edge.
       await api.post(`workflow_job_template_nodes/${node.id}/${from}_nodes/`, { id: to }).catch(() => {})
-      toast(e instanceof Error ? `Could not change the link: ${e.message}` : 'Could not change the link', 'error')
+      toast(e instanceof Error ? tr('Could not change the link: {message}', { message: e.message }) : tr('Could not change the link'), 'error')
     }
     await onChanged()
   }
@@ -663,14 +663,14 @@ function NodePanel({
     <section className="panel">
       <div className="panel-head">
         <div className="grow">
-          <div className="small faint">{NODE_TYPE[t] ?? 'Step'}</div>
+          <div className="small faint">{NODE_TYPE[t] ?? tr('Step')}</div>
           <h2 className="ellipsis" title={nodeName(node)}>
             {nodeName(node)}
           </h2>
         </div>
         {ujt && !isApproval && (
           <Link className="small nowrap" to={templatePath({ id: ujt.id, type: ujt.type })}>
-            Open template
+            {tr('Open template')}
           </Link>
         )}
       </div>
@@ -678,17 +678,17 @@ function NodePanel({
         <FormError error={error && !Object.keys(errors).length ? error : null} />
         {isApproval ? (
           <>
-            <TextInput label="Approval name" value={apName} onChange={setApName} disabled={ro} error={errors.name} />
-            <TextInput label="Instructions" value={apDesc} onChange={setApDesc} optional disabled={ro} help="Shown to approvers." />
-            <TextInput label="Time out after (minutes)" type="number" value={apTimeout} onChange={setApTimeout} optional disabled={ro} help="Empty: waits until someone decides." error={errors.timeout} />
+            <TextInput label={tr('Approval name')} value={apName} onChange={setApName} disabled={ro} error={errors.name} />
+            <TextInput label={tr('Instructions')} value={apDesc} onChange={setApDesc} optional disabled={ro} help={tr('Shown to approvers.')} />
+            <TextInput label={tr('Time out after (minutes)')} type="number" value={apTimeout} onChange={setApTimeout} optional disabled={ro} help={tr('Empty: waits until someone decides.')} error={errors.timeout} />
           </>
         ) : ro ? (
-          <Field label="Runs">
+          <Field label={tr('Runs')}>
             <span>{nodeName(node)}</span>
           </Field>
         ) : (
           <Lookup
-            label="Runs"
+            label={tr('Runs')}
             resource="unified_job_templates/"
             params={{ type__in: NODE_TEMPLATE_TYPES, not__id: wf?.id ?? 0 }}
             value={tpl}
@@ -697,32 +697,32 @@ function NodePanel({
             error={errors.unified_job_template}
           />
         )}
-        <TextInput label="Identifier" value={identifier} onChange={setIdentifier} mono disabled={ro} help="Stable name for this step, used by GitOps and the API." error={errors.identifier} />
-        {incoming.length > 1 && <Check label="Wait for all parents" checked={converge} onChange={(v) => !ro && setConverge(v)} help="Run only when every link into this step fired, not the first one." />}
+        <TextInput label={tr('Identifier')} value={identifier} onChange={setIdentifier} mono disabled={ro} help={tr('Stable name for this step, used by GitOps and the API.')} error={errors.identifier} />
+        {incoming.length > 1 && <Check label={tr('Wait for all parents')} checked={converge} onChange={(v) => !ro && setConverge(v)} help={tr('Run only when every link into this step fired, not the first one.')} />}
         <TextInput
-          label="Run only when"
+          label={tr('Run only when')}
           value={when}
           onChange={setWhen}
           mono
           optional
           disabled={ro}
-          placeholder="deploy_env == 'prod'"
+          placeholder={tr('deploy_env == \'prod\'')}
           error={errors.when}
           help={
             <>
-              False skips this step. Use variables and earlier steps by identifier: <span className="mono">nodes.build.status == 'successful'</span>, <span className="mono">nodes.build.artifacts.version</span>.
+              {tr('False skips this step. Use variables and earlier steps by identifier:')} <span className="mono">{tr('nodes.build.status == \'successful\'')}</span>, <span className="mono">{tr('nodes.build.artifacts.version')}</span>.
             </>
           }
         />
         {!ro && <OutputChips items={whenOutputs} onPick={(ref) => setWhen((w) => addToCondition(w, ref))} />}
-        {!isApproval && <Check label="Repeat for each item of a list" checked={loopOn} onChange={(v) => !ro && setLoopOn(v)} help="Runs the template once per item. The step fails if any item fails." />}
+        {!isApproval && <Check label={tr('Repeat for each item of a list')} checked={loopOn} onChange={(v) => !ro && setLoopOn(v)} help={tr('Runs the template once per item. The step fails if any item fails.')} />}
         {!isApproval && loopOn && (
           <div className="stack" style={{ gap: 12, paddingLeft: 24 }}>
-            <TextInput label="Items" value={loop} onChange={setLoop} mono disabled={ro} placeholder="regions   or   ['eu', 'us']" error={errors.loop} help="A variable or expression giving a list." />
+            <TextInput label={tr('Items')} value={loop} onChange={setLoop} mono disabled={ro} placeholder={tr('regions   or   [\'eu\', \'us\']')} error={errors.loop} help={tr('A variable or expression giving a list.')} />
             {!ro && <OutputChips items={loopOutputs} onPick={setLoop} />}
             <div className="row" style={{ gap: 12, alignItems: 'flex-start' }}>
-              <TextInput label="Item variable" value={loopVar} onChange={setLoopVar} mono optional disabled={ro} placeholder="item" error={errors.loop_var} help="loop_index holds its position." />
-              <TextInput label="At most at once" type="number" value={loopConcurrency} onChange={setLoopConcurrency} optional disabled={ro} placeholder="all" error={errors.loop_concurrency} help="1 runs the items one by one." />
+              <TextInput label={tr('Item variable')} value={loopVar} onChange={setLoopVar} mono optional disabled={ro} placeholder={tr('item')} error={errors.loop_var} help={tr('loop_index holds its position.')} />
+              <TextInput label={tr('At most at once')} type="number" value={loopConcurrency} onChange={setLoopConcurrency} optional disabled={ro} placeholder={tr('all')} error={errors.loop_concurrency} help={tr('1 runs the items one by one.')} />
             </div>
           </div>
         )}
@@ -750,24 +750,24 @@ function NodePanel({
           </div>
         )}
         {!isApproval && survey.map((s) => <SurveyField key={s.variable} q={s} value={answers[s.variable] ?? s.default} onChange={(v) => setAnswers((a) => ({ ...a, [s.variable]: v }))} />)}
-        {!isApproval && askVars && <VarsEditor label="Extra variables" value={extraText} onChange={setExtraText} error={errors.extra_data} rows={4} />}
+        {!isApproval && askVars && <VarsEditor label={tr('Extra variables')} value={extraText} onChange={setExtraText} error={errors.extra_data} rows={4} />}
         {!isApproval && template && !allowed.length && !askVars && !survey.length && !rel.any && (
           <p className="small faint" style={{ margin: 0 }}>
-            The template prompts for nothing, so this step runs it as configured.
+            {tr('The template prompts for nothing, so this step runs it as configured.')}
           </p>
         )}
         {canEdit && (
           <div className="form-actions">
             <button className="btn primary" disabled={busy || (isApproval ? !apName.trim() : !tpl || (loopOn && !loop.trim()))} onClick={save}>
-              {busy ? 'Saving…' : 'Save step'}
+              {busy ? tr('Saving…') : tr('Save step')}
             </button>
           </div>
         )}
 
         <div className="stack" style={{ gap: 8, borderTop: '1px solid var(--line-soft)', paddingTop: 12 }}>
-          <h2>Runs after</h2>
+          <h2>{tr('Runs after')}</h2>
           {incoming.length === 0 ? (
-            <span className="small muted">The start of the workflow.</span>
+            <span className="small muted">{tr('The start of the workflow.')}</span>
           ) : (
             <ul className="wf-links">
               {incoming.map((i) => (
@@ -783,14 +783,14 @@ function NodePanel({
         </div>
 
         <div className="stack" style={{ gap: 8, borderTop: '1px solid var(--line-soft)', paddingTop: 12 }}>
-          <h2>Then</h2>
-          {outgoing.length === 0 && <span className="small muted">Nothing follows this step.</span>}
+          <h2>{tr('Then')}</h2>
+          {outgoing.length === 0 && <span className="small muted">{tr('Nothing follows this step.')}</span>}
           {outgoing.length > 0 && (
             <ul className="wf-links">
               {outgoing.map((o) => (
                 <li key={`${o.kind}-${o.to}`}>
                   {canEdit ? (
-                    <select className="select" style={{ width: 'auto', height: 26, fontSize: 12 }} aria-label="Link kind" value={o.kind} onChange={(e) => changeKind(o.to, o.kind, e.target.value as EdgeKind)}>
+                    <select className="select" style={{ width: 'auto', height: 26, fontSize: 12 }} aria-label={tr('Link kind')} value={o.kind} onChange={(e) => changeKind(o.to, o.kind, e.target.value as EdgeKind)}>
                       {KINDS.map((k) => (
                         <option key={k} value={k}>
                           {KIND_LABEL[k]}
@@ -801,10 +801,10 @@ function NodePanel({
                     <span className={`wf-kind ${o.kind}`}>{KIND_LABEL[o.kind]}</span>
                   )}
                   <button className="link-btn ellipsis grow" style={{ textAlign: 'left' }} onClick={() => onSelect(o.to)}>
-                    {byId.get(o.to) ? nodeName(byId.get(o.to)!) : `#${o.to}`}
+                    {byId.get(o.to) ? nodeName(byId.get(o.to)!) : tr('#{to}', { to: o.to })}
                   </button>
                   {canEdit && (
-                    <button className="btn ghost sm icon" aria-label="Remove link" title="Remove link" onClick={() => link(o.to, o.kind, true)}>
+                    <button className="btn ghost sm icon" aria-label={tr('Remove link')} title={tr('Remove link')} onClick={() => link(o.to, o.kind, true)}>
                       <Icon name="x" size={12} />
                     </button>
                   )}
@@ -817,32 +817,32 @@ function NodePanel({
               <div className="row wrap" style={{ gap: 6 }}>
                 <button className="btn sm" onClick={() => onAdd('success')}>
                   <Icon name="plus" size={12} />
-                  On success
+                  {tr('On success')}
                 </button>
                 <button className="btn sm" onClick={() => onAdd('failure')}>
                   <Icon name="plus" size={12} />
-                  On failure
+                  {tr('On failure')}
                 </button>
                 <button className="btn sm" onClick={() => onAdd('always')}>
                   <Icon name="plus" size={12} />
-                  Always
+                  {tr('Always')}
                 </button>
               </div>
               {linkable.length > 0 && (
                 <div className="row wrap" style={{ gap: 6 }}>
                   <label className="sr-only" htmlFor={`link-${node.id}`}>
-                    Link to an existing step
+                    {tr('Link to an existing step')}
                   </label>
                   <select id={`link-${node.id}`} className="select" style={{ flex: '1 1 140px', height: 28, fontSize: 12 }} value={linkTo} onChange={(e) => setLinkTo(e.target.value)}>
-                    <option value="">Link to an existing step…</option>
+                    <option value="">{tr('Link to an existing step…')}</option>
                     {linkable.map((n) => (
                       <option key={n.id} value={n.id}>
                         {nodeName(n)}
-                        {n.identifier ? ` (${n.identifier})` : ''}
+                        {n.identifier ? tr(' ({identifier})', { identifier: n.identifier }) : ''}
                       </option>
                     ))}
                   </select>
-                  <select className="select" aria-label="Link kind" style={{ width: 'auto', height: 28, fontSize: 12 }} value={linkKind} onChange={(e) => setLinkKind(e.target.value as EdgeKind)}>
+                  <select className="select" aria-label={tr('Link kind')} style={{ width: 'auto', height: 28, fontSize: 12 }} value={linkKind} onChange={(e) => setLinkKind(e.target.value as EdgeKind)}>
                     {KINDS.map((k) => (
                       <option key={k} value={k}>
                         {KIND_LABEL[k]}
@@ -857,7 +857,7 @@ function NodePanel({
                       setLinkTo('')
                     }}
                   >
-                    Link
+                    {tr('Link')}
                   </button>
                 </div>
               )}
@@ -868,7 +868,7 @@ function NodePanel({
           <div style={{ borderTop: '1px solid var(--line-soft)', paddingTop: 12 }}>
             <button className="btn danger sm" onClick={onRemove}>
               <Icon name="trash" size={12} />
-              Remove step
+              {tr('Remove step')}
             </button>
           </div>
         )}
@@ -935,15 +935,15 @@ function AddStepDialog({
   const ready = what === 'template' ? !!tpl : !!apName.trim()
   return (
     <Dialog
-      title={parent ? `Add a step after “${nodeName(parent)}”` : 'Add a step at the start'}
+      title={parent ? tr('Add a step after “{nodeName}”', { nodeName: nodeName(parent) }) : tr('Add a step at the start')}
       onClose={onClose}
       footer={
         <>
           <button className="btn" onClick={onClose}>
-            Cancel
+            {tr('Cancel')}
           </button>
           <button className="btn primary" disabled={busy || !ready} onClick={create}>
-            {busy ? 'Adding…' : 'Add step'}
+            {busy ? tr('Adding…') : tr('Add step')}
           </button>
         </>
       }
@@ -951,33 +951,33 @@ function AddStepDialog({
       <FormError error={error} />
       {parent && (
         <fieldset>
-          <legend>Run it</legend>
+          <legend>{tr('Run it')}</legend>
           <div className="segmented">
             {KINDS.map((k) => (
               <label key={k} className={kind === k ? 'on' : ''}>
                 <input type="radio" name="add-kind" checked={kind === k} onChange={() => setKind(k)} />
-                {k === 'success' ? 'When it succeeds' : k === 'failure' ? 'When it fails' : 'Always'}
+                {k === 'success' ? tr('When it succeeds') : k === 'failure' ? tr('When it fails') : tr('Always')}
               </label>
             ))}
           </div>
         </fieldset>
       )}
       <fieldset>
-        <legend>Step</legend>
+        <legend>{tr('Step')}</legend>
         <div className="segmented">
           <label className={what === 'template' ? 'on' : ''}>
             <input type="radio" name="add-what" checked={what === 'template'} onChange={() => setWhat('template')} />
-            Run a template or sync
+            {tr('Run a template or sync')}
           </label>
           <label className={what === 'approval' ? 'on' : ''}>
             <input type="radio" name="add-what" checked={what === 'approval'} onChange={() => setWhat('approval')} />
-            Wait for approval
+            {tr('Wait for approval')}
           </label>
         </div>
       </fieldset>
       {what === 'template' ? (
         <Lookup
-          label="Runs"
+          label={tr('Runs')}
           resource="unified_job_templates/"
           params={{ type__in: NODE_TEMPLATE_TYPES, not__id: templateId }}
           value={tpl}
@@ -986,12 +986,12 @@ function AddStepDialog({
         />
       ) : (
         <>
-          <TextInput label="Approval name" value={apName} onChange={setApName} autoFocus placeholder="Release manager sign-off" />
-          <TextInput label="Instructions" value={apDesc} onChange={setApDesc} optional help="Shown to approvers." />
-          <TextInput label="Time out after (minutes)" type="number" value={apTimeout} onChange={setApTimeout} optional help="Empty: waits until someone decides. A timeout counts as a failure." />
+          <TextInput label={tr('Approval name')} value={apName} onChange={setApName} autoFocus placeholder={tr('Release manager sign-off')} />
+          <TextInput label={tr('Instructions')} value={apDesc} onChange={setApDesc} optional help={tr('Shown to approvers.')} />
+          <TextInput label={tr('Time out after (minutes)')} type="number" value={apTimeout} onChange={setApTimeout} optional help={tr('Empty: waits until someone decides. A timeout counts as a failure.')} />
         </>
       )}
-      <TextInput label="Identifier" value={identifier} onChange={setIdentifier} mono optional help="Defaults to a generated id." />
+      <TextInput label={tr('Identifier')} value={identifier} onChange={setIdentifier} mono optional help={tr('Defaults to a generated id.')} />
     </Dialog>
   )
 }
@@ -1002,13 +1002,13 @@ function AddStepDialog({
 function runState(n: WfNode): { status: string; label: string; loop?: LoopProgress } {
   if (Array.isArray(n.loop_items)) {
     const p = loopProgress(n.loop_items, n.iterations ?? [])
-    const label = p.total === 0 ? 'No items' : `${p.done} of ${p.total} item${p.total === 1 ? '' : 's'} done${p.failed ? ` · ${p.failed} failed` : ''}`
+    const label = p.total === 0 ? tr('No items') : `${p.done} of ${p.total} item${p.total === 1 ? '' : 's'} done${p.failed ? ` · ${p.failed} failed` : ''}`
     return { status: p.status, label, loop: p }
   }
   const job = n.summary_fields?.job
   if (job) return { status: job.status, label: statusLabel(job.status) }
-  if (n.do_not_run) return { status: 'none', label: n.skip_reason ? 'Skipped by its condition' : 'Will not run' }
-  return { status: 'waiting', label: 'Waiting' }
+  if (n.do_not_run) return { status: 'none', label: n.skip_reason ? tr('Skipped by its condition') : tr('Will not run') }
+  return { status: 'waiting', label: tr('Waiting') }
 }
 
 /** The jobs of a loop node, one per item. */
@@ -1016,10 +1016,10 @@ function LoopItems({ node, onClose }: { node: WfNode; onClose: () => void }) {
   const items = node.loop_items ?? []
   const byIndex = new Map((node.iterations ?? []).map((i) => [i.index, i]))
   return (
-    <Dialog title={`${nodeName(node)}: ${items.length} item${items.length === 1 ? '' : 's'}`} onClose={onClose}>
+    <Dialog title={trn(items.length, '{step}: {n} item', '{step}: {n} items', { step: nodeName(node) })} onClose={onClose}>
       <p className="small muted" style={{ marginTop: 0 }}>
-        Each item of <span className="mono">{node.loop}</span> runs as its own job, with the item in <span className="mono">{node.loop_var || 'item'}</span>
-        {node.loop_concurrency ? `, ${node.loop_concurrency} at a time` : ''}.
+        {tr('Each item of')} <span className="mono">{node.loop}</span> {tr('runs as its own job, with the item in')} <span className="mono">{node.loop_var || tr('item')}</span>
+        {node.loop_concurrency ? tr(', {loop_concurrency} at a time', { loop_concurrency: node.loop_concurrency }) : ''}.
       </p>
       <ul className="wf-links">
         {items.map((item, i) => {
@@ -1037,10 +1037,10 @@ function LoopItems({ node, onClose }: { node: WfNode; onClose: () => void }) {
                       #{job.id}
                     </Link>{' '}
                     {statusLabel(job.status)}
-                    {job.elapsed ? ` · ${duration(job.elapsed)}` : ''}
+                    {job.elapsed ? tr(' · {duration}', { duration: duration(job.elapsed) }) : ''}
                   </>
                 ) : (
-                  <span className="muted">waiting</span>
+                  <span className="muted">{tr('waiting')}</span>
                 )}
               </span>
             </li>
@@ -1079,25 +1079,25 @@ export function WorkflowJobGraph({ jobId }: { jobId: number }) {
 
   const decide = async (approvalId: number, name: string, action: 'approve' | 'deny') => {
     const ok = await confirm({
-      title: action === 'approve' ? `Approve “${name}”?` : `Deny “${name}”?`,
-      confirm: action === 'approve' ? 'Approve' : 'Deny',
+      title: action === 'approve' ? tr('Approve “{name}”?', { name }) : tr('Deny “{name}”?', { name }),
+      confirm: action === 'approve' ? tr('Approve') : tr('Deny'),
       danger: action === 'deny',
-      body: <p style={{ margin: 0 }}>{action === 'approve' ? 'The workflow continues.' : 'The workflow takes its failure path.'}</p>,
+      body: <p style={{ margin: 0 }}>{action === 'approve' ? tr('The workflow continues.') : tr('The workflow takes its failure path.')}</p>,
     })
     if (!ok) return
     try {
       await api.post(`workflow_approvals/${approvalId}/${action}/`)
-      toast(`${name} ${action === 'approve' ? 'approved' : 'denied'}`)
+      toast(action === 'approve' ? tr('{name} approved', { name }) : tr('{name} denied', { name }))
       qc.invalidateQueries({ queryKey: [key] })
       qc.invalidateQueries({ queryKey: ['workflow_approvals'] })
     } catch (e) {
-      toast(e instanceof Error ? e.message : 'Could not record the decision', 'error')
+      toast(e instanceof Error ? e.message : tr('Could not record the decision'), 'error')
     }
   }
 
   if (q.isPending) return <Loading />
   if (q.error) return <FormError error={q.error} />
-  if (!nodes.length) return <Empty title="This workflow had no steps" />
+  if (!nodes.length) return <Empty title={tr('This workflow had no steps')} />
 
   const counts: Record<string, number> = {}
   for (const n of nodes) {
@@ -1114,27 +1114,27 @@ export function WorkflowJobGraph({ jobId }: { jobId: number }) {
         <div className="wf-counts">
           {counts.ok ? (
             <span>
-              <StatusDot status="successful" /> {counts.ok} succeeded
+              <StatusDot status="successful" /> {counts.ok} {tr('succeeded')}
             </span>
           ) : null}
           {counts.fail || counts.error ? (
             <span>
-              <StatusDot status="failed" /> {(counts.fail ?? 0) + (counts.error ?? 0)} failed
+              <StatusDot status="failed" /> {(counts.fail ?? 0) + (counts.error ?? 0)} {tr('failed')}
             </span>
           ) : null}
           {counts.run ? (
             <span>
-              <StatusDot status="running" /> {counts.run} running
+              <StatusDot status="running" /> {counts.run} {tr('running')}
             </span>
           ) : null}
           {counts.pending ? (
             <span>
-              <StatusDot status="pending" /> {counts.pending} waiting
+              <StatusDot status="pending" /> {counts.pending} {tr('waiting')}
             </span>
           ) : null}
           {counts.skipped ? (
             <span>
-              <StatusDot status="none" /> {counts.skipped} not run
+              <StatusDot status="none" /> {counts.skipped} {tr('not run')}
             </span>
           ) : null}
         </div>
@@ -1148,9 +1148,9 @@ export function WorkflowJobGraph({ jobId }: { jobId: number }) {
         nodes={nodes}
         zoom={zoom}
         short
-        label="Workflow run"
+        label={tr('Workflow run')}
         dim={(id) => dnr.has(id)}
-        start={<span>Start</span>}
+        start={<span>{tr('Start')}</span>}
         renderNode={(n, b) => {
           const job = n.summary_fields?.job
           const t = nodeType(n)
@@ -1174,11 +1174,11 @@ export function WorkflowJobGraph({ jobId }: { jobId: number }) {
               style={{ left: b.x, top: b.y, width: b.w, height: b.h, cursor: clickable ? 'pointer' : 'default' }}
               onClick={(e) => !(e.target as HTMLElement).closest('button') && open()}
               onKeyDown={(e) => e.key === 'Enter' && open()}
-              title={job ? `#${job.id} ${nodeName(n)}: ${label}` : n.skip_reason ? `${nodeName(n)}: ${n.skip_reason}` : nodeName(n)}
+              title={job ? tr('#{id} {nodeName}: {label}', { id: job.id, nodeName: nodeName(n), label }) : n.skip_reason ? tr('{nodeName}: {skip_reason}', { nodeName: nodeName(n), skip_reason: n.skip_reason }) : nodeName(n)}
             >
               <span className="k">
                 <StatusDot status={status} />
-                {NODE_TYPE[t] ?? 'Step'}
+                {NODE_TYPE[t] ?? tr('Step')}
                 {loop && <span className="mono">× {loop.total}</span>}
                 {job && <span className="mono">#{job.id}</span>}
               </span>
@@ -1186,17 +1186,17 @@ export function WorkflowJobGraph({ jobId }: { jobId: number }) {
               {decidable ? (
                 <span className="acts">
                   <button className="btn sm primary" onClick={() => decide(job.id, nodeName(n), 'approve')}>
-                    Approve
+                    {tr('Approve')}
                   </button>
                   <button className="btn sm" onClick={() => decide(job.id, nodeName(n), 'deny')}>
-                    Deny
+                    {tr('Deny')}
                   </button>
                 </span>
               ) : (
                 <span className="m">
                   {label}
-                  {job && job.elapsed ? ` · ${duration(job.elapsed)}` : ''}
-                  {approvalPending && !decidable ? ' · waiting on approvers' : ''}
+                  {job && job.elapsed ? tr(' · {duration}', { duration: duration(job.elapsed) }) : ''}
+                  {approvalPending && !decidable ? tr(' · waiting on approvers') : ''}
                 </span>
               )}
             </div>

@@ -1,9 +1,19 @@
 import type { JobStatus, UserRef } from '../api/types'
+import { currentLocale, tr, trn } from './i18n'
 
-const rtf = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' })
-const dateTime = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' })
-const timeOnly = new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' })
-const weekday = new Intl.DateTimeFormat(undefined, { weekday: 'short', hour: '2-digit', minute: '2-digit' })
+// Dates in the chosen locale (lib/i18n), made once per locale.
+const formatters = new Map<string, Intl.DateTimeFormat | Intl.RelativeTimeFormat>()
+function cached<T extends Intl.DateTimeFormat | Intl.RelativeTimeFormat>(name: string, make: (locale: string) => T): T {
+  const key = currentLocale() + ':' + name
+  let f = formatters.get(key) as T | undefined
+  if (!f) formatters.set(key, (f = make(currentLocale())))
+  return f
+}
+const rtf = () => cached('rtf', (l) => new Intl.RelativeTimeFormat(l, { numeric: 'auto' }))
+const dateTime = () => cached('dateTime', (l) => new Intl.DateTimeFormat(l, { dateStyle: 'medium', timeStyle: 'short' }))
+const dateMedium = () => cached('date', (l) => new Intl.DateTimeFormat(l, { dateStyle: 'medium' }))
+const timeOnly = () => cached('time', (l) => new Intl.DateTimeFormat(l, { hour: '2-digit', minute: '2-digit' }))
+const weekday = () => cached('weekday', (l) => new Intl.DateTimeFormat(l, { weekday: 'short', hour: '2-digit', minute: '2-digit' }))
 
 export function parseDate(s: string | null | undefined): Date | null {
   if (!s) return null
@@ -17,18 +27,30 @@ export function ago(s: string | null | undefined, now = Date.now()): string {
   if (!d) return '—'
   const sec = Math.round((d.getTime() - now) / 1000)
   const abs = Math.abs(sec)
-  if (abs < 45) return sec <= 0 ? 'just now' : 'in a moment'
-  if (abs < 3600) return rtf.format(Math.round(sec / 60), 'minute')
-  if (abs < 86400) return rtf.format(Math.round(sec / 3600), 'hour')
-  if (abs < 86400 * 7) return rtf.format(Math.round(sec / 86400), 'day')
-  if (abs < 86400 * 30) return rtf.format(Math.round(sec / (86400 * 7)), 'week')
-  if (abs < 86400 * 365) return rtf.format(Math.round(sec / (86400 * 30)), 'month')
-  return rtf.format(Math.round(sec / (86400 * 365)), 'year')
+  if (abs < 45) return sec <= 0 ? tr('just now') : tr('in a moment')
+  if (abs < 3600) return rtf().format(Math.round(sec / 60), 'minute')
+  if (abs < 86400) return rtf().format(Math.round(sec / 3600), 'hour')
+  if (abs < 86400 * 7) return rtf().format(Math.round(sec / 86400), 'day')
+  if (abs < 86400 * 30) return rtf().format(Math.round(sec / (86400 * 7)), 'week')
+  if (abs < 86400 * 365) return rtf().format(Math.round(sec / (86400 * 30)), 'month')
+  return rtf().format(Math.round(sec / (86400 * 365)), 'year')
 }
 
 export function absolute(s: string | null | undefined): string {
   const d = parseDate(s)
-  return d ? dateTime.format(d) : '—'
+  return d ? dateTime().format(d) : '—'
+}
+
+/** The date alone, in the chosen locale. */
+export function dateOnly(s: string | Date | null | undefined): string {
+  const d = s instanceof Date ? s : parseDate(s)
+  return d ? dateMedium().format(d) : '—'
+}
+
+/** A date and time, in the chosen locale. */
+export function dateTimeText(s: string | Date | null | undefined): string {
+  const d = s instanceof Date ? s : parseDate(s)
+  return d ? dateTime().format(d) : '—'
 }
 
 /** Short form for upcoming runs: "14:00", "Thu 06:00", "12 Mar 2026, 06:00". */
@@ -36,9 +58,9 @@ export function upcoming(s: string | null | undefined, now = Date.now()): string
   const d = parseDate(s)
   if (!d) return '—'
   const diff = d.getTime() - now
-  if (diff >= 0 && diff < 86400_000 && new Date(now).getDate() === d.getDate()) return 'today ' + timeOnly.format(d)
-  if (diff >= 0 && diff < 6 * 86400_000) return weekday.format(d)
-  return dateTime.format(d)
+  if (diff >= 0 && diff < 86400_000 && new Date(now).getDate() === d.getDate()) return tr('today {time}', { time: timeOnly().format(d) })
+  if (diff >= 0 && diff < 6 * 86400_000) return weekday().format(d)
+  return dateTime().format(d)
 }
 
 /** "6m 42s", "1h 02m", "48s". */
@@ -111,8 +133,22 @@ export function statusKind(s: JobStatus | string | null | undefined): StatusKind
 
 export function statusLabel(s: string | null | undefined): string {
   if (!s) return '—'
-  if (s === 'never updated') return 'Never run'
-  return s.charAt(0).toUpperCase() + s.slice(1)
+  const known: Record<string, string> = {
+    'never updated': tr('Never run'),
+    new: tr('New'),
+    pending: tr('Pending'),
+    waiting: tr('Waiting'),
+    running: tr('Running'),
+    successful: tr('Successful'),
+    failed: tr('Failed'),
+    error: tr('Error'),
+    canceled: tr('Canceled'),
+    ok: tr('Ok'),
+    missing: tr('Missing'),
+    updating: tr('Updating'),
+    none: tr('None'),
+  }
+  return known[s] ?? s.charAt(0).toUpperCase() + s.slice(1)
 }
 
 /**
@@ -125,8 +161,10 @@ export const jobsNewestFirst = '-started,-id'
 export const finished = (s: string) => ['successful', 'failed', 'error', 'canceled'].includes(s)
 export const active = (s: string) => ['new', 'pending', 'waiting', 'running'].includes(s)
 
+/** "3 hosts", in the chosen locale: the catalog has "{n} host" / "{n} hosts". */
 export function plural(n: number, one: string, many = one + 's'): string {
-  return `${n} ${n === 1 ? one : many}`
+  // i18n-dynamic: the checker reads the keys from plural()'s callers.
+  return trn(n, `{n} ${one}`, `{n} ${many}`)
 }
 
 export function shortSha(s: string | null | undefined): string {
@@ -137,18 +175,18 @@ export function shortSha(s: string | null | undefined): string {
 export function typeLabel(t: string): string {
   return (
     {
-      job: 'Playbook run',
-      job_template: 'Job template',
-      workflow_job: 'Workflow',
-      workflow_job_template: 'Workflow template',
-      project_update: 'Project sync',
-      project: 'Project',
-      inventory_update: 'Inventory sync',
-      inventory_source: 'Inventory source',
-      ad_hoc_command: 'Command',
-      system_job: 'Management job',
-      system_job_template: 'Management job',
-      workflow_approval: 'Approval',
+      job: tr('Playbook run'),
+      job_template: tr('Job template'),
+      workflow_job: tr('Workflow'),
+      workflow_job_template: tr('Workflow template'),
+      project_update: tr('Project sync'),
+      project: tr('Project'),
+      inventory_update: tr('Inventory sync'),
+      inventory_source: tr('Inventory source'),
+      ad_hoc_command: tr('Command'),
+      system_job: tr('Management job'),
+      system_job_template: tr('Management job'),
+      workflow_approval: tr('Approval'),
     } as Record<string, string>
   )[t] ?? t
 }

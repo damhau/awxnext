@@ -14,6 +14,7 @@ import { Ago, Avatar, Empty, ErrorNote, KV, Loading, PageHead, Panel, Tab } from
 import { userName } from '../../lib/format'
 import { ListPage, useDelete } from './common'
 import { NotificationsTab } from '../../components/NotificationsTab'
+import { tr, trn } from '../../lib/i18n'
 
 type Org = Base & { max_hosts: number; default_environment: number | null }
 
@@ -22,15 +23,15 @@ export function OrganizationList() {
   const { me } = useSession()
   return (
     <ListPage<Org>
-      title="Organizations"
-      subtitle="Top-level boundaries for content, people and quotas."
+      title={tr('Organizations')}
+      subtitle={tr('Top-level boundaries for content, people and quotas.')}
       path="organizations/"
-      placeholder="Filter organizations…"
+      placeholder={tr('Filter organizations…')}
       actions={
         me.is_superuser && (
           <Link to="/organizations/new" className="btn primary">
             <Icon name="plus" size={14} />
-            New organization
+            {tr('New organization')}
           </Link>
         )
       }
@@ -38,7 +39,7 @@ export function OrganizationList() {
       columns={[
         {
           key: 'name',
-          header: 'Organization',
+          header: tr('Organization'),
           sort: 'name',
           render: (o) => (
             <div>
@@ -51,13 +52,13 @@ export function OrganizationList() {
         },
         ...(['teams', 'users', 'job_templates', 'inventories', 'projects'] as const).map((k) => ({
           key: k,
-          header: { teams: 'Teams', users: 'Members', job_templates: 'Templates', inventories: 'Inventories', projects: 'Projects' }[k],
+          header: { teams: tr('Teams'), users: tr('Members'), job_templates: tr('Templates'), inventories: tr('Inventories'), projects: tr('Projects') }[k],
           className: 'num',
           render: (o: Org) => o.summary_fields.related_field_counts?.[k] ?? 0,
         })),
-        { key: 'modified', header: 'Changed', sort: 'modified', className: 'small faint nowrap', render: (o) => <Ago at={o.modified} /> },
+        { key: 'modified', header: tr('Changed'), sort: 'modified', className: 'small faint nowrap', render: (o) => <Ago at={o.modified} /> },
       ]}
-      empty={<Empty title="No organizations">Create one to start grouping templates, inventories and teams.</Empty>}
+      empty={<Empty title={tr('No organizations')}>{tr('Create one to start grouping templates, inventories and teams.')}</Empty>}
     />
   )
 }
@@ -112,7 +113,7 @@ function OrgForm({ org, galaxy, groups, ee }: { org?: Org; galaxy?: Ref[]; group
       await syncLinks(`organizations/${saved.id}/galaxy_credentials/`, (galaxy ?? []).map((g) => g.id), f.values.galaxy.map((g) => g.id), true)
       await syncLinks(`organizations/${saved.id}/instance_groups/`, (groups ?? []).map((g) => g.id), f.values.groups.map((g) => g.id), true)
       invalidate('organizations')
-      toast(org ? 'Saved' : `Created ${saved.name}`)
+      toast(org ? tr('Saved') : tr('Created {name}', { name: saved.name }))
       nav(`/organizations/${saved.id}`)
     } catch (e) {
       setError(e)
@@ -130,51 +131,51 @@ function OrgForm({ org, galaxy, groups, ee }: { org?: Org; galaxy?: Ref[]; group
       }}
     >
       <div className="form-grid">
-        <TextInput label="Name" value={f.values.name} onChange={(v) => f.set('name', v)} error={f.errors.name} autoFocus={!org} />
+        <TextInput label={tr('Name')} value={f.values.name} onChange={(v) => f.set('name', v)} error={f.errors.name} autoFocus={!org} />
         <TextInput
-          label="Host limit"
+          label={tr('Host limit')}
           type="number"
           value={f.values.max_hosts}
           onChange={(v) => f.set('max_hosts', v)}
           error={f.errors.max_hosts}
-          help="Hosts this organization may manage. 0 means no limit."
+          help={tr('Hosts this organization may manage. 0 means no limit.')}
         />
-        <TextArea label="Description" optional rows={2} value={f.values.description} onChange={(v) => f.set('description', v)} />
+        <TextArea label={tr('Description')} optional rows={2} value={f.values.description} onChange={(v) => f.set('description', v)} />
         <Lookup
-          label="Default execution environment"
+          label={tr('Default execution environment')}
           optional
           resource="execution_environments/"
           value={f.values.default_environment}
           onChange={(v) => f.set('default_environment', v)}
           meta={(r) => r.image}
-          help="Used by templates and projects of this organization that do not pick one."
+          help={tr('Used by templates and projects of this organization that do not pick one.')}
           error={f.errors.default_environment}
         />
         <MultiLookup
-          label="Galaxy credentials"
+          label={tr('Galaxy credentials')}
           optional
           resource="credentials/"
           params={{ credential_type__kind: 'galaxy' }}
           values={f.values.galaxy}
           onChange={(v) => f.set('galaxy', v)}
-          help="Content sources for roles and collections, tried in this order."
+          help={tr('Content sources for roles and collections, tried in this order.')}
         />
         <MultiLookup
-          label="Instance groups"
+          label={tr('Instance groups')}
           optional
           resource="instance_groups/"
           values={f.values.groups}
           onChange={(v) => f.set('groups', v)}
-          help="Preferred capacity for this organization's jobs, in order."
+          help={tr('Preferred capacity for this organization\'s jobs, in order.')}
         />
       </div>
       <FormError error={error} />
       <div className="form-actions">
         <button className="btn primary" disabled={busy || !f.values.name.trim()}>
-          {busy ? 'Saving…' : org ? 'Save changes' : 'Create organization'}
+          {busy ? tr('Saving…') : org ? tr('Save changes') : tr('Create organization')}
         </button>
         <button type="button" className="btn ghost" onClick={() => nav(org ? `/organizations/${org.id}` : '/organizations')}>
-          Cancel
+          {tr('Cancel')}
         </button>
       </div>
     </form>
@@ -184,7 +185,7 @@ function OrgForm({ org, galaxy, groups, ee }: { org?: Org; galaxy?: Ref[]; group
 export function OrganizationNew() {
   return (
     <div className="page">
-      <PageHead crumbs={[{ label: 'Organizations', to: '/organizations' }, { label: 'New' }]} title="New organization" />
+      <PageHead crumbs={[{ label: tr('Organizations'), to: '/organizations' }, { label: tr('New') }]} title={tr('New organization')} />
       <div className="page-body" style={{ maxWidth: 980 }}>
         <OrgForm />
       </div>
@@ -207,14 +208,14 @@ export function OrganizationDetail() {
   return (
     <div className="page">
       <PageHead
-        crumbs={[{ label: 'Organizations', to: '/organizations' }, { label: o.name }]}
+        crumbs={[{ label: tr('Organizations'), to: '/organizations' }, { label: o.name }]}
         title={o.name}
         subtitle={o.description || undefined}
         actions={
           <>
             {o.summary_fields.user_capabilities?.edit && (
               <Link className="btn" to={`${base}/edit`}>
-                Edit
+                {tr('Edit')}
               </Link>
             )}
             {o.summary_fields.user_capabilities?.delete && (
@@ -224,13 +225,13 @@ export function OrganizationDetail() {
                   del({
                     path: `organizations/${id}/`,
                     name: o.name,
-                    what: 'organization',
+                    what: tr('organization'),
                     then: '/organizations',
-                    body: <p style={{ margin: 0 }}>Its teams, inventories, projects, templates and credentials are deleted with it.</p>,
+                    body: <p style={{ margin: 0 }}>{tr('Its teams, inventories, projects, templates and credentials are deleted with it.')}</p>,
                   })
                 }
               >
-                Delete
+                {tr('Delete')}
               </button>
             )}
           </>
@@ -238,16 +239,16 @@ export function OrganizationDetail() {
         tabs={
           <>
             <Tab to={base} end>
-              Details
+              {tr('Details')}
             </Tab>
             <Tab to={`${base}/members`} n={counts.users}>
-              Members
+              {tr('Members')}
             </Tab>
             <Tab to={`${base}/teams`} n={counts.teams}>
-              Teams
+              {tr('Teams')}
             </Tab>
-            <Tab to={`${base}/notifications`}>Notifications</Tab>
-            <Tab to={`${base}/access`}>Access</Tab>
+            <Tab to={`${base}/notifications`}>{tr('Notifications')}</Tab>
+            <Tab to={`${base}/access`}>{tr('Access')}</Tab>
           </>
         }
       />
@@ -258,35 +259,35 @@ export function OrganizationDetail() {
             element={
               <div className="split">
                 <div className="wide">
-                  <Panel title="Settings">
+                  <Panel title={tr('Settings')}>
                     <KV
                       items={[
-                        ['Host limit', o.max_hosts ? o.max_hosts : 'No limit'],
-                        ['Default environment', ee.data ? <Link to={`/execution-environments/${ee.data.id}`}>{ee.data.name}</Link> : <span className="faint">Global default</span>],
+                        [tr('Host limit'), o.max_hosts ? o.max_hosts : tr('No limit')],
+                        [tr('Default environment'), ee.data ? <Link to={`/execution-environments/${ee.data.id}`}>{ee.data.name}</Link> : <span className="faint">{tr('Global default')}</span>],
                         [
-                          'Galaxy credentials',
-                          galaxy.data?.results.length ? galaxy.data.results.map((g, i) => <span key={g.id}>{i > 0 && ', '}<Link to={`/credentials/${g.id}`}>{g.name}</Link></span>) : <span className="faint">None</span>,
+                          tr('Galaxy credentials'),
+                          galaxy.data?.results.length ? galaxy.data.results.map((g, i) => <span key={g.id}>{i > 0 && ', '}<Link to={`/credentials/${g.id}`}>{g.name}</Link></span>) : <span className="faint">{tr('None')}</span>,
                         ],
                         [
-                          'Instance groups',
-                          groups.data?.results.length ? groups.data.results.map((g, i) => <span key={g.id}>{i > 0 && ' → '}<Link to={`/instance-groups/${g.id}`}>{g.name}</Link></span>) : <span className="faint">Any available</span>,
+                          tr('Instance groups'),
+                          groups.data?.results.length ? groups.data.results.map((g, i) => <span key={g.id}>{i > 0 && ' → '}<Link to={`/instance-groups/${g.id}`}>{g.name}</Link></span>) : <span className="faint">{tr('Any available')}</span>,
                         ],
-                        ['Created', <><Ago at={o.created} /> by {userName(o.summary_fields.created_by)}</>],
-                        ['Changed', <><Ago at={o.modified} /> by {userName(o.summary_fields.modified_by)}</>],
+                        [tr('Created'), <><Ago at={o.created} /> {tr('by')} {userName(o.summary_fields.created_by)}</>],
+                        [tr('Changed'), <><Ago at={o.modified} /> {tr('by')} {userName(o.summary_fields.modified_by)}</>],
                       ]}
                     />
                   </Panel>
                 </div>
                 <div className="narrow">
-                  <Panel title="Contents">
+                  <Panel title={tr('Contents')}>
                     <ul className="list-plain">
                       {(
                         [
-                          ['job_templates', 'Job templates', `/templates?org=${id}`],
-                          ['inventories', 'Inventories', '/inventories'],
-                          ['projects', 'Projects', '/projects'],
-                          ['teams', 'Teams', `${base}/teams`],
-                          ['users', 'Members', `${base}/members`],
+                          ['job_templates', tr('Job templates'), `/templates?org=${id}`],
+                          ['inventories', tr('Inventories'), '/inventories'],
+                          ['projects', tr('Projects'), '/projects'],
+                          ['teams', tr('Teams'), `${base}/teams`],
+                          ['users', tr('Members'), `${base}/members`],
                         ] as const
                       ).map(([k, l, to]) => (
                         <li key={k}>
@@ -345,11 +346,11 @@ function OrgMembers({ org }: { org: Org }) {
     return [...by.values()].sort((a, b) => userName(a.user).localeCompare(userName(b.user)))
   }, [assignments.data])
   const remove = async (p: (typeof people)[number]) => {
-    if (!(await confirm({ title: `Remove ${userName(p.user)} from ${org.name}?`, body: <p style={{ margin: 0 }}>All of their organization roles are removed. Roles on individual objects stay.</p>, confirm: 'Remove member', danger: true }))) return
+    if (!(await confirm({ title: tr('Remove {user} from {name}?', { user: userName(p.user), name: org.name }), body: <p style={{ margin: 0 }}>{tr('All of their organization roles are removed. Roles on individual objects stay.')}</p>, confirm: tr('Remove member'), danger: true }))) return
     try {
       for (const a of p.list) await api.del(`role_user_assignments/${a.id}/`)
       invalidate('role_user_assignments', 'organizations', 'role_access')
-      toast(`Removed ${userName(p.user)}`)
+      toast(tr('Removed {user}', { user: userName(p.user) }))
     } catch (e) {
       toast((e as Error).message, 'error')
     }
@@ -357,23 +358,23 @@ function OrgMembers({ org }: { org: Org }) {
   return (
     <div className="stack" style={{ gap: 12 }}>
       <div className="row">
-        <span className="small faint grow">People with a role on the whole organization. Members can see it; admins manage everything in it.</span>
+        <span className="small faint grow">{tr('People with a role on the whole organization. Members can see it; admins manage everything in it.')}</span>
         <button className="btn primary" onClick={() => setAdding(true)}>
           <Icon name="plus" size={14} />
-          Add members
+          {tr('Add members')}
         </button>
       </div>
       <DataTable
-        label="Members"
+        label={tr('Members')}
         rows={people}
         rowKey={(p) => p.user.id}
         loading={assignments.isPending || roles.isPending}
         error={assignments.error}
-        empty={<Empty title="No members yet">Add people, or grant roles to teams under Access.</Empty>}
+        empty={<Empty title={tr('No members yet')}>{tr('Add people, or grant roles to teams under Access.')}</Empty>}
         columns={[
           {
             key: 'who',
-            header: 'Person',
+            header: tr('Person'),
             render: (p) => (
               <div className="row">
                 <Avatar name={userName(p.user)} size="sm" />
@@ -388,7 +389,7 @@ function OrgMembers({ org }: { org: Org }) {
           },
           {
             key: 'roles',
-            header: 'Roles',
+            header: tr('Roles'),
             render: (p) => (
               <div className="row wrap" style={{ gap: 4 }}>
                 {p.list.map((a) => (
@@ -401,11 +402,11 @@ function OrgMembers({ org }: { org: Org }) {
           },
           {
             key: 'x',
-            header: <span className="sr-only">Actions</span>,
+            header: <span className="sr-only">{tr('Actions')}</span>,
             className: 'end',
             render: (p) => (
               <button className="btn sm ghost" onClick={() => remove(p)}>
-                Remove
+                {tr('Remove')}
               </button>
             ),
           },
@@ -421,7 +422,7 @@ function AddMembers({ org, onClose }: { org: Org; onClose: () => void }) {
   const [users, setUsers] = useState<Ref[]>([])
   const options = (roles.data ?? []).filter((r) => r.content_type?.endsWith('organization'))
   const [role, setRole] = useState<number | null>(null)
-  const member = options.find((r) => r.name === 'Organization Member')
+  const member = options.find((r) => r.name === tr('Organization Member'))
   const chosen = role ?? member?.id ?? null
   const [error, setError] = useState<unknown>(null)
   const [busy, setBusy] = useState(false)
@@ -432,7 +433,7 @@ function AddMembers({ org, onClose }: { org: Org; onClose: () => void }) {
     try {
       for (const u of users) await api.post('role_user_assignments/', { role_definition: chosen, user: u.id, object_id: org.id })
       invalidate('role_user_assignments', 'organizations', 'role_access')
-      toast(`Added ${users.length} ${users.length === 1 ? 'person' : 'people'} to ${org.name}`)
+      toast(trn(users.length, 'Added {n} person to {name}', 'Added {n} people to {name}', { name: org.name }))
       onClose()
     } catch (e) {
       setError(e)
@@ -442,21 +443,21 @@ function AddMembers({ org, onClose }: { org: Org; onClose: () => void }) {
   }
   return (
     <Dialog
-      title={`Add members to ${org.name}`}
+      title={tr('Add members to {name}', { name: org.name })}
       onClose={onClose}
       footer={
         <>
           <button className="btn" onClick={onClose}>
-            Cancel
+            {tr('Cancel')}
           </button>
           <button className="btn primary" disabled={busy || !users.length || !chosen} onClick={submit}>
-            Add
+            {tr('Add')}
           </button>
         </>
       }
     >
       <MultiLookup
-        label="People"
+        label={tr('People')}
         resource="users/"
         order="username"
         values={users}
@@ -466,7 +467,7 @@ function AddMembers({ org, onClose }: { org: Org; onClose: () => void }) {
         full
       />
       <div className="field">
-        <label htmlFor="org-role">Role</label>
+        <label htmlFor="org-role">{tr('Role')}</label>
         <select id="org-role" className="select" value={chosen ?? ''} onChange={(e) => setRole(Number(e.target.value))}>
           {options.map((r) => (
             <option key={r.id} value={r.id}>
@@ -486,23 +487,23 @@ function OrgTeams({ org }: { org: Org }) {
   return (
     <div className="stack" style={{ gap: 12 }}>
       <div className="row">
-        <span className="small faint grow">Teams group people so roles can be granted once.</span>
+        <span className="small faint grow">{tr('Teams group people so roles can be granted once.')}</span>
         <Link className="btn primary" to={`/teams/new?organization=${org.id}`}>
           <Icon name="plus" size={14} />
-          New team
+          {tr('New team')}
         </Link>
       </div>
       <DataTable
-        label="Teams"
+        label={tr('Teams')}
         rows={teams.data?.results}
         loading={teams.isPending}
         error={teams.error}
         onOpen={(t) => nav(`/teams/${t.id}`)}
-        empty={<Empty title="No teams in this organization" />}
+        empty={<Empty title={tr('No teams in this organization')} />}
         columns={[
           {
             key: 'name',
-            header: 'Team',
+            header: tr('Team'),
             render: (t) => (
               <div>
                 <Link to={`/teams/${t.id}`} className="cell-title">
@@ -512,7 +513,7 @@ function OrgTeams({ org }: { org: Org }) {
               </div>
             ),
           },
-          { key: 'mod', header: 'Changed', className: 'small faint nowrap', render: (t) => <Ago at={t.modified} /> },
+          { key: 'mod', header: tr('Changed'), className: 'small faint nowrap', render: (t) => <Ago at={t.modified} /> },
         ]}
       />
     </div>

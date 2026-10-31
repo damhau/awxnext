@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { tokenize, type KeyTable } from '../lib/query'
 import { Icon } from './icons'
+import { tr } from '../lib/i18n'
 
 const structuredOf = (q: string, keys: KeyTable) => tokenize(q).filter((t) => t.key && keys[t.key])
 const freeOf = (q: string, keys: KeyTable) =>
@@ -58,16 +59,16 @@ export function FilterBar({
           {chips.map((c, i) => (
             <span key={i} className="chip">
               {c.label}
-              <button type="button" aria-label="Remove filter" onClick={c.onRemove}>
+              <button type="button" aria-label={tr('Remove filter')} onClick={c.onRemove}>
                 <Icon name="x" size={11} />
               </button>
             </span>
           ))}
           {applied.map((t) => (
             <span key={t.raw} className="chip">
-              {t.negate && 'not '}
+              {t.negate && tr('not ')}
               {t.key}:<b>{t.value}</b>
-              <button type="button" aria-label={`Remove ${t.raw}`} onClick={() => remove(t.raw)}>
+              <button type="button" aria-label={tr('Remove {raw}', { raw: t.raw })} onClick={() => remove(t.raw)}>
                 <Icon name="x" size={11} />
               </button>
             </span>
@@ -104,7 +105,7 @@ export function FilterBar({
       </div>
       {unknown.length > 0 ? (
         <span className="small fail-text">
-          Unknown filter {unknown.map((k) => `"${k}:"`).join(', ')}. Available: {Object.keys(keys).map((k) => k + ':').join(' ')}
+          {tr('Unknown filter')} {unknown.map((k) => `"${k}:"`).join(', ')}{tr('. Available:')} {Object.keys(keys).map((k) => k + ':').join(' ')}
         </span>
       ) : (
         focus && (
@@ -112,7 +113,7 @@ export function FilterBar({
             {Object.entries(keys)
               .map(([k, s]) => `${k}:${s.help ?? '…'}`)
               .join('  ')}
-            {'  '}· -key:value excludes · * matches any text · Enter applies
+            {'  '}{tr('· -key:value excludes · * matches any text · Enter applies')}
           </span>
         )
       )}

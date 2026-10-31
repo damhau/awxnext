@@ -15,12 +15,13 @@ import { absolute, userName } from '../../lib/format'
 import { checkPassword, describeRules, passwordRules } from '../../lib/passwordPolicy'
 import { ListPage, OneTimeSecret, useDelete } from './common'
 import { BulkDelete } from '../../components/BulkBar'
+import { tr } from '../../lib/i18n'
 
 type User = Base & Me & { last_login: string | null; is_active?: boolean; ldap_dn?: string; external_account?: string | null; auth?: unknown[] }
 
 function Kind({ u }: { u: User }) {
-  if (u.is_superuser) return <span className="badge run">Superuser</span>
-  if (u.is_system_auditor) return <span className="badge">Auditor</span>
+  if (u.is_superuser) return <span className="badge run">{tr('Superuser')}</span>
+  if (u.is_system_auditor) return <span className="badge">{tr('Auditor')}</span>
   return null
 }
 
@@ -28,28 +29,28 @@ export function UserList() {
   const nav = useNavigate()
   return (
     <ListPage<User>
-      title="Users"
-      subtitle="People and service accounts. Single sign-on users appear after their first login."
+      title={tr('Users')}
+      subtitle={tr('People and service accounts. Single sign-on users appear after their first login.')}
       path="users/"
       order="username"
       keys={{
-        superuser: { field: 'is_superuser', help: 'true/false' },
-        auditor: { field: 'is_system_auditor', help: 'true/false' },
-        email: { field: 'email', help: 'email address' },
+        superuser: { field: 'is_superuser', help: tr('true/false') },
+        auditor: { field: 'is_system_auditor', help: tr('true/false') },
+        email: { field: 'email', help: tr('email address') },
       }}
-      placeholder="Filter by name, username or email…  try  superuser:true"
+      placeholder={tr('Filter by name, username or email…  try  superuser:true')}
       actions={
         <Link to="/users/new" className="btn primary">
           <Icon name="plus" size={14} />
-          New user
+          {tr('New user')}
         </Link>
       }
       onOpen={(u) => nav(`/users/${u.id}`)}
-      bulk={(sel) => <BulkDelete sel={sel} resource="users" noun={['user', 'users']} name={(u) => u.username} note="Their job history stays, under their name; their tokens stop working." />}
+      bulk={(sel) => <BulkDelete sel={sel} resource="users" noun={['user', 'users']} name={(u) => u.username} note={tr('Their job history stays, under their name; their tokens stop working.')} />}
       columns={[
         {
           key: 'name',
-          header: 'Person',
+          header: tr('Person'),
           sort: 'username',
           render: (u) => (
             <div className="row">
@@ -63,17 +64,17 @@ export function UserList() {
             </div>
           ),
         },
-        { key: 'email', header: 'Email', sort: 'email', render: (u) => u.email || <span className="faint">—</span> },
-        { key: 'kind', header: 'Type', render: (u) => <Kind u={u} /> },
+        { key: 'email', header: tr('Email'), sort: 'email', render: (u) => u.email || <span className="faint">—</span> },
+        { key: 'kind', header: tr('Type'), render: (u) => <Kind u={u} /> },
         {
           key: 'login',
-          header: 'Last sign-in',
+          header: tr('Last sign-in'),
           sort: 'last_login',
           className: 'small nowrap',
-          render: (u) => (u.last_login ? <Ago at={u.last_login} /> : <span className="faint">Never</span>),
+          render: (u) => (u.last_login ? <Ago at={u.last_login} /> : <span className="faint">{tr('Never')}</span>),
         },
       ]}
-      empty={<Empty title="No users">Create local accounts here, or configure single sign-on in Settings.</Empty>}
+      empty={<Empty title={tr('No users')}>{tr('Create local accounts here, or configure single sign-on in Settings.')}</Empty>}
     />
   )
 }
@@ -157,57 +158,57 @@ function UserForm({ user }: { user?: User }) {
       }}
     >
       <div className="form-grid">
-        <TextInput label="Username" value={f.values.username} onChange={(v) => f.set('username', v)} error={f.errors.username} autoFocus={!user} disabled={external} />
-        <TextInput label="Email" optional type="email" value={f.values.email} onChange={(v) => f.set('email', v)} error={f.errors.email} />
-        <TextInput label="First name" optional value={f.values.first_name} onChange={(v) => f.set('first_name', v)} />
-        <TextInput label="Last name" optional value={f.values.last_name} onChange={(v) => f.set('last_name', v)} />
+        <TextInput label={tr('Username')} value={f.values.username} onChange={(v) => f.set('username', v)} error={f.errors.username} autoFocus={!user} disabled={external} />
+        <TextInput label={tr('Email')} optional type="email" value={f.values.email} onChange={(v) => f.set('email', v)} error={f.errors.email} />
+        <TextInput label={tr('First name')} optional value={f.values.first_name} onChange={(v) => f.set('first_name', v)} />
+        <TextInput label={tr('Last name')} optional value={f.values.last_name} onChange={(v) => f.set('last_name', v)} />
         {!external && (
           <>
             <TextInput
-              label={user ? 'New password' : 'Password'}
+              label={user ? tr('New password') : tr('Password')}
               optional={!!user}
               type="password"
               value={f.values.password}
               onChange={(v) => f.set('password', v)}
               error={f.errors.password ?? weak ?? undefined}
-              help={[user ? 'Leave empty to keep the current password.' : '', rulesText].filter(Boolean).join(' ') || undefined}
+              help={[user ? tr('Leave empty to keep the current password.') : '', rulesText].filter(Boolean).join(' ') || undefined}
             />
-            <TextInput label="Confirm password" type="password" optional={!!user} value={f.values.confirm} onChange={(v) => f.set('confirm', v)} error={mismatch && f.values.confirm ? 'The passwords differ.' : undefined} />
+            <TextInput label={tr('Confirm password')} type="password" optional={!!user} value={f.values.confirm} onChange={(v) => f.set('confirm', v)} error={mismatch && f.values.confirm ? tr('The passwords differ.') : undefined} />
           </>
         )}
         {!user && (
           <Lookup
-            label="Organization"
+            label={tr('Organization')}
             optional={me.is_superuser}
             resource="organizations/"
             params={me.is_superuser ? undefined : { role_level: 'admin_role' }}
             value={f.values.organization}
             onChange={(v) => f.set('organization', v)}
-            help="The user becomes a member of it."
+            help={tr('The user becomes a member of it.')}
           />
         )}
         {me.is_superuser && (
           <SelectField
-            label="Type"
+            label={tr('Type')}
             value={f.values.kind}
             onChange={(v) => f.set('kind', v as UserValues['kind'])}
             options={[
-              ['normal', 'Normal — access through roles'],
-              ['auditor', 'System auditor — can see everything'],
-              ['superuser', 'Superuser — can do everything'],
+              ['normal', tr('Normal — access through roles')],
+              ['auditor', tr('System auditor — can see everything')],
+              ['superuser', tr('Superuser — can do everything')],
             ]}
           />
         )}
       </div>
-      {user && <Check label="Active" checked={f.values.is_active} onChange={(v) => f.set('is_active', v)} help="Inactive users cannot sign in; their history is kept." />}
-      {external && <div className="notice">This account signs in through single sign-on; its username and password are managed by the identity provider.</div>}
+      {user && <Check label={tr('Active')} checked={f.values.is_active} onChange={(v) => f.set('is_active', v)} help={tr('Inactive users cannot sign in; their history is kept.')} />}
+      {external && <div className="notice">{tr('This account signs in through single sign-on; its username and password are managed by the identity provider.')}</div>}
       <FormError error={error} />
       <div className="form-actions">
         <button className="btn primary" disabled={busy || !f.values.username.trim() || mismatch || !!weak || (!user && !f.values.password && !external) || (needsOrg && !f.values.organization)}>
-          {busy ? 'Saving…' : user ? 'Save changes' : 'Create user'}
+          {busy ? tr('Saving…') : user ? tr('Save changes') : tr('Create user')}
         </button>
         <button type="button" className="btn ghost" onClick={() => nav(user ? `/users/${user.id}` : '/users')}>
-          Cancel
+          {tr('Cancel')}
         </button>
       </div>
     </form>
@@ -217,7 +218,7 @@ function UserForm({ user }: { user?: User }) {
 export function UserNew() {
   return (
     <div className="page">
-      <PageHead crumbs={[{ label: 'Users', to: '/users' }, { label: 'New' }]} title="New user" />
+      <PageHead crumbs={[{ label: tr('Users'), to: '/users' }, { label: tr('New') }]} title={tr('New user')} />
       <div className="page-body">
         <UserForm />
       </div>
@@ -238,7 +239,7 @@ export function UserDetail() {
   return (
     <div className="page">
       <PageHead
-        crumbs={[{ label: 'Users', to: '/users' }, { label: u.username }]}
+        crumbs={[{ label: tr('Users'), to: '/users' }, { label: u.username }]}
         title={
           <span className="row" style={{ gap: 10 }}>
             <Avatar name={userName(u)} />
@@ -249,20 +250,20 @@ export function UserDetail() {
         subtitle={
           <>
             <span className="mono">{u.username}</span>
-            {u.email ? ` · ${u.email}` : ''}
-            {self ? ' · this is you' : ''}
+            {u.email ? tr(' · {email}', { email: u.email }) : ''}
+            {self ? tr(' · this is you') : ''}
           </>
         }
         actions={
           <>
             {u.summary_fields.user_capabilities?.edit && (
               <Link className="btn" to={`${base}/edit`}>
-                Edit
+                {tr('Edit')}
               </Link>
             )}
             {u.summary_fields.user_capabilities?.delete && !self && (
-              <button className="btn danger" onClick={() => del({ path: `users/${id}/`, name: u.username, what: 'user', then: '/users' })}>
-                Delete
+              <button className="btn danger" onClick={() => del({ path: `users/${id}/`, name: u.username, what: tr('user'), then: '/users' })}>
+                {tr('Delete')}
               </button>
             )}
           </>
@@ -270,11 +271,11 @@ export function UserDetail() {
         tabs={
           <>
             <Tab to={base} end>
-              Details
+              {tr('Details')}
             </Tab>
-            <Tab to={`${base}/teams`}>Teams</Tab>
-            <Tab to={`${base}/roles`}>Roles</Tab>
-            <Tab to={`${base}/tokens`}>Tokens</Tab>
+            <Tab to={`${base}/teams`}>{tr('Teams')}</Tab>
+            <Tab to={`${base}/roles`}>{tr('Roles')}</Tab>
+            <Tab to={`${base}/tokens`}>{tr('Tokens')}</Tab>
           </>
         }
       />
@@ -283,17 +284,17 @@ export function UserDetail() {
           <Route
             index
             element={
-              <Panel title="Account">
+              <Panel title={tr('Account')}>
                 <KV
                   items={[
-                    ['Username', <span className="mono">{u.username}</span>],
-                    ['Name', [u.first_name, u.last_name].filter(Boolean).join(' ')],
-                    ['Email', u.email],
-                    ['Type', u.is_superuser ? 'Superuser' : u.is_system_auditor ? 'System auditor' : 'Normal'],
-                    ['Status', u.is_active === false ? 'Inactive' : 'Active'],
-                    ['Sign-in', u.external_account || (Array.isArray(u.auth) && u.auth.length) ? 'Single sign-on' : 'Local password'],
-                    ['Last sign-in', u.last_login ? <span title={absolute(u.last_login)}><Ago at={u.last_login} /></span> : <span className="faint">Never</span>],
-                    ['Created', <Ago at={u.created} />],
+                    [tr('Username'), <span className="mono">{u.username}</span>],
+                    [tr('Name'), [u.first_name, u.last_name].filter(Boolean).join(' ')],
+                    [tr('Email'), u.email],
+                    [tr('Type'), u.is_superuser ? tr('Superuser') : u.is_system_auditor ? tr('System auditor') : tr('Normal')],
+                    [tr('Status'), u.is_active === false ? tr('Inactive') : tr('Active')],
+                    [tr('Sign-in'), u.external_account || (Array.isArray(u.auth) && u.auth.length) ? tr('Single sign-on') : tr('Local password')],
+                    [tr('Last sign-in'), u.last_login ? <span title={absolute(u.last_login)}><Ago at={u.last_login} /></span> : <span className="faint">{tr('Never')}</span>],
+                    [tr('Created'), <Ago at={u.created} />],
                   ]}
                 />
               </Panel>
@@ -320,7 +321,7 @@ function UserTeams({ user }: { user: User }) {
   const invalidate = useInvalidate()
   const toast = useToast()
   const confirm = useConfirm()
-  const member = roles.data?.find((r) => r.name === 'Team Member')
+  const member = roles.data?.find((r) => r.name === tr('Team Member'))
   const add = async () => {
     try {
       for (const t of picked) await api.post('role_user_assignments/', { role_definition: member?.id, user: user.id, object_id: t.id })
@@ -334,44 +335,44 @@ function UserTeams({ user }: { user: User }) {
   return (
     <div className="stack" style={{ gap: 12 }}>
       <div className="row">
-        <span className="small faint grow">{userName(user)} gets every role granted to these teams.</span>
+        <span className="small faint grow">{userName(user)} {tr('gets every role granted to these teams.')}</span>
         <button className="btn primary" onClick={() => setAdding(true)}>
           <Icon name="plus" size={14} />
-          Add to teams
+          {tr('Add to teams')}
         </button>
       </div>
       <DataTable
-        label="Teams"
+        label={tr('Teams')}
         rows={list.data}
         loading={list.isPending}
         error={list.error}
-        empty={<Empty title="Not in any team" />}
+        empty={<Empty title={tr('Not in any team')} />}
         columns={[
           {
             key: 'team',
-            header: 'Team',
+            header: tr('Team'),
             render: (a) => (
               <Link to={`/teams/${a.object_id}`} className="cell-title">
                 {a.summary_fields.content_object?.name}
               </Link>
             ),
           },
-          { key: 'role', header: 'Role', render: (a) => (a.summary_fields.role_definition?.name ?? '').replace(/^Team /, '') },
-          { key: 'since', header: 'Since', className: 'small faint nowrap', render: (a) => <Ago at={a.created} /> },
+          { key: 'role', header: tr('Role'), render: (a) => (a.summary_fields.role_definition?.name ?? '').replace(/^Team /, '') },
+          { key: 'since', header: tr('Since'), className: 'small faint nowrap', render: (a) => <Ago at={a.created} /> },
           {
             key: 'x',
-            header: <span className="sr-only">Actions</span>,
+            header: <span className="sr-only">{tr('Actions')}</span>,
             className: 'end',
             render: (a) => (
               <button
                 className="btn sm ghost"
                 onClick={async () => {
-                  if (!(await confirm({ title: `Remove from ${a.summary_fields.content_object?.name}?`, confirm: 'Remove', danger: true }))) return
+                  if (!(await confirm({ title: tr('Remove from {name}?', { name: a.summary_fields.content_object?.name }), confirm: tr('Remove'), danger: true }))) return
                   await api.del(`role_user_assignments/${a.id}/`).catch((e) => toast((e as Error).message, 'error'))
                   invalidate('role_user_assignments', 'role_access')
                 }}
               >
-                Remove
+                {tr('Remove')}
               </button>
             ),
           },
@@ -379,20 +380,20 @@ function UserTeams({ user }: { user: User }) {
       />
       {adding && (
         <Dialog
-          title={`Add ${userName(user)} to teams`}
+          title={tr('Add {user} to teams', { user: userName(user) })}
           onClose={() => setAdding(false)}
           footer={
             <>
               <button className="btn" onClick={() => setAdding(false)}>
-                Cancel
+                {tr('Cancel')}
               </button>
               <button className="btn primary" disabled={!picked.length || !member} onClick={add}>
-                Add
+                {tr('Add')}
               </button>
             </>
           }
         >
-          <MultiLookup label="Teams" resource="teams/" values={picked} onChange={setPicked} meta={(r) => r.summary_fields?.organization?.name} full />
+          <MultiLookup label={tr('Teams')} resource="teams/" values={picked} onChange={setPicked} meta={(r) => r.summary_fields?.organization?.name} full />
         </Dialog>
       )}
     </div>
@@ -424,32 +425,32 @@ function Tokens({ user, self }: { user: User; self: boolean }) {
   return (
     <div className="stack" style={{ gap: 12 }}>
       <div className="row">
-        <span className="small faint grow">Personal access tokens authenticate scripts and CI as {self ? 'you' : userName(user)}: send <span className="mono">Authorization: Bearer &lt;token&gt;</span>.</span>
+        <span className="small faint grow">{tr('Personal access tokens authenticate scripts and CI as')} {self ? tr('you') : userName(user)}{tr(': send')} <span className="mono">{tr('Authorization: Bearer <token>')}</span>.</span>
         {self && (
           <button className="btn primary" onClick={() => setCreating(true)}>
             <Icon name="plus" size={14} />
-            New token
+            {tr('New token')}
           </button>
         )}
       </div>
       <DataTable
-        label="Tokens"
+        label={tr('Tokens')}
         rows={tokens.data?.results}
         loading={tokens.isPending}
         error={tokens.error}
-        empty={<Empty title="No tokens">{self ? 'Create one for scripts that call the API.' : 'Only the user can create tokens for themselves.'}</Empty>}
+        empty={<Empty title={tr('No tokens')}>{self ? tr('Create one for scripts that call the API.') : tr('Only the user can create tokens for themselves.')}</Empty>}
         columns={[
-          { key: 'desc', header: 'Description', render: (t) => t.description || <span className="faint">No description</span> },
-          { key: 'scope', header: 'Scope', render: (t) => <span className="tag">{t.scope}</span> },
-          { key: 'created', header: 'Created', className: 'small nowrap', render: (t) => <Ago at={t.created} /> },
+          { key: 'desc', header: tr('Description'), render: (t) => t.description || <span className="faint">{tr('No description')}</span> },
+          { key: 'scope', header: tr('Scope'), render: (t) => <span className="tag">{t.scope}</span> },
+          { key: 'created', header: tr('Created'), className: 'small nowrap', render: (t) => <Ago at={t.created} /> },
           {
             key: 'x',
-            header: <span className="sr-only">Actions</span>,
+            header: <span className="sr-only">{tr('Actions')}</span>,
             className: 'end',
             render: (t) =>
               t.summary_fields.user_capabilities?.delete !== false && (
-                <button className="btn sm ghost" onClick={() => del({ path: `tokens/${t.id}/`, name: t.description || `token ${t.id}`, what: 'token', invalidate: [`users/${user.id}/personal_tokens`], body: <p style={{ margin: 0 }}>Scripts using it stop working immediately.</p> })}>
-                  Revoke
+                <button className="btn sm ghost" onClick={() => del({ path: `tokens/${t.id}/`, name: t.description || `token ${t.id}`, what: tr('token'), invalidate: [`users/${user.id}/personal_tokens`], body: <p style={{ margin: 0 }}>{tr('Scripts using it stop working immediately.')}</p> })}>
+                  {tr('Revoke')}
                 </button>
               ),
           },
@@ -457,7 +458,7 @@ function Tokens({ user, self }: { user: User; self: boolean }) {
       />
       {creating && (
         <Dialog
-          title={created ? 'Token created' : 'New personal token'}
+          title={created ? tr('Token created') : tr('New personal token')}
           onClose={() => {
             setCreating(false)
             setCreated(null)
@@ -471,32 +472,32 @@ function Tokens({ user, self }: { user: User; self: boolean }) {
                   setCreated(null)
                 }}
               >
-                Done
+                {tr('Done')}
               </button>
             ) : (
               <>
                 <button className="btn" onClick={() => setCreating(false)}>
-                  Cancel
+                  {tr('Cancel')}
                 </button>
                 <button className="btn primary" onClick={create}>
-                  Create token
+                  {tr('Create token')}
                 </button>
               </>
             )
           }
         >
           {created ? (
-            <OneTimeSecret value={created.token} note="Copy the token now. It is shown only once; afterwards only its description is visible." />
+            <OneTimeSecret value={created.token} note={tr('Copy the token now. It is shown only once; afterwards only its description is visible.')} />
           ) : (
             <>
-              <TextInput label="Description" value={desc} onChange={setDesc} placeholder="e.g. GitLab CI deploy pipeline" autoFocus />
+              <TextInput label={tr('Description')} value={desc} onChange={setDesc} placeholder={tr('e.g. GitLab CI deploy pipeline')} autoFocus />
               <SelectField
-                label="Scope"
+                label={tr('Scope')}
                 value={scope}
                 onChange={setScope}
                 options={[
-                  ['write', 'Write — everything you can do'],
-                  ['read', 'Read — view only'],
+                  ['write', tr('Write — everything you can do')],
+                  ['read', tr('Read — view only')],
                 ]}
               />
               <FormError error={error} />

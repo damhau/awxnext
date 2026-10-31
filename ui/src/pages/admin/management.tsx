@@ -12,17 +12,18 @@ import { jobPath } from '../../lib/format'
 import { SchedulesTab } from '../automation/SchedulesTab'
 import { NotificationsTab } from '../../components/NotificationsTab'
 import { useSession } from '../../app/context'
+import { tr } from '../../lib/i18n'
 
 type SJT = Template & { job_type: string }
 
 const usesDays = (t: string) => ['cleanup_jobs', 'cleanup_activitystream', 'cleanup_host_metrics'].includes(t)
 
 const explain: Record<string, string> = {
-  cleanup_jobs: 'Deletes jobs, their output and events older than the retention period.',
-  cleanup_activitystream: 'Deletes activity stream entries older than the retention period.',
-  cleanup_sessions: 'Removes expired browser sessions.',
-  cleanup_tokens: 'Removes expired API tokens.',
-  cleanup_host_metrics: 'Removes soft-deleted host metrics older than the retention period.',
+  cleanup_jobs: tr('Deletes jobs, their output and events older than the retention period.'),
+  cleanup_activitystream: tr('Deletes activity stream entries older than the retention period.'),
+  cleanup_sessions: tr('Removes expired browser sessions.'),
+  cleanup_tokens: tr('Removes expired API tokens.'),
+  cleanup_host_metrics: tr('Removes soft-deleted host metrics older than the retention period.'),
 }
 
 function LaunchDialog({ t, onClose }: { t: SJT; onClose: () => void }) {
@@ -52,15 +53,15 @@ function LaunchDialog({ t, onClose }: { t: SJT; onClose: () => void }) {
   }
   return (
     <Dialog
-      title={`Run ${t.name}`}
+      title={tr('Run {name}', { name: t.name })}
       onClose={onClose}
       footer={
         <>
           <button className="btn" onClick={onClose}>
-            Cancel
+            {tr('Cancel')}
           </button>
           <button className={`btn ${dry || !usesDays(t.job_type) ? 'primary' : 'danger solid'}`} disabled={busy || (usesDays(t.job_type) && !(Number(days) >= 0 && days !== ''))} onClick={launch}>
-            {busy ? 'Starting…' : dry && usesDays(t.job_type) ? 'Run dry run' : 'Run now'}
+            {busy ? tr('Starting…') : dry && usesDays(t.job_type) ? tr('Run dry run') : tr('Run now')}
           </button>
         </>
       }
@@ -68,8 +69,8 @@ function LaunchDialog({ t, onClose }: { t: SJT; onClose: () => void }) {
       <p style={{ margin: 0 }}>{explain[t.job_type] ?? t.description}</p>
       {usesDays(t.job_type) && (
         <>
-          <TextInput label="Keep the last" type="number" value={days} onChange={setDays} help="Days of history to keep; older records are deleted." autoFocus />
-          <Check label="Dry run" checked={dry} onChange={setDry} help="Report what would be deleted without deleting anything." />
+          <TextInput label={tr('Keep the last')} type="number" value={days} onChange={setDays} help={tr('Days of history to keep; older records are deleted.')} autoFocus />
+          <Check label={tr('Dry run')} checked={dry} onChange={setDry} help={tr('Report what would be deleted without deleting anything.')} />
         </>
       )}
       <FormError error={error} />
@@ -83,10 +84,10 @@ export function ManagementList() {
   const nav = useNavigate()
   return (
     <div className="page">
-      <PageHead title="Management jobs" subtitle="Built-in housekeeping that keeps the database small. Each runs on a schedule you can change." bordered={false} />
+      <PageHead title={tr('Management jobs')} subtitle={tr('Built-in housekeeping that keeps the database small. Each runs on a schedule you can change.')} bordered={false} />
       <div className="page-body">
         <DataTable
-          label="Management jobs"
+          label={tr('Management jobs')}
           rows={list.data?.results}
           loading={list.isPending}
           error={list.error}
@@ -95,7 +96,7 @@ export function ManagementList() {
           columns={[
             {
               key: 'name',
-              header: 'Job',
+              header: tr('Job'),
               render: (t) => (
                 <div>
                   <Link to={`/management-jobs/${t.id}`} className="cell-title">
@@ -105,17 +106,17 @@ export function ManagementList() {
                 </div>
               ),
             },
-            { key: 'runs', header: 'Recent runs', render: (t) => <RunBars jobs={t.summary_fields.recent_jobs} slots={8} /> },
-            { key: 'last', header: 'Last run', className: 'small nowrap', render: (t) => (t.last_job_run ? <Status status={t.last_job_failed ? 'failed' : 'successful'}><Ago at={t.last_job_run} /></Status> : <span className="faint">Never</span>) },
-            { key: 'next', header: 'Next run', className: 'small nowrap', render: (t) => <Upcoming at={t.next_job_run} /> },
+            { key: 'runs', header: tr('Recent runs'), render: (t) => <RunBars jobs={t.summary_fields.recent_jobs} slots={8} /> },
+            { key: 'last', header: tr('Last run'), className: 'small nowrap', render: (t) => (t.last_job_run ? <Status status={t.last_job_failed ? 'failed' : 'successful'}><Ago at={t.last_job_run} /></Status> : <span className="faint">{tr('Never')}</span>) },
+            { key: 'next', header: tr('Next run'), className: 'small nowrap', render: (t) => <Upcoming at={t.next_job_run} /> },
             {
               key: 'x',
-              header: <span className="sr-only">Actions</span>,
+              header: <span className="sr-only">{tr('Actions')}</span>,
               className: 'end',
               render: (t) => (
                 <button className="btn sm" onClick={() => setLaunch(t)}>
                   <Icon name="play" size={10} />
-                  Run
+                  {tr('Run')}
                 </button>
               ),
             },
@@ -140,22 +141,22 @@ export function ManagementDetail() {
   return (
     <div className="page">
       <PageHead
-        crumbs={[{ label: 'Management jobs', to: '/management-jobs' }, { label: sjt.name }]}
+        crumbs={[{ label: tr('Management jobs'), to: '/management-jobs' }, { label: sjt.name }]}
         title={sjt.name}
         subtitle={explain[sjt.job_type] ?? sjt.description}
         actions={
           <button className="btn primary" onClick={() => setLaunch(true)}>
             <Icon name="play" size={10} />
-            Run
+            {tr('Run')}
           </button>
         }
         tabs={
           <>
             <Tab to={base} end>
-              Jobs
+              {tr('Jobs')}
             </Tab>
-            <Tab to={`${base}/schedules`}>Schedules</Tab>
-            <Tab to={`${base}/notifications`}>Notifications</Tab>
+            <Tab to={`${base}/schedules`}>{tr('Schedules')}</Tab>
+            <Tab to={`${base}/notifications`}>{tr('Notifications')}</Tab>
           </>
         }
       />
@@ -183,7 +184,7 @@ export function ManagementDetail() {
                     </tbody>
                   </table>
                 ) : (
-                  <Empty title="Never run">It runs on its schedule, or now with Run.</Empty>
+                  <Empty title={tr('Never run')}>{tr('It runs on its schedule, or now with Run.')}</Empty>
                 )}
               </Panel>
             }

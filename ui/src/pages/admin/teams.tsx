@@ -14,6 +14,7 @@ import { Ago, Avatar, Empty, ErrorNote, Loading, PageHead, Panel, Tab } from '..
 import { userName } from '../../lib/format'
 import { ListPage, useDelete } from './common'
 import { BulkDelete } from '../../components/BulkBar'
+import { tr, trn } from '../../lib/i18n'
 
 type Team = Base & { organization: number }
 
@@ -22,24 +23,24 @@ export function TeamList() {
   const { scope } = useOrg()
   return (
     <ListPage<Team>
-      title="Teams"
-      subtitle="Grant roles to a team once; every member gets them."
+      title={tr('Teams')}
+      subtitle={tr('Grant roles to a team once; every member gets them.')}
       path="teams/"
       params={scope}
-      keys={{ org: { field: 'organization__name', help: 'organization name' } }}
-      placeholder="Filter teams…  try  org:Acme*"
-      bulk={(sel) => <BulkDelete sel={sel} resource="teams" noun={['team', 'teams']} name={(t) => t.name} note="Their members lose the roles granted to the team." />}
+      keys={{ org: { field: 'organization__name', help: tr('organization name') } }}
+      placeholder={tr('Filter teams…  try  org:Acme*')}
+      bulk={(sel) => <BulkDelete sel={sel} resource="teams" noun={['team', 'teams']} name={(t) => t.name} note={tr('Their members lose the roles granted to the team.')} />}
       actions={
         <Link to="/teams/new" className="btn primary">
           <Icon name="plus" size={14} />
-          New team
+          {tr('New team')}
         </Link>
       }
       onOpen={(t) => nav(`/teams/${t.id}`)}
       columns={[
         {
           key: 'name',
-          header: 'Team',
+          header: tr('Team'),
           sort: 'name',
           render: (t) => (
             <div className="row">
@@ -55,12 +56,12 @@ export function TeamList() {
         },
         {
           key: 'org',
-          header: 'Organization',
+          header: tr('Organization'),
           render: (t) => (t.summary_fields.organization ? <Link to={`/organizations/${t.organization}`}>{t.summary_fields.organization.name}</Link> : '—'),
         },
-        { key: 'modified', header: 'Changed', sort: 'modified', className: 'small faint nowrap', render: (t) => <Ago at={t.modified} /> },
+        { key: 'modified', header: tr('Changed'), sort: 'modified', className: 'small faint nowrap', render: (t) => <Ago at={t.modified} /> },
       ]}
-      empty={<Empty title="No teams yet">Teams make access manageable: grant roles to the team, then add people.</Empty>}
+      empty={<Empty title={tr('No teams yet')}>{tr('Teams make access manageable: grant roles to the team, then add people.')}</Empty>}
     />
   )
 }
@@ -106,17 +107,17 @@ function TeamForm({ team }: { team?: Team }) {
       }}
     >
       <div className="form-grid">
-        <TextInput label="Name" value={f.values.name} onChange={(v) => f.set('name', v)} error={f.errors.name} autoFocus={!team} />
-        <Lookup label="Organization" resource="organizations/" value={organization} onChange={(v) => f.set('organization', v)} error={f.errors.organization} />
-        <TextArea label="Description" optional rows={2} value={f.values.description} onChange={(v) => f.set('description', v)} />
+        <TextInput label={tr('Name')} value={f.values.name} onChange={(v) => f.set('name', v)} error={f.errors.name} autoFocus={!team} />
+        <Lookup label={tr('Organization')} resource="organizations/" value={organization} onChange={(v) => f.set('organization', v)} error={f.errors.organization} />
+        <TextArea label={tr('Description')} optional rows={2} value={f.values.description} onChange={(v) => f.set('description', v)} />
       </div>
       <FormError error={error} />
       <div className="form-actions">
         <button className="btn primary" disabled={busy || !f.values.name.trim() || !organization}>
-          {busy ? 'Saving…' : team ? 'Save changes' : 'Create team'}
+          {busy ? tr('Saving…') : team ? tr('Save changes') : tr('Create team')}
         </button>
         <button type="button" className="btn ghost" onClick={() => nav(team ? `/teams/${team.id}` : '/teams')}>
-          Cancel
+          {tr('Cancel')}
         </button>
       </div>
     </form>
@@ -126,7 +127,7 @@ function TeamForm({ team }: { team?: Team }) {
 export function TeamNew() {
   return (
     <div className="page">
-      <PageHead crumbs={[{ label: 'Teams', to: '/teams' }, { label: 'New' }]} title="New team" />
+      <PageHead crumbs={[{ label: tr('Teams'), to: '/teams' }, { label: tr('New') }]} title={tr('New team')} />
       <div className="page-body">
         <TeamForm />
       </div>
@@ -157,28 +158,28 @@ export function TeamDetail() {
   if (!team.data) return <Loading />
   const t = team.data
   const base = `/teams/${id}`
-  const memberCount = (members.data?.users.filter((a) => a.summary_fields.role_definition?.name === 'Team Member').length ?? 0) + (members.data?.teams.filter((a) => a.summary_fields.role_definition?.name === 'Team Member').length ?? 0)
+  const memberCount = (members.data?.users.filter((a) => a.summary_fields.role_definition?.name === tr('Team Member')).length ?? 0) + (members.data?.teams.filter((a) => a.summary_fields.role_definition?.name === tr('Team Member')).length ?? 0)
   return (
     <div className="page">
       <PageHead
-        crumbs={[{ label: 'Teams', to: '/teams' }, { label: t.name }]}
+        crumbs={[{ label: tr('Teams'), to: '/teams' }, { label: t.name }]}
         title={t.name}
         subtitle={
           <>
-            Team in <Link to={`/organizations/${t.organization}`}>{t.summary_fields.organization?.name}</Link>
-            {t.description ? ` · ${t.description}` : ''}
+            {tr('Team in')} <Link to={`/organizations/${t.organization}`}>{t.summary_fields.organization?.name}</Link>
+            {t.description ? tr(' · {description}', { description: t.description }) : ''}
           </>
         }
         actions={
           <>
             {t.summary_fields.user_capabilities?.edit && (
               <Link className="btn" to={`${base}/edit`}>
-                Edit
+                {tr('Edit')}
               </Link>
             )}
             {t.summary_fields.user_capabilities?.delete && (
-              <button className="btn danger" onClick={() => del({ path: `teams/${id}/`, name: t.name, what: 'team', then: '/teams', body: <p style={{ margin: 0 }}>Members lose every role granted through this team.</p> })}>
-                Delete
+              <button className="btn danger" onClick={() => del({ path: `teams/${id}/`, name: t.name, what: tr('team'), then: '/teams', body: <p style={{ margin: 0 }}>{tr('Members lose every role granted through this team.')}</p> })}>
+                {tr('Delete')}
               </button>
             )}
           </>
@@ -186,11 +187,11 @@ export function TeamDetail() {
         tabs={
           <>
             <Tab to={base} end n={memberCount || undefined}>
-              Members
+              {tr('Members')}
             </Tab>
-            <Tab to={`${base}/roles`}>Roles</Tab>
-            <Tab to={`${base}/parents`}>Member of</Tab>
-            <Tab to={`${base}/access`}>Access</Tab>
+            <Tab to={`${base}/roles`}>{tr('Roles')}</Tab>
+            <Tab to={`${base}/parents`}>{tr('Member of')}</Tab>
+            <Tab to={`${base}/access`}>{tr('Access')}</Tab>
           </>
         }
       />
@@ -235,7 +236,7 @@ function TeamMembers({ team }: { team: Team }) {
     })),
   ].sort((x, y) => x.role.localeCompare(y.role) || x.name.localeCompare(y.name))
   const remove = async (r: Row) => {
-    if (!(await confirm({ title: `Remove ${r.name}?`, body: <p style={{ margin: 0 }}>{r.name} will no longer be {r.role === 'Member' ? 'a member of' : `${r.role.toLowerCase()} on`} {team.name}.</p>, confirm: 'Remove', danger: true }))) return
+    if (!(await confirm({ title: tr('Remove {name}?', { name: r.name }), body: <p style={{ margin: 0 }}>{r.name} {tr('will no longer be')} {r.role === 'Member' ? tr('a member of') : tr('{toLowerCase} on', { toLowerCase: r.role.toLowerCase() })} {team.name}.</p>, confirm: tr('Remove'), danger: true }))) return
     try {
       await api.del(`role_${r.kind}_assignments/${r.a.id}/`)
       invalidate('role_user_assignments', 'role_team_assignments', 'role_access')
@@ -246,23 +247,23 @@ function TeamMembers({ team }: { team: Team }) {
   return (
     <div className="stack" style={{ gap: 12 }}>
       <div className="row">
-        <span className="small faint grow">Members inherit every role granted to {team.name}. Team admins can add and remove members.</span>
+        <span className="small faint grow">{tr('Members inherit every role granted to')} {team.name}{tr('. Team admins can add and remove members.')}</span>
         <button className="btn primary" onClick={() => setAdding(true)}>
           <Icon name="plus" size={14} />
-          Add members
+          {tr('Add members')}
         </button>
       </div>
       <DataTable
-        label="Members"
+        label={tr('Members')}
         rows={rows}
         rowKey={(r) => r.key}
         loading={members.isPending}
         error={members.error}
-        empty={<Empty title="Nobody is in this team yet" action={<button className="btn" onClick={() => setAdding(true)}>Add members</button>} />}
+        empty={<Empty title={tr('Nobody is in this team yet')} action={<button className="btn" onClick={() => setAdding(true)}>{tr('Add members')}</button>} />}
         columns={[
           {
             key: 'who',
-            header: 'Member',
+            header: tr('Member'),
             render: (r) => (
               <div className="row">
                 <Avatar name={r.name} size="sm" />
@@ -275,16 +276,16 @@ function TeamMembers({ team }: { team: Team }) {
               </div>
             ),
           },
-          { key: 'role', header: 'Role', render: (r) => (r.role === 'Member' ? 'Member' : <span className="tag">{r.role}</span>) },
-          { key: 'since', header: 'Since', className: 'small faint nowrap', render: (r) => <Ago at={r.a.created} /> },
+          { key: 'role', header: tr('Role'), render: (r) => (r.role === 'Member' ? 'Member' : <span className="tag">{r.role}</span>) },
+          { key: 'since', header: tr('Since'), className: 'small faint nowrap', render: (r) => <Ago at={r.a.created} /> },
           {
             key: 'x',
-            header: <span className="sr-only">Actions</span>,
+            header: <span className="sr-only">{tr('Actions')}</span>,
             className: 'end',
             render: (r) =>
               r.a.summary_fields.user_capabilities?.delete !== false && (
                 <button className="btn sm ghost" onClick={() => remove(r)}>
-                  Remove
+                  {tr('Remove')}
                 </button>
               ),
           },
@@ -304,7 +305,7 @@ function AddTeamMembers({ team, onClose }: { team: Team; onClose: () => void }) 
   const [busy, setBusy] = useState(false)
   const invalidate = useInvalidate()
   const toast = useToast()
-  const role = roles.data?.find((r) => r.name === (admin ? 'Team Admin' : 'Team Member'))
+  const role = roles.data?.find((r) => r.name === (admin ? tr('Team Admin') : tr('Team Member')))
   const submit = async () => {
     if (!role) return
     setBusy(true)
@@ -312,7 +313,7 @@ function AddTeamMembers({ team, onClose }: { team: Team; onClose: () => void }) 
       for (const u of users) await api.post('role_user_assignments/', { role_definition: role.id, user: u.id, object_id: team.id })
       for (const t of teams) await api.post('role_team_assignments/', { role_definition: role.id, team: t.id, object_id: team.id })
       invalidate('role_user_assignments', 'role_team_assignments', 'role_access')
-      toast(`Added ${users.length + teams.length} to ${team.name}`)
+      toast(trn(users.length + teams.length, 'Added {n} member to {name}', 'Added {n} members to {name}', { name: team.name }))
       onClose()
     } catch (e) {
       setError(e)
@@ -322,21 +323,21 @@ function AddTeamMembers({ team, onClose }: { team: Team; onClose: () => void }) 
   }
   return (
     <Dialog
-      title={`Add to ${team.name}`}
+      title={tr('Add to {name}', { name: team.name })}
       onClose={onClose}
       footer={
         <>
           <button className="btn" onClick={onClose}>
-            Cancel
+            {tr('Cancel')}
           </button>
           <button className="btn primary" disabled={busy || !role || users.length + teams.length === 0} onClick={submit}>
-            Add
+            {tr('Add')}
           </button>
         </>
       }
     >
       <MultiLookup
-        label="People"
+        label={tr('People')}
         resource="users/"
         order="username"
         values={users}
@@ -346,20 +347,20 @@ function AddTeamMembers({ team, onClose }: { team: Team; onClose: () => void }) 
         full
       />
       <MultiLookup
-        label="Teams"
+        label={tr('Teams')}
         optional
         resource="teams/"
         params={{ not__id: team.id }}
         values={teams}
         onChange={setTeams}
         meta={(r) => r.summary_fields?.organization?.name}
-        help="Members of a nested team are members of this team too."
+        help={tr('Members of a nested team are members of this team too.')}
         full
       />
       <label className="check">
         <input type="checkbox" checked={admin} onChange={(e) => setAdmin(e.target.checked)} />
         <span>
-          Make them team admins <span className="faint">— can manage membership</span>
+          {tr('Make them team admins')} <span className="faint">{tr('— can manage membership')}</span>
         </span>
       </label>
       <FormError error={error} />
@@ -378,7 +379,7 @@ function TeamParents({ team }: { team: Team }) {
   const [picked, setPicked] = useState<Ref[]>([])
   const invalidate = useInvalidate()
   const toast = useToast()
-  const member = roles.data?.find((r) => r.name === 'Team Member')
+  const member = roles.data?.find((r) => r.name === tr('Team Member'))
   const add = async () => {
     try {
       for (const p of picked) await api.post('role_team_assignments/', { role_definition: member?.id, team: team.id, object_id: p.id })
@@ -389,14 +390,14 @@ function TeamParents({ team }: { team: Team }) {
       toast((e as Error).message, 'error')
     }
   }
-  const rows = (parents.data ?? []).filter((a) => a.summary_fields.role_definition?.name === 'Team Member')
+  const rows = (parents.data ?? []).filter((a) => a.summary_fields.role_definition?.name === tr('Team Member'))
   return (
     <div className="stack" style={{ gap: 12 }}>
       <div className="row">
-        <span className="small faint grow">Everyone in {team.name} is also a member of these teams and gets their roles.</span>
+        <span className="small faint grow">{tr('Everyone in')} {team.name} {tr('is also a member of these teams and gets their roles.')}</span>
         <button className="btn" onClick={() => setAdding(true)}>
           <Icon name="plus" size={14} />
-          Join a team
+          {tr('Join a team')}
         </button>
       </div>
       <Panel pad={false}>
@@ -412,31 +413,31 @@ function TeamParents({ team }: { team: Team }) {
                     invalidate('role_team_assignments', 'role_access')
                   }}
                 >
-                  Leave
+                  {tr('Leave')}
                 </button>
               </li>
             ))}
           </ul>
         ) : (
-          <Empty title="Not nested in any team">{parents.isPending ? 'Loading…' : 'This team only has the roles granted to it directly.'}</Empty>
+          <Empty title={tr('Not nested in any team')}>{parents.isPending ? tr('Loading…') : tr('This team only has the roles granted to it directly.')}</Empty>
         )}
       </Panel>
       {adding && (
         <Dialog
-          title={`Make ${team.name} a member of…`}
+          title={tr('Make {name} a member of…', { name: team.name })}
           onClose={() => setAdding(false)}
           footer={
             <>
               <button className="btn" onClick={() => setAdding(false)}>
-                Cancel
+                {tr('Cancel')}
               </button>
               <button className="btn primary" disabled={!picked.length || !member} onClick={add}>
-                Add
+                {tr('Add')}
               </button>
             </>
           }
         >
-          <MultiLookup label="Teams" resource="teams/" params={{ not__id: team.id }} values={picked} onChange={setPicked} meta={(r) => r.summary_fields?.organization?.name} full />
+          <MultiLookup label={tr('Teams')} resource="teams/" params={{ not__id: team.id }} values={picked} onChange={setPicked} meta={(r) => r.summary_fields?.organization?.name} full />
         </Dialog>
       )}
     </div>

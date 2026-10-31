@@ -72,6 +72,7 @@ on :8052. `uv run --no-project scripts/seed-demo.py --jobs` fills it with demo c
 Every environment variable and setting is in the [configuration reference](docs/configuration.md),
 generated from the code (`go run ./cmd/gendocs`). Installing, upgrading, high availability,
 migrating from AWX and the master key: the [operator guide](docs/operations.md).
+The UI is in English and French; adding a language: [translations](docs/translations.md).
 
 Capacity follows AWX's formula: 4 forks per CPU and one fork per 100 MB of memory after 2 GiB
 (none set aside in Kubernetes). AWX's `SYSTEM_TASK_FORKS_CPU` and `SYSTEM_TASK_FORKS_MEM` change

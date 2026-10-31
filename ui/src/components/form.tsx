@@ -4,6 +4,7 @@ import { api, type Page } from '../api/client'
 import type { Ref } from '../api/types'
 import { moveEarlier } from '../lib/relations'
 import { Icon } from './icons'
+import { tr } from '../lib/i18n'
 
 export function Field({
   label,
@@ -25,7 +26,7 @@ export function Field({
   return (
     <div className={`field ${full ? 'full' : ''}`}>
       <label htmlFor={htmlFor}>
-        {label} {optional && <span className="opt">· optional</span>}
+        {label} {optional && <span className="opt">{tr('· optional')}</span>}
       </label>
       {children}
       {error ? <span className="err">{error}</span> : help ? <span className="help">{help}</span> : null}
@@ -208,7 +209,7 @@ export function VarsEditor({
       full
       htmlFor={id}
       error={error ?? parseError ?? undefined}
-      help={help ?? 'YAML or JSON. A mapping of variable names to values.'}
+      help={help ?? tr('YAML or JSON. A mapping of variable names to values.')}
     >
       <textarea
         id={id}
@@ -227,7 +228,7 @@ export function varsError(text: string): string | null {
   if (!text.trim()) return null
   try {
     const v = parseYaml(text)
-    if (v !== null && (typeof v !== 'object' || Array.isArray(v))) return 'Variables must be a mapping (key: value).'
+    if (v !== null && (typeof v !== 'object' || Array.isArray(v))) return tr('Variables must be a mapping (key: value).')
     return null
   } catch (e) {
     return (e as Error).message.split('\n')[0]
@@ -340,7 +341,7 @@ export function MultiLookup({
   const id = useId()
   return (
     <Field label={label} error={error} help={help} optional={optional} htmlFor={id} full={full}>
-      <Picker id={id} resource={resource} params={params} placeholder="Add…" display={display} meta={meta} order={order} values={values} onChange={onChange} ordered={ordered} />
+      <Picker id={id} resource={resource} params={params} placeholder={tr('Add…')} display={display} meta={meta} order={order} values={values} onChange={onChange} ordered={ordered} />
     </Field>
   )
 }
@@ -423,11 +424,11 @@ function Picker({
               {ordered && <span className="faint">{i + 1}.</span>}
               {display(v)}
               {ordered && i > 0 && (
-                <button type="button" aria-label={`Move ${display(v)} earlier`} title="Move earlier" onClick={() => onChange(moveEarlier(values, i))}>
+                <button type="button" aria-label={tr('Move {display} earlier', { display: display(v) })} title={tr('Move earlier')} onClick={() => onChange(moveEarlier(values, i))}>
                   <Icon name="arrowLeft" size={12} />
                 </button>
               )}
-              <button type="button" aria-label={`Remove ${display(v)}`} onClick={() => onChange(values.filter((x) => x.id !== v.id))}>
+              <button type="button" aria-label={tr('Remove {display}', { display: display(v) })} onClick={() => onChange(values.filter((x) => x.id !== v.id))}>
                 <Icon name="x" size={12} />
               </button>
             </span>
@@ -464,15 +465,15 @@ function Picker({
           aria-autocomplete="list"
         />
         {single && values[0] && (
-          <button type="button" className="btn ghost sm icon" aria-label="Clear" onClick={() => onChange([])}>
+          <button type="button" className="btn ghost sm icon" aria-label={tr('Clear')} onClick={() => onChange([])}>
             <Icon name="x" size={12} />
           </button>
         )}
       </div>
       {open && (
         <div className="popover" role="listbox">
-          {loading && visible.length === 0 && <div className="opt faint">Searching…</div>}
-          {!loading && visible.length === 0 && <div className="opt faint">No matches</div>}
+          {loading && visible.length === 0 && <div className="opt faint">{tr('Searching…')}</div>}
+          {!loading && visible.length === 0 && <div className="opt faint">{tr('No matches')}</div>}
           {visible.map((r, i) => (
             <div
               key={r.id}

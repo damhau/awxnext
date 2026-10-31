@@ -1,13 +1,14 @@
+import { tr } from './i18n'
 /** Sections of Settings, Jobs. */
 export function jobsSection(key: string): string {
-  if (/^JOB_EVENTS_(ARCHIVE_|HOT_DAYS)/.test(key)) return 'Event archives'
-  if (/TIMEOUT/.test(key)) return 'Timeouts'
-  if (/GALAXY|COLLECTIONS|ROLES/.test(key)) return 'Content'
-  if (/ISOLATION|MOUNT|TASK_ENV|CALLBACK/.test(key)) return 'Execution'
-  return 'General'
+  if (/^JOB_EVENTS_(ARCHIVE_|HOT_DAYS)/.test(key)) return tr('Event archives')
+  if (/TIMEOUT/.test(key)) return tr('Timeouts')
+  if (/GALAXY|COLLECTIONS|ROLES/.test(key)) return tr('Content')
+  if (/ISOLATION|MOUNT|TASK_ENV|CALLBACK/.test(key)) return tr('Execution')
+  return tr('General')
 }
 
-export const jobsSections = ['General', 'Timeouts', 'Content', 'Execution', 'Event archives']
+export const jobsSections = [tr('General'), tr('Timeouts'), tr('Content'), tr('Execution'), tr('Event archives')]
 
 const archiveOrder = [
   'JOB_EVENTS_HOT_DAYS',

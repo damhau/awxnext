@@ -8,6 +8,7 @@ import { BulkBar, useSelection, type Selection } from '../../components/BulkBar'
 import { DataTable, Pager, useListState, type Column } from '../../components/table'
 import { PageHead } from '../../components/ui'
 import { compile, type KeyTable } from '../../lib/query'
+import { tr } from '../../lib/i18n'
 
 /** The query box used by list pages: free text searches, key:value terms filter. */
 export function FilterBox({ value, onChange, placeholder, keys }: { value: string; onChange: (v: string) => void; placeholder: string; keys?: KeyTable }) {
@@ -22,7 +23,7 @@ export function FilterBox({ value, onChange, placeholder, keys }: { value: strin
     <div className="filterbar">
       <label className="filter-input" style={{ flex: '1 1 420px' }}>
         <Icon name="search" size={14} />
-        <span className="sr-only">Filter</span>
+        <span className="sr-only">{tr('Filter')}</span>
         <input
           data-filter
           value={draft}
@@ -42,7 +43,7 @@ export function FilterBox({ value, onChange, placeholder, keys }: { value: strin
           <button
             type="button"
             className="btn ghost sm icon"
-            aria-label="Clear filter"
+            aria-label={tr('Clear filter')}
             onClick={() => {
               setDraft('')
               onChange('')
@@ -52,10 +53,10 @@ export function FilterBox({ value, onChange, placeholder, keys }: { value: strin
           </button>
         )}
       </label>
-      {unknown.length > 0 && <span className="small fail-text">Unknown filter {unknown.map((u) => `${u}:`).join(', ')}</span>}
+      {unknown.length > 0 && <span className="small fail-text">{tr('Unknown filter')} {unknown.map((u) => `${u}:`).join(', ')}</span>}
       {keys && (
         <span className="small faint" title={Object.entries(keys).map(([k, s]) => `${k}: ${s.help ?? s.field}`).join('\n')}>
-          Filters{' '}
+          {tr('Filters')}{' '}
           {Object.keys(keys).map((k) => (
             <span key={k} className="mono">
               {k}:{' '}
@@ -76,7 +77,7 @@ export function ListPage<T extends { id: number }>({
   params,
   columns,
   keys,
-  placeholder = 'Filter by name…',
+  placeholder = tr('Filter by name…'),
   order = 'name',
   empty,
   onOpen,
@@ -135,8 +136,8 @@ export function ListPage<T extends { id: number }>({
             list.data && list.data.count > 0 ? (
               <div className="table-foot">
                 <span>
-                  {list.data.count} {list.data.count === 1 ? 'item' : 'items'}
-                  {ls.q ? ' match the filter' : ''}
+                  {list.data.count} {list.data.count === 1 ? tr('item') : tr('items')}
+                  {ls.q ? tr(' match the filter') : ''}
                 </span>
                 <Pager count={list.data.count} page={ls.page} pageSize={ls.pageSize} onPage={ls.setPage} />
               </div>
@@ -156,15 +157,15 @@ export function useDelete() {
   const nav = useNavigate()
   return async (opts: { path: string; name: string; what: string; body?: ReactNode; then?: string; invalidate?: string[] }) => {
     const ok = await confirm({
-      title: `Delete ${opts.what} “${opts.name}”?`,
-      body: opts.body ?? <p style={{ margin: 0 }}>This cannot be undone.</p>,
-      confirm: `Delete ${opts.what}`,
+      title: tr('Delete {what} “{name}”?', { what: opts.what, name: opts.name }),
+      body: opts.body ?? <p style={{ margin: 0 }}>{tr('This cannot be undone.')}</p>,
+      confirm: tr('Delete {what}', { what: opts.what }),
       danger: true,
     })
     if (!ok) return false
     try {
       await api.del(opts.path)
-      toast(`Deleted ${opts.name}`)
+      toast(tr('Deleted {name}', { name: opts.name }))
       invalidate(...(opts.invalidate ?? [opts.path.split('/')[0]]))
       if (opts.then) nav(opts.then)
       return true
@@ -209,7 +210,7 @@ export function CopyButton({ text, label = 'Copy' }: { text: string; label?: str
       }}
     >
       <Icon name={done ? 'check' : 'copy'} size={14} />
-      {done ? 'Copied' : label}
+      {done ? tr('Copied') : label}
     </button>
   )
 }

@@ -1,3 +1,4 @@
+import { tr } from './i18n'
 // Instance group membership as the server applies AWX's policies: the
 // instances a group lists, then its minimum, then its percentage. Adding
 // an instance by hand lists it; the installer's groups (default and
@@ -35,7 +36,7 @@ export function describePolicy(g: GroupPolicy): string {
     if (g.policy_instance_minimum > 0) auto.push(`at least ${instances(g.policy_instance_minimum)}`)
     if (g.policy_instance_percentage > 0) auto.push(`${g.policy_instance_percentage}% of instances`)
   }
-  if (!auto.length) return listed ? `Only the ${listed === 1 ? 'listed instance' : `${listed} listed instances`}.` : 'Only instances added by hand.'
+  if (!auto.length) return listed ? `Only the ${listed === 1 ? 'listed instance' : `${listed} listed instances`}.` : tr('Only instances added by hand.')
   const text = auto.join(' and ')
   return `${text[0].toUpperCase()}${text.slice(1)}${listed ? `, plus ${listed} listed` : ''}.`
 }
@@ -55,8 +56,8 @@ export function checkGroupForm(v: GroupFormValues): Partial<Record<keyof GroupFo
     const s = v[k].trim()
     if (s === '') continue
     if (!/^-?\d+$/.test(s)) errors[k] = 'A valid integer is required.'
-    else if (Number(s) < 0) errors[k] = 'Ensure this value is greater than or equal to 0.'
-    else if (k === 'policy_instance_percentage' && Number(s) > 100) errors[k] = 'Ensure this value is less than or equal to 100.'
+    else if (Number(s) < 0) errors[k] = tr('Ensure this value is greater than or equal to 0.')
+    else if (k === 'policy_instance_percentage' && Number(s) > 100) errors[k] = tr('Ensure this value is less than or equal to 100.')
   }
   const seen = new Set<string>()
   for (const h of parseHosts(v.policy_instance_list)) {

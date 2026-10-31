@@ -11,15 +11,16 @@ import { describeSource, type ChoicesFrom } from '../templates/surveyLogic'
 import './automation.css'
 import { SavedLabelsAndGroupsFields, useSavedLabelsAndGroups } from './SavedLabelsAndGroups'
 import { browserZone, DAY_NAMES, DAYS, defaultModel, describe, MONTHS, parseRRule, toRRule, type Day, type Freq, type RuleModel } from './rrule'
+import { tr } from '../../lib/i18n'
 
 const FREQS: [Freq, string, string][] = [
-  ['once', 'Once', ''],
-  ['MINUTELY', 'Minutes', 'minutes'],
-  ['HOURLY', 'Hours', 'hours'],
-  ['DAILY', 'Daily', 'days'],
-  ['WEEKLY', 'Weekly', 'weeks'],
-  ['MONTHLY', 'Monthly', 'months'],
-  ['YEARLY', 'Yearly', 'years'],
+  ['once', tr('Once'), ''],
+  ['MINUTELY', tr('Minutes'), 'minutes'],
+  ['HOURLY', tr('Hours'), 'hours'],
+  ['DAILY', tr('Daily'), 'days'],
+  ['WEEKLY', tr('Weekly'), 'weeks'],
+  ['MONTHLY', tr('Monthly'), 'months'],
+  ['YEARLY', tr('Yearly'), 'years'],
 ]
 
 function useZones() {
@@ -91,7 +92,7 @@ export function RRuleEditor({ value, onChange, error }: { value: string; onChang
       {!advanced && model ? (
         <>
           <fieldset>
-            <legend>Repeats</legend>
+            <legend>{tr('Repeats')}</legend>
             <div className="segmented">
               {FREQS.map(([f, label]) => (
                 <label key={f} className={model.freq === f ? 'on' : ''}>
@@ -104,7 +105,7 @@ export function RRuleEditor({ value, onChange, error }: { value: string; onChang
 
           {model.freq !== 'once' && (
             <div className="rr-row">
-              <label htmlFor={ids.every}>Every</label>
+              <label htmlFor={ids.every}>{tr('Every')}</label>
               <input id={ids.every} className="input rr-num" type="number" min={1} value={model.interval} onChange={(e) => set({ interval: Math.max(1, Number(e.target.value) || 1) })} />
               <span>{model.interval === 1 ? unit.replace(/s$/, '') : unit}</span>
             </div>
@@ -112,7 +113,7 @@ export function RRuleEditor({ value, onChange, error }: { value: string; onChang
 
           {model.freq === 'WEEKLY' && (
             <fieldset>
-              <legend>On</legend>
+              <legend>{tr('On')}</legend>
               <div className="segmented rr-days">
                 {DAYS.map((d) => {
                   const on = model.byday.includes(d)
@@ -137,27 +138,27 @@ export function RRuleEditor({ value, onChange, error }: { value: string; onChang
 
           {model.freq === 'MONTHLY' && (
             <fieldset>
-              <legend>On</legend>
+              <legend>{tr('On')}</legend>
               <div className="stack" style={{ gap: 6 }}>
                 <label className="rr-row">
                   <input type="radio" name={ids.every + 'm'} checked={model.monthly === 'day'} onChange={() => set({ monthly: 'day' })} />
-                  Day
+                  {tr('Day')}
                   <input
                     className="input rr-num"
                     type="number"
                     min={1}
                     max={31}
-                    aria-label="Day of the month"
+                    aria-label={tr('Day of the month')}
                     value={model.monthday}
                     onFocus={() => model.monthly !== 'day' && set({ monthly: 'day' })}
                     onChange={(e) => set({ monthly: 'day', monthday: Math.min(31, Math.max(1, Number(e.target.value) || 1)) })}
                   />
-                  of the month
+                  {tr('of the month')}
                 </label>
                 <label className="rr-row">
                   <input type="radio" name={ids.every + 'm'} checked={model.monthly === 'weekday'} onChange={() => set({ monthly: 'weekday' })} />
-                  The
-                  <select className="select rr-sel" aria-label="Which week" value={model.setpos} onChange={(e) => set({ monthly: 'weekday', setpos: Number(e.target.value) })}>
+                  {tr('The')}
+                  <select className="select rr-sel" aria-label={tr('Which week')} value={model.setpos} onChange={(e) => set({ monthly: 'weekday', setpos: Number(e.target.value) })}>
                     {[
                       [1, 'first'],
                       [2, 'second'],
@@ -170,7 +171,7 @@ export function RRuleEditor({ value, onChange, error }: { value: string; onChang
                       </option>
                     ))}
                   </select>
-                  <select className="select rr-sel" aria-label="Weekday" value={model.setposDay} onChange={(e) => set({ monthly: 'weekday', setposDay: e.target.value as Day })}>
+                  <select className="select rr-sel" aria-label={tr('Weekday')} value={model.setposDay} onChange={(e) => set({ monthly: 'weekday', setposDay: e.target.value as Day })}>
                     {DAYS.map((d) => (
                       <option key={d} value={d}>
                         {DAY_NAMES[d]}
@@ -184,9 +185,9 @@ export function RRuleEditor({ value, onChange, error }: { value: string; onChang
 
           {model.freq === 'YEARLY' && (
             <div className="rr-row">
-              <span>On</span>
-              <input className="input rr-num" type="number" min={1} max={31} aria-label="Day" value={model.monthday} onChange={(e) => set({ monthday: Math.min(31, Math.max(1, Number(e.target.value) || 1)) })} />
-              <select className="select rr-sel" aria-label="Month" value={model.month} onChange={(e) => set({ month: Number(e.target.value) })}>
+              <span>{tr('On')}</span>
+              <input className="input rr-num" type="number" min={1} max={31} aria-label={tr('Day')} value={model.monthday} onChange={(e) => set({ monthday: Math.min(31, Math.max(1, Number(e.target.value) || 1)) })} />
+              <select className="select rr-sel" aria-label={tr('Month')} value={model.month} onChange={(e) => set({ month: Number(e.target.value) })}>
                 {MONTHS.map((m, i) => (
                   <option key={m} value={i + 1}>
                     {m}
@@ -198,52 +199,52 @@ export function RRuleEditor({ value, onChange, error }: { value: string; onChang
 
           <div className="rr-row wrap">
             <div className="field">
-              <label htmlFor={ids.start}>{model.freq === 'once' ? 'Date' : 'Starting'}</label>
+              <label htmlFor={ids.start}>{model.freq === 'once' ? tr('Date') : tr('Starting')}</label>
               <input id={ids.start} className="input" type="date" value={model.start.slice(0, 10)} onChange={(e) => e.target.value && set({ start: `${e.target.value}T${model.start.slice(11)}` })} />
             </div>
             <div className="field">
-              <label htmlFor={ids.time}>At</label>
+              <label htmlFor={ids.time}>{tr('At')}</label>
               <input id={ids.time} className="input" type="time" value={model.start.slice(11, 16)} onChange={(e) => e.target.value && set({ start: `${model.start.slice(0, 10)}T${e.target.value}` })} />
             </div>
             <div className="field grow" style={{ minWidth: 220 }}>
-              <label htmlFor={ids.tz}>Time zone</label>
+              <label htmlFor={ids.tz}>{tr('Time zone')}</label>
               <ZoneInput id={ids.tz} listId={ids.zones} value={model.tz} zones={zones.data?.map((z) => z.name) ?? []} onChange={(tz) => set({ tz })} />
             </div>
           </div>
 
           {model.freq !== 'once' && (
             <fieldset>
-              <legend>Ends</legend>
+              <legend>{tr('Ends')}</legend>
               <div className="stack" style={{ gap: 6 }}>
                 <label className="rr-row">
                   <input type="radio" name={ids.every + 'e'} checked={model.end === 'never'} onChange={() => set({ end: 'never' })} />
-                  Never
+                  {tr('Never')}
                 </label>
                 <label className="rr-row">
                   <input type="radio" name={ids.every + 'e'} checked={model.end === 'count'} onChange={() => set({ end: 'count' })} />
-                  After
+                  {tr('After')}
                   <input
                     id={ids.count}
                     className="input rr-num"
                     type="number"
                     min={1}
                     max={999}
-                    aria-label="Number of runs"
+                    aria-label={tr('Number of runs')}
                     value={model.count}
                     onFocus={() => model.end !== 'count' && set({ end: 'count' })}
                     onChange={(e) => set({ end: 'count', count: Math.min(999, Math.max(1, Number(e.target.value) || 1)) })}
                   />
-                  runs
+                  {tr('runs')}
                 </label>
                 <label className="rr-row">
                   <input type="radio" name={ids.every + 'e'} checked={model.end === 'until'} onChange={() => set({ end: 'until', until: model.until || model.start.slice(0, 10) })} />
-                  On
+                  {tr('On')}
                   <input
                     id={ids.until}
                     className="input"
                     style={{ width: 'auto' }}
                     type="date"
-                    aria-label="Last day"
+                    aria-label={tr('Last day')}
                     value={model.until}
                     min={model.start.slice(0, 10)}
                     onChange={(e) => set({ end: 'until', until: e.target.value })}
@@ -256,13 +257,13 @@ export function RRuleEditor({ value, onChange, error }: { value: string; onChang
           {model.freq !== 'once' && (
             <div className="field">
               <label htmlFor={ids.ex}>
-                Skip these dates <span className="opt">· optional</span>
+                {tr('Skip these dates')} <span className="opt">{tr('· optional')}</span>
               </label>
               <div className="rr-row wrap">
                 {model.exdates.map((d) => (
                   <span key={d} className="chip">
                     {d}
-                    <button type="button" aria-label={`Do not skip ${d}`} onClick={() => set({ exdates: model.exdates.filter((x) => x !== d) })}>
+                    <button type="button" aria-label={tr('Do not skip {d}', { d })} onClick={() => set({ exdates: model.exdates.filter((x) => x !== d) })}>
                       <Icon name="x" size={12} />
                     </button>
                   </span>
@@ -277,16 +278,16 @@ export function RRuleEditor({ value, onChange, error }: { value: string; onChang
                     setExDraft('')
                   }}
                 >
-                  Skip date
+                  {tr('Skip date')}
                 </button>
               </div>
-              <span className="help">Runs that would fall on these days at {model.start.slice(11, 16)} are left out (holidays, freeze days).</span>
+              <span className="help">{tr('Runs that would fall on these days at')} {model.start.slice(11, 16)} {tr('are left out (holidays, freeze days).')}</span>
             </div>
           )}
         </>
       ) : (
         <div className="field">
-          <label htmlFor={ids.text}>Rule</label>
+          <label htmlFor={ids.text}>{tr('Rule')}</label>
           <textarea
             id={ids.text}
             className="textarea mono"
@@ -300,22 +301,22 @@ export function RRuleEditor({ value, onChange, error }: { value: string; onChang
             aria-invalid={!!(error || previewError)}
           />
           <span className="help">
-            iCalendar text: a DTSTART and an RRULE, optionally EXRULE, RDATE and EXDATE, separated by spaces.
-            {!parsed.model && parsed.reason && value ? ` The form cannot show this rule: ${parsed.reason}` : ''}
+            {tr('iCalendar text: a DTSTART and an RRULE, optionally EXRULE, RDATE and EXDATE, separated by spaces.')}
+            {!parsed.model && parsed.reason && value ? tr(' The form cannot show this rule: {reason}', { reason: parsed.reason }) : ''}
           </span>
         </div>
       )}
 
       <div className="rr-summary">
         <div className="row wrap" style={{ gap: 10 }}>
-          <strong className="grow">{model ? describe(model) : 'Custom rule'}</strong>
+          <strong className="grow">{model ? describe(model) : tr('Custom rule')}</strong>
           {advanced ? (
             <button type="button" className="link-btn small" disabled={!model} title={model ? undefined : parsed.reason} onClick={() => model && setAdvanced(false)}>
-              Use the form
+              {tr('Use the form')}
             </button>
           ) : (
             <button type="button" className="link-btn small" onClick={() => setAdvanced(true)}>
-              Edit as text
+              {tr('Edit as text')}
             </button>
           )}
         </div>
@@ -323,18 +324,18 @@ export function RRuleEditor({ value, onChange, error }: { value: string; onChang
         {(error || previewError) && <div className="err small">{error || previewError}</div>}
         {preview.data && preview.data.utc.length > 0 && (
           <div className="rr-preview">
-            <span className="faint small">Next runs</span>
+            <span className="faint small">{tr('Next runs')}</span>
             <ol>
               {preview.data.utc.slice(0, 5).map((u, i) => (
                 <li key={u}>
                   <span className="mono">{model ? formatIn(u, model.tz) : preview.data!.local[i]}</span>
-                  {model && model.tz !== browserTz && <span className="faint"> · {formatIn(u, browserTz)} your time</span>}
+                  {model && model.tz !== browserTz && <span className="faint"> · {formatIn(u, browserTz)} {tr('your time')}</span>}
                 </li>
               ))}
             </ol>
           </div>
         )}
-        {preview.data && preview.data.utc.length === 0 && <div className="small faint">This rule has no future runs.</div>}
+        {preview.data && preview.data.utc.length === 0 && <div className="small faint">{tr('This rule has no future runs.')}</div>}
       </div>
     </div>
   )
@@ -517,10 +518,10 @@ export function ScheduleDialog({
       let id: number
       if (editing) id = (await api.patch<Any>(`schedules/${schedule!.id}/`, body)).id
       else if (template) id = (await api.post<Any>(`${templateResource(template.type)}/${template.id}/schedules/`, body)).id
-      else throw new Error('Choose what the schedule runs.')
+      else throw new Error(tr('Choose what the schedule runs.'))
       await rel.save(`schedules/${id}/`)
       invalidate('schedules', templateResource(template?.type ?? ''), 'unified_job_templates')
-      toast(editing ? `Schedule “${name}” saved` : `Schedule “${name}” created`)
+      toast(editing ? tr('Schedule “{name}” saved', { name }) : tr('Schedule “{name}” created', { name }))
       onClose()
     } catch (e) {
       if (e instanceof ApiError && Object.keys(e.fields).length) {
@@ -538,15 +539,15 @@ export function ScheduleDialog({
   return (
     <Dialog
       wide
-      title={editing ? `Edit schedule` : 'New schedule'}
+      title={editing ? tr('Edit schedule') : tr('New schedule')}
       onClose={onClose}
       footer={
         <>
           <button className="btn" onClick={onClose}>
-            Cancel
+            {tr('Cancel')}
           </button>
           <button className="btn primary" disabled={busy || !name.trim() || !template || !rrule} onClick={save}>
-            {busy ? 'Saving…' : editing ? 'Save schedule' : 'Create schedule'}
+            {busy ? tr('Saving…') : editing ? tr('Save schedule') : tr('Create schedule')}
           </button>
         </>
       }
@@ -554,7 +555,7 @@ export function ScheduleDialog({
       <FormError error={formError} />
       {!fixedTemplate && !editing ? (
         <Lookup
-          label="Runs"
+          label={tr('Runs')}
           resource="unified_job_templates/"
           params={{ type__in: 'job_template,workflow_job_template,project,inventory_source,system_job_template' }}
           value={template ? ({ id: template.id, name: template.name } as Ref) : null}
@@ -565,22 +566,22 @@ export function ScheduleDialog({
       ) : (
         template && (
           <div className="small muted">
-            Runs <strong style={{ color: 'var(--ink)' }}>{template.name}</strong> · {typeLabel(template.type)}
+            {tr('Runs')} <strong style={{ color: 'var(--ink)' }}>{template.name}</strong> · {typeLabel(template.type)}
           </div>
         )
       )}
       <div className="form-grid">
-        <TextInput label="Name" value={name} onChange={setName} error={errors.name} autoFocus={!!fixedTemplate || editing} />
-        <TextInput label="Description" value={description} onChange={setDescription} optional error={errors.description} />
+        <TextInput label={tr('Name')} value={name} onChange={setName} error={errors.name} autoFocus={!!fixedTemplate || editing} />
+        <TextInput label={tr('Description')} value={description} onChange={setDescription} optional error={errors.description} />
       </div>
       <RRuleEditor value={rrule} onChange={setRrule} error={errors.rrule} />
-      <Check label="Enabled" checked={enabled} onChange={setEnabled} help="Disabled schedules keep their rule but do not launch anything." />
+      <Check label={tr('Enabled')} checked={enabled} onChange={setEnabled} help={tr('Disabled schedules keep their rule but do not launch anything.')} />
 
       {template && (allowed.length > 0 || survey.length > 0 || askVars || wantsDays || rel.any) && (
         <section className="form-section">
-          <h2>Launch with</h2>
+          <h2>{tr('Launch with')}</h2>
           <p className="small muted" style={{ margin: 0 }}>
-            Only what the template lets you change at launch. Empty fields use the template's values.
+            {tr('Only what the template lets you change at launch. Empty fields use the template\'s values.')}
           </p>
           <div className="form-grid">
             {allowed.map((p) => (
@@ -598,7 +599,7 @@ export function ScheduleDialog({
               />
             ))}
             {wantsDays && (
-              <TextInput label="Keep data for (days)" type="number" value={days} onChange={setDays} error={errors.extra_vars || errors.extra_data} help="Older records are removed." />
+              <TextInput label={tr('Keep data for (days)')} type="number" value={days} onChange={setDays} error={errors.extra_vars || errors.extra_data} help={tr('Older records are removed.')} />
             )}
             <SavedLabelsAndGroupsFields rel={rel} orgId={tpl?.organization} errors={errors} />
           </div>
@@ -609,11 +610,11 @@ export function ScheduleDialog({
               ))}
             </div>
           )}
-          {askVars && <VarsEditor label="Extra variables" value={extraText} onChange={setExtraText} error={errors.extra_data} rows={4} />}
+          {askVars && <VarsEditor label={tr('Extra variables')} value={extraText} onChange={setExtraText} error={errors.extra_data} rows={4} />}
           {!askVars && errors.extra_data && <div className="err small">{errors.extra_data}</div>}
         </section>
       )}
-      {loading && <div className="small faint">Loading template…</div>}
+      {loading && <div className="small faint">{tr('Loading template…')}</div>}
     </Dialog>
   )
 }
@@ -661,19 +662,19 @@ export function PromptField({
   const str = (v: unknown) => (v === null || v === undefined ? '' : String(v))
   switch (field) {
     case 'inventory':
-      return <Lookup label="Inventory" resource="inventories/" value={inventory} onChange={setInventory} optional error={error} params={orgId ? { organization: orgId } : undefined} />
+      return <Lookup label={tr('Inventory')} resource="inventories/" value={inventory} onChange={setInventory} optional error={error} params={orgId ? { organization: orgId } : undefined} />
     case 'execution_environment':
-      return <Lookup label="Execution environment" resource="execution_environments/" value={ee} onChange={setEe} optional error={error} />
+      return <Lookup label={tr('Execution environment')} resource="execution_environments/" value={ee} onChange={setEe} optional error={error} />
     case 'job_type':
       return (
         <SelectField
-          label="Job type"
+          label={tr('Job type')}
           value={str(value)}
           onChange={(v) => onChange(v || null)}
           options={[
-            ['', 'Template default'],
-            ['run', 'Run'],
-            ['check', 'Check'],
+            ['', tr('Template default')],
+            ['run', tr('Run')],
+            ['check', tr('Check')],
           ]}
           error={error}
         />
@@ -681,11 +682,11 @@ export function PromptField({
     case 'verbosity':
       return (
         <SelectField
-          label="Verbosity"
+          label={tr('Verbosity')}
           value={str(value)}
           onChange={(v) => onChange(v === '' ? null : Number(v))}
           options={[
-            ['', 'Template default'],
+            ['', tr('Template default')],
             [0, '0 · normal'],
             [1, '1 · verbose'],
             [2, '2 · more verbose'],
@@ -699,13 +700,13 @@ export function PromptField({
     case 'diff_mode':
       return (
         <SelectField
-          label="Show changes"
+          label={tr('Show changes')}
           value={value === null || value === undefined ? '' : value ? 'on' : 'off'}
           onChange={(v) => onChange(v === '' ? null : v === 'on')}
           options={[
-            ['', 'Template default'],
-            ['on', 'On'],
-            ['off', 'Off'],
+            ['', tr('Template default')],
+            ['on', tr('On')],
+            ['off', tr('Off')],
           ]}
           error={error}
         />
@@ -715,7 +716,7 @@ export function PromptField({
     case 'timeout':
       return (
         <TextInput
-          label={{ forks: 'Forks', job_slice_count: 'Job slices', timeout: 'Timeout (seconds)' }[field]}
+          label={{ forks: tr('Forks'), job_slice_count: tr('Job slices'), timeout: tr('Timeout (seconds)') }[field]}
           type="number"
           value={str(value)}
           onChange={(v) => onChange(v === '' ? null : Number(v))}
@@ -726,7 +727,7 @@ export function PromptField({
     default:
       return (
         <TextInput
-          label={{ limit: 'Limit', scm_branch: 'Source control branch', job_tags: 'Job tags', skip_tags: 'Skip tags' }[field] ?? field}
+          label={{ limit: tr('Limit'), scm_branch: tr('Source control branch'), job_tags: tr('Job tags'), skip_tags: tr('Skip tags') }[field] ?? field}
           value={str(value)}
           onChange={(v) => onChange(v)}
           optional
@@ -747,7 +748,7 @@ export function SurveyField({ q, value, onChange }: { q: SurveyQuestion; value: 
     const multi = q.type === 'multiselect'
     const text = Array.isArray(value) ? value.join('\n') : str
     return (
-      <Field label={label} help={`${help ? `${help} ` : ''}One of the ${describeSource(q.choices_from)}${multi ? ', one per line' : ''}; checked when the job starts.`} optional={!q.required} full={multi} htmlFor={id}>
+      <Field label={label} help={[help, multi ? tr('One of the {source}, one per line; checked when the job starts.', { source: describeSource(q.choices_from) }) : tr('One of the {source}; checked when the job starts.', { source: describeSource(q.choices_from) })].filter(Boolean).join(' ')} optional={!q.required} full={multi} htmlFor={id}>
         {multi ? (
           <textarea id={id} className="textarea mono" rows={3} value={text} onChange={(e) => onChange(e.target.value.split('\n').map((x) => x.trim()).filter(Boolean))} />
         ) : (
@@ -803,7 +804,7 @@ export function SurveyField({ q, value, onChange }: { q: SurveyQuestion; value: 
       return (
         <fieldset>
           <legend>
-            {label} {!q.required && <span className="opt faint">· optional</span>}
+            {label} {!q.required && <span className="opt faint">{tr('· optional')}</span>}
           </legend>
           <div className="row wrap" style={{ gap: 12 }}>
             {surveyChoices(q).map((c) => (

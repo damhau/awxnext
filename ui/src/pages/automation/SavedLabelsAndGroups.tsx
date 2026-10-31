@@ -4,6 +4,7 @@ import { getAll } from '../../api/client'
 import type { Any, Ref } from '../../api/types'
 import { MultiLookup } from '../../components/form'
 import { syncRelation } from '../../lib/relations'
+import { tr } from '../../lib/i18n'
 
 /**
  * Credentials, labels and instance groups saved as launch prompts on a
@@ -56,7 +57,7 @@ export function SavedLabelsAndGroupsFields({
     <>
       {rel.askCredentials && (
         <MultiLookup
-          label="Credentials"
+          label={tr('Credentials')}
           resource="credentials/"
           values={rel.credentials}
           onChange={rel.setCredentials}
@@ -64,12 +65,12 @@ export function SavedLabelsAndGroupsFields({
           full
           error={errors.credentials}
           meta={(c) => c.kind ?? c.summary_fields?.credential_type?.name ?? ''}
-          help="Each replaces the template's credential of the same type. Credentials that ask for passwords at launch cannot be saved."
+          help={tr('Each replaces the template\'s credential of the same type. Credentials that ask for passwords at launch cannot be saved.')}
         />
       )}
       {rel.askLabels && (
         <MultiLookup
-          label="Labels"
+          label={tr('Labels')}
           resource="labels/"
           params={orgId ? { organization: orgId } : undefined}
           values={rel.labels}
@@ -77,12 +78,12 @@ export function SavedLabelsAndGroupsFields({
           optional
           full
           error={errors.labels}
-          help="Added to the template's labels on the jobs launched."
+          help={tr('Added to the template\'s labels on the jobs launched.')}
         />
       )}
       {rel.askGroups && (
         <MultiLookup
-          label="Instance groups"
+          label={tr('Instance groups')}
           resource="instance_groups/"
           values={rel.groups}
           onChange={rel.setGroups}
@@ -90,7 +91,7 @@ export function SavedLabelsAndGroupsFields({
           full
           ordered
           error={errors.instance_groups}
-          help="Tried in this order; empty uses the template's."
+          help={tr('Tried in this order; empty uses the template\'s.')}
         />
       )}
     </>

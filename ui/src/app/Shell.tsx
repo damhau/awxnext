@@ -17,6 +17,7 @@ import { useOrg, useSession } from './context'
 import { Palette } from './Palette'
 import { AboutDialog, ShortcutsDialog } from '../components/About'
 import { JUMPS } from '../lib/shortcuts'
+import { LOCALES, languageChoice, setLanguage, tr } from '../lib/i18n'
 
 /** Refreshes job-related queries when job statuses change anywhere. */
 function LiveRefresh() {
@@ -53,10 +54,10 @@ function LiveCount() {
   const r = running.data?.count ?? 0
   const q = queued.data?.count ?? 0
   return (
-    <Link to="/jobs?q=status:running" className="live-count" title="Jobs running and waiting for capacity" aria-label={`${r} running, ${q} queued`}>
+    <Link to="/jobs?q=status:running" className="live-count" title={tr('Jobs running and waiting for capacity')} aria-label={tr('{r} running, {q} queued', { r, q })}>
       <span aria-hidden="true" className={`live-dot ${r ? '' : 'idle'}`} />
       <span className="live-long" aria-hidden="true">
-        {r} running · {q} queued
+        {r} {tr('running ·')} {q} {tr('queued')}
       </span>
       <span className="live-short" aria-hidden="true">
         {r}·{q}
@@ -78,45 +79,45 @@ function useNav(): { label: string; items: NavItem[] }[] {
   const approvals = useList('workflow_approvals/', { status: 'pending', page_size: 1 }, { queryKey: ['workflow_approvals', 'pending-count'], refetchInterval: 60_000 })
   return [
     {
-      label: 'Automation',
+      label: tr('Automation'),
       items: [
-        { to: '/', label: 'Now', icon: 'activity', end: true },
-        { to: '/templates', label: 'Templates', icon: 'templates' },
-        { to: '/jobs', label: 'Jobs', icon: 'jobs' },
-        { to: '/schedules', label: 'Schedules', icon: 'calendar' },
-        { to: '/approvals', label: 'Approvals', icon: 'approve', count: approvals.data?.count || undefined },
+        { to: '/', label: tr('Now'), icon: 'activity', end: true },
+        { to: '/templates', label: tr('Templates'), icon: 'templates' },
+        { to: '/jobs', label: tr('Jobs'), icon: 'jobs' },
+        { to: '/schedules', label: tr('Schedules'), icon: 'calendar' },
+        { to: '/approvals', label: tr('Approvals'), icon: 'approve', count: approvals.data?.count || undefined },
       ],
     },
     {
-      label: 'Resources',
+      label: tr('Resources'),
       items: [
-        { to: '/inventories', label: 'Inventories', icon: 'inventory' },
-        { to: '/hosts', label: 'Hosts', icon: 'host' },
-        { to: '/projects', label: 'Projects', icon: 'project' },
-        { to: '/credentials', label: 'Credentials', icon: 'key' },
-        { to: '/execution-environments', label: 'Execution environments', icon: 'box' },
+        { to: '/inventories', label: tr('Inventories'), icon: 'inventory' },
+        { to: '/hosts', label: tr('Hosts'), icon: 'host' },
+        { to: '/projects', label: tr('Projects'), icon: 'project' },
+        { to: '/credentials', label: tr('Credentials'), icon: 'key' },
+        { to: '/execution-environments', label: tr('Execution environments'), icon: 'box' },
       ],
     },
     {
-      label: 'Access',
+      label: tr('Access'),
       items: [
-        { to: '/organizations', label: 'Organizations', icon: 'org' },
-        { to: '/folders', label: 'Folders', icon: 'folder' },
-        { to: '/teams', label: 'Teams', icon: 'team' },
-        { to: '/users', label: 'Users', icon: 'users' },
+        { to: '/organizations', label: tr('Organizations'), icon: 'org' },
+        { to: '/folders', label: tr('Folders'), icon: 'folder' },
+        { to: '/teams', label: tr('Teams'), icon: 'team' },
+        { to: '/users', label: tr('Users'), icon: 'users' },
       ],
     },
     {
-      label: 'Admin',
+      label: tr('Admin'),
       items: [
-        { to: '/instances', label: 'Instances', icon: 'server' },
-        { to: '/credential-types', label: 'Credential types', icon: 'shield' },
-        { to: '/host-metrics', label: 'Host metrics', icon: 'host', superuser: true },
-        { to: '/notifications', label: 'Notifications', icon: 'bell' },
-        { to: '/gitops', label: 'GitOps', icon: 'git' },
-        { to: '/management-jobs', label: 'Management jobs', icon: 'terminal', superuser: true },
-        { to: '/activity', label: 'Activity', icon: 'history' },
-        { to: '/settings', label: 'Settings', icon: 'settings', superuser: true },
+        { to: '/instances', label: tr('Instances'), icon: 'server' },
+        { to: '/credential-types', label: tr('Credential types'), icon: 'shield' },
+        { to: '/host-metrics', label: tr('Host metrics'), icon: 'host', superuser: true },
+        { to: '/notifications', label: tr('Notifications'), icon: 'bell' },
+        { to: '/gitops', label: tr('GitOps'), icon: 'git' },
+        { to: '/management-jobs', label: tr('Management jobs'), icon: 'terminal', superuser: true },
+        { to: '/activity', label: tr('Activity'), icon: 'history' },
+        { to: '/settings', label: tr('Settings'), icon: 'settings', superuser: true },
       ],
     },
   ]
@@ -132,7 +133,7 @@ function Nav({ open, onClose }: { open: boolean; onClose: () => void }) {
   return (
     <>
       {open && <div className="nav-backdrop" onClick={onClose} aria-hidden="true" />}
-      <nav id="main-nav" aria-label="Main" className={`nav ${collapsed ? 'collapsed' : ''} ${open ? 'open' : ''}`}>
+      <nav id="main-nav" aria-label={tr('Main')} className={`nav ${collapsed ? 'collapsed' : ''} ${open ? 'open' : ''}`}>
         {groups.map((g) => (
           <div key={g.label} className="nav-group">
             {!collapsed && <div className="nav-label">{g.label}</div>}
@@ -147,8 +148,8 @@ function Nav({ open, onClose }: { open: boolean; onClose: () => void }) {
               ))}
           </div>
         ))}
-        <button className="nav-toggle" onClick={() => setCollapsed(!collapsed)} aria-label={collapsed ? 'Expand navigation' : 'Collapse navigation'}>
-          {collapsed ? '»' : '« Collapse'}
+        <button className="nav-toggle" onClick={() => setCollapsed(!collapsed)} aria-label={collapsed ? tr('Expand navigation') : tr('Collapse navigation')}>
+          {collapsed ? '»' : tr('« Collapse')}
         </button>
       </nav>
     </>
@@ -161,18 +162,18 @@ function OrgSwitcher() {
   return (
     <div className="org">
       <Menu
-        label="Organization"
+        label={tr('Organization')}
         align="left"
         className="bar-button"
         trigger={
           <>
-            {org ? org.name : 'All organizations'}
+            {org ? org.name : tr('All organizations')}
             <Icon name="chevron" size={12} />
           </>
         }
       >
-        <div className="head">Show content of</div>
-        <button onClick={() => setOrg(null)}>{!org && <Icon name="check" size={14} />}All organizations</button>
+        <div className="head">{tr('Show content of')}</div>
+        <button onClick={() => setOrg(null)}>{!org && <Icon name="check" size={14} />}{tr('All organizations')}</button>
         {orgs.map((o) => (
           <button key={o.id} onClick={() => setOrg(o.id)}>
             {org?.id === o.id ? <Icon name="check" size={14} /> : <span style={{ width: 14 }} />}
@@ -187,23 +188,32 @@ function OrgSwitcher() {
 function Account({ onAbout, onShortcuts }: { onAbout: () => void; onShortcuts: () => void }) {
   const { me, logout } = useSession()
   const [theme, setTheme] = useTheme()
+  const language = languageChoice()
   const name = userName(me)
   return (
-    <Menu label={`Account: ${name}`} className="avatar" trigger={<Avatar name={name} />}>
+    <Menu label={tr('Account: {name}', { name })} className="avatar" trigger={<Avatar name={name} />}>
       <div className="head">{name}</div>
-      <Link to={`/users/${me.id}`}>Profile and tokens</Link>
-      <Link to="/run">Operator view</Link>
-      <Link to="/api/docs">API docs</Link>
+      <Link to={`/users/${me.id}`}>{tr('Profile and tokens')}</Link>
+      <Link to="/run">{tr('Operator view')}</Link>
+      <Link to="/api/docs">{tr('API docs')}</Link>
       <button onClick={onShortcuts}>
-        Keyboard shortcuts
+        {tr('Keyboard shortcuts')}
         <kbd className="keycap" style={{ marginLeft: 'auto' }}>
           ?
         </kbd>
       </button>
-      <button onClick={onAbout}>About awxnext</button>
+      <button onClick={onAbout}>{tr('About awxnext')}</button>
       <hr />
-      <div className="head">Theme</div>
-      <div className="menu-segmented" role="radiogroup" aria-label="Theme">
+      <div className="head">{tr('Language')}</div>
+      <div className="menu-segmented" role="radiogroup" aria-label={tr('Language')}>
+        {[{ value: 'system' as const, label: tr('Browser') }, ...LOCALES].map((l) => (
+          <button key={l.value} role="radio" aria-checked={language === l.value} className={language === l.value ? 'on' : ''} lang={l.value === 'system' ? undefined : l.value} onClick={() => language !== l.value && setLanguage(l.value)}>
+            {l.label}
+          </button>
+        ))}
+      </div>
+      <div className="head">{tr('Theme')}</div>
+      <div className="menu-segmented" role="radiogroup" aria-label={tr('Theme')}>
         {THEMES.map((t) => (
           <button key={t.value} role="radio" aria-checked={theme === t.value} className={theme === t.value ? 'on' : ''} onClick={() => setTheme(t.value)}>
             {t.label}
@@ -213,7 +223,7 @@ function Account({ onAbout, onShortcuts }: { onAbout: () => void; onShortcuts: (
       <hr />
       <button onClick={logout}>
         <Icon name="logout" size={14} />
-        Sign out
+        {tr('Sign out')}
       </button>
     </Menu>
   )
@@ -271,18 +281,18 @@ export function Shell() {
       <LiveRefresh />
       <LiveSwitch />
       <header className="topbar">
-        <button className="bar-button icon nav-open" aria-label="Menu" aria-expanded={menu} aria-controls="main-nav" onClick={() => setMenu((m) => !m)}>
+        <button className="bar-button icon nav-open" aria-label={tr('Menu')} aria-expanded={menu} aria-controls="main-nav" onClick={() => setMenu((m) => !m)}>
           <Icon name={menu ? 'x' : 'menu'} size={16} />
         </button>
-        <Link to="/" className="brand" aria-label="awxnext home">
+        <Link to="/" className="brand" aria-label={tr('awxnext home')}>
           <BrandMark />
-          <span>awxnext</span>
+          <span>{tr('awxnext')}</span>
         </Link>
         <OrgSwitcher />
-        <button className="bar-button jump" onClick={() => setPalette(true)} aria-label="Jump to template, host, job">
+        <button className="bar-button jump" onClick={() => setPalette(true)} aria-label={tr('Jump to template, host, job')}>
           <Icon name="search" size={14} />
-          <span className="grow">Jump to template, host, job…</span>
-          <span className="kbd">{navigator.platform.includes('Mac') ? '⌘K' : 'Ctrl K'}</span>
+          <span className="grow">{tr('Jump to template, host, job…')}</span>
+          <span className="kbd">{navigator.platform.includes('Mac') ? '⌘K' : tr('Ctrl K')}</span>
         </button>
         <div className="topbar-right">
           {loc.pathname === '/' && <RecentStrip />}

@@ -14,6 +14,7 @@ import { SchedulesTab } from '../automation/SchedulesTab'
 import { applyErrors, refOf } from './common'
 import { useSubList, type Inventory } from './inventories'
 import { enabledDefault, enabledHelp, isImportedFile, sourceChoices } from '../../lib/sourceDefaults'
+import { asIs, tr } from '../../lib/i18n'
 
 export interface Source extends Base {
   inventory: number
@@ -42,19 +43,19 @@ export interface Source extends Base {
 
 /** Human names and the credential type kind each cloud source uses. */
 export const sourceInfo: Record<string, { label: string; credential?: string; credentialKind?: string; hint?: string }> = {
-  file: { label: 'Imported file', hint: 'Recorded by the awxnext inventory-import command; it cannot be synced from here.' },
-  scm: { label: 'Sourced from a project', hint: 'An inventory file or plugin config in a project repository.' },
-  ec2: { label: 'Amazon EC2', credential: 'Amazon Web Services', credentialKind: 'cloud' },
-  gce: { label: 'Google Compute Engine', credential: 'Google Compute Engine', credentialKind: 'cloud' },
-  azure_rm: { label: 'Microsoft Azure Resource Manager', credential: 'Microsoft Azure Resource Manager', credentialKind: 'cloud' },
-  vmware: { label: 'VMware vCenter', credential: 'VMware vCenter', credentialKind: 'cloud' },
-  satellite6: { label: 'Red Hat Satellite 6', credential: 'Red Hat Satellite 6', credentialKind: 'cloud' },
-  openstack: { label: 'OpenStack', credential: 'OpenStack', credentialKind: 'cloud' },
-  rhv: { label: 'Red Hat Virtualization', credential: 'Red Hat Virtualization', credentialKind: 'cloud' },
-  controller: { label: 'Red Hat Ansible Automation Platform', credential: 'Red Hat Ansible Automation Platform', credentialKind: 'cloud' },
-  insights: { label: 'Red Hat Insights', credential: 'Insights', credentialKind: 'insights' },
-  terraform: { label: 'Terraform state', credential: 'Terraform backend configuration', credentialKind: 'cloud' },
-  constructed: { label: 'Constructed' },
+  file: { label: tr('Imported file'), hint: tr('Recorded by the awxnext inventory-import command; it cannot be synced from here.') },
+  scm: { label: tr('Sourced from a project'), hint: tr('An inventory file or plugin config in a project repository.') },
+  ec2: { label: tr('Amazon EC2'), credential: tr('Amazon Web Services'), credentialKind: 'cloud' },
+  gce: { label: tr('Google Compute Engine'), credential: tr('Google Compute Engine'), credentialKind: 'cloud' },
+  azure_rm: { label: tr('Microsoft Azure Resource Manager'), credential: tr('Microsoft Azure Resource Manager'), credentialKind: 'cloud' },
+  vmware: { label: tr('VMware vCenter'), credential: 'VMware vCenter', credentialKind: 'cloud' },
+  satellite6: { label: tr('Red Hat Satellite 6'), credential: tr('Red Hat Satellite 6'), credentialKind: 'cloud' },
+  openstack: { label: tr('OpenStack'), credential: asIs('OpenStack'), credentialKind: 'cloud' },
+  rhv: { label: tr('Red Hat Virtualization'), credential: tr('Red Hat Virtualization'), credentialKind: 'cloud' },
+  controller: { label: tr('Red Hat Ansible Automation Platform'), credential: tr('Red Hat Ansible Automation Platform'), credentialKind: 'cloud' },
+  insights: { label: tr('Red Hat Insights'), credential: asIs('Insights'), credentialKind: 'insights' },
+  terraform: { label: tr('Terraform state'), credential: tr('Terraform backend configuration'), credentialKind: 'cloud' },
+  constructed: { label: tr('Constructed') },
 }
 
 export function InventorySourcesTab({ inv }: { inv: Inventory }) {
@@ -78,34 +79,34 @@ export function InventorySourcesTab({ inv }: { inv: Inventory }) {
       const jid = r.inventory_update ?? r.id
       toast(
         <span>
-          Updating {s.name}
+          {tr('Updating')} {s.name}
           {jid ? (
             <>
               {' · '}
-              <Link to={`/jobs/inventory_update/${jid}`}>follow output</Link>
+              <Link to={`/jobs/inventory_update/${jid}`}>{tr('follow output')}</Link>
             </>
           ) : null}
         </span>,
       )
       invalidate(path, 'inventories')
     } catch (e) {
-      toast(e instanceof Error ? e.message : 'Update failed', 'error')
+      toast(e instanceof Error ? e.message : tr('Update failed'), 'error')
     }
   }
   const syncAll = async () => {
     try {
       await api.post(`inventories/${inv.id}/update_inventory_sources/`)
-      toast('Updating every source of this inventory')
+      toast(tr('Updating every source of this inventory'))
       invalidate(path, 'inventories')
     } catch (e) {
-      toast(e instanceof Error ? e.message : 'Update failed', 'error')
+      toast(e instanceof Error ? e.message : tr('Update failed'), 'error')
     }
   }
   const remove = async (s: Source) => {
     const ok = await confirm({
-      title: `Delete source ${s.name}?`,
-      body: <p style={{ margin: 0 }}>Hosts and groups it imported stay in the inventory until you delete them.</p>,
-      confirm: 'Delete source',
+      title: tr('Delete source {name}?', { name: s.name }),
+      body: <p style={{ margin: 0 }}>{tr('Hosts and groups it imported stay in the inventory until you delete them.')}</p>,
+      confirm: tr('Delete source'),
       danger: true,
     })
     if (!ok) return
@@ -113,13 +114,13 @@ export function InventorySourcesTab({ inv }: { inv: Inventory }) {
       await api.del(`inventory_sources/${s.id}/`)
       invalidate(path, 'inventories')
     } catch (e) {
-      toast(e instanceof Error ? e.message : 'Delete failed', 'error')
+      toast(e instanceof Error ? e.message : tr('Delete failed'), 'error')
     }
   }
   const cols: Column<Source>[] = [
     {
       key: 'name',
-      header: 'Source',
+      header: tr('Source'),
       render: (s) => (
         <div style={{ outline: s.id === highlight ? '2px solid var(--accent-ring)' : undefined }}>
           <button className="link-btn cell-title" onClick={() => setEdit({ source: s })}>
@@ -128,7 +129,7 @@ export function InventorySourcesTab({ inv }: { inv: Inventory }) {
           <div className="cell-sub">
             {s.source === 'scm' ? (
               <>
-                {s.summary_fields.source_project?.name ?? 'project'} · {s.source_path || '(project root)'}
+                {s.summary_fields.source_project?.name ?? tr('project')} · {s.source_path || tr('(project root)')}
               </>
             ) : (
               sourceInfo[s.source]?.label ?? s.source
@@ -137,10 +138,10 @@ export function InventorySourcesTab({ inv }: { inv: Inventory }) {
         </div>
       ),
     },
-    { key: 'runs', header: 'Recent updates', render: (s) => <RunBars jobs={s.summary_fields.recent_jobs} slots={10} /> },
+    { key: 'runs', header: tr('Recent updates'), render: (s) => <RunBars jobs={s.summary_fields.recent_jobs} slots={10} /> },
     {
       key: 'status',
-      header: 'Last update',
+      header: tr('Last update'),
       render: (s) => (
         <div className="small">
           <Status status={s.status} />
@@ -154,7 +155,7 @@ export function InventorySourcesTab({ inv }: { inv: Inventory }) {
     },
     {
       key: 'opts',
-      header: 'Behaviour',
+      header: tr('Behaviour'),
       render: (s) => (
         <span className="small muted">
           {[s.update_on_launch && 'update on launch', s.overwrite && 'overwrite', s.overwrite_vars && 'overwrite vars'].filter(Boolean).join(' · ') || '—'}
@@ -163,25 +164,25 @@ export function InventorySourcesTab({ inv }: { inv: Inventory }) {
     },
     {
       key: 'act',
-      header: <span className="sr-only">Actions</span>,
+      header: <span className="sr-only">{tr('Actions')}</span>,
       className: 'end',
       render: (s) => (
         <div className="row" style={{ justifyContent: 'flex-end', gap: 4 }}>
           {s.summary_fields.user_capabilities?.start !== false && !isImportedFile(s.source) && (
             <button className="btn sm" onClick={() => sync(s)} disabled={s.status === 'running' || s.status === 'pending'}>
-              <Icon name="refresh" size={14} /> Sync
+              <Icon name="refresh" size={14} /> {tr('Sync')}
             </button>
           )}
-          <Menu label={`Actions for ${s.name}`} className="btn sm icon ghost">
-            <button onClick={() => setEdit({ source: s })}>Edit…</button>
-            <button onClick={() => setNotify(s.id)}>Notifications…</button>
-            {!isImportedFile(s.source) && <Link to={`/inventories/${inv.id}/sources/${s.id}/schedules`}>Schedules</Link>}
-            <Link to={`/jobs?q=type:inventory_update ${encodeURIComponent(s.name)}`}>Update history</Link>
+          <Menu label={tr('Actions for {name}', { name: s.name })} className="btn sm icon ghost">
+            <button onClick={() => setEdit({ source: s })}>{tr('Edit…')}</button>
+            <button onClick={() => setNotify(s.id)}>{tr('Notifications…')}</button>
+            {!isImportedFile(s.source) && <Link to={`/inventories/${inv.id}/sources/${s.id}/schedules`}>{tr('Schedules')}</Link>}
+            <Link to={`/jobs?q=type:inventory_update ${encodeURIComponent(s.name)}`}>{tr('Update history')}</Link>
             {editable && (
               <>
                 <hr />
                 <button className="danger" onClick={() => remove(s)}>
-                  Delete…
+                  {tr('Delete…')}
                 </button>
               </>
             )}
@@ -194,21 +195,21 @@ export function InventorySourcesTab({ inv }: { inv: Inventory }) {
     <div className="page-body">
       <div className="row wrap" style={{ gap: 8 }}>
         <p className="muted grow" style={{ margin: 0 }}>
-          Sources import hosts and groups from a project or a cloud API. A sync runs <span className="mono">ansible-inventory</span> in an execution environment.
+          {tr('Sources import hosts and groups from a project or a cloud API. A sync runs')} <span className="mono">{tr('ansible-inventory')}</span> {tr('in an execution environment.')}
         </p>
         {!!sources.data?.results.some((s) => !isImportedFile(s.source)) && (
           <button className="btn" onClick={syncAll}>
-            <Icon name="refresh" size={14} /> Sync all
+            <Icon name="refresh" size={14} /> {tr('Sync all')}
           </button>
         )}
         {editable && (
           <button className="btn primary" onClick={() => setEdit({})}>
-            New source
+            {tr('New source')}
           </button>
         )}
       </div>
       <DataTable
-        label="Inventory sources"
+        label={tr('Inventory sources')}
         rows={sources.data?.results}
         columns={cols}
         loading={sources.isPending}
@@ -216,14 +217,14 @@ export function InventorySourcesTab({ inv }: { inv: Inventory }) {
         onOpen={(s) => setEdit({ source: s })}
         keys={{ s: (s) => sync(s) }}
         empty={
-          <Empty title="No sources" action={editable ? <button className="btn primary" onClick={() => setEdit({})}>New source</button> : undefined}>
-            Without a source, hosts are added by hand or through the API.
+          <Empty title={tr('No sources')} action={editable ? <button className="btn primary" onClick={() => setEdit({})}>{tr('New source')}</button> : undefined}>
+            {tr('Without a source, hosts are added by hand or through the API.')}
           </Empty>
         }
       />
       {notify && (
         <NotificationsDialog
-          title={`Notifications for ${sources.data?.results.find((s) => s.id === notify)?.name ?? 'source'}`}
+          title={tr('Notifications for {name}', { name: sources.data?.results.find((s) => s.id === notify)?.name ?? tr('source') })}
           resource="inventory_sources"
           id={notify}
           editable={editable}
@@ -253,14 +254,14 @@ export function InventorySourceSchedulesTab({ inv }: { inv: Inventory }) {
   const { sourceId } = useParams()
   const src = useObject<Source>(`inventory_sources/${sourceId}/`)
   if (src.isPending) return <Loading />
-  if (src.error || !src.data || src.data.inventory !== inv.id) return <div className="page-body"><ErrorNote error={src.error ?? 'Not a source of this inventory'} /></div>
+  if (src.error || !src.data || src.data.inventory !== inv.id) return <div className="page-body"><ErrorNote error={src.error ?? tr('Not a source of this inventory')} /></div>
   return (
     <div className="page-body stack" style={{ gap: 12 }}>
       <div className="row" style={{ gap: 8 }}>
         <Link className="btn ghost sm" to={`/inventories/${inv.id}/sources`}>
-          <Icon name="arrowLeft" size={14} /> All sources
+          <Icon name="arrowLeft" size={14} /> {tr('All sources')}
         </Link>
-        <h2 style={{ margin: 0 }}>Schedules of {src.data.name}</h2>
+        <h2 style={{ margin: 0 }}>{tr('Schedules of')} {src.data.name}</h2>
       </div>
       <SchedulesTab template={{ id: src.data.id, type: 'inventory_source', name: src.data.name }} />
     </div>
@@ -328,7 +329,7 @@ function SourceDialog({ inv, source, onClose }: { inv: Inventory; source?: Sourc
       if (source) await api.patch(`inventory_sources/${source.id}/`, body)
       else await api.post(`inventories/${inv.id}/inventory_sources/`, body)
       invalidate(`inventories/${inv.id}`, 'inventory_sources', 'inventories')
-      toast(source ? `Saved ${v.name}` : `Created ${v.name}`)
+      toast(source ? tr('Saved {name}', { name: v.name }) : tr('Created {name}', { name: v.name }))
       onClose()
     } catch (err) {
       setError(applyErrors(err, f.setErrors))
@@ -338,17 +339,17 @@ function SourceDialog({ inv, source, onClose }: { inv: Inventory; source?: Sourc
   }
   return (
     <Dialog
-      title={source ? source.name : 'New inventory source'}
+      title={source ? source.name : tr('New inventory source')}
       onClose={onClose}
       wide
       footer={
         <>
           <button className="btn" onClick={onClose}>
-            {readOnly ? 'Close' : 'Cancel'}
+            {readOnly ? tr('Close') : tr('Cancel')}
           </button>
           {!readOnly && (
             <button className="btn primary" disabled={busy || !v.name || (v.source === 'scm' && !v.source_project) || !!varsError(v.source_vars)} onClick={() => submit()}>
-              {busy ? 'Saving…' : source ? 'Save' : 'Create source'}
+              {busy ? tr('Saving…') : source ? tr('Save') : tr('Create source')}
             </button>
           )}
         </>
@@ -357,21 +358,21 @@ function SourceDialog({ inv, source, onClose }: { inv: Inventory; source?: Sourc
       <form className="form" onSubmit={submit}>
         <fieldset disabled={readOnly} className="form">
           <div className="form-grid">
-            <TextInput label="Name" value={v.name} onChange={(x) => f.set('name', x)} error={f.errors.name} autoFocus />
+            <TextInput label={tr('Name')} value={v.name} onChange={(x) => f.set('name', x)} error={f.errors.name} autoFocus />
             <SelectField
-              label="Source"
+              label={tr('Source')}
               value={v.source}
               onChange={(x) => f.set('source', x)}
               options={choices.filter(([k]) => k !== 'constructed').map(([k, l]) => [k, sourceInfo[k]?.label ?? l] as [string, string])}
               error={f.errors.source}
               help={info.hint}
             />
-            <TextInput label="Description" optional value={v.description} onChange={(x) => f.set('description', x)} full />
+            <TextInput label={tr('Description')} optional value={v.description} onChange={(x) => f.set('description', x)} full />
           </div>
           {v.source === 'scm' ? (
             <div className="form-grid">
               <Lookup
-                label="Project"
+                label={tr('Project')}
                 resource="projects/"
                 params={{ organization: inv.organization }}
                 value={v.source_project}
@@ -379,76 +380,76 @@ function SourceDialog({ inv, source, onClose }: { inv: Inventory; source?: Sourc
                 error={f.errors.source_project}
               />
               <TextInput
-                label="Inventory file"
+                label={tr('Inventory file')}
                 optional
                 mono
                 value={v.source_path}
                 onChange={(x) => f.set('source_path', x)}
                 error={f.errors.source_path}
-                placeholder="inventories/prod/hosts.yml"
-                help="Path within the project; a directory or plugin config also works."
+                placeholder={tr('inventories/prod/hosts.yml')}
+                help={tr('Path within the project; a directory or plugin config also works.')}
               />
-              <TextInput label="Branch" optional mono value={v.scm_branch} onChange={(x) => f.set('scm_branch', x)} help="Only if the project allows branch override." />
+              <TextInput label={tr('Branch')} optional mono value={v.scm_branch} onChange={(x) => f.set('scm_branch', x)} help={tr('Only if the project allows branch override.')} />
             </div>
           ) : (
             <div className="form-grid">
               <Lookup
-                label="Credential"
+                label={tr('Credential')}
                 optional={v.source === 'ec2'}
                 resource="credentials/"
                 params={info.credential ? { credential_type__name: info.credential } : info.credentialKind ? { credential_type__kind: info.credentialKind } : undefined}
                 value={v.credential}
                 onChange={(x) => f.set('credential', x)}
                 error={f.errors.credential}
-                help={info.credential ? `A ${info.credential} credential.` : undefined}
+                help={info.credential ? tr('A {credential} credential.', { credential: info.credential }) : undefined}
               />
             </div>
           )}
           <VarsEditor
-            label={v.source === 'scm' ? 'Source variables' : 'Plugin options'}
+            label={v.source === 'scm' ? tr('Source variables') : tr('Plugin options')}
             value={v.source_vars}
             onChange={(x) => f.set('source_vars', x)}
             error={f.errors.source_vars}
             help={
               v.source === 'scm' ? (
                 <>
-                  Set as environment variables for the inventory script or plugin, e.g. <code>REGION: eu-west-1</code>.
+                  {tr('Set as environment variables for the inventory script or plugin, e.g.')} <code>REGION: eu-west-1</code>.
                 </>
               ) : (
                 <>
-                  Options of the inventory plugin, e.g. <code>regions: [eu-west-1]</code> or <code>keyed_groups</code>.
+                  {tr('Options of the inventory plugin, e.g.')} <code>regions: [eu-west-1]</code> {tr('or')} <code>keyed_groups</code>.
                 </>
               )
             }
           />
           <div className="row wrap" style={{ gap: 20 }}>
-            <Check label="Overwrite hosts and groups" checked={v.overwrite} onChange={(x) => f.set('overwrite', x)} help="Remove what the source no longer reports." />
-            <Check label="Overwrite variables" checked={v.overwrite_vars} onChange={(x) => f.set('overwrite_vars', x)} help="Replace variables instead of merging." />
-            <Check label="Update on launch" checked={v.update_on_launch} onChange={(x) => f.set('update_on_launch', x)} help="Sync before each job using this inventory." />
+            <Check label={tr('Overwrite hosts and groups')} checked={v.overwrite} onChange={(x) => f.set('overwrite', x)} help={tr('Remove what the source no longer reports.')} />
+            <Check label={tr('Overwrite variables')} checked={v.overwrite_vars} onChange={(x) => f.set('overwrite_vars', x)} help={tr('Replace variables instead of merging.')} />
+            <Check label={tr('Update on launch')} checked={v.update_on_launch} onChange={(x) => f.set('update_on_launch', x)} help={tr('Sync before each job using this inventory.')} />
           </div>
           {v.update_on_launch && (
             <div className="form-grid">
               <TextInput
-                label="Cache timeout (seconds)"
+                label={tr('Cache timeout (seconds)')}
                 type="number"
                 value={v.update_cache_timeout}
                 onChange={(x) => f.set('update_cache_timeout', Number(x))}
-                help="Skip the sync when the last one is newer than this."
+                help={tr('Skip the sync when the last one is newer than this.')}
               />
             </div>
           )}
           <button type="button" className="link-btn small" style={{ alignSelf: 'flex-start' }} onClick={() => setAdvanced((a) => !a)}>
-            {advanced ? 'Hide' : 'Show'} host filtering, enablement and runtime options
+            {advanced ? tr('Hide') : tr('Show')} {tr('host filtering, enablement and runtime options')}
           </button>
           {advanced && (
             <div className="form-grid">
-              <TextInput label="Host filter" optional mono value={v.host_filter} onChange={(x) => f.set('host_filter', x)} error={f.errors.host_filter} help="Regular expression; only matching host names are imported." />
-              <TextInput label="Limit" optional mono value={v.limit} onChange={(x) => f.set('limit', x)} help="Host pattern applied by ansible-inventory." />
-              <TextInput label="Enabled variable" optional mono value={v.enabled_var} onChange={(x) => f.set('enabled_var', x)} placeholder={enabledDefault(v.source)?.variable} help={enabledHelp(v.source)} />
-              <TextInput label="Enabled value" optional mono value={v.enabled_value} onChange={(x) => f.set('enabled_value', x)} placeholder={v.enabled_var ? undefined : enabledDefault(v.source)?.value} help="Value of that variable meaning enabled." />
-              <Lookup label="Execution environment" optional resource="execution_environments/" value={v.execution_environment} onChange={(x) => f.set('execution_environment', x)} />
-              <SelectField label="Verbosity" value={v.verbosity} onChange={(x) => f.set('verbosity', Number(x))} options={[[0, '0 (warning)'], [1, '1 (info)'], [2, '2 (debug)']]} />
-              <TextInput label="Timeout (seconds)" type="number" value={v.timeout} onChange={(x) => f.set('timeout', Number(x))} help="0 means no timeout." />
+              <TextInput label={tr('Host filter')} optional mono value={v.host_filter} onChange={(x) => f.set('host_filter', x)} error={f.errors.host_filter} help={tr('Regular expression; only matching host names are imported.')} />
+              <TextInput label={tr('Limit')} optional mono value={v.limit} onChange={(x) => f.set('limit', x)} help={tr('Host pattern applied by ansible-inventory.')} />
+              <TextInput label={tr('Enabled variable')} optional mono value={v.enabled_var} onChange={(x) => f.set('enabled_var', x)} placeholder={enabledDefault(v.source)?.variable} help={enabledHelp(v.source)} />
+              <TextInput label={tr('Enabled value')} optional mono value={v.enabled_value} onChange={(x) => f.set('enabled_value', x)} placeholder={v.enabled_var ? undefined : enabledDefault(v.source)?.value} help={tr('Value of that variable meaning enabled.')} />
+              <Lookup label={tr('Execution environment')} optional resource="execution_environments/" value={v.execution_environment} onChange={(x) => f.set('execution_environment', x)} />
+              <SelectField label={tr('Verbosity')} value={v.verbosity} onChange={(x) => f.set('verbosity', Number(x))} options={[[0, '0 (warning)'], [1, '1 (info)'], [2, '2 (debug)']]} />
+              <TextInput label={tr('Timeout (seconds)')} type="number" value={v.timeout} onChange={(x) => f.set('timeout', Number(x))} help={tr('0 means no timeout.')} />
             </div>
           )}
         </fieldset>

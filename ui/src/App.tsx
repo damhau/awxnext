@@ -13,6 +13,7 @@ import { automationRoutes } from './pages/automation'
 import { jobRoutes } from './pages/jobs'
 import { resourceRoutes } from './pages/resources'
 import { templateRoutes } from './pages/templates'
+import { tr } from './lib/i18n'
 
 // Swagger UI is large: loaded only on the API page.
 const ApiDocs = lazy(() => import('./pages/ApiDocs'))
@@ -30,8 +31,8 @@ const queryClient = new QueryClient({
 function NotFound() {
   return (
     <div className="page">
-      <Empty title="This page does not exist" action={<Link to="/" className="btn">Back to Now</Link>}>
-        The link may be outdated, or the object was deleted.
+      <Empty title={tr('This page does not exist')} action={<Link to="/" className="btn">{tr('Back to Now')}</Link>}>
+        {tr('The link may be outdated, or the object was deleted.')}
       </Empty>
     </div>
   )

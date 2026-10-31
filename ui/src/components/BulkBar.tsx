@@ -8,6 +8,8 @@ import { bulkMessage, bulkOutcome, MAX_SELECT_ALL, nameList, nextSelection, offe
 import { HAS_USED_BY, inUse, summarize } from '../lib/usedBy'
 import { useConfirm, useToast } from './overlay'
 import { fetchUsedBy } from './UsedBy'
+import { plural } from '../lib/format'
+import { tr } from '../lib/i18n'
 
 type Key = number | string
 
@@ -75,27 +77,27 @@ export function BulkDelete<T>({
         const used = check ? await Promise.all(rows.map((r) => fetchUsedBy(resource, (r as { id: number }).id))) : []
         const busy = rows.map((r, i) => ({ name: name(r), u: used[i] ?? null })).filter((x) => inUse(x.u))
         const ok = await confirm({
-          title: `Delete ${rows.length} ${rows.length === 1 ? noun[0] : noun[1]}?`,
+          title: tr('Delete {what}?', { what: plural(rows.length, noun[0], noun[1]) }),
           body: (
             <>
               <p style={{ margin: 0 }}>
-                {nameList(rows.map(name))}. {note ?? 'This cannot be undone.'}
+                {nameList(rows.map(name))}. {note ?? tr('This cannot be undone.')}
               </p>
               {busy.length > 0 && (
                 <div className="notice warn small stack" role="note" style={{ gap: 4, marginTop: 10 }}>
-                  <div>{busy.length === 1 ? 'One of them is in use:' : `${busy.length} of them are in use:`}</div>
+                  <div>{busy.length === 1 ? tr('One of them is in use:') : tr('{count} of them are in use:', { count: busy.length })}</div>
                   {busy.slice(0, 8).map((x) => (
                     <div key={x.name}>
-                      <b>{x.name}</b>: used by {summarize(x.u!)}
+                      <b>{x.name}</b>{tr(': used by')} {summarize(x.u!)}
                     </div>
                   ))}
-                  {busy.length > 8 && <div>and {busy.length - 8} more.</div>}
+                  {busy.length > 8 && <div>{tr('and')} {busy.length - 8} {tr('more.')}</div>}
                 </div>
               )}
-              {HAS_USED_BY.has(resource) && !check && <p className="small faint">Not checked for what uses them: more than 50 are selected.</p>}
+              {HAS_USED_BY.has(resource) && !check && <p className="small faint">{tr('Not checked for what uses them: more than 50 are selected.')}</p>}
             </>
           ),
-          confirm: 'Delete',
+          confirm: tr('Delete'),
           danger: true,
         })
         if (!ok) return
@@ -103,7 +105,7 @@ export function BulkDelete<T>({
         sel.set(o.failedRows)
       }}
     >
-      Delete
+      {tr('Delete')}
     </button>
   )
 }
@@ -141,22 +143,22 @@ export function BulkBar<T>({
       const rows = await getAll<T>(path!, rest, Math.ceil(MAX_SELECT_ALL / 200))
       sel.set(rows.slice(0, MAX_SELECT_ALL))
     } catch (e) {
-      toast(e instanceof Error ? e.message : 'Could not select them all', 'error')
+      toast(e instanceof Error ? e.message : tr('Could not select them all'), 'error')
     } finally {
       setLoading(false)
     }
   }
   return (
-    <div className="bulkbar" role="region" aria-label="Bulk actions" style={style}>
-      <span className="n">{sel.size} selected</span>
+    <div className="bulkbar" role="region" aria-label={tr('Bulk actions')} style={style}>
+      <span className="n">{sel.size} {tr('selected')}</span>
       {more && (
         <button className="btn" onClick={selectAll} disabled={loading}>
-          {total! > MAX_SELECT_ALL ? `Select the first ${MAX_SELECT_ALL}` : `Select all ${total}`}
+          {total! > MAX_SELECT_ALL ? tr('Select the first {MAX_SELECT_ALL}', { MAX_SELECT_ALL }) : tr('Select all {total}', { total })}
         </button>
       )}
       {children}
       <button className="btn clear" onClick={sel.clear}>
-        Clear
+        {tr('Clear')}
       </button>
     </div>
   )

@@ -3,6 +3,7 @@ import { Link, NavLink } from 'react-router'
 import type { RecentJob } from '../api/types'
 import { jobCell, type CellSize, type CellState } from '../lib/cells'
 import { absolute, ago, avatarColor, duration, elapsed, initials, statusKind, statusLabel, upcoming } from '../lib/format'
+import { tr } from '../lib/i18n'
 
 type CellProps = {
   state: CellState
@@ -55,7 +56,7 @@ export function StatusBadge({ status, children }: { status: string | null | unde
 export function RunBars({ jobs, slots = 12 }: { jobs: RecentJob[] | undefined; slots?: number }) {
   const list = [...(jobs ?? [])].slice(0, slots).reverse()
   const failed = list.filter((j) => statusKind(j.status) === 'fail' || statusKind(j.status) === 'error').length
-  const label = list.length ? `Last ${list.length} runs: ${list.length - failed} not failed, ${failed} failed` : 'No runs yet'
+  const label = list.length ? `Last ${list.length} runs: ${list.length - failed} not failed, ${failed} failed` : tr('No runs yet')
   const pad = Math.max(0, Math.min(slots, 12) - list.length)
   return (
     <div className="runbars" role="group" aria-label={label}>
@@ -63,7 +64,7 @@ export function RunBars({ jobs, slots = 12 }: { jobs: RecentJob[] | undefined; s
         <Cell key={'p' + i} state="empty" size="bar" />
       ))}
       {list.map((j) => (
-        <Cell key={j.id} state={jobCell(j.status)} size="bar" to={`/jobs/${j.type}/${j.id}`} label={`#${j.id} ${statusLabel(j.status)} · ${ago(j.finished)}`} />
+        <Cell key={j.id} state={jobCell(j.status)} size="bar" to={`/jobs/${j.type}/${j.id}`} label={tr('#{id} {statusLabel} · {ago}', { id: j.id, statusLabel: statusLabel(j.status), ago: ago(j.finished) })} />
       ))}
     </div>
   )
@@ -128,7 +129,7 @@ export function Avatar({ name, size }: { name: string; size?: 'sm' }) {
 
 export function Crumbs({ items }: { items: { label: string; to?: string }[] }) {
   return (
-    <nav className="crumbs" aria-label="Breadcrumb">
+    <nav className="crumbs" aria-label={tr('Breadcrumb')}>
       {items.map((it, i) => (
         <span key={i} className="row" style={{ gap: 6 }}>
           {i > 0 && <span aria-hidden="true">/</span>}
@@ -202,7 +203,7 @@ export function Empty({ title, children, action }: { title: string; children?: R
 
 export function Loading({ rows = 6 }: { rows?: number }) {
   return (
-    <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }} aria-busy="true" aria-label="Loading">
+    <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }} aria-busy="true" aria-label={tr('Loading')}>
       {Array.from({ length: rows }, (_, i) => (
         <div key={i} className="skeleton" style={{ width: `${60 + ((i * 37) % 35)}%` }} />
       ))}

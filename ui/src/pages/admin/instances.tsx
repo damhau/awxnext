@@ -15,6 +15,7 @@ import { adjustedCapacity, describeAdjustment } from '../../lib/capacity'
 import { jobPath, jobsNewestFirst } from '../../lib/format'
 import { checkGroupForm, describePolicy, installerGroup, memberReason, parseHosts } from '../../lib/instanceGroups'
 import { OneTimeSecret, useDelete } from './common'
+import { tr, trn } from '../../lib/i18n'
 
 type Instance = Base & {
   hostname: string
@@ -61,7 +62,7 @@ const stateTone: Record<string, CellState> = { ready: 'ok', installed: 'pending'
 
 function NodeState({ i }: { i: Instance }) {
   const tone: CellState = !i.enabled ? 'canceled' : (stateTone[i.node_state] ?? 'empty')
-  const label = !i.enabled ? 'Disabled' : i.node_state === 'installed' ? 'Waiting for agent' : i.node_state.charAt(0).toUpperCase() + i.node_state.slice(1)
+  const label = !i.enabled ? 'Disabled' : i.node_state === 'installed' ? tr('Waiting for agent') : i.node_state.charAt(0).toUpperCase() + i.node_state.slice(1)
   return (
     <span className="status">
       <Cell state={tone} />
@@ -109,7 +110,7 @@ export function InstanceList() {
     try {
       await api.patch(`instances/${i.id}/`, { enabled: !i.enabled })
       invalidate('instances')
-      toast(`${i.hostname} ${i.enabled ? 'disabled — running jobs finish, no new jobs start' : 'enabled'}`)
+      toast(i.enabled ? tr('{hostname} disabled — running jobs finish, no new jobs start', { hostname: i.hostname }) : tr('{hostname} enabled', { hostname: i.hostname }))
     } catch (e) {
       toast((e as Error).message, 'error')
     }
@@ -117,18 +118,18 @@ export function InstanceList() {
   return (
     <div className="page">
       <PageHead
-        title="Instances"
-        subtitle="Nodes that run jobs, and the groups that route jobs to them."
+        title={tr('Instances')}
+        subtitle={tr('Nodes that run jobs, and the groups that route jobs to them.')}
         bordered={false}
         actions={
           me.is_superuser && (
             <>
               <Link className="btn" to="/instance-groups/new">
-                New instance group
+                {tr('New instance group')}
               </Link>
               <button className="btn primary" onClick={() => setAdding(true)}>
                 <Icon name="plus" size={14} />
-                Add execution node
+                {tr('Add execution node')}
               </button>
             </>
           )
@@ -136,7 +137,7 @@ export function InstanceList() {
       />
       <div className="page-body">
         <DataTable
-          label="Instances"
+          label={tr('Instances')}
           rows={instances.data?.results}
           loading={instances.isPending}
           error={instances.error}
@@ -144,7 +145,7 @@ export function InstanceList() {
           columns={[
             {
               key: 'host',
-              header: 'Node',
+              header: tr('Node'),
               render: (i) => (
                 <div>
                   <Link to={`/instances/${i.id}`} className="cell-title mono" style={{ fontSize: 13 }}>
@@ -152,25 +153,25 @@ export function InstanceList() {
                   </Link>
                   <div className="small faint">
                     {i.node_type}
-                    {i.version ? ` · ${i.version}` : ''}
-                    {i.agent_runtime ? ` · ${i.agent_runtime}` : ''}
+                    {i.version ? tr(' · {version}', { version: i.version }) : ''}
+                    {i.agent_runtime ? tr(' · {agent_runtime}', { agent_runtime: i.agent_runtime }) : ''}
                   </div>
                 </div>
               ),
             },
-            { key: 'state', header: 'State', render: (i) => <NodeState i={i} /> },
-            { key: 'cap', header: 'Capacity used', render: (i) => (i.node_type === 'hop' ? <span className="faint">—</span> : <CapacityBar used={i.consumed_capacity} total={i.capacity} label={`${i.hostname} capacity`} />) },
-            { key: 'jobs', header: 'Running', className: 'num', render: (i) => i.jobs_running },
-            { key: 'seen', header: 'Last seen', className: 'small nowrap', render: (i) => <Ago at={i.last_seen} /> },
+            { key: 'state', header: tr('State'), render: (i) => <NodeState i={i} /> },
+            { key: 'cap', header: tr('Capacity used'), render: (i) => (i.node_type === 'hop' ? <span className="faint">—</span> : <CapacityBar used={i.consumed_capacity} total={i.capacity} label={tr('{hostname} capacity', { hostname: i.hostname })} />) },
+            { key: 'jobs', header: tr('Running'), className: 'num', render: (i) => i.jobs_running },
+            { key: 'seen', header: tr('Last seen'), className: 'small nowrap', render: (i) => <Ago at={i.last_seen} /> },
             {
               key: 'x',
-              header: <span className="sr-only">Actions</span>,
+              header: <span className="sr-only">{tr('Actions')}</span>,
               className: 'end',
               render: (i) =>
                 me.is_superuser && (
-                  <Menu label={`Actions for ${i.hostname}`} className="btn sm icon">
-                    <button onClick={() => toggle(i)}>{i.enabled ? 'Disable (drain)' : 'Enable'}</button>
-                    {i.node_type === 'execution' && <button onClick={() => issue(i)}>Issue new agent token…</button>}
+                  <Menu label={tr('Actions for {hostname}', { hostname: i.hostname })} className="btn sm icon">
+                    <button onClick={() => toggle(i)}>{i.enabled ? tr('Disable (drain)') : tr('Enable')}</button>
+                    {i.node_type === 'execution' && <button onClick={() => issue(i)}>{tr('Issue new agent token…')}</button>}
                   </Menu>
                 ),
             },
@@ -178,11 +179,11 @@ export function InstanceList() {
         />
         <section className="stack" style={{ gap: 10 }}>
           <div className="row">
-            <h2 className="grow">Instance groups</h2>
-            <span className="small faint">Templates, inventories and organizations pick groups in order; the first with free capacity runs the job.</span>
+            <h2 className="grow">{tr('Instance groups')}</h2>
+            <span className="small faint">{tr('Templates, inventories and organizations pick groups in order; the first with free capacity runs the job.')}</span>
           </div>
           <DataTable
-            label="Instance groups"
+            label={tr('Instance groups')}
             rows={groups.data?.results}
             loading={groups.isPending}
             error={groups.error}
@@ -190,19 +191,19 @@ export function InstanceList() {
             columns={[
               {
                 key: 'name',
-                header: 'Group',
+                header: tr('Group'),
                 render: (g) => (
                   <div>
                     <Link to={`/instance-groups/${g.id}`} className="cell-title">
                       {g.name}
                     </Link>
-                    <div className="small faint">{g.is_container_group ? 'Container group · a pod per job' : `${g.instances} node${g.instances === 1 ? '' : 's'}`}</div>
+                    <div className="small faint">{g.is_container_group ? tr('Container group · a pod per job') : trn(g.instances, '{n} node', '{n} nodes')}</div>
                   </div>
                 ),
               },
-              { key: 'cap', header: 'Capacity used', render: (g) => (g.is_container_group ? <span className="small faint">{g.max_concurrent_jobs ? `up to ${g.max_concurrent_jobs} jobs` : 'Elastic'}</span> : <CapacityBar used={g.consumed_capacity} total={g.capacity} label={`${g.name} capacity`} />) },
-              { key: 'run', header: 'Running', className: 'num', render: (g) => g.jobs_running },
-              { key: 'total', header: 'Jobs run', className: 'num faint', render: (g) => g.jobs_total },
+              { key: 'cap', header: tr('Capacity used'), render: (g) => (g.is_container_group ? <span className="small faint">{g.max_concurrent_jobs ? tr('up to {max_concurrent_jobs} jobs', { max_concurrent_jobs: g.max_concurrent_jobs }) : tr('Elastic')}</span> : <CapacityBar used={g.consumed_capacity} total={g.capacity} label={tr('{name} capacity', { name: g.name })} />) },
+              { key: 'run', header: tr('Running'), className: 'num', render: (g) => g.jobs_running },
+              { key: 'total', header: tr('Jobs run'), className: 'num faint', render: (g) => g.jobs_total },
             ]}
           />
         </section>
@@ -218,20 +219,19 @@ export function InstanceList() {
       )}
       {token && (
         <Dialog
-          title={`Connect ${token.host}`}
+          title={tr('Connect {host}', { host: token.host })}
           onClose={() => setToken(null)}
           wide
           footer={
             <button className="btn primary" onClick={() => setToken(null)}>
-              Done
+              {tr('Done')}
             </button>
           }
         >
           <p style={{ margin: 0 }}>
-            Run this on the node. The agent dials back to the control plane over HTTPS — no inbound ports are needed. Use <span className="mono">--runtime docker</span> or <span className="mono">--runtime none</span> if Podman is not
-            installed.
+            {tr('Run this on the node. The agent dials back to the control plane over HTTPS — no inbound ports are needed. Use')} <span className="mono">{tr('--runtime docker')}</span> {tr('or')} <span className="mono">{tr('--runtime none')}</span> {tr('if Podman is not installed.')}
           </p>
-          <OneTimeSecret value={token.command} note="This token is shown once. Issuing a new token disconnects the agent using the old one." />
+          <OneTimeSecret value={token.command} note={tr('This token is shown once. Issuing a new token disconnects the agent using the old one.')} />
         </Dialog>
       )}
     </div>
@@ -259,20 +259,20 @@ function AddNode({ onClose, onCreated }: { onClose: () => void; onCreated: (host
   }
   return (
     <Dialog
-      title="Add an execution node"
+      title={tr('Add an execution node')}
       onClose={onClose}
       footer={
         <>
           <button className="btn" onClick={onClose}>
-            Cancel
+            {tr('Cancel')}
           </button>
           <button className="btn primary" disabled={busy || !host.trim()} onClick={submit}>
-            Add and issue token
+            {tr('Add and issue token')}
           </button>
         </>
       }
     >
-      <TextInput label="Hostname" value={host} onChange={setHost} mono placeholder="exec-dc2-01" autoFocus help="A name for the node; it does not need to resolve. It identifies the agent in job details." />
+      <TextInput label={tr('Hostname')} value={host} onChange={setHost} mono placeholder={tr('exec-dc2-01')} autoFocus help={tr('A name for the node; it does not need to resolve. It identifies the agent in job details.')} />
       <FormError error={error} />
     </Dialog>
   )
@@ -303,10 +303,10 @@ export function InstanceDetail() {
   return (
     <div className="page">
       <PageHead
-        crumbs={[{ label: 'Instances', to: '/instances' }, { label: i.hostname }]}
+        crumbs={[{ label: tr('Instances'), to: '/instances' }, { label: i.hostname }]}
         title={<span className="mono" style={{ fontSize: 'inherit' }}>{i.hostname}</span>}
         badge={<NodeState i={i} />}
-        subtitle={`${i.node_type} node${i.managed ? ' · registered by the control plane' : ''}`}
+        subtitle={i.managed ? tr('{node_type} node · registered by the control plane', { node_type: i.node_type }) : tr('{node_type} node', { node_type: i.node_type })}
         actions={
           me.is_superuser && (
             <>
@@ -317,16 +317,16 @@ export function InstanceDetail() {
                   invalidate('instances')
                 }}
               >
-                {i.enabled ? 'Disable' : 'Enable'}
+                {i.enabled ? tr('Disable') : tr('Enable')}
               </button>
               {i.node_type === 'execution' && (
                 <button className="btn" onClick={issue}>
-                  New agent token
+                  {tr('New agent token')}
                 </button>
               )}
               {!i.managed && (
-                <button className="btn danger" onClick={() => del({ path: `instances/${id}/`, name: i.hostname, what: 'instance', then: '/instances' })}>
-                  Remove
+                <button className="btn danger" onClick={() => del({ path: `instances/${id}/`, name: i.hostname, what: tr('instance'), then: '/instances' })}>
+                  {tr('Remove')}
                 </button>
               )}
             </>
@@ -334,25 +334,25 @@ export function InstanceDetail() {
         }
       />
       <div className="page-body">
-        {token && <OneTimeSecret value={token} note="Run this on the node to connect its agent. The token is shown once; the previous one stops working." />}
+        {token && <OneTimeSecret value={token} note={tr('Run this on the node to connect its agent. The token is shown once; the previous one stops working.')} />}
         {i.errors && <div className="form-error">{i.errors}</div>}
         <div className="split">
           <div className="wide stack" style={{ gap: 16 }}>
-            <Panel title="Capacity">
+            <Panel title={tr('Capacity')}>
               <div className="stack" style={{ gap: 12 }}>
-                <CapacityBar used={i.consumed_capacity} total={i.capacity} label="capacity used" />
+                <CapacityBar used={i.consumed_capacity} total={i.capacity} label={tr('capacity used')} />
                 <KV
                   items={[
-                    ['Running jobs', <span className="mono">{i.jobs_running}</span>],
-                    ['Jobs run', <span className="mono">{i.jobs_total}</span>],
-                    ['CPU', i.cpu ? `${i.cpu} cores` : '—'],
-                    ['Memory', i.memory ? `${(i.memory / 1024 ** 3).toFixed(1)} GiB` : '—'],
+                    [tr('Running jobs'), <span className="mono">{i.jobs_running}</span>],
+                    [tr('Jobs run'), <span className="mono">{i.jobs_total}</span>],
+                    [tr('CPU'), i.cpu ? tr('{cpu} cores', { cpu: i.cpu }) : '—'],
+                    [tr('Memory'), i.memory ? tr('{toFixed} GiB', { toFixed: (i.memory / 1024 ** 3).toFixed(1) }) : '—'],
                   ]}
                 />
                 {me.is_superuser && <CapacityAdjust inst={i} />}
               </div>
             </Panel>
-            <Panel title="Recent jobs on this node" pad={false}>
+            <Panel title={tr('Recent jobs on this node')} pad={false}>
               {jobs.data?.results.length ? (
                 <table className="data">
                   <tbody>
@@ -371,23 +371,23 @@ export function InstanceDetail() {
                   </tbody>
                 </table>
               ) : (
-                <Empty title="No jobs ran here yet" />
+                <Empty title={tr('No jobs ran here yet')} />
               )}
             </Panel>
           </div>
           <div className="narrow">
-            <Panel title="Details">
+            <Panel title={tr('Details')}>
               <KV
                 items={[
-                  ['Version', <span className="mono">{i.version || '—'}</span>],
-                  ['Runtime', i.agent_runtime || (i.node_type === 'execution' ? '—' : 'local')],
-                  ['Last seen', <Ago at={i.last_seen} />],
-                  ['UUID', <span className="mono small">{i.uuid}</span>],
-                  ['IP address', i.ip_address || '—'],
+                  [tr('Version'), <span className="mono">{i.version || '—'}</span>],
+                  [tr('Runtime'), i.agent_runtime || (i.node_type === 'execution' ? '—' : tr('local'))],
+                  [tr('Last seen'), <Ago at={i.last_seen} />],
+                  [tr('UUID'), <span className="mono small">{i.uuid}</span>],
+                  [tr('IP address'), i.ip_address || '—'],
                   [
-                    'Policy',
+                    tr('Policy'),
                     me.is_superuser && i.node_type !== 'hop' ? (
-                      <label className="check" title="Off: the instance joins only the groups that list it.">
+                      <label className="check" title={tr('Off: the instance joins only the groups that list it.')}>
                         <input
                           type="checkbox"
                           checked={i.managed_by_policy}
@@ -396,16 +396,16 @@ export function InstanceDetail() {
                             invalidate('instances', 'instance_groups')
                           }}
                         />
-                        <span>Managed by policy</span>
+                        <span>{tr('Managed by policy')}</span>
                       </label>
                     ) : i.managed_by_policy ? (
-                      'Managed by policy'
+                      tr('Managed by policy')
                     ) : (
-                      'Listed groups only'
+                      tr('Listed groups only')
                     ),
                   ],
                   [
-                    'Groups',
+                    tr('Groups'),
                     groups.data?.results.length ? (
                       groups.data.results.map((g, n) => (
                         <span key={g.id}>
@@ -414,7 +414,7 @@ export function InstanceDetail() {
                         </span>
                       ))
                     ) : (
-                      <span className="faint">None — add it to a group to receive jobs</span>
+                      <span className="faint">{tr('None — add it to a group to receive jobs')}</span>
                     ),
                   ],
                 ]}
@@ -433,7 +433,7 @@ function CapacityAdjust({ inst }: { inst: Instance }) {
   const toast = useToast()
   return (
     <div className="field">
-      <label htmlFor="adj">Capacity adjustment</label>
+      <label htmlFor="adj">{tr('Capacity adjustment')}</label>
       <div className="row">
         <input
           id="adj"
@@ -457,8 +457,8 @@ function CapacityAdjust({ inst }: { inst: Instance }) {
           {Math.round(v * 100)}%
         </span>
         {(inst.cpu_capacity > 0 || inst.mem_capacity > 0) && (
-          <span className="mono small nowrap" title="Capacity at this adjustment">
-            {adjustedCapacity(inst.cpu_capacity, inst.mem_capacity, v)} forks
+          <span className="mono small nowrap" title={tr('Capacity at this adjustment')}>
+            {adjustedCapacity(inst.cpu_capacity, inst.mem_capacity, v)} {tr('forks')}
           </span>
         )}
       </div>
@@ -480,19 +480,19 @@ export function GroupDetail() {
   return (
     <div className="page">
       <PageHead
-        crumbs={[{ label: 'Instances', to: '/instances' }, { label: grp.name }]}
+        crumbs={[{ label: tr('Instances'), to: '/instances' }, { label: grp.name }]}
         title={grp.name}
-        subtitle={grp.is_container_group ? 'Container group — each job runs in its own pod' : 'Instance group'}
+        subtitle={grp.is_container_group ? tr('Container group — each job runs in its own pod') : tr('Instance group')}
         actions={
           <>
             {grp.summary_fields.user_capabilities?.edit && (
               <Link className="btn" to={`${base}/edit`}>
-                Edit
+                {tr('Edit')}
               </Link>
             )}
             {me.is_superuser && !builtin && (
-              <button className="btn danger" onClick={() => del({ path: `instance_groups/${id}/`, name: grp.name, what: 'instance group', then: '/instances' })}>
-                Delete
+              <button className="btn danger" onClick={() => del({ path: `instance_groups/${id}/`, name: grp.name, what: tr('instance group'), then: '/instances' })}>
+                {tr('Delete')}
               </button>
             )}
           </>
@@ -500,15 +500,15 @@ export function GroupDetail() {
         tabs={
           <>
             <Tab to={base} end>
-              Details
+              {tr('Details')}
             </Tab>
             {!grp.is_container_group && (
               <Tab to={`${base}/instances`} n={grp.instances}>
-                Instances
+                {tr('Instances')}
               </Tab>
             )}
-            <Tab to={`${base}/jobs`}>Jobs</Tab>
-            <Tab to={`${base}/access`}>Access</Tab>
+            <Tab to={`${base}/jobs`}>{tr('Jobs')}</Tab>
+            <Tab to={`${base}/access`}>{tr('Access')}</Tab>
           </>
         }
       />
@@ -519,19 +519,19 @@ export function GroupDetail() {
             element={
               <div className="split">
                 <div className="wide">
-                  <Panel title="Routing">
+                  <Panel title={tr('Routing')}>
                     <KV
                       items={[
-                        ['Capacity used', grp.is_container_group ? 'Elastic' : <CapacityBar used={grp.consumed_capacity} total={grp.capacity} label="capacity" />],
-                        ['Running jobs', <span className="mono">{grp.jobs_running}</span>],
-                        ['Max concurrent jobs', grp.max_concurrent_jobs || 'No limit'],
-                        ['Max forks', grp.max_forks || 'No limit'],
+                        [tr('Capacity used'), grp.is_container_group ? tr('Elastic') : <CapacityBar used={grp.consumed_capacity} total={grp.capacity} label={tr('capacity')} />],
+                        [tr('Running jobs'), <span className="mono">{grp.jobs_running}</span>],
+                        [tr('Max concurrent jobs'), grp.max_concurrent_jobs || tr('No limit')],
+                        [tr('Max forks'), grp.max_forks || tr('No limit')],
                         ...(!grp.is_container_group
                           ? ([
-                              ['Membership', describePolicy(grp)],
-                              ['Policy: minimum nodes', grp.policy_instance_minimum],
-                              ['Policy: share of nodes', `${grp.policy_instance_percentage}%`],
-                              ['Always include', grp.policy_instance_list.length ? <span className="mono">{grp.policy_instance_list.join(', ')}</span> : '—'],
+                              [tr('Membership'), describePolicy(grp)],
+                              [tr('Policy: minimum nodes'), grp.policy_instance_minimum],
+                              [tr('Policy: share of nodes'), tr('{policy_instance_percentage}%', { policy_instance_percentage: grp.policy_instance_percentage })],
+                              [tr('Always include'), grp.policy_instance_list.length ? <span className="mono">{grp.policy_instance_list.join(', ')}</span> : '—'],
                             ] as [string, ReactNode][])
                           : []),
                       ]}
@@ -540,7 +540,7 @@ export function GroupDetail() {
                 </div>
                 {grp.is_container_group && (
                   <div className="narrow">
-                    <Panel title="Pod spec override">{grp.pod_spec_override ? <pre className="code">{grp.pod_spec_override}</pre> : <p className="muted" style={{ margin: 0 }}>Default pod spec.</p>}</Panel>
+                    <Panel title={tr('Pod spec override')}>{grp.pod_spec_override ? <pre className="code">{grp.pod_spec_override}</pre> : <p className="muted" style={{ margin: 0 }}>{tr('Default pod spec.')}</p>}</Panel>
                   </div>
                 )}
               </div>
@@ -580,44 +580,44 @@ function GroupInstances({ group }: { group: Group }) {
           <span className="grow" />
           <button className="btn primary" onClick={() => setAdding(true)}>
             <Icon name="plus" size={14} />
-            Add instances
+            {tr('Add instances')}
           </button>
         </div>
       )}
       <DataTable
-        label="Instances"
+        label={tr('Instances')}
         rows={list.data?.results}
         loading={list.isPending}
         error={list.error}
-        empty={<Empty title="No instances in this group" />}
+        empty={<Empty title={tr('No instances in this group')} />}
         columns={[
           {
             key: 'host',
-            header: 'Node',
+            header: tr('Node'),
             render: (i) => (
               <Link to={`/instances/${i.id}`} className="mono">
                 {i.hostname}
               </Link>
             ),
           },
-          { key: 'type', header: 'Type', render: (i) => i.node_type },
-          { key: 'state', header: 'State', render: (i) => <NodeState i={i} /> },
+          { key: 'type', header: tr('Type'), render: (i) => i.node_type },
+          { key: 'state', header: tr('State'), render: (i) => <NodeState i={i} /> },
           {
             key: 'why',
-            header: 'In the group',
+            header: tr('In the group'),
             render: (i) =>
               memberReason(i.hostname, group) === 'listed' ? (
-                <span className="tag">Listed</span>
+                <span className="tag">{tr('Listed')}</span>
               ) : (
-                <span className="tag" title="Chosen by the group's minimum or share of instances. It stays while they select it; turn off its policy management to take it out.">
-                  By policy
+                <span className="tag" title={tr('Chosen by the group\'s minimum or share of instances. It stays while they select it; turn off its policy management to take it out.')}>
+                  {tr('By policy')}
                 </span>
               ),
           },
-          { key: 'cap', header: 'Capacity used', render: (i) => <CapacityBar used={i.consumed_capacity} total={i.capacity} label={`${i.hostname} capacity`} /> },
+          { key: 'cap', header: tr('Capacity used'), render: (i) => <CapacityBar used={i.consumed_capacity} total={i.capacity} label={tr('{hostname} capacity', { hostname: i.hostname })} /> },
           {
             key: 'x',
-            header: <span className="sr-only">Actions</span>,
+            header: <span className="sr-only">{tr('Actions')}</span>,
             className: 'end',
             render: (i) =>
               me.is_superuser &&
@@ -629,7 +629,7 @@ function GroupInstances({ group }: { group: Group }) {
                     invalidate('instance_groups', 'instances')
                   }}
                 >
-                  Remove
+                  {tr('Remove')}
                 </button>
               ),
           },
@@ -637,21 +637,21 @@ function GroupInstances({ group }: { group: Group }) {
       />
       {adding && (
         <Dialog
-          title={`Add instances to ${group.name}`}
+          title={tr('Add instances to {name}', { name: group.name })}
           onClose={() => setAdding(false)}
           footer={
             <>
               <button className="btn" onClick={() => setAdding(false)}>
-                Cancel
+                {tr('Cancel')}
               </button>
               <button className="btn primary" disabled={!picked.length} onClick={add}>
-                Add
+                {tr('Add')}
               </button>
             </>
           }
         >
           <MultiLookup
-            label="Instances"
+            label={tr('Instances')}
             resource="instances/"
             order="hostname"
             params={{ node_type__in: 'execution,hybrid' }}
@@ -659,7 +659,7 @@ function GroupInstances({ group }: { group: Group }) {
             onChange={setPicked}
             display={(r) => r.hostname}
             meta={(r) => r.node_type}
-            help="Added instances are listed in the group's policy, so they stay in it."
+            help={tr('Added instances are listed in the group\'s policy, so they stay in it.')}
             full
           />
         </Dialog>
@@ -672,17 +672,17 @@ function GroupJobs({ group }: { group: Group }) {
   const jobs = useList<Job>('unified_jobs/', { instance_group: group.id, order_by: jobsNewestFirst, page_size: 25 })
   return (
     <DataTable
-      label="Jobs"
+      label={tr('Jobs')}
       rows={jobs.data?.results}
       loading={jobs.isPending}
       error={jobs.error}
-      empty={<Empty title="No jobs ran in this group yet" />}
+      empty={<Empty title={tr('No jobs ran in this group yet')} />}
       columns={[
-        { key: 's', header: 'Status', render: (j) => <Status status={j.status} /> },
-        { key: 'n', header: 'Job', render: (j) => <Link to={jobPath(j)}>{j.name}</Link> },
-        { key: 'id', header: 'ID', className: 'num faint', render: (j) => `#${j.id}` },
-        { key: 'node', header: 'Node', className: 'num', render: (j) => j.execution_node || '—' },
-        { key: 't', header: 'Finished', className: 'small nowrap', render: (j) => (j.finished ? <Ago at={j.finished} /> : <Elapsed job={j} />) },
+        { key: 's', header: tr('Status'), render: (j) => <Status status={j.status} /> },
+        { key: 'n', header: tr('Job'), render: (j) => <Link to={jobPath(j)}>{j.name}</Link> },
+        { key: 'id', header: tr('ID'), className: 'num faint', render: (j) => `#${j.id}` },
+        { key: 'node', header: tr('Node'), className: 'num', render: (j) => j.execution_node || '—' },
+        { key: 't', header: tr('Finished'), className: 'small nowrap', render: (j) => (j.finished ? <Ago at={j.finished} /> : <Elapsed job={j} />) },
       ]}
     />
   )
@@ -768,11 +768,11 @@ function GroupFormInner({ group, credential, onDone }: { group?: Group; credenti
       }}
     >
       {!group && (
-        <div className="segmented" role="radiogroup" aria-label="Kind">
+        <div className="segmented" role="radiogroup" aria-label={tr('Kind')}>
           {(
             [
-              [false, 'Instance group — runs on registered nodes'],
-              [true, 'Container group — a Kubernetes pod per job'],
+              [false, tr('Instance group — runs on registered nodes')],
+              [true, tr('Container group — a Kubernetes pod per job')],
             ] as const
           ).map(([v, l]) => (
             <label key={String(v)} className={f.values.container === v ? 'on' : ''}>
@@ -784,49 +784,49 @@ function GroupFormInner({ group, credential, onDone }: { group?: Group; credenti
       )}
       <div className="form-grid">
         <TextInput
-          label="Name"
+          label={tr('Name')}
           value={f.values.name}
           onChange={(v) => f.set('name', v)}
           error={f.errors.name}
           autoFocus={!group}
           disabled={locked}
-          help={locked ? 'Created by the installer; the name cannot change.' : undefined}
+          help={locked ? tr('Created by the installer; the name cannot change.') : undefined}
         />
         <TextInput
-          label="Max concurrent jobs"
+          label={tr('Max concurrent jobs')}
           type="number"
           value={f.values.max_concurrent_jobs}
           onChange={(v) => f.set('max_concurrent_jobs', v)}
-          help="Jobs running on the group's instances, whichever group sent them. 0 means no limit."
+          help={tr('Jobs running on the group\'s instances, whichever group sent them. 0 means no limit.')}
           error={err('max_concurrent_jobs')}
         />
         <TextInput
-          label="Max forks"
+          label={tr('Max forks')}
           type="number"
           value={f.values.max_forks}
           onChange={(v) => f.set('max_forks', v)}
-          help="Total forks across those jobs. 0 means no limit."
+          help={tr('Total forks across those jobs. 0 means no limit.')}
           error={err('max_forks')}
         />
         {f.values.container ? (
           <>
             <Lookup
-              label="Kubernetes credential"
+              label={tr('Kubernetes credential')}
               optional
               resource="credentials/"
               params={{ credential_type__kind: 'kubernetes' }}
               value={f.values.credential}
               onChange={(v) => f.set('credential', v)}
-              help="Leave empty to use the service account of the control plane pod."
+              help={tr('Leave empty to use the service account of the control plane pod.')}
               error={f.errors.credential}
             />
-            <Field label="Pod spec override" optional full error={podError ?? f.errors.pod_spec_override} help="YAML merged into the default job pod: namespace, resources, node selectors, tolerations, service account.">
+            <Field label={tr('Pod spec override')} optional full error={podError ?? f.errors.pod_spec_override} help={tr('YAML merged into the default job pod: namespace, resources, node selectors, tolerations, service account.')}>
               <textarea
                 className="textarea mono"
                 rows={12}
                 spellCheck={false}
                 value={f.values.pod_spec_override}
-                placeholder={'apiVersion: v1\nkind: Pod\nmetadata:\n  namespace: awx-jobs\nspec:\n  containers:\n    - name: worker\n      resources:\n        requests: {cpu: 250m, memory: 100Mi}'}
+                placeholder={tr('apiVersion: v1\nkind: Pod\nmetadata:\n  namespace: awx-jobs\nspec:\n  containers:\n    - name: worker\n      resources:\n        requests: {cpu: 250m, memory: 100Mi}')}
                 onChange={(e) => f.set('pod_spec_override', e.target.value)}
               />
             </Field>
@@ -834,29 +834,29 @@ function GroupFormInner({ group, credential, onDone }: { group?: Group; credenti
         ) : (
           <>
             <TextInput
-              label="Policy: minimum nodes"
+              label={tr('Policy: minimum nodes')}
               type="number"
               value={f.values.policy_instance_minimum}
               onChange={(v) => f.set('policy_instance_minimum', v)}
-              help="Instances kept in this group, taken from those in the fewest groups."
+              help={tr('Instances kept in this group, taken from those in the fewest groups.')}
               error={err('policy_instance_minimum')}
             />
             <TextInput
-              label="Policy: share of nodes"
+              label={tr('Policy: share of nodes')}
               type="number"
               value={f.values.policy_instance_percentage}
               onChange={(v) => f.set('policy_instance_percentage', v)}
-              help={locked ? 'Every instance, as the installer set it.' : 'Percent of all instances kept in this group.'}
+              help={locked ? tr('Every instance, as the installer set it.') : tr('Percent of all instances kept in this group.')}
               error={err('policy_instance_percentage')}
               disabled={locked}
             />
             <TextInput
-              label="Always include"
+              label={tr('Always include')}
               optional
               mono
               value={f.values.policy_instance_list}
               onChange={(v) => f.set('policy_instance_list', v)}
-              help={locked ? 'Set by the installer.' : 'Hostnames, comma separated. Instances added by hand are listed here.'}
+              help={locked ? tr('Set by the installer.') : tr('Hostnames, comma separated. Instances added by hand are listed here.')}
               error={err('policy_instance_list')}
               disabled={locked}
               full
@@ -867,10 +867,10 @@ function GroupFormInner({ group, credential, onDone }: { group?: Group; credenti
       <FormError error={error} />
       <div className="form-actions">
         <button className="btn primary" disabled={busy || !f.values.name.trim() || !!podError || Object.keys(checks).length > 0}>
-          {busy ? 'Saving…' : group ? 'Save changes' : 'Create group'}
+          {busy ? tr('Saving…') : group ? tr('Save changes') : tr('Create group')}
         </button>
         <button type="button" className="btn ghost" onClick={() => nav(group ? `/instance-groups/${group.id}` : '/instances')}>
-          Cancel
+          {tr('Cancel')}
         </button>
       </div>
     </form>
@@ -880,7 +880,7 @@ function GroupFormInner({ group, credential, onDone }: { group?: Group; credenti
 export function GroupNew() {
   return (
     <div className="page">
-      <PageHead crumbs={[{ label: 'Instances', to: '/instances' }, { label: 'New instance group' }]} title="New instance group" />
+      <PageHead crumbs={[{ label: tr('Instances'), to: '/instances' }, { label: tr('New instance group') }]} title={tr('New instance group')} />
       <div className="page-body">
         <GroupForm />
       </div>

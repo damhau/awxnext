@@ -13,6 +13,7 @@ import { absolute, plural } from '../../lib/format'
 import { compile, type KeyTable } from '../../lib/query'
 import { FilterBox, Provenance, useDelete } from './common'
 import { AdHocDialog, HostDialog, type Host } from './inventoryHosts'
+import { tr } from '../../lib/i18n'
 
 const keys: KeyTable = {
   inventory: { field: 'inventory__name', lookup: 'iexact' },
@@ -31,20 +32,20 @@ export function HostList() {
   const cols: Column<Host>[] = [
     {
       key: 'name',
-      header: 'Host',
+      header: tr('Host'),
       sort: 'name',
       render: (h) => (
         <div className="row" style={{ gap: 6 }}>
           <Link to={`/hosts/${h.id}`} className="cell-title mono" style={{ fontSize: 13, opacity: h.enabled ? 1 : 0.55 }}>
             {h.name}
           </Link>
-          {!h.enabled && <span className="tag">disabled</span>}
+          {!h.enabled && <span className="tag">{tr('disabled')}</span>}
         </div>
       ),
     },
     {
       key: 'inv',
-      header: 'Inventory',
+      header: tr('Inventory'),
       sort: 'inventory__name',
       render: (h) => (
         <Link to={`/inventories/${h.inventory}/hosts`} className="small" style={{ color: 'var(--ink-2)' }}>
@@ -54,7 +55,7 @@ export function HostList() {
     },
     {
       key: 'groups',
-      header: 'Groups',
+      header: tr('Groups'),
       render: (h) => {
         const g = (h.summary_fields.groups?.results ?? []) as Ref[]
         return g.length ? (
@@ -68,10 +69,10 @@ export function HostList() {
     },
     {
       key: 'last',
-      header: 'Last job',
+      header: tr('Last job'),
       render: (h) => {
         const j = (h.summary_fields.recent_jobs ?? [])[0] as (Base & { status: string; finished: string }) | undefined
-        if (!j) return <span className="faint small">never targeted</span>
+        if (!j) return <span className="faint small">{tr('never targeted')}</span>
         return (
           <Link to={`/jobs/${j.type}/${j.id}`} className="row small" style={{ gap: 6, color: 'var(--ink-2)' }}>
             <StatusDot status={j.status} />
@@ -88,11 +89,11 @@ export function HostList() {
   ]
   return (
     <div className="page">
-      <PageHead title="Hosts" subtitle="Every host across the inventories you can see." bordered={false} />
+      <PageHead title={tr('Hosts')} subtitle={tr('Every host across the inventories you can see.')} bordered={false} />
       <div className="page-body">
-        <FilterBox value={ls.q} onApply={ls.setQ} placeholder="name…  try  inventory:prod-eu-west  group:web  enabled:no" />
+        <FilterBox value={ls.q} onApply={ls.setQ} placeholder={tr('name…  try  inventory:prod-eu-west  group:web  enabled:no')} />
         <DataTable
-          label="Hosts"
+          label={tr('Hosts')}
           rows={hosts.data?.results}
           columns={cols}
           loading={hosts.isPending}
@@ -100,11 +101,11 @@ export function HostList() {
           order={ls.order}
           onOrder={ls.setOrder}
           onOpen={(h) => nav(`/hosts/${h.id}`)}
-          empty={<Empty title={ls.q ? 'No host matches' : 'No hosts yet'}>{ls.q ? 'Try a shorter filter.' : 'Hosts live in inventories. Create an inventory to add some.'}</Empty>}
+          empty={<Empty title={ls.q ? tr('No host matches') : tr('No hosts yet')}>{ls.q ? tr('Try a shorter filter.') : tr('Hosts live in inventories. Create an inventory to add some.')}</Empty>}
           footer={
             <div className="table-foot">
-              <span>{hosts.data ? `${plural(hosts.data.count, 'host', 'hosts')}` : ''}</span>
-              <span className="mono">j/k move · enter open · / filter</span>
+              <span>{hosts.data ? tr('{count}', { count: plural(hosts.data.count, 'host', 'hosts') }) : ''}</span>
+              <span className="mono">{tr('j/k move · enter open · / filter')}</span>
               <Pager count={hosts.data?.count ?? 0} page={ls.page} pageSize={ls.pageSize} onPage={ls.setPage} />
             </div>
           }
@@ -131,7 +132,7 @@ export function HostDetail() {
   const h = host.data
   const del = useDelete('hosts', h ? `/inventories/${h.inventory}/hosts` : '/hosts')
   if (host.isPending) return <Loading />
-  if (host.error || !h) return <div className="page-body"><ErrorNote error={host.error ?? 'Not found'} /></div>
+  if (host.error || !h) return <div className="page-body"><ErrorNote error={host.error ?? tr('Not found')} /></div>
   const inv = h.summary_fields.inventory as Ref | undefined
   const caps = h.summary_fields.user_capabilities ?? {}
   const groups = (h.summary_fields.groups?.results ?? []) as Ref[]
@@ -140,18 +141,18 @@ export function HostDetail() {
       await api.patch(`hosts/${h.id}/`, { enabled: !h.enabled })
       invalidate(`hosts/${h.id}`, 'hosts', `inventories/${h.inventory}`)
     } catch (e) {
-      toast(e instanceof Error ? e.message : 'Update failed', 'error')
+      toast(e instanceof Error ? e.message : tr('Update failed'), 'error')
     }
   }
   const sumCols: Column<Summary>[] = [
     {
       key: 'job',
-      header: 'Job',
+      header: tr('Job'),
       render: (s) => (
         <div className="row" style={{ gap: 6 }}>
           <StatusDot status={s.failed ? 'failed' : s.summary_fields.job?.status ?? 'successful'} />
           <Link to={`/jobs/job/${s.job}`} className="cell-title">
-            {s.summary_fields.job?.name ?? `Job ${s.job}`}
+            {s.summary_fields.job?.name ?? tr('Job {job}', { job: s.job })}
           </Link>
           <span className="mono small faint">#{s.job}</span>
         </div>
@@ -159,43 +160,43 @@ export function HostDetail() {
     },
     {
       key: 'counts',
-      header: 'Result on this host',
+      header: tr('Result on this host'),
       render: (s) => (
         <span className="mono small">
-          ok {s.ok} · <span style={{ color: s.changed ? 'var(--changed)' : undefined }}>changed {s.changed}</span>
-          {s.failures ? <span className="fail-text"> · failed {s.failures}</span> : null}
-          {s.dark ? <span className="fail-text"> · unreachable {s.dark}</span> : null}
-          {s.skipped ? <span className="faint"> · skipped {s.skipped}</span> : null}
+          {tr('ok')} {s.ok} · <span style={{ color: s.changed ? 'var(--changed)' : undefined }}>{tr('changed')} {s.changed}</span>
+          {s.failures ? <span className="fail-text"> {tr('· failed')} {s.failures}</span> : null}
+          {s.dark ? <span className="fail-text"> {tr('· unreachable')} {s.dark}</span> : null}
+          {s.skipped ? <span className="faint"> {tr('· skipped')} {s.skipped}</span> : null}
         </span>
       ),
     },
-    { key: 'when', header: 'When', render: (s) => <span className="small nowrap"><Ago at={s.created} /></span> },
+    { key: 'when', header: tr('When'), render: (s) => <span className="small nowrap"><Ago at={s.created} /></span> },
   ]
   return (
     <div className="page">
       <PageHead
-        crumbs={[{ label: 'Inventories', to: '/inventories' }, ...(inv ? [{ label: inv.name, to: `/inventories/${inv.id}/hosts` }] : []), { label: h.name }]}
+        crumbs={[{ label: tr('Inventories'), to: '/inventories' }, ...(inv ? [{ label: inv.name, to: `/inventories/${inv.id}/hosts` }] : []), { label: h.name }]}
         title={<span className="mono" style={{ fontSize: 19 }}>{h.name}</span>}
-        badge={h.enabled ? undefined : <span className="badge">Disabled</span>}
+        badge={h.enabled ? undefined : <span className="badge">{tr('Disabled')}</span>}
         subtitle={h.description || undefined}
         actions={
           <>
             <button className="btn" onClick={() => setDialog('adhoc')}>
-              <Icon name="terminal" size={14} /> Run command…
+              <Icon name="terminal" size={14} /> {tr('Run command…')}
             </button>
             {caps.edit && (
               <button className="btn" onClick={() => setDialog('edit')}>
-                Edit
+                {tr('Edit')}
               </button>
             )}
-            <Menu label="More actions">
-              {caps.edit && <button onClick={toggle}>{h.enabled ? 'Disable host' : 'Enable host'}</button>}
-              <Link to={`/jobs?q=${encodeURIComponent(`host:${h.name}`)}`}>Jobs that targeted this host</Link>
+            <Menu label={tr('More actions')}>
+              {caps.edit && <button onClick={toggle}>{h.enabled ? tr('Disable host') : tr('Enable host')}</button>}
+              <Link to={`/jobs?q=${encodeURIComponent(`host:${h.name}`)}`}>{tr('Jobs that targeted this host')}</Link>
               {caps.delete && (
                 <>
                   <hr />
                   <button className="danger" onClick={() => del(h, 'host')}>
-                    Delete…
+                    {tr('Delete…')}
                   </button>
                 </>
               )}
@@ -206,27 +207,27 @@ export function HostDetail() {
       <div className="page-body">
         <div className="split">
           <div className="wide stack" style={{ gap: 16 }}>
-            <Panel title="Recent jobs on this host" pad={false} className="flush">
+            <Panel title={tr('Recent jobs on this host')} pad={false} className="flush">
               <DataTable
-                label="Job results"
+                label={tr('Job results')}
                 rows={summaries.data?.results}
                 columns={sumCols}
                 loading={summaries.isPending}
                 error={summaries.error}
                 keyboard={false}
-                empty={<Empty title="Never targeted">No job has run against this host yet.</Empty>}
+                empty={<Empty title={tr('Never targeted')}>{tr('No job has run against this host yet.')}</Empty>}
               />
             </Panel>
-            <Panel title="Variables">{h.variables?.trim() ? <pre className="code">{h.variables}</pre> : <span className="faint small">No host variables.</span>}</Panel>
+            <Panel title={tr('Variables')}>{h.variables?.trim() ? <pre className="code">{h.variables}</pre> : <span className="faint small">{tr('No host variables.')}</span>}</Panel>
             <Facts facts={facts.data} gathered={h.ansible_facts_modified} loading={facts.isPending} />
           </div>
           <div className="narrow">
-            <Panel title="About">
+            <Panel title={tr('About')}>
               <KV
                 items={[
-                  ['Inventory', inv ? <Link to={`/inventories/${inv.id}`}>{inv.name}</Link> : '—'],
+                  [tr('Inventory'), inv ? <Link to={`/inventories/${inv.id}`}>{inv.name}</Link> : '—'],
                   [
-                    'Groups',
+                    tr('Groups'),
                     groups.length ? (
                       <span className="row wrap" style={{ gap: 4 }}>
                         {groups.map((g) => (
@@ -236,13 +237,13 @@ export function HostDetail() {
                         ))}
                       </span>
                     ) : (
-                      <span className="faint">ungrouped</span>
+                      <span className="faint">{tr('ungrouped')}</span>
                     ),
                   ],
-                  ['Enabled', h.enabled ? 'Yes' : 'No — jobs skip this host'],
-                  ['Instance ID', h.instance_id ? <code>{h.instance_id}</code> : ''],
-                  ['Facts gathered', h.ansible_facts_modified ? <span title={absolute(h.ansible_facts_modified)}><Ago at={h.ansible_facts_modified} /></span> : <span className="faint">never</span>],
-                  ['History', <Provenance obj={h} />],
+                  [tr('Enabled'), h.enabled ? tr('Yes') : tr('No — jobs skip this host')],
+                  [tr('Instance ID'), h.instance_id ? <code>{h.instance_id}</code> : ''],
+                  [tr('Facts gathered'), h.ansible_facts_modified ? <span title={absolute(h.ansible_facts_modified)}><Ago at={h.ansible_facts_modified} /></span> : <span className="faint">{tr('never')}</span>],
+                  [tr('History'), <Provenance obj={h} />],
                 ]}
               />
             </Panel>
@@ -257,24 +258,24 @@ export function HostDetail() {
 
 const keyFacts = [
   ['OS', (f: Record<string, unknown>) => [f.ansible_distribution, f.ansible_distribution_version].filter(Boolean).join(' ')],
-  ['Kernel', (f: Record<string, unknown>) => f.ansible_kernel],
-  ['Architecture', (f: Record<string, unknown>) => f.ansible_architecture],
+  [tr('Kernel'), (f: Record<string, unknown>) => f.ansible_kernel],
+  [tr('Architecture'), (f: Record<string, unknown>) => f.ansible_architecture],
   ['IPv4', (f: Record<string, unknown>) => (f.ansible_default_ipv4 as Record<string, unknown> | undefined)?.address],
-  ['Memory', (f: Record<string, unknown>) => (f.ansible_memtotal_mb ? `${Math.round(Number(f.ansible_memtotal_mb) / 1024)} GiB` : undefined)],
+  [tr('Memory'), (f: Record<string, unknown>) => (f.ansible_memtotal_mb ? `${Math.round(Number(f.ansible_memtotal_mb) / 1024)} GiB` : undefined)],
   ['CPUs', (f: Record<string, unknown>) => f.ansible_processor_vcpus],
-  ['Virtualization', (f: Record<string, unknown>) => [f.ansible_virtualization_type, f.ansible_virtualization_role].filter(Boolean).join(' · ')],
+  [tr('Virtualization'), (f: Record<string, unknown>) => [f.ansible_virtualization_type, f.ansible_virtualization_role].filter(Boolean).join(' · ')],
 ] as const
 
 function Facts({ facts, gathered, loading }: { facts?: Record<string, unknown>; gathered?: string | null; loading: boolean }) {
   const [filter, setFilter] = useState('')
   const [all, setAll] = useState(false)
   const entries = useMemo(() => Object.entries(facts ?? {}).sort(([a], [b]) => a.localeCompare(b)), [facts])
-  if (loading) return <Panel title="Facts"><Loading rows={3} /></Panel>
+  if (loading) return <Panel title={tr('Facts')}><Loading rows={3} /></Panel>
   if (!entries.length)
     return (
-      <Panel title="Facts">
+      <Panel title={tr('Facts')}>
         <span className="faint small">
-          No facts stored. Facts are kept when a job template enables fact storage and gathers facts.
+          {tr('No facts stored. Facts are kept when a job template enables fact storage and gathers facts.')}
         </span>
       </Panel>
     )
@@ -282,18 +283,18 @@ function Facts({ facts, gathered, loading }: { facts?: Record<string, unknown>; 
   const shown = entries.filter(([k, v]) => !filter || k.includes(filter) || JSON.stringify(v).toLowerCase().includes(filter.toLowerCase()))
   return (
     <Panel
-      title="Facts"
+      title={tr('Facts')}
       actions={
         <span className="small faint">
-          gathered <Ago at={gathered} />
+          {tr('gathered')} <Ago at={gathered} />
         </span>
       }
     >
       {known.length > 0 && <KV items={known.map(([k, v]) => [k, <span className="mono">{String(v)}</span>])} />}
       <div className="row" style={{ marginTop: known.length ? 14 : 0 }}>
-        <input className="input mono" style={{ maxWidth: 280 }} placeholder="filter facts…" value={filter} onChange={(e) => setFilter(e.target.value)} aria-label="Filter facts" />
+        <input className="input mono" style={{ maxWidth: 280 }} placeholder={tr('filter facts…')} value={filter} onChange={(e) => setFilter(e.target.value)} aria-label={tr('Filter facts')} />
         <span className="small faint">
-          {shown.length} of {entries.length}
+          {shown.length} {tr('of')} {entries.length}
         </span>
       </div>
       <div style={{ marginTop: 10, maxHeight: all ? undefined : 360, overflow: 'auto' }}>
@@ -314,7 +315,7 @@ function Facts({ facts, gathered, loading }: { facts?: Record<string, unknown>; 
       </div>
       {!all && shown.length > 60 && (
         <button className="link-btn small" style={{ marginTop: 8 }} onClick={() => setAll(true)}>
-          Show all {shown.length}
+          {tr('Show all')} {shown.length}
         </button>
       )}
     </Panel>

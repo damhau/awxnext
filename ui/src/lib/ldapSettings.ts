@@ -1,3 +1,4 @@
+import { tr } from './i18n'
 // AWX's six LDAP servers share one settings category: AUTH_LDAP_* is the
 // default server, AUTH_LDAP_1_* to AUTH_LDAP_5_* the others, tried in order.
 
@@ -11,10 +12,10 @@ export function ldapPrefix(key: string): string {
 /** The section heading of a key's server. */
 export function ldapServer(key: string): string {
   const n = key.match(serverRe)?.[1]
-  return n ? `Server ${n}` : 'Default server'
+  return n ? tr('Server {n}', { n }) : tr('Default server')
 }
 
-export const ldapServerOrder = ['Default server', 'Server 1', 'Server 2', 'Server 3', 'Server 4', 'Server 5']
+export const ldapServerOrder = [tr('Default server'), ...[1, 2, 3, 4, 5].map((n) => tr('Server {n}', { n }))]
 
 /** Whether a server has a URI, so its section can start open. */
 export function ldapServerOn(values: Record<string, unknown>, server: string): boolean {

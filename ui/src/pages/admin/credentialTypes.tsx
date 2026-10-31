@@ -13,6 +13,7 @@ import { Ago, Empty, PageHead } from '../../components/ui'
 import { fieldIds, injectorsExample, inputsExample, parseSpec, specText, undefinedRefs, type Spec } from '../../lib/credentialTypes'
 import { plural } from '../../lib/format'
 import { applyErrors, FilterBox, KindTag, useDelete } from '../resources/common'
+import { asIs, tr } from '../../lib/i18n'
 
 interface CredType extends Base {
   kind: string
@@ -23,24 +24,24 @@ interface CredType extends Base {
 }
 
 const kindLabel: Record<string, string> = {
-  ssh: 'Machine',
-  scm: 'Source control',
-  vault: 'Vault',
-  net: 'Network',
-  cloud: 'Cloud',
-  registry: 'Container registry',
-  token: 'Token',
-  insights: 'Insights',
-  kubernetes: 'Kubernetes',
-  galaxy: 'Galaxy',
-  cryptography: 'Cryptography',
-  external: 'Secret lookup',
+  ssh: tr('Machine'),
+  scm: tr('Source control'),
+  vault: asIs('Vault'),
+  net: tr('Network'),
+  cloud: tr('Cloud'),
+  registry: tr('Container registry'),
+  token: tr('Token'),
+  insights: asIs('Insights'),
+  kubernetes: asIs('Kubernetes'),
+  galaxy: asIs('Galaxy'),
+  cryptography: tr('Cryptography'),
+  external: tr('Secret lookup'),
 }
 
 const show = [
-  ['all', 'All'],
-  ['custom', 'Custom'],
-  ['managed', 'Built-in'],
+  ['all', tr('All')],
+  ['custom', tr('Custom')],
+  ['managed', tr('Built-in')],
 ] as const
 
 export function CredentialTypeList() {
@@ -54,7 +55,7 @@ export function CredentialTypeList() {
   const cols: Column<CredType>[] = [
     {
       key: 'name',
-      header: 'Type',
+      header: tr('Type'),
       sort: 'name',
       render: (t) => (
         <div>
@@ -62,30 +63,30 @@ export function CredentialTypeList() {
             <button className="link-btn cell-title" onClick={() => setOpen({ type: t })}>
               {t.name}
             </button>
-            {t.managed && <KindTag>built-in</KindTag>}
+            {t.managed && <KindTag>{tr('built-in')}</KindTag>}
           </span>
           {t.description && <div className="faint small">{t.description}</div>}
         </div>
       ),
     },
-    { key: 'kind', header: 'Kind', sort: 'kind', render: (t) => <span className="small">{kindLabel[t.kind] ?? t.kind}</span> },
-    { key: 'fields', header: 'Inputs', render: (t) => <span className="small muted">{plural(fieldIds(t.inputs ?? {}).length, 'field', 'fields')}</span> },
-    { key: 'ns', header: 'Namespace', render: (t) => (t.namespace ? <span className="mono small">{t.namespace}</span> : <span className="faint small">—</span>) },
-    { key: 'modified', header: 'Edited', render: (t) => <span className="small faint nowrap"><Ago at={t.modified} /></span> },
+    { key: 'kind', header: tr('Kind'), sort: 'kind', render: (t) => <span className="small">{kindLabel[t.kind] ?? t.kind}</span> },
+    { key: 'fields', header: tr('Inputs'), render: (t) => <span className="small muted">{plural(fieldIds(t.inputs ?? {}).length, 'field', 'fields')}</span> },
+    { key: 'ns', header: tr('Namespace'), render: (t) => (t.namespace ? <span className="mono small">{t.namespace}</span> : <span className="faint small">—</span>) },
+    { key: 'modified', header: tr('Edited'), render: (t) => <span className="small faint nowrap"><Ago at={t.modified} /></span> },
     {
       key: 'menu',
-      header: <span className="sr-only">Actions</span>,
+      header: <span className="sr-only">{tr('Actions')}</span>,
       className: 'end',
       render: (t) =>
         t.summary_fields.user_capabilities?.edit ? (
-          <Menu label={`Actions for ${t.name}`} className="btn sm icon ghost">
-            <button onClick={() => setOpen({ type: t })}>Edit…</button>
-            <Link to={`/credentials?q=type:${encodeURIComponent(`"${t.name}"`)}`}>Credentials of this type</Link>
+          <Menu label={tr('Actions for {name}', { name: t.name })} className="btn sm icon ghost">
+            <button onClick={() => setOpen({ type: t })}>{tr('Edit…')}</button>
+            <Link to={`/credentials?q=type:${encodeURIComponent(`"${t.name}"`)}`}>{tr('Credentials of this type')}</Link>
             {t.summary_fields.user_capabilities?.delete && (
               <>
                 <hr />
                 <button className="danger" onClick={() => del(t, 'credential type')}>
-                  Delete…
+                  {tr('Delete…')}
                 </button>
               </>
             )}
@@ -96,24 +97,24 @@ export function CredentialTypeList() {
   return (
     <div className="page">
       <PageHead
-        title="Credential types"
-        subtitle="What a credential holds and how jobs receive it: the built-in types, and custom ones with your own inputs and injectors."
+        title={tr('Credential types')}
+        subtitle={tr('What a credential holds and how jobs receive it: the built-in types, and custom ones with your own inputs and injectors.')}
         bordered={false}
         actions={
           me?.is_superuser ? (
             <button className="btn primary" onClick={() => setOpen({})}>
-              New type
+              {tr('New type')}
             </button>
           ) : undefined
         }
       />
       <div className="page-body">
         <div className="row wrap" style={{ gap: 8 }}>
-          <FilterBox value={ls.q} onApply={ls.setQ} placeholder="name…" />
-          <Segmented legend={<span className="sr-only">Show</span>} value={only} onChange={setOnly} options={show.map(([k, label]) => [k, label])} />
+          <FilterBox value={ls.q} onApply={ls.setQ} placeholder={tr('name…')} />
+          <Segmented legend={<span className="sr-only">{tr('Show')}</span>} value={only} onChange={setOnly} options={show.map(([k, label]) => [k, label])} />
         </div>
         <DataTable
-          label="Credential types"
+          label={tr('Credential types')}
           rows={list.data?.results}
           columns={cols}
           loading={list.isPending}
@@ -121,7 +122,7 @@ export function CredentialTypeList() {
           order={ls.order}
           onOrder={ls.setOrder}
           onOpen={(t) => setOpen({ type: t })}
-          empty={<Empty title={ls.q || only !== 'all' ? 'No type matches' : 'No credential types'} />}
+          empty={<Empty title={ls.q || only !== 'all' ? tr('No type matches') : tr('No credential types')} />}
           footer={
             <div className="table-foot">
               <span>{list.data ? plural(list.data.count, 'type', 'types') : ''}</span>
@@ -163,7 +164,7 @@ function CredentialTypeDialog({ type, onClose }: { type?: CredType; onClose: () 
     try {
       const saved = type ? await api.patch<CredType>(`credential_types/${type.id}/`, body) : await api.post<CredType>('credential_types/', body)
       invalidate('credential_types')
-      toast(type ? `Saved ${saved.name}` : `Created ${saved.name}`)
+      toast(type ? tr('Saved {name}', { name: saved.name }) : tr('Created {name}', { name: saved.name }))
       onClose()
     } catch (err) {
       setError(applyErrors(err, f.setErrors))
@@ -171,7 +172,7 @@ function CredentialTypeDialog({ type, onClose }: { type?: CredType; onClose: () 
       setBusy(false)
     }
   }
-  const title = !type ? 'New credential type' : editable ? `Edit ${type.name}` : type.name
+  const title = !type ? tr('New credential type') : editable ? `Edit ${type.name}` : type.name
   return (
     <Dialog
       title={title}
@@ -181,39 +182,39 @@ function CredentialTypeDialog({ type, onClose }: { type?: CredType; onClose: () 
         editable ? (
           <>
             <button className="btn" type="button" onClick={onClose}>
-              Cancel
+              {tr('Cancel')}
             </button>
             <button className="btn primary" form="credtype-form" disabled={busy || !v.name.trim() || !inputs.value || !injectors.value}>
-              {busy ? 'Saving…' : type ? 'Save' : 'Create type'}
+              {busy ? tr('Saving…') : type ? tr('Save') : tr('Create type')}
             </button>
           </>
         ) : (
           <button className="btn" type="button" onClick={onClose}>
-            Close
+            {tr('Close')}
           </button>
         )
       }
     >
       <form id="credtype-form" className="form" onSubmit={submit}>
-        {type?.managed && <p className="muted" style={{ marginTop: 0 }}>A built-in type: read-only. Make a custom type for other inputs.</p>}
+        {type?.managed && <p className="muted" style={{ marginTop: 0 }}>{tr('A built-in type: read-only. Make a custom type for other inputs.')}</p>}
         {inUse && editable && (
           <p className="muted" style={{ marginTop: 0 }}>
-            {plural(used.data!.count, 'credential uses', 'credentials use')} this type: its inputs cannot change, its injectors can.
+            {plural(used.data!.count, 'credential uses', 'credentials use')} {tr('this type: its inputs cannot change, its injectors can.')}
           </p>
         )}
         <div className="form-grid">
-          <TextInput label="Name" value={v.name} onChange={(x) => f.set('name', x)} error={f.errors.name} disabled={!editable} />
+          <TextInput label={tr('Name')} value={v.name} onChange={(x) => f.set('name', x)} error={f.errors.name} disabled={!editable} />
           <SelectField
-            label="Kind"
+            label={tr('Kind')}
             value={v.kind}
             onChange={(x) => f.set('kind', x)}
-            options={type?.managed ? [[v.kind, kindLabel[v.kind] ?? v.kind]] : [['cloud', 'Cloud'], ['net', 'Network']]}
+            options={type?.managed ? [[v.kind, kindLabel[v.kind] ?? v.kind]] : [['cloud', tr('Cloud')], ['net', tr('Network')]]}
             error={f.errors.kind}
-            help={editable ? 'Custom types are cloud or network credentials.' : undefined}
+            help={editable ? tr('Custom types are cloud or network credentials.') : undefined}
           />
-          <TextInput label="Description" optional value={v.description} onChange={(x) => f.set('description', x)} error={f.errors.description} full disabled={!editable} />
+          <TextInput label={tr('Description')} optional value={v.description} onChange={(x) => f.set('description', x)} error={f.errors.description} full disabled={!editable} />
           <TextArea
-            label="Input configuration"
+            label={tr('Input configuration')}
             mono
             rows={12}
             value={v.inputs}
@@ -221,13 +222,13 @@ function CredentialTypeDialog({ type, onClose }: { type?: CredType; onClose: () 
             error={inputs.error ?? f.errors.inputs}
             help={
               <>
-                YAML or JSON: <code>fields</code> (each with an <code>id</code>, a <code>label</code>, a <code>type</code>, <code>secret: true</code> to hide it),{' '}
+                {tr('YAML or JSON:')} <code>fields</code> {tr('(each with an')} <code>id</code>, a <code>label</code>, a <code>type</code>, <code>secret: true</code> {tr('to hide it),')}{' '}
                 <code>required</code>.
               </>
             }
           />
           <TextArea
-            label="Injector configuration"
+            label={tr('Injector configuration')}
             mono
             rows={8}
             value={v.injectors}
@@ -235,10 +236,10 @@ function CredentialTypeDialog({ type, onClose }: { type?: CredType; onClose: () 
             error={injectors.error ?? f.errors.injectors}
             help={
               missing.length ? (
-                <span className="err">No input field named {missing.join(', ')}.</span>
+                <span className="err">{tr('No input field named')} {missing.join(', ')}.</span>
               ) : (
                 <>
-                  How jobs receive the inputs: <code>env</code>, <code>extra_vars</code> and <code>file</code>, as Jinja2 templates such as <code>{'{{ token }}'}</code>.
+                  {tr('How jobs receive the inputs:')} <code>env</code>, <code>extra_vars</code> {tr('and')} <code>file</code>{tr(', as Jinja2 templates such as')} <code>{'{{ token }}'}</code>.
                 </>
               )
             }

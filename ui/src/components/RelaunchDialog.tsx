@@ -5,6 +5,7 @@ import type { Job } from '../api/types'
 import { jobApi, jobPath } from '../lib/format'
 import { passwordLabel, relaunchJob } from '../lib/jobs'
 import { Dialog, useToast } from './overlay'
+import { tr } from '../lib/i18n'
 
 type Relaunchable = Pick<Job, 'id' | 'type' | 'unified_job_template'>
 
@@ -60,22 +61,22 @@ function PasswordsDialog({ needed, onClose, onSubmit }: { needed: string[]; onCl
   }
   return (
     <Dialog
-      title="Passwords to relaunch"
+      title={tr('Passwords to relaunch')}
       onClose={onClose}
       footer={
         <>
           <button className="btn" onClick={onClose}>
-            Cancel
+            {tr('Cancel')}
           </button>
           <button className="btn primary" disabled={missing.length > 0} onClick={() => submit()}>
-            Relaunch
+            {tr('Relaunch')}
           </button>
         </>
       }
     >
       <form className="stack" style={{ gap: 14 }} onSubmit={submit}>
         <p className="muted" style={{ margin: 0 }}>
-          The job's credentials ask for these at launch. They are used for this run only.
+          {tr('The job\'s credentials ask for these at launch. They are used for this run only.')}
         </p>
         {needed.map((k, i) => (
           <div key={k} className="field">

@@ -6,6 +6,7 @@ import { usePref } from '../lib/prefs'
 import { Icon } from './icons'
 import { Menu } from './overlay'
 import { Empty, ErrorNote, Loading } from './ui'
+import { tr } from '../lib/i18n'
 
 export interface Column<T> {
   key: string
@@ -120,7 +121,7 @@ export function DataTable<T>({
               <th className="sel" scope="col">
                 <input
                   type="checkbox"
-                  aria-label="Select all"
+                  aria-label={tr('Select all')}
                   checked={allSelected}
                   onChange={() => onSelect(allSelected ? new Set([...selected!].filter((k) => !allKeys.includes(k))) : new Set([...(selected ?? []), ...allKeys]))}
                 />
@@ -169,7 +170,7 @@ export function DataTable<T>({
               >
                 {onSelect && (
                   <td className="sel">
-                    <input type="checkbox" aria-label="Select row" checked={!!sel} onChange={() => toggle(k)} />
+                    <input type="checkbox" aria-label={tr('Select row')} checked={!!sel} onChange={() => toggle(k)} />
                   </td>
                 )}
                 {columns.map((c, ci) => (
@@ -184,7 +185,7 @@ export function DataTable<T>({
         </tbody>
       </table>
       {loading && list.length === 0 && <Loading />}
-      {!loading && list.length === 0 && !lead && (empty ?? <Empty title="Nothing here yet" />)}
+      {!loading && list.length === 0 && !lead && (empty ?? <Empty title={tr('Nothing here yet')} />)}
       {footer}
     </div>
   )
@@ -196,8 +197,8 @@ function ColumnChooser<T>({ columns, hidden, onToggle, onReset }: { columns: Col
   if (!can.length) return null
   const n = can.filter((c) => hidden.includes(c.key)).length
   return (
-    <Menu label={n ? `Columns, ${n} hidden` : 'Columns'} className={`btn sm icon ghost${n ? ' on' : ''}`} trigger={<Icon name="columns" size={14} />}>
-      <div className="head">Columns</div>
+    <Menu label={n ? tr('Columns, {n} hidden', { n }) : tr('Columns')} className={`btn sm icon ghost${n ? ' on' : ''}`} trigger={<Icon name="columns" size={14} />}>
+      <div className="head">{tr('Columns')}</div>
       {can.map((c) => (
         <label key={c.key} className="menu-check">
           <input type="checkbox" checked={!hidden.includes(c.key)} onChange={() => onToggle(c.key)} />
@@ -207,7 +208,7 @@ function ColumnChooser<T>({ columns, hidden, onToggle, onReset }: { columns: Col
       {n > 0 && (
         <>
           <hr />
-          <button onClick={onReset}>Show all columns</button>
+          <button onClick={onReset}>{tr('Show all columns')}</button>
         </>
       )}
     </Menu>
@@ -220,13 +221,13 @@ export function Pager({ count, page, pageSize, onPage }: { count: number; page: 
   return (
     <div className="pager">
       <button className="btn sm" disabled={page <= 1} onClick={() => onPage(page - 1)}>
-        Previous
+        {tr('Previous')}
       </button>
       <span className="mono">
         {page} / {pages}
       </span>
       <button className="btn sm" disabled={page >= pages} onClick={() => onPage(page + 1)}>
-        Next
+        {tr('Next')}
       </button>
     </div>
   )

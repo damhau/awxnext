@@ -13,6 +13,7 @@ import { cleanOutputs, type OutputDecl } from '../../lib/outputs'
 import { syncRelation } from '../../lib/relations'
 import { OutputsEditor } from './OutputsEditor'
 import { resOf, type Kind } from './TemplateDetail'
+import { asIs, tr } from '../../lib/i18n'
 
 /** A field with an "Ask at launch" toggle beside its label. */
 function Askable({ label, ask, onAsk, children, help, error, full }: { label: ReactNode; ask: boolean; onAsk: (v: boolean) => void; children: ReactNode; help?: ReactNode; error?: string; full?: boolean }) {
@@ -25,7 +26,7 @@ function Askable({ label, ask, onAsk, children, help, error, full }: { label: Re
         </span>
         <label className="check small muted" htmlFor={id}>
           <input id={id} type="checkbox" checked={ask} onChange={(e) => onAsk(e.target.checked)} />
-          Ask at launch
+          {tr('Ask at launch')}
         </label>
       </div>
       {children}
@@ -58,9 +59,9 @@ function WebhookKey({ res, id }: { res: string; id: number }) {
   }
   const rotate = async () => {
     const ok = await confirm({
-      title: 'Rotate the webhook key?',
-      body: <p style={{ margin: 0 }}>The current key stops working at once: set the new one where the webhook is configured.</p>,
-      confirm: 'Rotate key',
+      title: tr('Rotate the webhook key?'),
+      body: <p style={{ margin: 0 }}>{tr('The current key stops working at once: set the new one where the webhook is configured.')}</p>,
+      confirm: tr('Rotate key'),
       danger: true,
     })
     if (ok) await call(true)
@@ -68,20 +69,20 @@ function WebhookKey({ res, id }: { res: string; id: number }) {
   return (
     <div className="field full">
       <span className="label" style={{ fontWeight: 500 }}>
-        Webhook key
+        {tr('Webhook key')}
       </span>
       <div className="row" style={{ gap: 8 }}>
-        <input className="input mono" readOnly aria-label="Webhook key" value={key ?? '••••••••••••••••••••••••'} style={{ flex: 1 }} />
+        <input className="input mono" readOnly aria-label={tr('Webhook key')} value={key ?? '••••••••••••••••••••••••'} style={{ flex: 1 }} />
         {key === null && (
           <button type="button" className="btn" disabled={busy} onClick={() => call(false)}>
-            Show
+            {tr('Show')}
           </button>
         )}
         <button type="button" className="btn" disabled={busy} onClick={rotate}>
-          Rotate
+          {tr('Rotate')}
         </button>
       </div>
-      <span className="help">The secret the sending service signs or authenticates its requests with.</span>
+      <span className="help">{tr('The secret the sending service signs or authenticates its requests with.')}</span>
       {error ? <FormError error={error} /> : null}
     </div>
   )
@@ -222,7 +223,7 @@ export function TemplateForm({ kind, tpl }: { kind: Kind; tpl?: Template }) {
       if (e instanceof ApiError && Object.keys(e.fields).length) {
         setErrors(e.fields)
         const unknown = Object.keys(e.fields).filter((k) => !(k in v) && !(k in body))
-        setError(unknown.length ? e : new Error('Some fields need attention.'))
+        setError(unknown.length ? e : new Error(tr('Some fields need attention.')))
       } else setError(e)
     } finally {
       setSaving(false)
@@ -239,75 +240,75 @@ export function TemplateForm({ kind, tpl }: { kind: Kind; tpl?: Template }) {
       }}
     >
       <FormError error={error} />
-      <Panel title="Basics">
+      <Panel title={tr('Basics')}>
         <div className="form-grid">
-          <TextInput label="Name" value={v.name} onChange={(x) => set('name', x)} error={errors.name} autoFocus={!tpl} />
-          {kind === 'workflow' && <Lookup label="Organization" resource="organizations/" value={v.organization} onChange={(x) => set('organization', x)} error={errors.organization} />}
+          <TextInput label={tr('Name')} value={v.name} onChange={(x) => set('name', x)} error={errors.name} autoFocus={!tpl} />
+          {kind === 'workflow' && <Lookup label={tr('Organization')} resource="organizations/" value={v.organization} onChange={(x) => set('organization', x)} error={errors.organization} />}
           <SelectField
-            label="Folder"
+            label={tr('Folder')}
             value={v.folder ?? ''}
             onChange={(x) => set('folder', x ? Number(x) : null)}
-            options={[['', 'None (organization level)'], ...flatten(tree.roots).map((n): [number, string] => [n.folder.id, `${'   '.repeat(n.depth)}${n.path}`])]}
+            options={[['', tr('None (organization level)')], ...flatten(tree.roots).map((n): [number, string] => [n.folder.id, `${'   '.repeat(n.depth)}${n.path}`])]}
             error={errors.folder}
-            help="Access granted on the folder applies to the template."
+            help={tr('Access granted on the folder applies to the template.')}
           />
-          <TextInput label="Description" value={v.description} onChange={(x) => set('description', x)} optional full />
+          <TextInput label={tr('Description')} value={v.description} onChange={(x) => set('description', x)} optional full />
         </div>
       </Panel>
 
       {kind === 'job' && (
-        <Panel title="What runs">
+        <Panel title={tr('What runs')}>
           <div className="form-grid">
-            <Lookup label="Project" resource="projects/" value={v.project} onChange={(x) => { set('project', x); set('playbook', '') }} error={errors.project} meta={(p) => p.scm_url ?? ''} />
+            <Lookup label={tr('Project')} resource="projects/" value={v.project} onChange={(x) => { set('project', x); set('playbook', '') }} error={errors.project} meta={(p) => p.scm_url ?? ''} />
             <SelectField
-              label="Playbook"
+              label={tr('Playbook')}
               value={v.playbook}
               onChange={(x) => set('playbook', x)}
-              options={[['', v.project ? (playbooks.isPending ? 'Loading…' : 'Choose a playbook') : 'Choose a project first'], ...(playbooks.data ?? []).map((p): [string, string] => [p, p])]}
+              options={[['', v.project ? (playbooks.isPending ? 'Loading…' : tr('Choose a playbook')) : tr('Choose a project first')], ...(playbooks.data ?? []).map((p): [string, string] => [p, p])]}
               error={errors.playbook}
-              help={v.project && playbooks.data?.length === 0 ? 'The project has no playbooks yet; sync it first.' : undefined}
+              help={v.project && playbooks.data?.length === 0 ? tr('The project has no playbooks yet; sync it first.') : undefined}
             />
             {project.data?.allow_override && (
-              <Askable label="Branch" ask={ask('scm_branch')} onAsk={(o) => setAsk('scm_branch', o)} help="Overrides the project's branch, tag or commit." error={errors.scm_branch}>
-                <input className="input mono" value={v.scm_branch} onChange={(e) => set('scm_branch', e.target.value)} placeholder={project.data?.scm_branch || 'default branch'} />
+              <Askable label={tr('Branch')} ask={ask('scm_branch')} onAsk={(o) => setAsk('scm_branch', o)} help={tr('Overrides the project\'s branch, tag or commit.')} error={errors.scm_branch}>
+                <input className="input mono" value={v.scm_branch} onChange={(e) => set('scm_branch', e.target.value)} placeholder={project.data?.scm_branch || tr('default branch')} />
               </Askable>
             )}
-            <Askable label="Execution environment" ask={ask('execution_environment')} onAsk={(o) => setAsk('execution_environment', o)} error={errors.execution_environment}>
-              <Lookup label={<span className="sr-only">Execution environment</span>} resource="execution_environments/" value={v.execution_environment} onChange={(x) => set('execution_environment', x)} placeholder="Default" meta={(e) => e.image} />
+            <Askable label={tr('Execution environment')} ask={ask('execution_environment')} onAsk={(o) => setAsk('execution_environment', o)} error={errors.execution_environment}>
+              <Lookup label={<span className="sr-only">{tr('Execution environment')}</span>} resource="execution_environments/" value={v.execution_environment} onChange={(x) => set('execution_environment', x)} placeholder={tr('Default')} meta={(e) => e.image} />
             </Askable>
           </div>
         </Panel>
       )}
 
-      <Panel title={kind === 'job' ? 'Where and with what access' : 'Defaults for the nodes'}>
+      <Panel title={kind === 'job' ? tr('Where and with what access') : tr('Defaults for the nodes')}>
         <div className="form-grid">
-          <Askable label="Inventory" ask={ask('inventory')} onAsk={(o) => setAsk('inventory', o)} error={errors.inventory} help={kind === 'workflow' ? 'Overrides the inventory of every node that asks for one.' : undefined}>
-            <Lookup label={<span className="sr-only">Inventory</span>} resource="inventories/" value={v.inventory} onChange={(x) => set('inventory', x)} placeholder={kind === 'workflow' ? 'Use each node’s own' : 'Search inventories…'} />
+          <Askable label={tr('Inventory')} ask={ask('inventory')} onAsk={(o) => setAsk('inventory', o)} error={errors.inventory} help={kind === 'workflow' ? tr('Overrides the inventory of every node that asks for one.') : undefined}>
+            <Lookup label={<span className="sr-only">{tr('Inventory')}</span>} resource="inventories/" value={v.inventory} onChange={(x) => set('inventory', x)} placeholder={kind === 'workflow' ? tr('Use each node’s own') : tr('Search inventories…')} />
           </Askable>
-          <Askable label="Limit" ask={ask('limit')} onAsk={(o) => setAsk('limit', o)} help="Host pattern, e.g. web:&eu" error={errors.limit}>
+          <Askable label={tr('Limit')} ask={ask('limit')} onAsk={(o) => setAsk('limit', o)} help={tr('Host pattern, e.g. web:&eu')} error={errors.limit}>
             <input className="input mono" value={v.limit} onChange={(e) => set('limit', e.target.value)} />
           </Askable>
           {kind === 'job' && (
-            <Askable label="Credentials" ask={ask('credential')} onAsk={(o) => setAsk('credential', o)} error={errors.credentials} full>
-              <MultiLookup label={<span className="sr-only">Credentials</span>} resource="credentials/" values={v.credentials} onChange={(x) => set('credentials', x)} meta={(c) => c.kind ?? c.summary_fields?.credential_type?.name ?? ''} />
+            <Askable label={tr('Credentials')} ask={ask('credential')} onAsk={(o) => setAsk('credential', o)} error={errors.credentials} full>
+              <MultiLookup label={<span className="sr-only">{tr('Credentials')}</span>} resource="credentials/" values={v.credentials} onChange={(x) => set('credentials', x)} meta={(c) => c.kind ?? c.summary_fields?.credential_type?.name ?? ''} />
             </Askable>
           )}
           {kind === 'job' && (
-            <Askable label="Instance groups" ask={ask('instance_groups')} onAsk={(o) => setAsk('instance_groups', o)} help="Preferred groups, tried in this order. Empty uses the inventory's and organization's groups." full>
-              <MultiLookup label={<span className="sr-only">Instance groups</span>} resource="instance_groups/" values={instanceGroups} onChange={(x) => set('instance_groups', x)} ordered />
+            <Askable label={tr('Instance groups')} ask={ask('instance_groups')} onAsk={(o) => setAsk('instance_groups', o)} help={tr('Preferred groups, tried in this order. Empty uses the inventory\'s and organization\'s groups.')} full>
+              <MultiLookup label={<span className="sr-only">{tr('Instance groups')}</span>} resource="instance_groups/" values={instanceGroups} onChange={(x) => set('instance_groups', x)} ordered />
             </Askable>
           )}
           {kind === 'job' && (
             <div className="field full">
               <Check
-                label="Only these instance groups: do not fall back to the inventory's and organization's"
+                label={tr('Only these instance groups: do not fall back to the inventory\'s and organization\'s')}
                 checked={v.prevent_instance_group_fallback}
                 onChange={(x) => set('prevent_instance_group_fallback', x)}
               />
             </div>
           )}
           {kind === 'workflow' && (
-            <Askable label="Branch" ask={ask('scm_branch')} onAsk={(o) => setAsk('scm_branch', o)} help="Passed to nodes whose project allows branch override.">
+            <Askable label={tr('Branch')} ask={ask('scm_branch')} onAsk={(o) => setAsk('scm_branch', o)} help={tr('Passed to nodes whose project allows branch override.')}>
               <input className="input mono" value={v.scm_branch} onChange={(e) => set('scm_branch', e.target.value)} />
             </Askable>
           )}
@@ -315,15 +316,15 @@ export function TemplateForm({ kind, tpl }: { kind: Kind; tpl?: Template }) {
       </Panel>
 
       {kind === 'job' && (
-        <Panel title="How it runs">
+        <Panel title={tr('How it runs')}>
           <div className="form-grid">
-            <Askable label="Job type" ask={ask('job_type')} onAsk={(o) => setAsk('job_type', o)}>
+            <Askable label={tr('Job type')} ask={ask('job_type')} onAsk={(o) => setAsk('job_type', o)}>
               <select className="select" value={v.job_type} onChange={(e) => set('job_type', e.target.value)}>
-                <option value="run">Run — make changes</option>
-                <option value="check">Check — dry run, report what would change</option>
+                <option value="run">{tr('Run — make changes')}</option>
+                <option value="check">{tr('Check — dry run, report what would change')}</option>
               </select>
             </Askable>
-            <Askable label="Verbosity" ask={ask('verbosity')} onAsk={(o) => setAsk('verbosity', o)}>
+            <Askable label={tr('Verbosity')} ask={ask('verbosity')} onAsk={(o) => setAsk('verbosity', o)}>
               <select className="select" value={v.verbosity} onChange={(e) => set('verbosity', Number(e.target.value))}>
                 {['0 · normal', '1 · verbose', '2 · more verbose', '3 · debug', '4 · connection debug', '5 · WinRM debug'].map((l, i) => (
                   <option key={i} value={i}>
@@ -332,113 +333,113 @@ export function TemplateForm({ kind, tpl }: { kind: Kind; tpl?: Template }) {
                 ))}
               </select>
             </Askable>
-            <Askable label="Forks" ask={ask('forks')} onAsk={(o) => setAsk('forks', o)} help="Hosts in parallel; 0 uses the default (5)." error={errors.forks}>
+            <Askable label={tr('Forks')} ask={ask('forks')} onAsk={(o) => setAsk('forks', o)} help={tr('Hosts in parallel; 0 uses the default (5).')} error={errors.forks}>
               <input className="input" type="number" min={0} value={v.forks} onChange={(e) => set('forks', e.target.value)} />
             </Askable>
-            <Askable label="Timeout (seconds)" ask={ask('timeout')} onAsk={(o) => setAsk('timeout', o)} help="0 means no timeout." error={errors.timeout}>
+            <Askable label={tr('Timeout (seconds)')} ask={ask('timeout')} onAsk={(o) => setAsk('timeout', o)} help={tr('0 means no timeout.')} error={errors.timeout}>
               <input className="input" type="number" min={0} value={v.timeout} onChange={(e) => set('timeout', e.target.value)} />
             </Askable>
-            <Askable label="Job slices" ask={ask('job_slice_count')} onAsk={(o) => setAsk('job_slice_count', o)} help="Split the inventory across this many parallel jobs." error={errors.job_slice_count}>
+            <Askable label={tr('Job slices')} ask={ask('job_slice_count')} onAsk={(o) => setAsk('job_slice_count', o)} help={tr('Split the inventory across this many parallel jobs.')} error={errors.job_slice_count}>
               <input className="input" type="number" min={1} value={v.job_slice_count} onChange={(e) => set('job_slice_count', e.target.value)} />
             </Askable>
-            <Askable label="Tags" ask={ask('tags')} onAsk={(o) => setAsk('tags', o)} help="Comma separated; only tasks with these tags run.">
+            <Askable label={tr('Tags')} ask={ask('tags')} onAsk={(o) => setAsk('tags', o)} help={tr('Comma separated; only tasks with these tags run.')}>
               <input className="input mono" value={v.job_tags} onChange={(e) => set('job_tags', e.target.value)} />
             </Askable>
-            <Askable label="Skip tags" ask={ask('skip_tags')} onAsk={(o) => setAsk('skip_tags', o)}>
+            <Askable label={tr('Skip tags')} ask={ask('skip_tags')} onAsk={(o) => setAsk('skip_tags', o)}>
               <input className="input mono" value={v.skip_tags} onChange={(e) => set('skip_tags', e.target.value)} />
             </Askable>
-            <Askable label="Start at task" ask={ask('start_at_task')} onAsk={(o) => setAsk('start_at_task', o)} help="Name of the task to start from (--start-at-task); empty runs the whole playbook." error={errors.start_at_task}>
+            <Askable label={tr('Start at task')} ask={ask('start_at_task')} onAsk={(o) => setAsk('start_at_task', o)} help={tr('Name of the task to start from (--start-at-task); empty runs the whole playbook.')} error={errors.start_at_task}>
               <input className="input mono" value={v.start_at_task} onChange={(e) => set('start_at_task', e.target.value)} />
             </Askable>
-            <Askable label="Show changes (--diff)" ask={ask('diff_mode')} onAsk={(o) => setAsk('diff_mode', o)}>
-              <Check label="Show what changed in files and templates" checked={v.diff_mode} onChange={(x) => set('diff_mode', x)} />
+            <Askable label={tr('Show changes (--diff)')} ask={ask('diff_mode')} onAsk={(o) => setAsk('diff_mode', o)}>
+              <Check label={tr('Show what changed in files and templates')} checked={v.diff_mode} onChange={(x) => set('diff_mode', x)} />
             </Askable>
             <div className="field full">
               <span className="label" style={{ fontWeight: 500 }}>
-                Options
+                {tr('Options')}
               </span>
               <div className="row wrap" style={{ gap: 18 }}>
-                <Check label="Privilege escalation (become)" checked={v.become_enabled} onChange={(x) => set('become_enabled', x)} />
-                <Check label="Allow concurrent runs" checked={v.allow_simultaneous} onChange={(x) => set('allow_simultaneous', x)} />
-                <Check label="Use fact cache" checked={v.use_fact_cache} onChange={(x) => set('use_fact_cache', x)} />
-                <Check label="Force handlers" checked={v.force_handlers} onChange={(x) => set('force_handlers', x)} />
+                <Check label={tr('Privilege escalation (become)')} checked={v.become_enabled} onChange={(x) => set('become_enabled', x)} />
+                <Check label={tr('Allow concurrent runs')} checked={v.allow_simultaneous} onChange={(x) => set('allow_simultaneous', x)} />
+                <Check label={tr('Use fact cache')} checked={v.use_fact_cache} onChange={(x) => set('use_fact_cache', x)} />
+                <Check label={tr('Force handlers')} checked={v.force_handlers} onChange={(x) => set('force_handlers', x)} />
               </div>
             </div>
           </div>
         </Panel>
       )}
 
-      <Panel title="Variables">
+      <Panel title={tr('Variables')}>
         <div className="form-grid">
           <div className="full row" style={{ justifyContent: 'flex-end', marginBottom: -8 }}>
             <label className="check small muted">
               <input type="checkbox" checked={ask('variables')} onChange={(e) => setAsk('variables', e.target.checked)} />
-              Ask at launch
+              {tr('Ask at launch')}
             </label>
           </div>
-          <VarsEditor label="Extra variables" value={v.extra_vars} onChange={(x) => set('extra_vars', x)} error={errors.extra_vars} rows={8} help="Highest precedence: override inventory and role variables. YAML or JSON." />
+          <VarsEditor label={tr('Extra variables')} value={v.extra_vars} onChange={(x) => set('extra_vars', x)} error={errors.extra_vars} rows={8} help={tr('Highest precedence: override inventory and role variables. YAML or JSON.')} />
           {kind === 'workflow' && kind && (
             <div className="field full">
-              <Check label="Allow concurrent runs" checked={v.allow_simultaneous} onChange={(x) => set('allow_simultaneous', x)} />
+              <Check label={tr('Allow concurrent runs')} checked={v.allow_simultaneous} onChange={(x) => set('allow_simultaneous', x)} />
             </div>
           )}
         </div>
       </Panel>
 
       {kind === 'job' && (
-        <Panel title="Outputs">
+        <Panel title={tr('Outputs')}>
           <div className="form-grid">
             <OutputsEditor value={v.outputs} onChange={(x) => set('outputs', x)} error={errors.outputs} />
           </div>
         </Panel>
       )}
 
-      <Panel title="Organize and trigger">
+      <Panel title={tr('Organize and trigger')}>
         <div className="form-grid">
-          <Askable label="Labels" ask={ask('labels')} onAsk={(o) => setAsk('labels', o)} full>
-            <MultiLookup label={<span className="sr-only">Labels</span>} resource="labels/" params={orgId ? { organization: orgId } : undefined} values={v.labels} onChange={(x) => set('labels', x)} />
+          <Askable label={tr('Labels')} ask={ask('labels')} onAsk={(o) => setAsk('labels', o)} full>
+            <MultiLookup label={<span className="sr-only">{tr('Labels')}</span>} resource="labels/" params={orgId ? { organization: orgId } : undefined} values={v.labels} onChange={(x) => set('labels', x)} />
           </Askable>
           <SelectField
-            label="Webhook"
+            label={tr('Webhook')}
             value={v.webhook_service}
             onChange={(x) => set('webhook_service', x)}
             options={[
-              ['', 'Off'],
-              ['github', 'GitHub'],
-              ['gitlab', 'GitLab'],
-              ['bitbucket_dc', 'Bitbucket Data Center'],
-              ['generic', 'Generic (any JSON, mapped with JSONPath)'],
+              ['', tr('Off')],
+              ['github', asIs('GitHub')],
+              ['gitlab', asIs('GitLab')],
+              ['bitbucket_dc', tr('Bitbucket Data Center')],
+              ['generic', tr('Generic (any JSON, mapped with JSONPath)')],
             ]}
-            help="Launch on push or pull request events."
+            help={tr('Launch on push or pull request events.')}
             error={errors.webhook_service}
           />
           {v.webhook_service && v.webhook_service !== 'generic' && (
-            <Lookup label="Webhook credential" resource="credentials/" value={v.webhook_credential} onChange={(x) => set('webhook_credential', x)} optional help="Token used to post commit statuses back." />
+            <Lookup label={tr('Webhook credential')} resource="credentials/" value={v.webhook_credential} onChange={(x) => set('webhook_credential', x)} optional help={tr('Token used to post commit statuses back.')} />
           )}
           {tpl?.webhook_service && v.webhook_service === tpl.webhook_service && <WebhookKey res={res} id={tpl.id} />}
           {kind === 'job' && (
-            <TextInput label="Provisioning callback key" value={v.host_config_key} onChange={(x) => set('host_config_key', x)} optional mono help="Lets new hosts request a run of this template for themselves." />
+            <TextInput label={tr('Provisioning callback key')} value={v.host_config_key} onChange={(x) => set('host_config_key', x)} optional mono help={tr('Lets new hosts request a run of this template for themselves.')} />
           )}
         </div>
       </Panel>
 
-      {tpl && <TextArea label="Describe this change" value={v.comment} onChange={(x) => set('comment', x)} optional rows={2} help="Shown in History next to the change." />}
+      {tpl && <TextArea label={tr('Describe this change')} value={v.comment} onChange={(x) => set('comment', x)} optional rows={2} help={tr('Shown in History next to the change.')} />}
 
       <div className="form-actions">
         <button className="btn primary" disabled={saving || !v.name.trim()}>
-          {saving ? 'Saving…' : tpl ? 'Save changes' : `Create ${kind === 'job' ? 'job' : 'workflow'} template`}
+          {saving ? tr('Saving…') : tpl ? tr('Save changes') : kind === 'job' ? tr('Create job template') : tr('Create workflow template')}
         </button>
         <Link className="btn ghost" to={tpl ? `/templates/${kind}/${tpl.id}` : '/templates'}>
-          Cancel
+          {tr('Cancel')}
         </Link>
-        {kind === 'workflow' && !tpl && <span className="small muted">Add nodes in the visualizer after creating it.</span>}
+        {kind === 'workflow' && !tpl && <span className="small muted">{tr('Add nodes in the visualizer after creating it.')}</span>}
       </div>
     </form>
   )
   if (tpl) return form
   return (
     <div className="page">
-      <PageHead crumbs={[{ label: 'Templates', to: '/templates' }]} title={kind === 'job' ? 'New job template' : 'New workflow template'} />
+      <PageHead crumbs={[{ label: tr('Templates'), to: '/templates' }]} title={kind === 'job' ? tr('New job template') : tr('New workflow template')} />
       <div className="page-body">{form}</div>
     </div>
   )

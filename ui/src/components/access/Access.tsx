@@ -13,6 +13,7 @@ import { FormError, MultiLookup } from '../form'
 import { Icon } from '../icons'
 import { Dialog, useConfirm, useToast } from '../overlay'
 import { Ago, Avatar, Empty, Loading } from '../ui'
+import { tr, trn } from '../../lib/i18n'
 import './access.css'
 
 /** API resource name -> RBAC content type. */
@@ -43,22 +44,22 @@ export function bareType(ct: string | null | undefined): string {
 }
 
 const typeLabels: Record<string, string> = {
-  organization: 'Organization',
-  team: 'Team',
-  credential: 'Credential',
-  project: 'Project',
-  inventory: 'Inventory',
-  jobtemplate: 'Job template',
-  workflowjobtemplate: 'Workflow template',
-  notificationtemplate: 'Notification template',
-  executionenvironment: 'Execution environment',
-  folder: 'Folder',
-  instancegroup: 'Instance group',
+  organization: tr('Organization'),
+  team: tr('Team'),
+  credential: tr('Credential'),
+  project: tr('Project'),
+  inventory: tr('Inventory'),
+  jobtemplate: tr('Job template'),
+  workflowjobtemplate: tr('Workflow template'),
+  notificationtemplate: tr('Notification template'),
+  executionenvironment: tr('Execution environment'),
+  folder: tr('Folder'),
+  instancegroup: tr('Instance group'),
 }
 
 export function typeName(ct: string | null | undefined): string {
   const t = bareType(ct)
-  return t ? (typeLabels[t] ?? t) : 'System'
+  return t ? (typeLabels[t] ?? t) : tr('System')
 }
 
 /** UI route of an object identified by content type and id. */
@@ -91,18 +92,18 @@ export function objectPath(ct: string | null | undefined, id: number | string): 
 }
 
 /** Resources a role can be granted on, for the principal-centric grant dialog. */
-export const grantable: { resource: string; ct: string; label: string }[] = [
-  { resource: 'organizations', ct: 'organization', label: 'Organization' },
-  { resource: 'folders', ct: 'folder', label: 'Folder' },
-  { resource: 'job_templates', ct: 'jobtemplate', label: 'Job template' },
-  { resource: 'workflow_job_templates', ct: 'workflowjobtemplate', label: 'Workflow template' },
-  { resource: 'inventories', ct: 'inventory', label: 'Inventory' },
-  { resource: 'projects', ct: 'project', label: 'Project' },
-  { resource: 'credentials', ct: 'credential', label: 'Credential' },
-  { resource: 'teams', ct: 'team', label: 'Team' },
-  { resource: 'execution_environments', ct: 'executionenvironment', label: 'Execution environment' },
-  { resource: 'notification_templates', ct: 'notificationtemplate', label: 'Notification template' },
-  { resource: 'instance_groups', ct: 'instancegroup', label: 'Instance group' },
+export const grantable: { resource: string; ct: string; label: string; plural: string }[] = [
+  { resource: 'organizations', ct: 'organization', label: tr('Organization'), plural: tr('Organizations') },
+  { resource: 'folders', ct: 'folder', label: tr('Folder'), plural: tr('Folders') },
+  { resource: 'job_templates', ct: 'jobtemplate', label: tr('Job template'), plural: tr('Job templates') },
+  { resource: 'workflow_job_templates', ct: 'workflowjobtemplate', label: tr('Workflow template'), plural: tr('Workflow templates') },
+  { resource: 'inventories', ct: 'inventory', label: tr('Inventory'), plural: tr('Inventories') },
+  { resource: 'projects', ct: 'project', label: tr('Project'), plural: tr('Projects') },
+  { resource: 'credentials', ct: 'credential', label: tr('Credential'), plural: tr('Credentials') },
+  { resource: 'teams', ct: 'team', label: tr('Team'), plural: tr('Teams') },
+  { resource: 'execution_environments', ct: 'executionenvironment', label: tr('Execution environment'), plural: tr('Execution environments') },
+  { resource: 'notification_templates', ct: 'notificationtemplate', label: tr('Notification template'), plural: tr('Notification templates') },
+  { resource: 'instance_groups', ct: 'instancegroup', label: tr('Instance group'), plural: tr('Instance groups') },
 ]
 
 export interface RoleDef {
@@ -185,7 +186,7 @@ async function loadAccess(resource: string, id: number) {
   const direct = (kind: 'user' | 'team') => getAll<Assignment>(`role_${kind}_assignments/`, { content_type: ct, object_id: id })
   const scopes: { ct: string; id: number; label: string }[] = []
   const orgId: number | null = ct === 'organization' ? null : (obj.organization ?? null)
-  if (orgId) scopes.push({ ct: 'organization', id: orgId, label: obj.summary_fields?.organization?.name ?? `organization ${orgId}` })
+  if (orgId) scopes.push({ ct: 'organization', id: orgId, label: obj.summary_fields?.organization?.name ?? tr('organization {orgId}', { orgId }) })
   // Folder chain, nearest first.
   let folder: number | null = ct === 'folder' ? (obj.parent ?? null) : (obj.folder ?? null)
   for (let depth = 0; folder && depth < 12; depth++) {
@@ -262,19 +263,19 @@ export function AccessTab({ resource, id, name }: { resource: string; id: number
   const revoke = async (r: Row) => {
     if (!r.assignment) return
     const ok = await confirm({
-      title: `Remove ${r.role} from ${r.name}?`,
+      title: tr('Remove {role} from {name}?', { role: r.role, name: r.name }),
       body: (
         <p style={{ margin: 0 }}>
-          {r.who === 'team' ? 'Members of the team' : r.name} will lose the {r.role} role on {r.inherited ? 'the inherited scope' : name}. Other roles they hold are not affected.
+          {r.who === 'team' ? tr('Members of the team') : r.name} {tr('will lose the')} {r.role} {tr('role on')} {r.inherited ? tr('the inherited scope') : name}{tr('. Other roles they hold are not affected.')}
         </p>
       ),
-      confirm: 'Remove access',
+      confirm: tr('Remove access'),
       danger: true,
     })
     if (!ok) return
     try {
       await api.del(`role_${r.who}_assignments/${r.assignment.id}/`)
-      toast(`Removed ${r.role} from ${r.name}`)
+      toast(tr('Removed {role} from {name}', { role: r.role, name: r.name }))
       invalidate(`role_access/${resource}/${id}`, 'role_user_assignments', 'role_team_assignments')
     } catch (e) {
       toast((e as Error).message, 'error')
@@ -285,7 +286,7 @@ export function AccessTab({ resource, id, name }: { resource: string; id: number
   return (
     <div className="stack" style={{ gap: 12 }}>
       <div className="row wrap">
-        <div className="segmented" role="radiogroup" aria-label="Show">
+        <div className="segmented" role="radiogroup" aria-label={tr('Show')}>
           {(
             [
               ['all', `All ${rows.length}`],
@@ -300,12 +301,12 @@ export function AccessTab({ resource, id, name }: { resource: string; id: number
           ))}
         </div>
         <span className="small faint grow">
-          Superusers can do everything and are not listed. Team roles apply to every member of the team.
+          {tr('Superusers can do everything and are not listed. Team roles apply to every member of the team.')}
         </span>
         {canGrant && (
           <button className="btn primary" onClick={() => setGranting(true)}>
             <Icon name="plus" size={14} />
-            Grant access
+            {tr('Grant access')}
           </button>
         )}
       </div>
@@ -313,12 +314,12 @@ export function AccessTab({ resource, id, name }: { resource: string; id: number
         <table className="data">
           <thead>
             <tr>
-              <th scope="col">Who</th>
-              <th scope="col">Role</th>
-              <th scope="col">Granted on</th>
-              <th scope="col">Granted</th>
+              <th scope="col">{tr('Who')}</th>
+              <th scope="col">{tr('Role')}</th>
+              <th scope="col">{tr('Granted on')}</th>
+              <th scope="col">{tr('Granted')}</th>
               <th scope="col" className="end">
-                <span className="sr-only">Actions</span>
+                <span className="sr-only">{tr('Actions')}</span>
               </th>
             </tr>
           </thead>
@@ -332,7 +333,7 @@ export function AccessTab({ resource, id, name }: { resource: string; id: number
                       <Link to={r.who === 'user' ? `/users/${r.id}` : `/teams/${r.id}`} className="cell-title">
                         {r.name}
                       </Link>
-                      <div className="small faint">{r.who === 'team' ? 'Team' : r.sub}</div>
+                      <div className="small faint">{r.who === 'team' ? tr('Team') : r.sub}</div>
                     </div>
                   </div>
                 </td>
@@ -346,11 +347,11 @@ export function AccessTab({ resource, id, name }: { resource: string; id: number
                 </td>
                 <td className="end">
                   {!r.inherited && r.assignment?.summary_fields.user_capabilities?.delete !== false && (
-                    <button className="btn sm ghost" onClick={() => revoke(r)} aria-label={`Remove ${r.role} from ${r.name}`}>
-                      Remove
+                    <button className="btn sm ghost" onClick={() => revoke(r)} aria-label={tr('Remove {role} from {name}', { role: r.role, name: r.name })}>
+                      {tr('Remove')}
                     </button>
                   )}
-                  {r.inherited && <span className="small faint">inherited</span>}
+                  {r.inherited && <span className="small faint">{tr('inherited')}</span>}
                 </td>
               </tr>
             ))}
@@ -359,8 +360,8 @@ export function AccessTab({ resource, id, name }: { resource: string; id: number
         {access.isPending && <Loading rows={4} />}
         {access.error && <div style={{ padding: 12 }}><FormError error={access.error} /></div>}
         {access.data && shown.length === 0 && (
-          <Empty title={filter === 'inherited' ? 'No inherited access' : 'Nobody has been granted access yet'}>
-            {filter === 'inherited' ? 'Roles on the organization or folders containing this object would show here.' : 'Grant a role to users or teams to let them use this.'}
+          <Empty title={filter === 'inherited' ? tr('No inherited access') : tr('Nobody has been granted access yet')}>
+            {filter === 'inherited' ? tr('Roles on the organization or folders containing this object would show here.') : tr('Grant a role to users or teams to let them use this.')}
           </Empty>
         )}
       </div>
@@ -414,7 +415,7 @@ export function GrantDialog({
           n++
         }
       }
-      toast(`Granted ${n} role${n === 1 ? '' : 's'} on ${target.name}`)
+      toast(trn(n, 'Granted {n} role on {name}', 'Granted {n} roles on {name}', { name: target.name }))
       onDone()
     } catch (e) {
       setError(e)
@@ -424,29 +425,29 @@ export function GrantDialog({
   }
   return (
     <Dialog
-      title={`Grant access to ${target.name}`}
+      title={tr('Grant access to {name}', { name: target.name })}
       onClose={onClose}
       wide
       footer={
         <>
           <span className="small faint" style={{ marginRight: 'auto' }}>
-            {principals.length && picked.size ? `${principals.length * picked.size} assignment${principals.length * picked.size === 1 ? '' : 's'} will be created` : ''}
+            {principals.length && picked.size ? trn(principals.length * picked.size, '{n} assignment will be created', '{n} assignments will be created') : ''}
           </span>
           <button className="btn" onClick={onClose}>
-            Cancel
+            {tr('Cancel')}
           </button>
           <button className="btn primary" disabled={busy || !principals.length || !picked.size} onClick={submit}>
-            {busy ? 'Granting…' : 'Grant'}
+            {busy ? tr('Granting…') : tr('Grant')}
           </button>
         </>
       }
     >
       {!fixedPrincipal && (
-        <div className="segmented" role="radiogroup" aria-label="Grant to">
+        <div className="segmented" role="radiogroup" aria-label={tr('Grant to')}>
           {(['user', 'team'] as const).map((k) => (
             <label key={k} className={kind === k ? 'on' : ''}>
               <input type="radio" name="grant-kind" checked={kind === k} onChange={() => setKind(k)} />
-              {k === 'user' ? 'Users' : 'Teams'}
+              {k === 'user' ? tr('Users') : tr('Teams')}
             </label>
           ))}
         </div>
@@ -454,7 +455,7 @@ export function GrantDialog({
       {!fixedPrincipal &&
         (kind === 'user' ? (
           <MultiLookup
-            label="Users"
+            label={tr('Users')}
             resource="users/"
             order="username"
             values={users}
@@ -464,10 +465,10 @@ export function GrantDialog({
             full
           />
         ) : (
-          <MultiLookup label="Teams" resource="teams/" values={teams} onChange={setTeams} meta={(r) => r.summary_fields?.organization?.name} full />
+          <MultiLookup label={tr('Teams')} resource="teams/" values={teams} onChange={setTeams} meta={(r) => r.summary_fields?.organization?.name} full />
         ))}
       <fieldset>
-        <legend>Roles</legend>
+        <legend>{tr('Roles')}</legend>
         {roles.isPending && <Loading rows={3} />}
         <div className="stack" style={{ gap: 6 }}>
           {options.map((r) => (
@@ -484,14 +485,14 @@ export function GrantDialog({
               />
               <span className="grow">
                 <span style={{ fontWeight: 500 }}>{roleShort(r.name, target.ct)}</span>
-                {!r.managed && <span className="tag" style={{ marginLeft: 6 }}>custom</span>}
+                {!r.managed && <span className="tag" style={{ marginLeft: 6 }}>{tr('custom')}</span>}
                 <span className="small faint" style={{ display: 'block' }}>
                   {r.description || summarizePermissions(r.permissions)}
                 </span>
               </span>
             </label>
           ))}
-          {roles.data && options.length === 0 && <p className="muted" style={{ margin: 0 }}>No roles apply to this kind of object.</p>}
+          {roles.data && options.length === 0 && <p className="muted" style={{ margin: 0 }}>{tr('No roles apply to this kind of object.')}</p>}
         </div>
       </fieldset>
       <FormError error={error} />
@@ -525,7 +526,7 @@ export function PrincipalRoles({ kind, id, name }: { kind: 'user' | 'team'; id: 
   const revoke = async (a: Assignment) => {
     const role = a.summary_fields.role_definition?.name ?? 'role'
     const what = a.summary_fields.content_object?.name ?? 'the system'
-    if (!(await confirm({ title: `Remove ${role}?`, body: <p style={{ margin: 0 }}>{name} will lose {role} on {what}.</p>, confirm: 'Remove', danger: true }))) return
+    if (!(await confirm({ title: tr('Remove {role}?', { role }), body: <p style={{ margin: 0 }}>{name} {tr('will lose')} {role} {tr('on')} {what}.</p>, confirm: tr('Remove'), danger: true }))) return
     try {
       await api.del(`role_${kind}_assignments/${a.id}/`)
       invalidate(`role_${kind}_assignments`, 'role_access')
@@ -538,23 +539,23 @@ export function PrincipalRoles({ kind, id, name }: { kind: 'user' | 'team'; id: 
     <div className="stack" style={{ gap: 12 }}>
       <div className="row">
         <span className="small faint grow">
-          {kind === 'user' ? 'Direct grants only. Roles of the teams this user belongs to also apply.' : 'Every member of this team holds these roles.'}
+          {kind === 'user' ? tr('Direct grants only. Roles of the teams this user belongs to also apply.') : tr('Every member of this team holds these roles.')}
         </span>
         <button className="btn primary" onClick={() => setGrant(true)}>
           <Icon name="plus" size={14} />
-          Grant a role
+          {tr('Grant a role')}
         </button>
       </div>
       <div className="table-wrap">
         <table className="data">
           <thead>
             <tr>
-              <th scope="col">Role</th>
-              <th scope="col">On</th>
-              <th scope="col">Type</th>
-              <th scope="col">Granted</th>
+              <th scope="col">{tr('Role')}</th>
+              <th scope="col">{tr('On')}</th>
+              <th scope="col">{tr('Type')}</th>
+              <th scope="col">{tr('Granted')}</th>
               <th scope="col" className="end">
-                <span className="sr-only">Actions</span>
+                <span className="sr-only">{tr('Actions')}</span>
               </th>
             </tr>
           </thead>
@@ -571,13 +572,13 @@ export function PrincipalRoles({ kind, id, name }: { kind: 'user' | 'team'; id: 
                     {a.object_id ? (
                       path ? (
                         <Link to={path} className="cell-title">
-                          {a.summary_fields.content_object?.name ?? `#${a.object_id}`}
+                          {a.summary_fields.content_object?.name ?? tr('#{object_id}', { object_id: a.object_id })}
                         </Link>
                       ) : (
-                        (a.summary_fields.content_object?.name ?? `#${a.object_id}`)
+                        (a.summary_fields.content_object?.name ?? tr('#{object_id}', { object_id: a.object_id }))
                       )
                     ) : (
-                      <span className="muted">Everything (system-wide)</span>
+                      <span className="muted">{tr('Everything (system-wide)')}</span>
                     )}
                   </td>
                   <td className="small faint">{typeName(a.content_type)}</td>
@@ -587,7 +588,7 @@ export function PrincipalRoles({ kind, id, name }: { kind: 'user' | 'team'; id: 
                   <td className="end">
                     {a.summary_fields.user_capabilities?.delete !== false && (
                       <button className="btn sm ghost" onClick={() => revoke(a)}>
-                        Remove
+                        {tr('Remove')}
                       </button>
                     )}
                   </td>
@@ -597,7 +598,7 @@ export function PrincipalRoles({ kind, id, name }: { kind: 'user' | 'team'; id: 
           </tbody>
         </table>
         {list.isPending && <Loading rows={4} />}
-        {list.data && rows.length === 0 && <Empty title="No roles yet">{name} has no direct role assignments.</Empty>}
+        {list.data && rows.length === 0 && <Empty title={tr('No roles yet')}>{name} {tr('has no direct role assignments.')}</Empty>}
       </div>
       {grant && (
         <PrincipalGrantDialog
@@ -629,7 +630,7 @@ function PrincipalGrantDialog({ kind, principal, onClose, onDone }: { kind: 'use
     setError(null)
     try {
       for (const o of objects) for (const rd of picked) await api.post(`role_${kind}_assignments/`, { role_definition: rd, [kind]: principal.id, object_id: o.id })
-      toast(`Granted to ${principal.name}`)
+      toast(tr('Granted to {name}', { name: principal.name }))
       onDone()
     } catch (e) {
       setError(e)
@@ -639,22 +640,22 @@ function PrincipalGrantDialog({ kind, principal, onClose, onDone }: { kind: 'use
   }
   return (
     <Dialog
-      title={`Grant a role to ${principal.name}`}
+      title={tr('Grant a role to {name}', { name: principal.name })}
       onClose={onClose}
       wide
       footer={
         <>
           <button className="btn" onClick={onClose}>
-            Cancel
+            {tr('Cancel')}
           </button>
           <button className="btn primary" disabled={busy || !objects.length || !picked.size} onClick={submit}>
-            {busy ? 'Granting…' : 'Grant'}
+            {busy ? tr('Granting…') : tr('Grant')}
           </button>
         </>
       }
     >
       <div className="field">
-        <label htmlFor="grant-type">On</label>
+        <label htmlFor="grant-type">{tr('On')}</label>
         <select
           id="grant-type"
           className="select"
@@ -674,7 +675,7 @@ function PrincipalGrantDialog({ kind, principal, onClose, onDone }: { kind: 'use
       </div>
       <MultiLookup
         key={type.resource}
-        label={`${type.label}s`}
+        label={type.plural}
         resource={`${type.resource}/`}
         values={objects}
         onChange={setObjects}
@@ -682,7 +683,7 @@ function PrincipalGrantDialog({ kind, principal, onClose, onDone }: { kind: 'use
         full
       />
       <fieldset>
-        <legend>Roles</legend>
+        <legend>{tr('Roles')}</legend>
         <div className="stack" style={{ gap: 6 }}>
           {options.map((r) => (
             <label key={r.id} className="role-option">

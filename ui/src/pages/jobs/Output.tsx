@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Icon } from '../../components/icons'
 import { parseAnsi } from '../../lib/ansi'
 import type { Line } from './events'
+import { tr } from '../../lib/i18n'
 
 const ROW = 20
 const OVERSCAN = 40
@@ -105,17 +106,17 @@ export function Output({
   const allTasks = useMemo(() => lines.flatMap((l, i) => (l.kind === 'task' ? [i] : [])), [lines])
 
   return (
-    <section aria-label="Job output" className="term">
+    <section aria-label={tr('Job output')} className="term">
       <div className="term-bar">
         <div className="term-search">
           <Icon name="search" size={13} style={{ color: 'var(--term-faint)' }} />
           <label htmlFor="search-out" className="sr-only">
-            Search output
+            {tr('Search output')}
           </label>
           <input
             id="search-out"
             value={q}
-            placeholder="Search output"
+            placeholder={tr('Search output')}
             onChange={(e) => setQ(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && hits.length) setHit((h) => (e.shiftKey ? (h - 1 + hits.length) % hits.length : (h + 1) % hits.length))
@@ -124,19 +125,19 @@ export function Output({
           />
           {needle && (
             <span style={{ fontSize: 11, color: 'var(--term-faint)', whiteSpace: 'nowrap' }}>
-              {hits.length ? `${Math.min(hit, hits.length - 1) + 1} of ${hits.length}` : 'no match'}
+              {hits.length ? tr('{n} of {count}', { n: Math.min(hit, hits.length - 1) + 1, count: hits.length }) : tr('no match')}
             </span>
           )}
         </div>
         <button className="term-btn" aria-pressed={failedOnly} onClick={() => setFailedOnly((x) => !x)}>
-          Failed only
+          {tr('Failed only')}
         </button>
         <button className="term-btn" aria-pressed={changedOnly} onClick={() => setChangedOnly((x) => !x)}>
-          Changed
+          {tr('Changed')}
         </button>
         {hosts.length > 1 && (
-          <select className="term-btn" value={host} onChange={(e) => onHost(e.target.value)} aria-label="Show one host">
-            <option value="">Host: all</option>
+          <select className="term-btn" value={host} onChange={(e) => onHost(e.target.value)} aria-label={tr('Show one host')}>
+            <option value="">{tr('Host: all')}</option>
             {hosts.map((h) => (
               <option key={h} value={h}>
                 {h}
@@ -146,22 +147,22 @@ export function Output({
         )}
         {allTasks.length > 0 && (
           <button className="term-btn" onClick={() => setCollapsed(collapsed.size ? new Set() : new Set(allTasks))}>
-            {collapsed.size ? 'Expand all' : 'Collapse all'}
+            {collapsed.size ? tr('Expand all') : tr('Collapse all')}
           </button>
         )}
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
           {firstFatal >= 0 && (
             <button className="term-btn alarm" onClick={() => { setFollow(false); scrollTo(firstFatal) }}>
-              ↓ First failure
+              {tr('↓ First failure')}
             </button>
           )}
           {running && (
-            <button className="term-btn" aria-pressed={follow} onClick={() => setFollow((f) => !f)} title="Keep the newest output in view">
-              Follow
+            <button className="term-btn" aria-pressed={follow} onClick={() => setFollow((f) => !f)} title={tr('Keep the newest output in view')}>
+              {tr('Follow')}
             </button>
           )}
           <a className="term-btn" href={downloadUrl} style={{ display: 'inline-flex', alignItems: 'center', textDecoration: 'none' }}>
-            Download
+            {tr('Download')}
           </a>
         </div>
       </div>
@@ -179,7 +180,7 @@ export function Output({
         }}
       >
         {visible.length === 0 ? (
-          <div className="term-empty">{running ? 'Waiting for output…' : filtering ? 'No lines match the filters.' : 'No output.'}</div>
+          <div className="term-empty">{running ? tr('Waiting for output…') : filtering ? tr('No lines match the filters.') : tr('No output.')}</div>
         ) : (
           <div style={{ height: visible.length * ROW, position: 'relative' }}>
             <div style={{ position: 'absolute', top: start * ROW, left: 0, right: 0 }}>
@@ -194,7 +195,7 @@ export function Output({
                     <span className="tx">
                       {isTask && <span aria-hidden="true">{collapsed.has(l.task) ? '▸ ' : '▾ '}</span>}
                       {isTask && l.taskNo && (
-                        <span className="tnum" data-state={l.taskState} title={`Task ${l.taskNo} in the hosts × tasks grid`}>
+                        <span className="tnum" data-state={l.taskState} title={tr('Task {taskNo} in the hosts × tasks grid', { taskNo: l.taskNo })}>
                           {l.taskNo}
                         </span>
                       )}

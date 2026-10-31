@@ -9,6 +9,7 @@ import { Ago, Cell, Elapsed, Panel, StatusDot, Upcoming, useTick } from '../comp
 import { fleetRows, hourBuckets, type FleetCell, type FleetRow } from '../lib/fleet'
 import { jobPath, jobsNewestFirst, plural, templatePath, typeLabel } from '../lib/format'
 import { eventsPath, firstFailure, toGrid } from './jobs/events'
+import { tr, asIs } from '../lib/i18n'
 
 const ROWS = 12
 const dayFmt = new Intl.DateTimeFormat(undefined, { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' })
@@ -40,10 +41,10 @@ export function Now() {
   return (
     <div className="page ground now">
       <header className="page-head">
-        <h1>Now</h1>
+        <h1>{tr('Now')}</h1>
         <p className="now-line mono">
-          {dayFmt.format(now)} · {timeFmt.format(now)} · <strong>{plural(runs, 'run')}</strong> in 24 h ·{' '}
-          <strong className={failed ? 'fail-text' : undefined}>{failed} failed</strong> · {running} running
+          {dayFmt.format(now)} · {timeFmt.format(now)} · <strong>{plural(runs, 'run')}</strong> {tr('in 24 h ·')}{' '}
+          <strong className={failed ? 'fail-text' : undefined}>{failed} {tr('failed')}</strong> · {running} {tr('running')}
         </p>
       </header>
       <div className="page-body">
@@ -52,10 +53,10 @@ export function Now() {
           <Panel
             title={
               <h2>
-                Running now <span className="mono small muted">{plural(active.data?.count ?? 0, 'job')}</span>
+                {tr('Running now')} <span className="mono small muted">{plural(active.data?.count ?? 0, 'job')}</span>
               </h2>
             }
-            actions={<Link to="/jobs?q=status:running" className="small">All</Link>}
+            actions={<Link to="/jobs?q=status:running" className="small">{tr('All')}</Link>}
           >
             {active.data?.results.length ? (
               <ul className="list-plain small">
@@ -72,18 +73,18 @@ export function Now() {
               </ul>
             ) : (
               <p className="muted small" style={{ margin: 0 }}>
-                Nothing is running.
+                {tr('Nothing is running.')}
               </p>
             )}
           </Panel>
           <Panel
             title={
               <h2>
-                Needs attention{' '}
-                {!!failures.data?.count && <span className="mono small muted">{plural(failures.data.count, 'failure')} in 24 h</span>}
+                {tr('Needs attention')}{' '}
+                {!!failures.data?.count && <span className="mono small muted">{plural(failures.data.count, 'failure')} {tr('in 24 h')}</span>}
               </h2>
             }
-            actions={<Link to="/jobs?q=status:failed" className="small">Failed jobs</Link>}
+            actions={<Link to="/jobs?q=status:failed" className="small">{tr('Failed jobs')}</Link>}
           >
             {failures.data?.results.length ? (
               <div className="stack" style={{ gap: 10 }}>
@@ -93,14 +94,14 @@ export function Now() {
               </div>
             ) : (
               <p className="muted small" style={{ margin: 0 }}>
-                {failures.isPending ? 'Loading…' : 'No failures in the last 24 hours.'}
+                {failures.isPending ? tr('Loading…') : tr('No failures in the last 24 hours.')}
               </p>
             )}
           </Panel>
         </div>
         <div className="now-grid">
           {!!approvals.data?.results.length && (
-            <Panel title="Waiting on approval" actions={<Link to="/approvals" className="small">Approvals</Link>}>
+            <Panel title={tr('Waiting on approval')} actions={<Link to="/approvals" className="small">{tr('Approvals')}</Link>}>
               <ul className="list-plain small">
                 {approvals.data.results.map((a) => (
                   <li key={a.id}>
@@ -113,7 +114,7 @@ export function Now() {
               </ul>
             </Panel>
           )}
-          <Panel title="Coming up" actions={<Link to="/schedules" className="small">Schedules</Link>}>
+          <Panel title={tr('Coming up')} actions={<Link to="/schedules" className="small">{tr('Schedules')}</Link>}>
             {upcoming.data?.results.length ? (
               <ul className="list-plain small">
                 {upcoming.data.results.map((s) => (
@@ -130,7 +131,7 @@ export function Now() {
               </ul>
             ) : (
               <p className="muted small" style={{ margin: 0 }}>
-                No scheduled runs.
+                {tr('No scheduled runs.')}
               </p>
             )}
           </Panel>
@@ -146,13 +147,13 @@ function Fleet({ rows, buckets, loading, truncated }: { rows: FleetRow[]; bucket
   return (
     <section className="panel" aria-labelledby="fleet-h">
       <div className="panel-head">
-        <h2 id="fleet-h">Fleet · templates × hours</h2>
-        <span className="small muted">Each cell is the worst result in that hour. Click a cell to open that run.</span>
+        <h2 id="fleet-h">{tr('Fleet · templates × hours')}</h2>
+        <span className="small muted">{tr('Each cell is the worst result in that hour. Click a cell to open that run.')}</span>
         <div className="legend" style={{ marginLeft: 'auto' }}>
           {(['ok', 'failed', 'running', 'canceled', 'empty'] as const).map((s) => (
             <span key={s}>
               <Cell state={s} />
-              {s === 'empty' ? 'no run' : s}
+              {s === 'empty' ? tr('no run') : { ok: tr('ok'), failed: tr('failed'), running: tr('running'), canceled: tr('canceled') }[s]}
             </span>
           ))}
         </div>
@@ -160,7 +161,7 @@ function Fleet({ rows, buckets, loading, truncated }: { rows: FleetRow[]; bucket
       <div className="panel-body">
         {!rows.length ? (
           <p className="muted small" style={{ margin: 0 }}>
-            {loading ? 'Loading…' : 'No template ran in the last 24 hours.'}
+            {loading ? tr('Loading…') : tr('No template ran in the last 24 hours.')}
           </p>
         ) : (
           <div className="fleet">
@@ -169,7 +170,7 @@ function Fleet({ rows, buckets, loading, truncated }: { rows: FleetRow[]; bucket
               {buckets.map((b, i) => (
                 <span key={b}>{i % 3 === 0 ? hourLabel(b) : ''}</span>
               ))}
-              <span className="end">runs · fail</span>
+              <span className="end">{tr('runs · fail')}</span>
             </div>
             {shown.map((r) => (
               <div key={r.key} className="fleet-row">
@@ -196,10 +197,10 @@ function Fleet({ rows, buckets, loading, truncated }: { rows: FleetRow[]; bucket
           <div className="row small muted" style={{ marginTop: 12 }}>
             {rows.length > ROWS && (
               <button className="link-btn" onClick={() => setAll(!all)}>
-                {all ? `Show the ${ROWS} most relevant` : `Show all ${rows.length} templates`}
+                {all ? tr('Show the {ROWS} most relevant', { ROWS }) : tr('Show all {count} templates', { count: rows.length })}
               </button>
             )}
-            {truncated && <span>Only the latest 200 runs are shown; older hours may be incomplete.</span>}
+            {truncated && <span>{tr('Only the latest 200 runs are shown; older hours may be incomplete.')}</span>}
           </div>
         )}
       </div>
@@ -246,7 +247,7 @@ function Attention({ job }: { job: Job }) {
   return (
     <Link to={jobPath(job)} className="attention">
       {mini && (
-        <span className="mini" role="img" aria-label={`${plural(g!.hosts.length, 'host')} by ${plural(g!.tasks.length, 'task')}, failed on ${plural(g!.hosts.length - others, 'host')}`}>
+        <span className="mini" role="img" aria-label={tr('{count} by {count2}, failed on {count3}', { count: plural(g!.hosts.length, 'host'), count2: plural(g!.tasks.length, 'task'), count3: plural(g!.hosts.length - others, 'host') })}>
           {mini.map((h) => (
             <span key={h.name} className="mini-row">
               {h.cells.map((c, i) => (
@@ -266,13 +267,13 @@ function Attention({ job }: { job: Job }) {
         {f && (
           <span className="mono small fail-text ellipsis">
             {f.hosts[0]}
-            {f.hosts.length > 1 ? ` +${f.hosts.length - 1}` : ''}
-            {taskNo ? ` · task ${taskNo}` : ''} · {f.task}
+            {f.hosts.length > 1 ? asIs(` +${f.hosts.length - 1}`) : ''}
+            {taskNo ? tr(' · task {taskNo}', { taskNo }) : ''} · {f.task}
           </span>
         )}
         <span className="small muted ellipsis">
           {reason}
-          {others > 0 && ` — ${plural(others, 'other host')} fine`}
+          {others > 0 && tr(' — {count} fine', { count: plural(others, 'other host') })}
         </span>
       </span>
     </Link>

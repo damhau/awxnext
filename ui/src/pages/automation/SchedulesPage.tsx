@@ -14,6 +14,7 @@ import { compile, getTerm, setTerm, type KeyTable } from '../../lib/query'
 import { describeText } from './rrule'
 import { ScheduleDialog, ujtTypeOf } from './ScheduleForm'
 import { EnabledToggle, ScheduleMenu } from './SchedulesTab'
+import { tr } from '../../lib/i18n'
 
 const typeMap: Record<string, string> = {
   job: 'job_template',
@@ -27,10 +28,10 @@ const typeMap: Record<string, string> = {
 }
 
 const KEYS: KeyTable = {
-  name: { field: 'name', lookup: 'icontains', help: 'schedule name' },
-  template: { field: 'unified_job_template__name', lookup: 'icontains', help: 'what it runs' },
-  type: { field: 'unified_job_template__type', map: (v) => v.split(',').map((x) => typeMap[x.toLowerCase()] ?? x).join(','), help: 'job, workflow, project, inventory, management' },
-  enabled: { field: 'enabled', map: (v) => (['no', 'false', 'off', '0'].includes(v.toLowerCase()) ? 'false' : 'true'), help: 'true or false' },
+  name: { field: 'name', lookup: 'icontains', help: tr('schedule name') },
+  template: { field: 'unified_job_template__name', lookup: 'icontains', help: tr('what it runs') },
+  type: { field: 'unified_job_template__type', map: (v) => v.split(',').map((x) => typeMap[x.toLowerCase()] ?? x).join(','), help: tr('job, workflow, project, inventory, management') },
+  enabled: { field: 'enabled', map: (v) => (['no', 'false', 'off', '0'].includes(v.toLowerCase()) ? 'false' : 'true'), help: tr('true or false') },
 }
 
 export function SchedulesPage() {
@@ -49,7 +50,7 @@ export function SchedulesPage() {
   const list = useList<Any>('schedules/', params)
   const sel = useSelection<Any>(list.data?.results)
   const run = useBulk<Any>(['schedule', 'schedules'], 'schedules', 'job_templates', 'workflow_job_templates', 'projects', 'inventory_sources', 'system_job_templates', 'unified_job_templates')
-  const turn = (on: boolean) => run(on ? 'Turn on' : 'Turn off', sel.rows, (s) => api.patch(`schedules/${s.id}/`, { enabled: on }))
+  const turn = (on: boolean) => run(on ? tr('Turn on') : tr('Turn off'), sel.rows, (s) => api.patch(`schedules/${s.id}/`, { enabled: on }))
   // Next runs move as the scheduler runs them and as schedules change.
   const invalidate = useInvalidate()
   useLive({ schedules: ['changed'] }, () => invalidate('schedules'))
@@ -58,7 +59,7 @@ export function SchedulesPage() {
   const columns: Column<Any>[] = [
     {
       key: 'name',
-      header: 'Schedule',
+      header: tr('Schedule'),
       sort: 'name',
       render: (s) => (
         <div>
@@ -71,7 +72,7 @@ export function SchedulesPage() {
     },
     {
       key: 'template',
-      header: 'Runs',
+      header: tr('Runs'),
       render: (s) => {
         const t = s.summary_fields?.unified_job_template
         if (!t) return <span className="faint">—</span>
@@ -86,22 +87,22 @@ export function SchedulesPage() {
         )
       },
     },
-    { key: 'next', header: 'Next run', sort: 'next_run', className: 'nowrap', render: (s) => (s.enabled ? <Upcoming at={s.next_run} /> : <span className="faint">Paused</span>) },
-    { key: 'tz', header: 'Time zone', className: 'nowrap small', render: (s) => <span className="mono">{s.timezone || 'UTC'}</span> },
-    { key: 'enabled', header: 'Enabled', width: 90, render: (s) => <EnabledToggle schedule={s} /> },
-    { key: 'menu', header: <span className="sr-only">Actions</span>, className: 'end', width: 48, render: (s) => <ScheduleMenu schedule={s} onEdit={() => setEditing(s)} /> },
+    { key: 'next', header: tr('Next run'), sort: 'next_run', className: 'nowrap', render: (s) => (s.enabled ? <Upcoming at={s.next_run} /> : <span className="faint">{tr('Paused')}</span>) },
+    { key: 'tz', header: tr('Time zone'), className: 'nowrap small', render: (s) => <span className="mono">{s.timezone || tr('UTC')}</span> },
+    { key: 'enabled', header: tr('Enabled'), width: 90, render: (s) => <EnabledToggle schedule={s} /> },
+    { key: 'menu', header: <span className="sr-only">{tr('Actions')}</span>, className: 'end', width: 48, render: (s) => <ScheduleMenu schedule={s} onEdit={() => setEditing(s)} /> },
   ]
 
   return (
     <div className="page">
       <PageHead
-        title="Schedules"
-        subtitle="Everything that runs on its own. Next runs show in your time zone."
+        title={tr('Schedules')}
+        subtitle={tr('Everything that runs on its own. Next runs show in your time zone.')}
         bordered={false}
         actions={
           <button className="btn primary" onClick={() => setEditing('new')}>
             <Icon name="plus" size={14} />
-            New schedule
+            {tr('New schedule')}
           </button>
         }
       >
@@ -115,22 +116,22 @@ export function SchedulesPage() {
           >
             <Icon name="search" size={14} className="faint" />
             <label htmlFor="sched-q" className="sr-only">
-              Filter schedules
+              {tr('Filter schedules')}
             </label>
             <input
               id="sched-q"
               data-filter
               value={draft}
-              placeholder="name…  try  template:deploy  type:workflow  enabled:false"
+              placeholder={tr('name…  try  template:deploy  type:workflow  enabled:false')}
               onChange={(e) => setDraft(e.target.value)}
               onBlur={() => draft !== ls.q && ls.setQ(draft)}
             />
           </form>
-          <div className="segmented" role="group" aria-label="Show">
+          <div className="segmented" role="group" aria-label={tr('Show')}>
             {[
-              [null, 'All'],
-              ['true', 'Enabled'],
-              ['false', 'Paused'],
+              [null, tr('All')],
+              ['true', tr('Enabled')],
+              ['false', tr('Paused')],
             ].map(([v, l]) => (
               <label key={l} className={enabledFilter === v ? 'on' : ''}>
                 <input
@@ -150,22 +151,22 @@ export function SchedulesPage() {
         </div>
         {compiled.unknown.length > 0 && (
           <div className="small fail-text">
-            Unknown filter {compiled.unknown.map((k) => `${k}:`).join(', ')} — use {Object.keys(KEYS).map((k) => `${k}:`).join(' ')}
+            {tr('Unknown filter')} {compiled.unknown.map((k) => `${k}:`).join(', ')} {tr('— use')} {Object.keys(KEYS).map((k) => `${k}:`).join(' ')}
           </div>
         )}
       </PageHead>
       <div className="page-body" style={{ paddingTop: 12 }}>
         <BulkBar sel={sel} page={list.data?.results} total={list.data?.count} path="schedules/" params={params} style={{ marginBottom: 12 }}>
           <button className="btn" onClick={() => turn(true)}>
-            Turn on
+            {tr('Turn on')}
           </button>
           <button className="btn" onClick={() => turn(false)}>
-            Turn off
+            {tr('Turn off')}
           </button>
-          <BulkDelete sel={sel} resource="schedules" noun={['schedule', 'schedules']} name={(s) => s.name} note="What they launch stays; it no longer runs on these schedules." />
+          <BulkDelete sel={sel} resource="schedules" noun={['schedule', 'schedules']} name={(s) => s.name} note={tr('What they launch stays; it no longer runs on these schedules.')} />
         </BulkBar>
         <DataTable
-          label="Schedules"
+          label={tr('Schedules')}
           rows={list.data?.results}
           columns={columns}
           selected={sel.selected}
@@ -179,10 +180,10 @@ export function SchedulesPage() {
           minWidth={820}
           empty={
             ls.q ? (
-              <Empty title="No schedule matches" action={<button className="btn" onClick={() => (setDraft(''), ls.setQ(''))}>Clear filter</button>} />
+              <Empty title={tr('No schedule matches')} action={<button className="btn" onClick={() => (setDraft(''), ls.setQ(''))}>{tr('Clear filter')}</button>} />
             ) : (
-              <Empty title="Nothing is scheduled" action={<button className="btn" onClick={() => setEditing('new')}>New schedule</button>}>
-                Schedules launch templates, project syncs and inventory syncs at set times.
+              <Empty title={tr('Nothing is scheduled')} action={<button className="btn" onClick={() => setEditing('new')}>{tr('New schedule')}</button>}>
+                {tr('Schedules launch templates, project syncs and inventory syncs at set times.')}
               </Empty>
             )
           }
@@ -190,9 +191,9 @@ export function SchedulesPage() {
             list.data && list.data.count > 0 ? (
               <div className="table-foot">
                 <span>
-                  {list.data.count} schedule{list.data.count === 1 ? '' : 's'}
+                  {list.data.count} {tr('schedule')}{list.data.count === 1 ? '' : 's'}
                 </span>
-                <span className="hint">j/k move · enter edit · / filter</span>
+                <span className="hint">{tr('j/k move · enter edit · / filter')}</span>
                 <Pager count={list.data.count} page={ls.page} pageSize={ls.pageSize} onPage={ls.setPage} />
               </div>
             ) : undefined

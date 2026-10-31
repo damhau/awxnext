@@ -17,6 +17,7 @@ import { plural } from '../../lib/format'
 import { compile, type KeyTable } from '../../lib/query'
 import { applyErrors, FilterBox, KindTag, ManagedNotice, NameCell, Provenance, refOf, SECRET, useDelete, useOrgColumn, folderColumn, folderKey } from './common'
 import { UsedByPanel } from '../../components/UsedBy'
+import { tr } from '../../lib/i18n'
 
 export interface Credential extends Base {
   credential_type: number
@@ -87,36 +88,36 @@ export function CredentialList() {
   const list = useList<Credential>('credentials/', params)
   const sel = useSelection<Credential>(list.data?.results)
   const del = useDelete('credentials')
-  const copy = useCopy('credentials', { to: (id) => `/credentials/${id}`, what: 'Secret values and secret lookups are copied as they are.' })
+  const copy = useCopy('credentials', { to: (id) => `/credentials/${id}`, what: tr('Secret values and secret lookups are copied as they are.') })
   const orgCol = useOrgColumn<Credential>()
   const cols: Column<Credential>[] = [
-    { key: 'name', header: 'Credential', sort: 'name', render: (c) => <NameCell to={`/credentials/${c.id}`} name={c.name} sub={c.description || undefined} /> },
+    { key: 'name', header: tr('Credential'), sort: 'name', render: (c) => <NameCell to={`/credentials/${c.id}`} name={c.name} sub={c.description || undefined} /> },
     {
       key: 'type',
-      header: 'Type',
+      header: tr('Type'),
       sort: 'credential_type__name',
       render: (c) => (
         <span className="row" style={{ gap: 6 }}>
           <span className="small">{c.summary_fields.credential_type?.name}</span>
-          {c.kind === 'external' && <KindTag>secret lookup</KindTag>}
+          {c.kind === 'external' && <KindTag>{tr('secret lookup')}</KindTag>}
         </span>
       ),
     },
     ...orgCol,
     ...folderColumn(list.data?.results),
-    { key: 'modified', header: 'Edited', sort: 'modified', render: (c) => <span className="small faint nowrap"><Ago at={c.modified} /></span> },
+    { key: 'modified', header: tr('Edited'), sort: 'modified', render: (c) => <span className="small faint nowrap"><Ago at={c.modified} /></span> },
     {
       key: 'menu',
-      header: <span className="sr-only">Actions</span>,
+      header: <span className="sr-only">{tr('Actions')}</span>,
       className: 'end',
       render: (c) => (
-        <Menu label={`Actions for ${c.name}`} className="btn sm icon ghost">
-          <Link to={`/credentials/${c.id}/edit`}>Edit</Link>
-          <Link to={`/credentials/${c.id}/access`}>Access</Link>
-          {c.summary_fields.user_capabilities?.copy && !c.managed && <button onClick={() => copy.open(c)}>Copy…</button>}
+        <Menu label={tr('Actions for {name}', { name: c.name })} className="btn sm icon ghost">
+          <Link to={`/credentials/${c.id}/edit`}>{tr('Edit')}</Link>
+          <Link to={`/credentials/${c.id}/access`}>{tr('Access')}</Link>
+          {c.summary_fields.user_capabilities?.copy && !c.managed && <button onClick={() => copy.open(c)}>{tr('Copy…')}</button>}
           <hr />
           <button className="danger" onClick={() => del(c, 'credential')}>
-            Delete…
+            {tr('Delete…')}
           </button>
         </Menu>
       ),
@@ -125,23 +126,23 @@ export function CredentialList() {
   return (
     <div className="page">
       <PageHead
-        title="Credentials"
-        subtitle="Secrets for machines, clouds, repositories and registries. Values are encrypted at rest and never shown again once saved."
+        title={tr('Credentials')}
+        subtitle={tr('Secrets for machines, clouds, repositories and registries. Values are encrypted at rest and never shown again once saved.')}
         bordered={false}
         actions={
           <Link to="/credentials/new" className="btn primary">
-            New credential
+            {tr('New credential')}
           </Link>
         }
       />
       {copy.dialog}
       <div className="page-body">
-        <FilterBox value={ls.q} onApply={ls.setQ} placeholder="name…  try  kind:machine  type:vault*  folder:checkout" />
+        <FilterBox value={ls.q} onApply={ls.setQ} placeholder={tr('name…  try  kind:machine  type:vault*  folder:checkout')} />
         <BulkBar sel={sel} page={list.data?.results} total={list.data?.count} path="credentials/" params={params} style={{ marginBottom: 12 }}>
-          <BulkDelete sel={sel} resource="credentials" noun={['credential', 'credentials']} name={(c) => c.name} note="Templates and sources using them lose them; this cannot be undone." />
+          <BulkDelete sel={sel} resource="credentials" noun={['credential', 'credentials']} name={(c) => c.name} note={tr('Templates and sources using them lose them; this cannot be undone.')} />
         </BulkBar>
         <DataTable
-          label="Credentials"
+          label={tr('Credentials')}
           rows={list.data?.results}
           columns={cols}
           selected={sel.selected}
@@ -153,13 +154,13 @@ export function CredentialList() {
           onOrder={ls.setOrder}
           onOpen={(c) => nav(`/credentials/${c.id}`)}
           empty={
-            <Empty title={ls.q ? 'No credential matches' : 'No credentials yet'} action={!ls.q && <Link to="/credentials/new" className="btn primary">New credential</Link>}>
-              {ls.q ? 'Try a shorter filter.' : null}
+            <Empty title={ls.q ? tr('No credential matches') : tr('No credentials yet')} action={!ls.q && <Link to="/credentials/new" className="btn primary">{tr('New credential')}</Link>}>
+              {ls.q ? tr('Try a shorter filter.') : null}
             </Empty>
           }
           footer={
             <div className="table-foot">
-              <span>{list.data ? `${plural(list.data.count, 'credential', 'credentials')}` : ''}</span>
+              <span>{list.data ? tr('{count}', { count: plural(list.data.count, 'credential', 'credentials') }) : ''}</span>
               <Pager count={list.data?.count ?? 0} page={ls.page} pageSize={ls.pageSize} onPage={ls.setPage} />
             </div>
           }
@@ -257,7 +258,7 @@ function CredentialFormInner({ cred, sources }: { cred?: Credential; sources: In
         await api.post('credential_input_sources/', { target_credential: saved.id, source_credential: l.source.id, input_field_name: field, metadata: l.metadata })
       }
       invalidate('credentials', `credentials/${saved.id}`)
-      toast(cred ? `Saved ${saved.name}` : `Created ${saved.name}`)
+      toast(cred ? tr('Saved {name}', { name: saved.name }) : tr('Created {name}', { name: saved.name }))
       nav(`/credentials/${saved.id}`)
     } catch (err) {
       setError(applyErrors(err, f.setErrors))
@@ -269,15 +270,15 @@ function CredentialFormInner({ cred, sources }: { cred?: Credential; sources: In
   return (
     <div className="page">
       <PageHead
-        crumbs={[{ label: 'Credentials', to: '/credentials' }, ...(cred ? [{ label: cred.name, to: `/credentials/${cred.id}` }] : []), { label: cred ? 'Edit' : 'New' }]}
-        title={cred ? `Edit ${cred.name}` : 'New credential'}
+        crumbs={[{ label: tr('Credentials'), to: '/credentials' }, ...(cred ? [{ label: cred.name, to: `/credentials/${cred.id}` }] : []), { label: cred ? tr('Edit') : tr('New') }]}
+        title={cred ? tr('Edit {name}', { name: cred.name }) : tr('New credential')}
       />
       <form className="page-body form" onSubmit={submit} style={{ maxWidth: 920 }} autoComplete="off">
         <ManagedNotice managedBy={cred?.managed_by} />
         <div className="form-grid">
-          <TextInput label="Name" value={f.values.name} onChange={(x) => f.set('name', x)} error={f.errors.name} autoFocus />
+          <TextInput label={tr('Name')} value={f.values.name} onChange={(x) => f.set('name', x)} error={f.errors.name} autoFocus />
           <Lookup
-            label="Type"
+            label={tr('Type')}
             resource="credential_types/"
             value={f.values.credential_type}
             onChange={(x) => {
@@ -289,20 +290,20 @@ function CredentialFormInner({ cred, sources }: { cred?: Credential; sources: In
             }}
             error={f.errors.credential_type}
             meta={(r) => kindNames[(r as unknown as CredType).kind] ?? (r as unknown as CredType).kind}
-            help={cred ? 'Changing the type clears inputs it does not have.' : undefined}
+            help={cred ? tr('Changing the type clears inputs it does not have.') : undefined}
           />
-          <TextInput label="Description" optional value={f.values.description} onChange={(x) => f.set('description', x)} full />
+          <TextInput label={tr('Description')} optional value={f.values.description} onChange={(x) => f.set('description', x)} full />
           <Lookup
-            label="Organization"
+            label={tr('Organization')}
             optional
             resource="organizations/"
             value={f.values.organization}
             onChange={(x) => f.set('organization', x)}
             error={f.errors.organization}
-            help="Organization members with the right roles can use it. Without one, only you (and admins) can."
+            help={tr('Organization members with the right roles can use it. Without one, only you (and admins) can.')}
           />
           <Lookup
-            label="Folder"
+            label={tr('Folder')}
             optional
             resource="folders/"
             params={f.values.organization ? { organization: f.values.organization.id } : undefined}
@@ -313,11 +314,11 @@ function CredentialFormInner({ cred, sources }: { cred?: Credential; sources: In
         </div>
         {f.values.credential_type && (
           <div className="form-section">
-            <h2>{type.data?.name ?? 'Inputs'}</h2>
+            <h2>{type.data?.name ?? tr('Inputs')}</h2>
             {type.isPending ? (
               <Loading rows={3} />
             ) : fields.length === 0 ? (
-              <span className="faint small">This type has no inputs.</span>
+              <span className="faint small">{tr('This type has no inputs.')}</span>
             ) : (
               <div className="form-grid">
                 {fields.map((fd) => (
@@ -349,12 +350,12 @@ function CredentialFormInner({ cred, sources }: { cred?: Credential; sources: In
         <FormError error={error} />
         <div className="form-actions">
           <button className="btn primary" disabled={busy || !f.values.name || !f.values.credential_type || missing.length > 0}>
-            {busy ? 'Saving…' : cred ? 'Save' : 'Create credential'}
+            {busy ? tr('Saving…') : cred ? tr('Save') : tr('Create credential')}
           </button>
           <button type="button" className="btn ghost" onClick={() => nav(-1)}>
-            Cancel
+            {tr('Cancel')}
           </button>
-          {missing.length > 0 && <span className="small faint">Required: {missing.map((m) => m.label).join(', ')}</span>}
+          {missing.length > 0 && <span className="small faint">{tr('Required:')} {missing.map((m) => m.label).join(', ')}</span>}
         </div>
       </form>
       {linking && (
@@ -400,11 +401,11 @@ function InputControl({
     <span className="row" style={{ gap: 8 }}>
       <span>
         {field.label}
-        {!required && <span className="opt"> · optional</span>}
+        {!required && <span className="opt"> {tr('· optional')}</span>}
       </span>
       {onLink && !link && (
-        <button type="button" className="link-btn small" style={{ fontWeight: 400, marginLeft: 'auto' }} onClick={onLink} title="Resolve this value from HashiCorp Vault or Azure Key Vault at run time">
-          <Icon name="link" size={12} /> lookup
+        <button type="button" className="link-btn small" style={{ fontWeight: 400, marginLeft: 'auto' }} onClick={onLink} title={tr('Resolve this value from HashiCorp Vault or Azure Key Vault at run time')}>
+          <Icon name="link" size={12} /> {tr('lookup')}
         </button>
       )}
     </span>
@@ -426,23 +427,23 @@ function InputControl({
       <div className="lookup-box" style={{ cursor: 'default' }}>
         <Icon name="key" size={14} style={{ color: 'var(--accent)' }} />
         <span className="small grow ellipsis">
-          from <b style={{ fontWeight: 500 }}>{link.source.name}</b>
+          {tr('from')} <b style={{ fontWeight: 500 }}>{link.source.name}</b>
           <span className="mono faint"> {describeMeta(link.metadata)}</span>
         </span>
         <button type="button" className="btn ghost sm" onClick={onLink}>
-          Change
+          {tr('Change')}
         </button>
         <button type="button" className="btn ghost sm" onClick={onUnlink}>
-          Remove
+          {tr('Remove')}
         </button>
       </div>
     )
   } else if (field.ask_at_runtime && value === 'ASK') {
     control = (
       <div className="lookup-box" style={{ cursor: 'default' }}>
-        <span className="small grow muted">Asked when a job launches</span>
+        <span className="small grow muted">{tr('Asked when a job launches')}</span>
         <button type="button" className="btn ghost sm" onClick={() => onChange('')}>
-          Set a value instead
+          {tr('Set a value instead')}
         </button>
       </div>
     )
@@ -450,7 +451,7 @@ function InputControl({
     control = (
       <div className="lookup-box" style={{ cursor: 'default' }}>
         <span className="mono faint grow">••••••••</span>
-        <span className="small faint">stored encrypted</span>
+        <span className="small faint">{tr('stored encrypted')}</span>
         <button
           type="button"
           className="btn ghost sm"
@@ -459,7 +460,7 @@ function InputControl({
             onChange('')
           }}
         >
-          Replace
+          {tr('Replace')}
         </button>
       </div>
     )
@@ -482,7 +483,7 @@ function InputControl({
         rows={field.format === 'ssh_private_key' || field.secret ? 6 : 4}
         spellCheck={false}
         value={String(value ?? '')}
-        placeholder={field.format === 'ssh_private_key' ? '-----BEGIN OPENSSH PRIVATE KEY-----' : undefined}
+        placeholder={field.format === 'ssh_private_key' ? tr('-----BEGIN OPENSSH PRIVATE KEY-----') : undefined}
         onChange={(e) => onChange(e.target.value)}
         aria-invalid={!!error}
         style={field.secret ? ({ WebkitTextSecurity: value ? 'disc' : undefined } as React.CSSProperties) : undefined}
@@ -508,7 +509,7 @@ function InputControl({
       {field.ask_at_runtime && !link && value !== 'ASK' && (
         <label className="check small" style={{ marginTop: 2 }}>
           <input type="checkbox" checked={false} onChange={() => onChange('ASK')} />
-          <span>Ask at launch instead</span>
+          <span>{tr('Ask at launch instead')}</span>
         </label>
       )}
     </Field>
@@ -538,35 +539,35 @@ function LinkDialog({ field, current, onClose, onSave }: { field: InputField; cu
     setTest(null)
     try {
       await api.post(`credentials/${source.id}/test/`, { metadata: meta })
-      setTest({ ok: true, msg: 'The lookup returned a value.' })
+      setTest({ ok: true, msg: tr('The lookup returned a value.') })
     } catch (e) {
-      setTest({ ok: false, msg: e instanceof Error ? e.message : 'Lookup failed' })
+      setTest({ ok: false, msg: e instanceof Error ? e.message : tr('Lookup failed') })
     } finally {
       setTesting(false)
     }
   }
   return (
     <Dialog
-      title={`Look up "${field.label}" from a secret store`}
+      title={tr('Look up "{label}" from a secret store', { label: field.label })}
       onClose={onClose}
       wide
       footer={
         <>
           {test && <span className={`small grow ${test.ok ? 'ok-text' : 'fail-text'}`}>{test.msg}</span>}
           <button className="btn" disabled={!source || missing.length > 0 || testing} onClick={runTest}>
-            {testing ? 'Testing…' : 'Test'}
+            {testing ? tr('Testing…') : tr('Test')}
           </button>
           <button className="btn primary" disabled={!source || missing.length > 0} onClick={() => source && onSave({ source, metadata: meta })}>
-            Use this lookup
+            {tr('Use this lookup')}
           </button>
         </>
       }
     >
       <p className="muted" style={{ margin: 0 }}>
-        The value is fetched each time a job uses this credential; it is never stored here.
+        {tr('The value is fetched each time a job uses this credential; it is never stored here.')}
       </p>
       <Lookup
-        label="Secret store credential"
+        label={tr('Secret store credential')}
         resource="credentials/"
         params={{ credential_type__kind: 'external' }}
         value={source}
@@ -574,7 +575,7 @@ function LinkDialog({ field, current, onClose, onSave }: { field: InputField; cu
           setSource(x)
           setTest(null)
         }}
-        help="A HashiCorp Vault or Azure Key Vault credential."
+        help={tr('A HashiCorp Vault or Azure Key Vault credential.')}
       />
       {source && srcType.isPending && <Loading rows={2} />}
       {md.length > 0 && (
@@ -611,9 +612,9 @@ function TestLookup({ type, cred, inputs }: { type: CredType; cred?: Credential;
     try {
       if (cred) await api.post(`credentials/${cred.id}/test/`, { inputs, metadata: meta })
       else await api.post(`credential_types/${type.id}/test/`, { inputs, metadata: meta })
-      setResult({ ok: true, msg: 'Connected; the lookup returned a value.' })
+      setResult({ ok: true, msg: tr('Connected; the lookup returned a value.') })
     } catch (e) {
-      setResult({ ok: false, msg: e instanceof Error ? e.message : 'Lookup failed' })
+      setResult({ ok: false, msg: e instanceof Error ? e.message : tr('Lookup failed') })
     } finally {
       setBusy(false)
     }
@@ -621,9 +622,9 @@ function TestLookup({ type, cred, inputs }: { type: CredType; cred?: Credential;
   if (!md.length) return null
   return (
     <div className="form-section">
-      <h2>Try a lookup</h2>
+      <h2>{tr('Try a lookup')}</h2>
       <p className="muted small" style={{ margin: 0 }}>
-        Checks the connection with the values above, without saving.
+        {tr('Checks the connection with the values above, without saving.')}
       </p>
       <div className="form-grid">
         {md.map((m) => (
@@ -632,7 +633,7 @@ function TestLookup({ type, cred, inputs }: { type: CredType; cred?: Credential;
       </div>
       <div className="row">
         <button type="button" className="btn" onClick={run} disabled={busy}>
-          {busy ? 'Testing…' : 'Test lookup'}
+          {busy ? tr('Testing…') : tr('Test lookup')}
         </button>
         {result && <span className={`small ${result.ok ? 'ok-text' : 'fail-text'}`}>{result.msg}</span>}
       </div>
@@ -644,9 +645,9 @@ export function CredentialDetail() {
   const { id } = useParams()
   const cred = useObject<Credential>(`credentials/${id}/`)
   const del = useDelete('credentials', '/credentials')
-  const copy = useCopy('credentials', { to: (id) => `/credentials/${id}`, what: 'Secret values and secret lookups are copied as they are.' })
+  const copy = useCopy('credentials', { to: (id) => `/credentials/${id}`, what: tr('Secret values and secret lookups are copied as they are.') })
   if (cred.isPending) return <Loading />
-  if (cred.error || !cred.data) return <div className="page-body"><ErrorNote error={cred.error ?? 'Not found'} /></div>
+  if (cred.error || !cred.data) return <div className="page-body"><ErrorNote error={cred.error ?? tr('Not found')} /></div>
   const c = cred.data
   const caps = c.summary_fields.user_capabilities ?? {}
   const base = `/credentials/${c.id}`
@@ -654,7 +655,7 @@ export function CredentialDetail() {
     <div className="page">
       {copy.dialog}
       <PageHead
-        crumbs={[{ label: 'Credentials', to: '/credentials' }, { label: c.name }]}
+        crumbs={[{ label: tr('Credentials'), to: '/credentials' }, { label: c.name }]}
         title={c.name}
         badge={<KindTag>{c.summary_fields.credential_type?.name}</KindTag>}
         subtitle={c.description || undefined}
@@ -662,16 +663,16 @@ export function CredentialDetail() {
           <>
             {caps.edit && !c.managed_by && !c.managed && (
               <Link className="btn" to={`${base}/edit`}>
-                Edit
+                {tr('Edit')}
               </Link>
             )}
             {(caps.copy || caps.delete) && !c.managed && (
-              <Menu label="More actions">
-                {caps.copy && <button onClick={() => copy.open(c)}>Copy…</button>}
+              <Menu label={tr('More actions')}>
+                {caps.copy && <button onClick={() => copy.open(c)}>{tr('Copy…')}</button>}
                 {caps.copy && caps.delete && <hr />}
                 {caps.delete && (
                   <button className="danger" onClick={() => del(c, 'credential; templates using it will fail until they get another one')}>
-                    Delete…
+                    {tr('Delete…')}
                   </button>
                 )}
               </Menu>
@@ -681,9 +682,9 @@ export function CredentialDetail() {
         tabs={
           <>
             <Tab to={base} end>
-              Details
+              {tr('Details')}
             </Tab>
-            <Tab to={`${base}/access`}>Access</Tab>
+            <Tab to={`${base}/access`}>{tr('Access')}</Tab>
           </>
         }
       />
@@ -707,12 +708,12 @@ export function CredentialDetailsTab() {
       if (s)
         shown = (
           <span className="small">
-            <Icon name="key" size={12} /> from <Link to={`/credentials/${s.source_credential}`}>{s.summary_fields.source_credential?.name}</Link>{' '}
+            <Icon name="key" size={12} /> {tr('from')} <Link to={`/credentials/${s.source_credential}`}>{s.summary_fields.source_credential?.name}</Link>{' '}
             <span className="mono faint">{describeMeta(s.metadata)}</span>
           </span>
         )
-      else if (v === 'ASK') shown = <span className="muted">asked at launch</span>
-      else if (v === SECRET) shown = <span className="mono faint">•••••••• stored encrypted</span>
+      else if (v === 'ASK') shown = <span className="muted">{tr('asked at launch')}</span>
+      else if (v === SECRET) shown = <span className="mono faint">{tr('•••••••• stored encrypted')}</span>
       else if (typeof v === 'boolean') shown = v ? 'Yes' : 'No'
       else shown = <span className="mono">{String(v)}</span>
       return [fd.label, shown]
@@ -722,19 +723,19 @@ export function CredentialDetailsTab() {
       <ManagedNotice managedBy={c.managed_by} />
       <div className="split">
         <div className="wide stack" style={{ gap: 16 }}>
-          <Panel title={c.summary_fields.credential_type?.name ?? 'Inputs'}>
-            {type.isPending ? <Loading rows={3} /> : rows.length ? <KV items={rows} /> : <span className="faint small">No inputs set.</span>}
+          <Panel title={c.summary_fields.credential_type?.name ?? tr('Inputs')}>
+            {type.isPending ? <Loading rows={3} /> : rows.length ? <KV items={rows} /> : <span className="faint small">{tr('No inputs set.')}</span>}
           </Panel>
         </div>
         <div className="narrow stack" style={{ gap: 16 }}>
-          <UsedByPanel resource="credentials" id={c.id} empty="Nothing uses this credential." />
-          <Panel title="About">
+          <UsedByPanel resource="credentials" id={c.id} empty={tr('Nothing uses this credential.')} />
+          <Panel title={tr('About')}>
             <KV
               items={[
-                ['Organization', c.summary_fields.organization ? <Link to={`/organizations/${c.organization}`}>{c.summary_fields.organization.name}</Link> : <span className="faint">personal</span>],
-                ['Folder', c.summary_fields.folder?.name ?? ''],
-                ['Type', c.summary_fields.credential_type?.name],
-                ['History', <Provenance obj={c} />],
+                [tr('Organization'), c.summary_fields.organization ? <Link to={`/organizations/${c.organization}`}>{c.summary_fields.organization.name}</Link> : <span className="faint">{tr('personal')}</span>],
+                [tr('Folder'), c.summary_fields.folder?.name ?? ''],
+                [tr('Type'), c.summary_fields.credential_type?.name],
+                [tr('History'), <Provenance obj={c} />],
               ]}
             />
           </Panel>

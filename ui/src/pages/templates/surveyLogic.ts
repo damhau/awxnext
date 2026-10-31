@@ -1,3 +1,4 @@
+import { tr } from '../../lib/i18n'
 // Survey rules shared by the editor, the launch form and their tests. They
 // mirror the server (internal/resources/survey.go), which has the last word.
 
@@ -56,7 +57,7 @@ export function patternError(q: { pattern?: string; pattern_hint?: string }, v: 
   } catch {
     return null
   }
-  return re.test(v) ? null : q.pattern_hint || 'Does not match the expected format.'
+  return re.test(v) ? null : q.pattern_hint || tr('Does not match the expected format.')
 }
 
 /** Says where a question's choices come from, for the survey editor. */

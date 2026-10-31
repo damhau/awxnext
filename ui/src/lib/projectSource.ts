@@ -1,3 +1,4 @@
+import { tr } from './i18n'
 // Where a project's content comes from, and the fields each kind of source
 // takes. AWX refuses a branch on archive projects, and a refspec or submodule
 // tracking on anything but git.
@@ -5,13 +6,13 @@
 export type ScmType = '' | 'git' | 'archive'
 
 export const scmTypeOptions: [ScmType, string][] = [
-  ['git', 'Git repository'],
-  ['archive', 'Remote archive'],
-  ['', 'Directory on the controller'],
+  ['git', tr('Git repository')],
+  ['archive', tr('Remote archive')],
+  ['', tr('Directory on the controller')],
 ]
 
 export function scmTypeLabel(t: ScmType): string {
-  return t === 'git' ? 'Git' : t === 'archive' ? 'Remote archive' : 'Directory on the controller'
+  return t === 'git' ? 'Git' : t === 'archive' ? tr('Remote archive') : tr('Directory on the controller')
 }
 
 export interface SourceValues {

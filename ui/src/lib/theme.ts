@@ -3,13 +3,14 @@
 // first paint, and this keeps it in step while the app runs.
 import { useEffect } from 'react'
 import { useStored } from './storage'
+import { tr } from './i18n'
 
 export type ThemeChoice = 'system' | 'light' | 'dark'
 
 export const THEMES: { value: ThemeChoice; label: string }[] = [
-  { value: 'system', label: 'System' },
-  { value: 'light', label: 'Light' },
-  { value: 'dark', label: 'Dark' },
+  { value: 'system', label: tr('System') },
+  { value: 'light', label: tr('Light') },
+  { value: 'dark', label: tr('Dark') },
 ]
 
 export function resolveTheme(choice: ThemeChoice | string, systemDark: boolean): 'light' | 'dark' {

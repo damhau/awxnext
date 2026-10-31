@@ -1,3 +1,4 @@
+import { asIs, tr } from './i18n'
 /** Notification template forms: email settings and custom messages per event. */
 
 export type Security = 'none' | 'starttls' | 'ssl'
@@ -86,13 +87,13 @@ export interface MessageEvent {
 }
 
 export const MESSAGE_EVENTS: MessageEvent[] = [
-  { key: 'started', label: 'Job started' },
-  { key: 'success', label: 'Job succeeded' },
-  { key: 'error', label: 'Job failed' },
-  { key: 'running', label: 'Approval requested', group: 'workflow_approval' },
-  { key: 'approved', label: 'Approval granted', group: 'workflow_approval' },
-  { key: 'denied', label: 'Approval denied', group: 'workflow_approval' },
-  { key: 'timed_out', label: 'Approval timed out', group: 'workflow_approval' },
+  { key: 'started', label: tr('Job started') },
+  { key: 'success', label: tr('Job succeeded') },
+  { key: 'error', label: tr('Job failed') },
+  { key: 'running', label: tr('Approval requested'), group: asIs('workflow_approval') },
+  { key: 'approved', label: tr('Approval granted'), group: asIs('workflow_approval') },
+  { key: 'denied', label: tr('Approval denied'), group: asIs('workflow_approval') },
+  { key: 'timed_out', label: tr('Approval timed out'), group: asIs('workflow_approval') },
 ]
 
 /** A custom message being edited: the subject (email only) and the body. */

@@ -10,6 +10,7 @@ import { absolute, userName } from '../../lib/format'
 import { compile, getTerm, setTerm, type KeyTable } from '../../lib/query'
 import { FilterBox } from './common'
 import { assignmentTarget, roleName } from '../../lib/activityRoles'
+import { currentLocale, tr } from '../../lib/i18n'
 
 interface Entry {
   id: number
@@ -23,28 +24,28 @@ interface Entry {
 }
 
 const keys: KeyTable = {
-  type: { field: 'object1', help: 'object type, e.g. job_template' },
-  op: { field: 'operation', help: 'create, update, delete, associate, disassociate' },
-  actor: { field: 'actor__username', help: 'username' },
+  type: { field: 'object1', help: tr('object type, e.g. job_template') },
+  op: { field: 'operation', help: tr('create, update, delete, associate, disassociate') },
+  actor: { field: 'actor__username', help: tr('username') },
 }
 
 const verbs: Record<string, string> = { create: 'created', update: 'changed', delete: 'deleted', associate: 'linked', disassociate: 'unlinked' }
 
 const types: [string, string][] = [
-  ['', 'All objects'],
-  ['job_template', 'Job templates'],
-  ['workflow_job_template', 'Workflow templates'],
-  ['inventory', 'Inventories'],
-  ['host', 'Hosts'],
-  ['project', 'Projects'],
-  ['credential', 'Credentials'],
-  ['schedule', 'Schedules'],
-  ['user', 'Users'],
-  ['team', 'Teams'],
-  ['organization', 'Organizations'],
-  ['role', 'Roles'],
-  ['setting', 'Settings'],
-  ['notification_template', 'Notifications'],
+  ['', tr('All objects')],
+  ['job_template', tr('Job templates')],
+  ['workflow_job_template', tr('Workflow templates')],
+  ['inventory', tr('Inventories')],
+  ['host', tr('Hosts')],
+  ['project', tr('Projects')],
+  ['credential', tr('Credentials')],
+  ['schedule', tr('Schedules')],
+  ['user', tr('Users')],
+  ['team', tr('Teams')],
+  ['organization', tr('Organizations')],
+  ['role', tr('Roles')],
+  ['setting', tr('Settings')],
+  ['notification_template', tr('Notifications')],
 ]
 
 const ctFor: Record<string, string> = {
@@ -54,6 +55,37 @@ const ctFor: Record<string, string> = {
   execution_environment: 'executionenvironment',
   instance_group: 'instancegroup',
 }
+
+/** Object types as the activity stream names them. */
+const objectNames = (): Record<string, string> => ({
+  organization: tr('organization'),
+  team: tr('team'),
+  user: tr('user'),
+  credential: tr('credential'),
+  credential_type: tr('credential type'),
+  project: tr('project'),
+  inventory: tr('inventory'),
+  host: tr('host'),
+  group: tr('group'),
+  inventory_source: tr('inventory source'),
+  job_template: tr('job template'),
+  workflow_job_template: tr('workflow template'),
+  workflow_job_template_node: tr('workflow step'),
+  job: tr('job'),
+  workflow_job: tr('workflow job'),
+  project_update: tr('project sync'),
+  inventory_update: tr('inventory sync'),
+  ad_hoc_command: tr('command'),
+  system_job: tr('management job'),
+  system_job_template: tr('management job template'),
+  schedule: tr('schedule'),
+  notification_template: tr('notification template'),
+  instance_group: tr('instance group'),
+  execution_environment: tr('execution environment'),
+  label: tr('label'),
+  folder: tr('folder'),
+  role: tr('role'),
+})
 
 function objLink(type: string, o: Any | undefined): ReactNode {
   if (!o) return null
@@ -71,15 +103,15 @@ function objLink(type: string, o: Any | undefined): ReactNode {
 function describe(e: Entry): ReactNode {
   const first = (e.summary_fields[e.object1] as Any[] | undefined)?.[0]
   const second = e.object2 ? (e.summary_fields[e.object2] as Any[] | undefined)?.[e.object1 === e.object2 ? 1 : 0] : undefined
-  const t1 = e.object1.replace(/_/g, ' ')
-  if (e.object1 === 'setting') return <>changed settings {Object.keys(e.changes ?? {}).map((k) => <span key={k} className="mono small"> {k}</span>)}</>
+  const t1 = objectNames()[e.object1] ?? e.object1.replace(/_/g, ' ')
+  if (e.object1 === 'setting') return <>{tr('changed settings')} {Object.keys(e.changes ?? {}).map((k) => <span key={k} className="mono small"> {k}</span>)}</>
   if (e.operation === 'associate' || e.operation === 'disassociate') {
     const role = e.object1 === 'role' ? roleName(first) : ''
     const target = assignmentTarget(e.object1, e.changes)
     return (
       <>
-        {e.operation === 'associate' ? 'linked' : 'unlinked'} {e.object2.replace(/_/g, ' ')} {objLink(e.object2, second)} {e.operation === 'associate' ? 'to' : 'from'}{' '}
-        {role ? <span>the {role}</span> : <>{t1} {objLink(e.object1, first)}</>}
+        {e.operation === 'associate' ? tr('linked') : tr('unlinked')} {e.object2.replace(/_/g, ' ')} {objLink(e.object2, second)} {e.operation === 'associate' ? tr('to') : tr('from')}{' '}
+        {role ? <span>{tr('the')} {role}</span> : <>{t1} {objLink(e.object1, first)}</>}
         {target && <span> {target}</span>}
         {e.object_association && <span className="faint small"> ({e.object_association.split('.').pop()?.replace(/_/g, ' ')})</span>}
       </>
@@ -100,18 +132,18 @@ function fmt(v: unknown): string {
 
 function Changes({ e }: { e: Entry }) {
   const entries = Object.entries(e.changes ?? {})
-  if (!entries.length) return <p className="muted small" style={{ margin: 0 }}>No field changes recorded.</p>
+  if (!entries.length) return <p className="muted small" style={{ margin: 0 }}>{tr('No field changes recorded.')}</p>
   const isDiff = e.operation === 'update' && entries.every(([, v]) => Array.isArray(v) && v.length === 2)
   return (
     <div className="changes" style={{ gridTemplateColumns: isDiff ? '200px 1fr 1fr' : '200px 1fr' }}>
-      <div className="head">field</div>
+      <div className="head">{tr('field')}</div>
       {isDiff ? (
         <>
-          <div className="head">before</div>
-          <div className="head">after</div>
+          <div className="head">{tr('before')}</div>
+          <div className="head">{tr('after')}</div>
         </>
       ) : (
-        <div className="head">value</div>
+        <div className="head">{tr('value')}</div>
       )}
       {entries.map(([k, v]) =>
         isDiff ? (
@@ -149,23 +181,23 @@ export function Activity() {
   let lastDay = ''
   return (
     <div className="page">
-      <PageHead title="Activity" subtitle="Every change to configuration, who made it and what changed." bordered={false}>
+      <PageHead title={tr('Activity')} subtitle={tr('Every change to configuration, who made it and what changed.')} bordered={false}>
         <div className="row wrap">
-          <select className="select" style={{ width: 'auto' }} aria-label="Object type" value={type} onChange={(e) => ls.setQ(setTerm(ls.q, 'type', e.target.value || null))}>
+          <select className="select" style={{ width: 'auto' }} aria-label={tr('Object type')} value={type} onChange={(e) => ls.setQ(setTerm(ls.q, 'type', e.target.value || null))}>
             {types.map(([v, l]) => (
               <option key={v} value={v}>
                 {l}
               </option>
             ))}
           </select>
-          <div className="segmented" role="radiogroup" aria-label="Operation">
+          <div className="segmented" role="radiogroup" aria-label={tr('Operation')}>
             {(
               [
-                ['', 'All'],
-                ['create', 'Created'],
-                ['update', 'Changed'],
-                ['delete', 'Deleted'],
-                ['associate', 'Linked'],
+                ['', tr('All')],
+                ['create', tr('Created')],
+                ['update', tr('Changed')],
+                ['delete', tr('Deleted')],
+                ['associate', tr('Linked')],
               ] as const
             ).map(([v, l]) => (
               <label key={v} className={op === v ? 'on' : ''}>
@@ -175,17 +207,17 @@ export function Activity() {
             ))}
           </div>
         </div>
-        <FilterBox value={ls.q} onChange={ls.setQ} keys={keys} placeholder="Search changes…  try  actor:priya type:job_template" />
+        <FilterBox value={ls.q} onChange={ls.setQ} keys={keys} placeholder={tr('Search changes…  try  actor:priya type:job_template')} />
       </PageHead>
       <div className="page-body">
         {list.error && <ErrorNote error={list.error} />}
         <div className="table-wrap">
           {list.isPending && <Loading />}
-          {list.data && list.data.results.length === 0 && <Empty title="No activity matches" />}
+          {list.data && list.data.results.length === 0 && <Empty title={tr('No activity matches')} />}
           <ol className="activity">
             {(list.data?.results ?? []).map((e) => {
               const day = new Date(e.timestamp).toDateString()
-              const head = day !== lastDay ? <li className="activity-day">{new Date(e.timestamp).toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</li> : null
+              const head = day !== lastDay ? <li className="activity-day">{new Date(e.timestamp).toLocaleDateString(currentLocale(), { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</li> : null
               lastDay = day
               const actor = e.summary_fields.actor
               const expanded = open.has(e.id)
@@ -196,7 +228,7 @@ export function Activity() {
                     <button className="activity-main" onClick={() => toggle(e.id)} aria-expanded={expanded}>
                       {actor ? <Avatar name={userName(actor)} size="sm" /> : <span className="avatar sm" style={{ background: 'var(--line)' }} aria-hidden="true">·</span>}
                       <span className="grow" style={{ textAlign: 'left' }}>
-                        <b style={{ fontWeight: 500 }}>{actor ? userName(actor) : 'System'}</b> {describe(e)}
+                        <b style={{ fontWeight: 500 }}>{actor ? userName(actor) : tr('System')}</b> {describe(e)}
                       </span>
                       <span className="small faint nowrap" title={absolute(e.timestamp)}>
                         <Ago at={e.timestamp} />
@@ -215,7 +247,7 @@ export function Activity() {
           </ol>
           {list.data && list.data.count > ls.pageSize && (
             <div className="table-foot">
-              <span>{list.data.count} entries</span>
+              <span>{list.data.count} {tr('entries')}</span>
               <Pager count={list.data.count} page={ls.page} pageSize={ls.pageSize} onPage={ls.setPage} />
             </div>
           )}

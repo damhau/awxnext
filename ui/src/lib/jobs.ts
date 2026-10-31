@@ -1,6 +1,7 @@
 import { api } from '../api/client'
 import type { Job } from '../api/types'
 import { jobApi } from './format'
+import { tr } from './i18n'
 
 /**
  * Runs a job again with the same values. Syncs have no relaunch endpoint in
@@ -26,8 +27,8 @@ export async function relaunchJob(j: Pick<Job, 'id' | 'type' | 'unified_job_temp
 const passwordLabels: Record<string, string> = {
   ssh_password: 'SSH password',
   ssh_key_unlock: 'SSH key passphrase',
-  become_password: 'Privilege escalation password',
-  vault_password: 'Vault password',
+  become_password: tr('Privilege escalation password'),
+  vault_password: tr('Vault password'),
 }
 
 // The machine credential inputs a launch must supply when set to ASK, by

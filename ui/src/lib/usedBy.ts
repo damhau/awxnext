@@ -1,3 +1,4 @@
+import { tr } from './i18n'
 // What uses an object (awxnext's used_by): for its "Used by" panel and its
 // delete confirmation, which says what deleting it does to each dependent.
 
@@ -22,18 +23,18 @@ export interface UsedBy {
 export const HAS_USED_BY = new Set(['inventories', 'credentials', 'projects', 'execution_environments', 'job_templates', 'workflow_job_templates'])
 
 const kinds: Record<string, [string, string]> = {
-  job_template: ['job template', 'job templates'],
-  workflow_job_template: ['workflow', 'workflows'],
-  schedule: ['schedule', 'schedules'],
-  inventory: ['inventory', 'inventories'],
-  inventory_source: ['inventory source', 'inventory sources'],
-  project: ['project', 'projects'],
-  organization: ['organization', 'organizations'],
-  execution_environment: ['execution environment', 'execution environments'],
-  credential: ['credential', 'credentials'],
-  instance_group: ['instance group', 'instance groups'],
-  gitops_source: ['GitOps source', 'GitOps sources'],
-  setting: ['setting', 'settings'],
+  job_template: [tr('job template'), tr('job templates')],
+  workflow_job_template: [tr('workflow'), tr('workflows')],
+  schedule: [tr('schedule'), tr('schedules')],
+  inventory: [tr('inventory'), tr('inventories')],
+  inventory_source: [tr('inventory source'), tr('inventory sources')],
+  project: [tr('project'), tr('projects')],
+  organization: [tr('organization'), tr('organizations')],
+  execution_environment: [tr('execution environment'), tr('execution environments')],
+  credential: [tr('credential'), tr('credentials')],
+  instance_group: [tr('instance group'), tr('instance groups')],
+  gitops_source: [tr('GitOps source'), tr('GitOps sources')],
+  setting: [tr('setting'), tr('settings')],
 }
 
 export function kindOf(d: Dependent, n = 1): string {
@@ -42,29 +43,29 @@ export function kindOf(d: Dependent, n = 1): string {
 }
 
 const how: Record<string, string> = {
-  inventory: 'as its inventory',
-  node_inventory: 'as a step’s inventory',
-  input_inventories: 'as an input',
-  credentials: 'as a credential',
-  credential: 'as its credential',
-  webhook_credential: 'as its webhook credential',
-  signature_validation_credential: 'to check signatures',
-  node_credentials: 'as a step’s credential',
-  input_sources: 'to look up a field',
-  galaxy_credentials: 'as a Galaxy credential',
-  source_project: 'as its source',
-  unified_job_template: 'runs it',
-  project: 'as its project',
-  node_template: 'runs it in a step',
-  execution_environment: 'as its execution environment',
-  default_environment: 'as its default execution environment',
-  node_execution_environment: 'as a step’s execution environment',
-  DEFAULT_EXECUTION_ENVIRONMENT: 'as the global default',
+  inventory: tr('as its inventory'),
+  node_inventory: tr('as a step’s inventory'),
+  input_inventories: tr('as an input'),
+  credentials: tr('as a credential'),
+  credential: tr('as its credential'),
+  webhook_credential: tr('as its webhook credential'),
+  signature_validation_credential: tr('to check signatures'),
+  node_credentials: tr('as a step’s credential'),
+  input_sources: tr('to look up a field'),
+  galaxy_credentials: tr('as a Galaxy credential'),
+  source_project: tr('as its source'),
+  unified_job_template: tr('runs it'),
+  project: tr('as its project'),
+  node_template: tr('runs it in a step'),
+  execution_environment: tr('as its execution environment'),
+  default_environment: tr('as its default execution environment'),
+  node_execution_environment: tr('as a step’s execution environment'),
+  DEFAULT_EXECUTION_ENVIRONMENT: tr('as the global default'),
 }
 
 /** "as its inventory", "runs it in a step" */
 export function howUsed(d: Dependent): string {
-  return how[d.field] ?? `as ${d.field.replace(/_/g, ' ')}`
+  return how[d.field] ?? tr('as {field}', { field: d.field.replace(/_/g, ' ') })
 }
 
 /** Where a dependent is shown in the UI. */

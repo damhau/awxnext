@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { Icon } from './icons'
+import { tr } from '../lib/i18n'
 
 /** Modal dialog: focus moves inside, Escape and backdrop clicks close it. */
 export function Dialog({
@@ -40,7 +41,7 @@ export function Dialog({
       <div ref={ref} role="dialog" aria-modal="true" aria-label={label ?? (typeof title === 'string' ? title : undefined)} className={`dialog ${wide ? 'wide' : ''}`} tabIndex={-1}>
         <div className="dialog-head">
           <h2>{title}</h2>
-          <button className="btn ghost sm icon dialog-close" style={{ marginLeft: 'auto' }} onClick={onClose} aria-label="Close">
+          <button className="btn ghost sm icon dialog-close" style={{ marginLeft: 'auto' }} onClick={onClose} aria-label={tr('Close')}>
             <Icon name="x" />
           </button>
         </div>
@@ -78,15 +79,15 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
           footer={
             <>
               <button className="btn" onClick={() => close(false)}>
-                Cancel
+                {tr('Cancel')}
               </button>
               <button className={`btn ${state.danger ? 'danger solid' : 'primary'}`} onClick={() => close(true)} autoFocus>
-                {state.confirm ?? 'Confirm'}
+                {state.confirm ?? tr('Confirm')}
               </button>
             </>
           }
         >
-          {state.body ?? <p style={{ margin: 0 }}>Are you sure?</p>}
+          {state.body ?? <p style={{ margin: 0 }}>{tr('Are you sure?')}</p>}
         </Dialog>
       )}
     </ConfirmCtx.Provider>
@@ -117,7 +118,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         {toasts.map((t) => (
           <div key={t.id} className={`toast ${t.kind === 'error' ? 'error' : ''}`}>
             <div>{t.text}</div>
-            <button aria-label="Dismiss" onClick={() => setToasts((all) => all.filter((x) => x.id !== t.id))}>
+            <button aria-label={tr('Dismiss')} onClick={() => setToasts((all) => all.filter((x) => x.id !== t.id))}>
               <Icon name="x" size={14} />
             </button>
           </div>

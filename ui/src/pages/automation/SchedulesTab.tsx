@@ -10,6 +10,7 @@ import { Empty, Upcoming } from '../../components/ui'
 import './automation.css'
 import { describeText } from './rrule'
 import { ScheduleDialog, templateResource } from './ScheduleForm'
+import { tr, trn } from '../../lib/i18n'
 
 export { RRuleEditor, ScheduleDialog } from './ScheduleForm'
 
@@ -20,26 +21,26 @@ export function EnabledToggle({ schedule, label = true }: { schedule: Any; label
   const [busy, setBusy] = useState(false)
   const can = schedule.summary_fields?.user_capabilities?.edit !== false
   return (
-    <label className="toggle" title={schedule.enabled ? 'Enabled' : 'Disabled'}>
+    <label className="toggle" title={schedule.enabled ? tr('Enabled') : tr('Disabled')}>
       <input
         type="checkbox"
         checked={!!schedule.enabled}
         disabled={busy || !can}
-        aria-label={`${schedule.enabled ? 'Disable' : 'Enable'} ${schedule.name}`}
+        aria-label={schedule.enabled ? tr('Disable {name}', { name: schedule.name }) : tr('Enable {name}', { name: schedule.name })}
         onChange={async (e) => {
           setBusy(true)
           try {
             await api.patch(`schedules/${schedule.id}/`, { enabled: e.target.checked })
             invalidate('schedules', 'job_templates', 'workflow_job_templates', 'projects', 'inventory_sources', 'system_job_templates', 'unified_job_templates')
           } catch (err) {
-            toast(err instanceof Error ? err.message : 'Could not change the schedule', 'error')
+            toast(err instanceof Error ? err.message : tr('Could not change the schedule'), 'error')
           } finally {
             setBusy(false)
           }
         }}
       />
       <span className="track" aria-hidden="true" />
-      {label && <span className="lbl">{schedule.enabled ? 'On' : 'Off'}</span>}
+      {label && <span className="lbl">{schedule.enabled ? tr('On') : tr('Off')}</span>}
     </label>
   )
 }
@@ -51,27 +52,27 @@ export function ScheduleMenu({ schedule, onEdit }: { schedule: Any; onEdit: () =
   const invalidate = useInvalidate()
   const caps = schedule.summary_fields?.user_capabilities ?? {}
   return (
-    <Menu label={`Actions for ${schedule.name}`} className="btn sm icon">
+    <Menu label={tr('Actions for {name}', { name: schedule.name })} className="btn sm icon">
       <button onClick={onEdit} disabled={caps.edit === false}>
         <Icon name="edit" size={14} />
-        Edit
+        {tr('Edit')}
       </button>
       <button
         className="danger"
         disabled={caps.delete === false}
         onClick={async () => {
-          if (!(await confirm({ title: `Delete “${schedule.name}”?`, body: <p style={{ margin: 0 }}>Its future runs are cancelled. Jobs it already launched stay.</p>, confirm: 'Delete schedule', danger: true }))) return
+          if (!(await confirm({ title: tr('Delete “{name}”?', { name: schedule.name }), body: <p style={{ margin: 0 }}>{tr('Its future runs are cancelled. Jobs it already launched stay.')}</p>, confirm: tr('Delete schedule'), danger: true }))) return
           try {
             await api.del(`schedules/${schedule.id}/`)
             invalidate('schedules', 'job_templates', 'workflow_job_templates', 'projects', 'inventory_sources', 'system_job_templates', 'unified_job_templates')
-            toast(`Deleted “${schedule.name}”`)
+            toast(tr('Deleted “{name}”', { name: schedule.name }))
           } catch (e) {
-            toast(e instanceof Error ? e.message : 'Delete failed', 'error')
+            toast(e instanceof Error ? e.message : tr('Delete failed'), 'error')
           }
         }}
       >
         <Icon name="trash" size={14} />
-        Delete
+        {tr('Delete')}
       </button>
     </Menu>
   )
@@ -87,7 +88,7 @@ export function SchedulesTab({ template }: { template: { id: number; type: strin
   const columns: Column<Any>[] = [
     {
       key: 'name',
-      header: 'Schedule',
+      header: tr('Schedule'),
       render: (s) => (
         <div>
           <button className="link-btn cell-title" style={{ color: 'var(--ink)' }} onClick={() => setEditing(s)}>
@@ -97,39 +98,39 @@ export function SchedulesTab({ template }: { template: { id: number; type: strin
         </div>
       ),
     },
-    { key: 'when', header: 'When', render: (s) => <span>{describeText(s.rrule)}</span> },
-    { key: 'next', header: 'Next run', className: 'nowrap', render: (s) => (s.enabled ? <Upcoming at={s.next_run} /> : <span className="faint">Paused</span>) },
-    { key: 'enabled', header: 'Enabled', width: 90, render: (s) => <EnabledToggle schedule={s} /> },
-    { key: 'menu', header: <span className="sr-only">Actions</span>, className: 'end', width: 48, render: (s) => <ScheduleMenu schedule={s} onEdit={() => setEditing(s)} /> },
+    { key: 'when', header: tr('When'), render: (s) => <span>{describeText(s.rrule)}</span> },
+    { key: 'next', header: tr('Next run'), className: 'nowrap', render: (s) => (s.enabled ? <Upcoming at={s.next_run} /> : <span className="faint">{tr('Paused')}</span>) },
+    { key: 'enabled', header: tr('Enabled'), width: 90, render: (s) => <EnabledToggle schedule={s} /> },
+    { key: 'menu', header: <span className="sr-only">{tr('Actions')}</span>, className: 'end', width: 48, render: (s) => <ScheduleMenu schedule={s} onEdit={() => setEditing(s)} /> },
   ]
 
   return (
     <div className="stack" style={{ gap: 12 }}>
       <div className="row wrap">
         <p className="muted grow" style={{ margin: 0 }}>
-          {rows?.length ? `Runs ${template.name} on ${list.data!.count === 1 ? 'one schedule' : `${list.data!.count} schedules`}.` : 'Run this template at set times.'}
+          {rows?.length ? trn(list.data!.count, 'Runs {name} on one schedule.', 'Runs {name} on {n} schedules.', { name: template.name }) : tr('Run this template at set times.')}
         </p>
         <button className="btn primary" onClick={() => setEditing('new')}>
           <Icon name="plus" size={14} />
-          Add schedule
+          {tr('Add schedule')}
         </button>
       </div>
       <DataTable
-        label={`Schedules of ${template.name}`}
+        label={tr('Schedules of {name}', { name: template.name })}
         rows={rows}
         columns={columns}
         loading={list.isPending}
         error={list.error}
         onOpen={(s) => setEditing(s)}
         empty={
-          <Empty title="No schedules" action={<button className="btn" onClick={() => setEditing('new')}>Add a schedule</button>}>
-            Nightly runs, weekly maintenance windows, a one-off run tomorrow at 06:00.
+          <Empty title={tr('No schedules')} action={<button className="btn" onClick={() => setEditing('new')}>{tr('Add a schedule')}</button>}>
+            {tr('Nightly runs, weekly maintenance windows, a one-off run tomorrow at 06:00.')}
           </Empty>
         }
         footer={
           list.data && list.data.count > 20 ? (
             <div className="table-foot">
-              <span>{list.data.count} schedules</span>
+              <span>{list.data.count} {tr('schedules')}</span>
               <Pager count={list.data.count} page={page} pageSize={20} onPage={setPage} />
             </div>
           ) : undefined

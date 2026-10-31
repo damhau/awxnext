@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
+import { tr } from '../lib/i18n'
 
 interface Props {
   children: ReactNode
@@ -35,15 +36,15 @@ export class ErrorBoundary extends Component<Props, { error: Error | null }> {
       <div className="page">
         <div className="page-body" style={{ maxWidth: 720 }}>
           <div className="form-error" role="alert">
-            <b style={{ fontWeight: 600 }}>{stale ? 'awxnext was updated.' : 'This page hit an error.'}</b>{' '}
-            {stale ? 'Reload to get the new version.' : error.message}
+            <b style={{ fontWeight: 600 }}>{stale ? tr('awxnext was updated.') : tr('This page hit an error.')}</b>{' '}
+            {stale ? tr('Reload to get the new version.') : error.message}
           </div>
           <div className="row">
             <button className="btn primary" onClick={() => window.location.reload()}>
-              Reload
+              {tr('Reload')}
             </button>
             <a className="btn" href="/">
-              Back to Now
+              {tr('Back to Now')}
             </a>
           </div>
         </div>

@@ -10,6 +10,7 @@ import { Ago, Avatar, Empty, Loading, Panel } from '../../components/ui'
 import { absolute, ago, userName } from '../../lib/format'
 import { diffLines } from '../../lib/diff'
 import { resOf, type Kind } from './TemplateDetail'
+import { tr, trn } from '../../lib/i18n'
 
 interface Version extends Base {
   version: number
@@ -25,9 +26,9 @@ const noise = new Set(['created', 'modified', 'created_by', 'modified_by', 'stat
 
 function describeChange(v: Version): string {
   if (v.comment) return v.comment
-  if (v.operation === 'create') return 'Created'
+  if (v.operation === 'create') return tr('Created')
   const keys = Object.keys(v.changes ?? {}).filter((k) => !noise.has(k))
-  if (!keys.length) return 'No visible change'
+  if (!keys.length) return tr('No visible change')
   if (keys.length === 1) {
     const k = keys[0]
     const c = v.changes[k]
@@ -63,7 +64,7 @@ export function History({ kind, tpl }: { kind: Kind; tpl: Template }) {
   const canRevert = !!tpl.summary_fields.user_capabilities?.edit && !tpl.managed_by
 
   if (versions.isPending) return <Loading />
-  if (!list.length) return <div className="page-body"><Empty title="No history yet">Every change to this template is recorded here.</Empty></div>
+  if (!list.length) return <div className="page-body"><Empty title={tr('No history yet')}>{tr('Every change to this template is recorded here.')}</Empty></div>
 
   const select = (v: number) => setSp({ to: String(v), from: String(v - 1) }, { replace: true })
   const a = (fromV.data?.data ?? {}) as Record<string, unknown>
@@ -77,12 +78,12 @@ export function History({ kind, tpl }: { kind: Kind; tpl: Template }) {
   const target = toV.data
 
   const revert = async (v: number) => {
-    if (!(await confirm({ title: `Revert to version ${v}?`, body: <p style={{ margin: 0 }}>The template takes the settings it had in v{v}. This is recorded as a new version, so you can undo it.</p>, confirm: `Revert to v${v}` }))) return
+    if (!(await confirm({ title: tr('Revert to version {v}?', { v }), body: <p style={{ margin: 0 }}>{tr('The template takes the settings it had in v{v}. This is recorded as a new version, so you can undo it.', { v })}</p>, confirm: tr('Revert to v{v}', { v }) }))) return
     try {
       await api.post(`${res}/${tpl.id}/history/${v}/revert/`, {})
       invalidate(`${res}/${tpl.id}`, 'unified_job_templates')
       setSp({}, { replace: true })
-      toast(`Reverted to version ${v}`)
+      toast(tr('Reverted to version {v}', { v }))
     } catch (e) {
       toast((e as Error).message, 'error')
     }
@@ -90,7 +91,7 @@ export function History({ kind, tpl }: { kind: Kind; tpl: Template }) {
 
   return (
     <div className="body" style={{ alignItems: 'stretch' }}>
-      <nav aria-label="Versions" style={{ flex: '0 0 300px', background: 'var(--surface-2)', borderRight: '1px solid var(--line)' }}>
+      <nav aria-label={tr('Versions')} style={{ flex: '0 0 300px', background: 'var(--surface-2)', borderRight: '1px solid var(--line)' }}>
         <ol style={{ listStyle: 'none', margin: 0, padding: 0 }}>
           {list.map((v) => {
             const cur = v.version === to
@@ -106,7 +107,7 @@ export function History({ kind, tpl }: { kind: Kind; tpl: Template }) {
                   </div>
                   <div className="small faint" style={{ marginLeft: 42, marginTop: 3 }}>
                     {userName(v.summary_fields.actor)} · {ago(v.created)}
-                    {v.version === latest && ' · current'}
+                    {v.version === latest && tr(' · current')}
                   </div>
                 </button>
               </li>
@@ -117,7 +118,7 @@ export function History({ kind, tpl }: { kind: Kind; tpl: Template }) {
       <div className="page-body grow">
         <div className="row wrap" style={{ gap: 10 }}>
           <label htmlFor="from" className="muted">
-            Compare
+            {tr('Compare')}
           </label>
           <select id="from" className="select mono" style={{ width: 'auto', height: 32 }} value={from ?? ''} onChange={(e) => setSp({ to: String(to), from: e.target.value }, { replace: true })}>
             {list
@@ -132,23 +133,23 @@ export function History({ kind, tpl }: { kind: Kind; tpl: Template }) {
             →
           </span>
           <label htmlFor="to" className="sr-only">
-            to version
+            {tr('to version')}
           </label>
           <select id="to" className="select mono" style={{ width: 'auto', height: 32 }} value={to} onChange={(e) => select(Number(e.target.value))}>
             {list.map((v) => (
               <option key={v.version} value={v.version}>
                 v{v.version}
-                {v.version === latest ? ' · current' : ` · ${ago(v.created)}`}
+                {v.version === latest ? tr(' · current') : tr(' · {ago}', { ago: ago(v.created) })}
               </option>
             ))}
           </select>
           <label className="check" style={{ marginLeft: 8 }}>
             <input type="checkbox" checked={showAll} onChange={(e) => setSp({ to: String(to), from: String(from), ...(e.target.checked ? { all: '1' } : {}) }, { replace: true })} />
-            Show unchanged fields
+            {tr('Show unchanged fields')}
           </label>
           {canRevert && from && from >= 1 && (
             <button className="btn" style={{ marginLeft: 'auto' }} onClick={() => revert(to === latest ? from : to)}>
-              Revert to v{to === latest ? from : to}…
+              {tr('Revert to v')}{to === latest ? from : to}…
             </button>
           )}
         </div>
@@ -158,20 +159,20 @@ export function History({ kind, tpl }: { kind: Kind; tpl: Template }) {
             <Avatar name={userName(target.summary_fields.actor)} />
             <div className="grow">
               <div>
-                <b style={{ fontWeight: 600 }}>{userName(target.summary_fields.actor)}</b> {target.operation === 'create' ? 'created the template' : `changed ${changed.length} field${changed.length === 1 ? '' : 's'}`}{' '}
+                <b style={{ fontWeight: 600 }}>{userName(target.summary_fields.actor)}</b> {target.operation === 'create' ? tr('created the template') : trn(changed.length, 'changed {n} field', 'changed {n} fields')}{' '}
                 <span className="faint" title={absolute(target.created)}>
                   · {ago(target.created)}
                 </span>
               </div>
-              {target.comment ? <p style={{ margin: '4px 0 0' }}>“{target.comment}”</p> : <p className="small faint" style={{ margin: '4px 0 0' }}>No comment. Describe changes in the edit form to explain them here.</p>}
+              {target.comment ? <p style={{ margin: '4px 0 0' }}>“{target.comment}”</p> : <p className="small faint" style={{ margin: '4px 0 0' }}>{tr('No comment. Describe changes in the edit form to explain them here.')}</p>}
             </div>
           </div>
         )}
 
         {from && from >= 1 ? (
-          <section aria-label="Changed fields" className="panel">
+          <section aria-label={tr('Changed fields')} className="panel">
             <div className="changes">
-              <div className="head">field</div>
+              <div className="head">{tr('field')}</div>
               <div className="head">v{from}</div>
               <div className="head">v{to}</div>
               {rows.map((k) => {
@@ -182,16 +183,16 @@ export function History({ kind, tpl }: { kind: Kind; tpl: Template }) {
               })}
               {rows.length === 0 && extraBefore === extraAfter && (
                 <div style={{ gridColumn: '1 / -1' }} className="muted">
-                  No field changed between these versions.
+                  {tr('No field changed between these versions.')}
                 </div>
               )}
             </div>
             {extraBefore !== extraAfter && (
               <div style={{ padding: '10px 16px 14px' }}>
                 <div className="mono" style={{ marginBottom: 8 }}>
-                  extra_vars
+                  {tr('extra_vars')}
                 </div>
-                <div className="diff" role="table" aria-label="extra_vars diff">
+                <div className="diff" role="table" aria-label={tr('extra_vars diff')}>
                   {diffLines(extraBefore, extraAfter).map((l, i) => (
                     <div key={i} role="row" className={l.kind === 'ctx' ? '' : l.kind}>
                       <span className="n">{l.a ?? ''}</span>
@@ -205,9 +206,9 @@ export function History({ kind, tpl }: { kind: Kind; tpl: Template }) {
             )}
           </section>
         ) : (
-          <Panel title="First version">
+          <Panel title={tr('First version')}>
             <p className="small muted" style={{ margin: 0 }}>
-              This is how the template was created.
+              {tr('This is how the template was created.')}
             </p>
           </Panel>
         )}
@@ -248,7 +249,7 @@ function Ref({ field, v }: { field: string; v: unknown }) {
     staleTime: 60_000,
   })
   if (!res) return <span className="mono">{show(v)}</span>
-  if (!ids.length) return <span className="faint">none</span>
+  if (!ids.length) return <span className="faint">{tr('none')}</span>
   const byId = new Map((names.data?.results ?? []).map((o) => [o.id, o.name]))
   return <span>{ids.map((id) => byId.get(id) ?? `#${id}`).join(', ')}</span>
 }
@@ -262,24 +263,24 @@ function Around({ tpl, version, next }: { tpl: Template; version: Version; next?
   const afterFailed = useList<Base>('unified_jobs/', { ...q(since), status__in: 'failed,error', order_by: '-id' })
   const af = afterFailed.data
   return (
-    <aside aria-label="Context" style={{ flex: '0 1 320px', minWidth: 260, borderLeft: '1px solid var(--line)', background: 'var(--surface)', padding: '20px 18px', display: 'flex', flexDirection: 'column', gap: 22 }}>
+    <aside aria-label={tr('Context')} style={{ flex: '0 1 320px', minWidth: 260, borderLeft: '1px solid var(--line)', background: 'var(--surface)', padding: '20px 18px', display: 'flex', flexDirection: 'column', gap: 22 }}>
       <section>
-        <h2 style={{ marginBottom: 10 }}>Runs around this change</h2>
+        <h2 style={{ marginBottom: 10 }}>{tr('Runs around this change')}</h2>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
           <div className="panel" style={{ padding: 10, borderColor: 'var(--line-soft)' }}>
-            <div className="small faint">before (v{version.version - 1})</div>
+            <div className="small faint">{tr('before (v')}{version.version - 1})</div>
             <div style={{ fontSize: 18, fontWeight: 500, marginTop: 2 }}>
-              {before.data?.count ?? '…'} <span className="small muted" style={{ fontWeight: 400 }}>runs</span>
+              {before.data?.count ?? '…'} <span className="small muted" style={{ fontWeight: 400 }}>{tr('runs')}</span>
             </div>
-            <div className={`small ${beforeFailed.data?.count ? 'fail-text' : 'ok-text'}`}>{beforeFailed.data?.count ?? 0} failed</div>
+            <div className={`small ${beforeFailed.data?.count ? 'fail-text' : 'ok-text'}`}>{beforeFailed.data?.count ?? 0} {tr('failed')}</div>
           </div>
           <div className="panel" style={{ padding: 10, ...(af?.count ? { borderColor: 'var(--fail-line)', background: 'var(--fail-wash)' } : { borderColor: 'var(--line-soft)' }) }}>
-            <div className="small faint">{next ? `with v${version.version}` : `since v${version.version}`}</div>
+            <div className="small faint">{next ? tr('with v{version}', { version: version.version }) : tr('since v{version}', { version: version.version })}</div>
             <div style={{ fontSize: 18, fontWeight: 500, marginTop: 2 }}>
-              {after.data?.count ?? '…'} <span className="small muted" style={{ fontWeight: 400 }}>runs</span>
+              {after.data?.count ?? '…'} <span className="small muted" style={{ fontWeight: 400 }}>{tr('runs')}</span>
             </div>
             <div className={`small ${af?.count ? 'fail-text' : 'ok-text'}`}>
-              {af?.count ?? 0} failed
+              {af?.count ?? 0} {tr('failed')}
               {af?.results[0] && (
                 <>
                   {' · '}
@@ -291,12 +292,12 @@ function Around({ tpl, version, next }: { tpl: Template; version: Version; next?
         </div>
       </section>
       <section>
-        <h2 style={{ marginBottom: 8 }}>Version</h2>
+        <h2 style={{ marginBottom: 8 }}>{tr('Version')}</h2>
         <p className="small" style={{ margin: 0 }}>
-          v{version.version} · {version.operation} · <Ago at={version.created} />
+          v{version.version} · {({ create: tr('created'), update: tr('updated'), revert: tr('reverted') } as Record<string, string>)[version.operation] ?? version.operation} · <Ago at={version.created} />
         </p>
         <p className="small muted" style={{ margin: '6px 0 0' }}>
-          Reverting creates a new version with the old settings; nothing is lost.
+          {tr('Reverting creates a new version with the old settings; nothing is lost.')}
         </p>
       </section>
     </aside>

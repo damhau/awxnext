@@ -1,12 +1,13 @@
+import { tr } from './i18n'
 // The external logging settings (LOG_AGGREGATOR_*): their sections, and
 // where the server sends messages, built as it builds the address.
 
-export const loggingSections = ['Aggregator', 'Messages', 'Queue']
+export const loggingSections = [tr('Aggregator'), tr('Messages'), tr('Queue')]
 
 export function loggingSection(key: string): string {
-  if (/LOGGERS|_LEVEL|INDIVIDUAL_FACTS|TOWER_UUID/.test(key)) return 'Messages'
-  if (/QUEUE|DISK|RSYSLOGD/.test(key)) return 'Queue'
-  return 'Aggregator'
+  if (/LOGGERS|_LEVEL|INDIVIDUAL_FACTS|TOWER_UUID/.test(key)) return tr('Messages')
+  if (/QUEUE|DISK|RSYSLOGD/.test(key)) return tr('Queue')
+  return tr('Aggregator')
 }
 
 /**
@@ -35,6 +36,6 @@ export function aggregatorTarget(v: Record<string, unknown>): string | null {
 
 /** What the test button says, from the endpoint's answer. */
 export function testOutcome(error: unknown): { ok: boolean; text: string } {
-  if (!error) return { ok: true, text: 'Test message sent: look for "AWX Connection Test Message" at the aggregator.' }
+  if (!error) return { ok: true, text: tr('Test message sent: look for "AWX Connection Test Message" at the aggregator.') }
   return { ok: false, text: error instanceof Error ? error.message : String(error) }
 }

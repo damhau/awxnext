@@ -5,6 +5,7 @@ import { eventGroup, useLive } from '../../api/live'
 import { stripAnsi } from '../../lib/ansi'
 import { jobApi } from '../../lib/format'
 import { unifiedKind } from '../../lib/diff'
+import { tr, trn } from '../../lib/i18n'
 
 /** MAX_UI_JOB_EVENTS when the setting is not loaded. */
 export const DEFAULT_MAX_EVENTS = 4000
@@ -352,24 +353,24 @@ export function firstFailure(events: JobEvent[]): Failure | null {
   }
 }
 
-const word: Record<TaskState, string> = { ok: 'ok', changed: 'changed', failed: 'failed', unreachable: 'unreachable', skipped: 'skipped', none: 'not run' }
+const word: Record<TaskState, string> = { ok: tr('ok'), changed: tr('changed'), failed: tr('failed'), unreachable: tr('unreachable'), skipped: tr('skipped'), none: tr('not run') }
 
 /** How the other hosts did on the same task: "Only this host failed · others: 5 ok". */
 export function peers(grid: Grid, host: number, task: number): string {
   const me = grid.hosts[host].cells[task]
   const others = grid.hosts.filter((_, i) => i !== host).map((h) => h.cells[task])
-  if (!others.length) return 'The only host in this run'
+  if (!others.length) return tr('The only host in this run')
   const tally = (['ok', 'changed', 'failed', 'unreachable', 'skipped', 'none'] as const)
     .map((s) => [s, others.filter((o) => o === s).length] as const)
     .filter(([, n]) => n)
     .map(([s, n]) => `${n} ${word[s]}`)
     .join(' · ')
-  if (others.every((o) => o === me)) return `Same on all ${others.length + 1} hosts`
+  if (others.every((o) => o === me)) return tr('Same on all {n} hosts', { n: others.length + 1 })
   if (isBad(me)) {
     const bad = others.filter(isBad).length
-    return bad ? `${bad} other host${bad === 1 ? '' : 's'} failed here too · ${tally}` : `Only this host failed · others: ${tally}`
+    return bad ? trn(bad, '{n} other host failed here too · {tally}', '{n} other hosts failed here too · {tally}', { tally }) : tr('Only this host failed · others: {tally}', { tally })
   }
-  return `Others: ${tally}`
+  return tr('Others: {tally}', { tally })
 }
 
 /** A task path relative to the project, with its line: "playbooks/site.yml:20". */

@@ -4,6 +4,7 @@ import 'swagger-ui-dist/swagger-ui.css'
 import { cookie } from '../api/client'
 import { PageHead } from '../components/ui'
 import { withSession, type DocsRequest } from '../lib/apidocs'
+import { tr } from '../lib/i18n'
 
 /**
  * The API, browsable and callable with the session (it replaces AWX's
@@ -25,7 +26,7 @@ export default function ApiDocs() {
   }, [])
   return (
     <div className="page">
-      <PageHead title="API" subtitle="Every endpoint of /api/v2/, callable with your session." />
+      <PageHead title={tr('API')} subtitle={tr('Every endpoint of /api/v2/, callable with your session.')} />
       <div className="page-body">
         <div ref={node} className="api-docs" />
       </div>

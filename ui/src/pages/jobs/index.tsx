@@ -1,6 +1,7 @@
 import { Route } from 'react-router'
 import { PageHead } from '../../components/ui'
 import { lazyModule } from '../../lib/lazy'
+import { tr } from '../../lib/i18n'
 
 const m_JobDetail = lazyModule(() => import('./JobDetail'))
 const JobDetail = m_JobDetail('JobDetail')
@@ -10,7 +11,7 @@ const JobsTable = m_JobsTable('JobsTable')
 function JobList() {
   return (
     <div className="page">
-      <PageHead title="Jobs" subtitle="Every run: playbooks, workflows, syncs and commands." bordered={false} />
+      <PageHead title={tr('Jobs')} subtitle={tr('Every run: playbooks, workflows, syncs and commands.')} bordered={false} />
       <div className="page-body">
         <JobsTable />
       </div>

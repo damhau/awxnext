@@ -14,6 +14,7 @@ import { grantReason, grantTarget, testerClaims, type MappedGrant } from '../../
 import { ldapPrefix, ldapServer, ldapServerOn, ldapServerOrder } from '../../lib/ldapSettings'
 import { aggregatorTarget, loggingSection, loggingSections, testOutcome } from '../../lib/logging'
 import { archiveCredentialParams, compareSettings, jobsSection, jobsSections } from '../../lib/jobSettings'
+import { tr, trn } from '../../lib/i18n'
 
 interface Category {
   slug: string
@@ -21,23 +22,23 @@ interface Category {
 }
 
 const blurbs: Record<string, string> = {
-  system: 'Base URL, activity stream, proxies and the default execution environment.',
-  jobs: 'Job defaults, timeouts, ad hoc modules, Galaxy and isolation.',
-  authentication: 'Sessions, basic auth and local accounts.',
-  oidc: 'Single sign-on with an OpenID Connect provider, and how its groups map to access.',
-  ldap: 'Up to six LDAP servers, tried in order before local accounts, and how their groups map to access.',
-  saml: 'Single sign-on with SAML identity providers: the service provider awxnext is, the providers, and how their attributes map to access.',
-  github: 'Login with GitHub accounts.',
-  'github-org': 'Login with GitHub accounts that are members of an organization.',
-  'github-team': 'Login with GitHub accounts that are members of a team.',
-  'github-enterprise': 'Login with GitHub Enterprise accounts.',
-  'github-enterprise-org': 'Login with GitHub Enterprise accounts that are members of an organization.',
-  'github-enterprise-team': 'Login with GitHub Enterprise accounts that are members of a team.',
-  'google-oauth2': 'Login with Google accounts, optionally of some domains only.',
-  'azuread-oauth2': 'Login with Microsoft Entra ID (Azure AD) accounts.',
-  logging: 'Shipping logs to an external aggregator.',
-  ui: 'Login page and live updates.',
-  changed: 'Every setting that differs from its default.',
+  system: tr('Base URL, activity stream, proxies and the default execution environment.'),
+  jobs: tr('Job defaults, timeouts, ad hoc modules, Galaxy and isolation.'),
+  authentication: tr('Sessions, basic auth and local accounts.'),
+  oidc: tr('Single sign-on with an OpenID Connect provider, and how its groups map to access.'),
+  ldap: tr('Up to six LDAP servers, tried in order before local accounts, and how their groups map to access.'),
+  saml: tr('Single sign-on with SAML identity providers: the service provider awxnext is, the providers, and how their attributes map to access.'),
+  github: tr('Login with GitHub accounts.'),
+  'github-org': tr('Login with GitHub accounts that are members of an organization.'),
+  'github-team': tr('Login with GitHub accounts that are members of a team.'),
+  'github-enterprise': tr('Login with GitHub Enterprise accounts.'),
+  'github-enterprise-org': tr('Login with GitHub Enterprise accounts that are members of an organization.'),
+  'github-enterprise-team': tr('Login with GitHub Enterprise accounts that are members of a team.'),
+  'google-oauth2': tr('Login with Google accounts, optionally of some domains only.'),
+  'azuread-oauth2': tr('Login with Microsoft Entra ID (Azure AD) accounts.'),
+  logging: tr('Shipping logs to an external aggregator.'),
+  ui: tr('Login page and live updates.'),
+  changed: tr('Every setting that differs from its default.'),
 }
 
 const order = ['system', 'jobs', 'authentication', 'oidc', 'ldap', 'saml', 'github', 'github-org', 'github-team', 'github-enterprise', 'github-enterprise-org', 'github-enterprise-team', 'google-oauth2', 'azuread-oauth2', 'logging', 'ui', 'changed']
@@ -46,14 +47,14 @@ const isSecret = (key: string) => /SECRET|PASSWORD/.test(key)
 
 function SettingsNav({ cats, active }: { cats: Category[]; active: string }) {
   return (
-    <nav className="sidelist" aria-label="Settings categories">
+    <nav className="sidelist" aria-label={tr('Settings categories')}>
       <div className="group">
         <div className="group-head">
-          <span>Settings</span>
+          <span>{tr('Settings')}</span>
         </div>
         {cats.map((c) => (
           <NavLink key={c.slug} to={`/settings/${c.slug}`} className={c.slug === active ? 'active' : ''}>
-            {c.slug === 'oidc' ? 'Single sign-on (OIDC)' : c.name}
+            {c.slug === 'oidc' ? tr('Single sign-on (OIDC)') : c.name}
           </NavLink>
         ))}
       </div>
@@ -71,9 +72,9 @@ export function Settings() {
     <div className="page" style={{ flexDirection: 'row' }}>
       <SettingsNav cats={list} active={cat} />
       <div className="grow" style={{ display: 'flex', flexDirection: 'column' }}>
-        <PageHead title={cat === 'oidc' ? 'Single sign-on' : (current?.name ?? 'Settings')} subtitle={blurbs[cat]} />
+        <PageHead title={cat === 'oidc' ? tr('Single sign-on') : (current?.name ?? tr('Settings'))} subtitle={blurbs[cat]} />
         <div className="page-body">
-          {!me.is_superuser && <div className="notice">Only superusers can change settings. You can review them here.</div>}
+          {!me.is_superuser && <div className="notice">{tr('Only superusers can change settings. You can review them here.')}</div>}
           {cat === 'changed' ? <ChangedSettings /> : <CategoryForm key={cat} cat={cat} editable={me.is_superuser} />}
         </div>
       </div>
@@ -91,20 +92,20 @@ function useCategory(cat: string) {
 
 /** Groups related settings under readable headings. */
 function sectionOf(cat: string, key: string): string {
-  if (cat === 'oidc') return key.startsWith('SOCIAL_AUTH_') ? 'Provider' : key === 'OIDC_MAPPING' ? 'Group mapping' : 'Claims and tokens'
-  if (cat === 'authentication') return key.endsWith('_MAP') ? 'Organization and team maps' : key.startsWith('LOCAL_PASSWORD_') ? 'Local passwords' : 'Sessions and accounts'
+  if (cat === 'oidc') return key.startsWith('SOCIAL_AUTH_') ? tr('Provider') : key === 'OIDC_MAPPING' ? tr('Group mapping') : tr('Claims and tokens')
+  if (cat === 'authentication') return key.endsWith('_MAP') ? tr('Organization and team maps') : key.startsWith('LOCAL_PASSWORD_') ? tr('Local passwords') : tr('Sessions and accounts')
   if (cat === 'ldap') return ldapServer(key)
   if (cat === 'logging') return loggingSection(key)
-  if (cat === 'saml') return /_MAP$|_ATTR$|FLAGS/.test(key) ? 'Organizations, teams and flags' : /IDPS|SECURITY|EXTRA_DATA/.test(key) ? 'Identity providers' : 'Service provider'
+  if (cat === 'saml') return /_MAP$|_ATTR$|FLAGS/.test(key) ? tr('Organizations, teams and flags') : /IDPS|SECURITY|EXTRA_DATA/.test(key) ? tr('Identity providers') : tr('Service provider')
   if (cat === 'jobs') return jobsSection(key)
   return ''
 }
 
 const sectionOrder: Record<string, string[]> = {
-  oidc: ['Provider', 'Claims and tokens', 'Group mapping'],
-  authentication: ['Sessions and accounts', 'Local passwords', 'Organization and team maps'],
+  oidc: [tr('Provider'), tr('Claims and tokens'), tr('Group mapping')],
+  authentication: [tr('Sessions and accounts'), tr('Local passwords'), tr('Organization and team maps')],
   ldap: ldapServerOrder,
-  saml: ['Service provider', 'Identity providers', 'Organizations, teams and flags'],
+  saml: [tr('Service provider'), tr('Identity providers'), tr('Organizations, teams and flags')],
   jobs: jobsSections,
   logging: loggingSections,
 }
@@ -127,11 +128,11 @@ function LoggingTest({ values, unsaved }: { values: Values; unsaved: boolean }) 
   }
   return (
     <>
-      <button className="btn" disabled={busy || unsaved} title={unsaved ? 'Save first: the test uses the saved settings.' : undefined} onClick={run}>
-        {busy ? 'Testing…' : 'Test'}
+      <button className="btn" disabled={busy || unsaved} title={unsaved ? tr('Save first: the test uses the saved settings.') : undefined} onClick={run}>
+        {busy ? tr('Testing…') : tr('Test')}
       </button>
       <span className={`small ${outcome?.ok === false ? '' : 'faint'}`} style={outcome?.ok === false ? { color: 'var(--fail-deep)' } : undefined} role="status">
-        {outcome ? outcome.text : target ? <>Sends to <span className="mono">{target}</span></> : values.LOG_AGGREGATOR_ENABLED ? '' : 'External logging is off.'}
+        {outcome ? outcome.text : target ? <>{tr('Sends to')} <span className="mono">{target}</span></> : values.LOG_AGGREGATOR_ENABLED ? '' : tr('External logging is off.')}
       </span>
     </>
   )
@@ -168,7 +169,7 @@ function CategoryForm({ cat, editable }: { cat: string; editable: boolean }) {
     try {
       await api.patch(`settings/${cat}/`, body)
       invalidate(`settings/`)
-      toast(`Saved ${dirty.length} setting${dirty.length === 1 ? '' : 's'}`)
+      toast(trn(dirty.length, 'Saved {n} setting', 'Saved {n} settings'))
     } catch (e) {
       setError(e)
       if (e && typeof e === 'object' && 'fields' in e) setErrors((e as { fields: Record<string, string> }).fields)
@@ -177,11 +178,11 @@ function CategoryForm({ cat, editable }: { cat: string; editable: boolean }) {
     }
   }
   const resetAll = async () => {
-    if (!(await confirm({ title: `Reset all ${cat} settings to their defaults?`, confirm: 'Reset', danger: true }))) return
+    if (!(await confirm({ title: tr('Reset all {cat} settings to their defaults?', { cat }), confirm: tr('Reset'), danger: true }))) return
     try {
       await api.del(`settings/${cat}/`)
       invalidate('settings/')
-      toast('Reset to defaults')
+      toast(tr('Reset to defaults'))
     } catch (e) {
       toast((e as Error).message, 'error')
     }
@@ -221,9 +222,9 @@ function CategoryForm({ cat, editable }: { cat: string; editable: boolean }) {
         if (cat === 'ldap') {
           const on = ldapServerOn(draft, title)
           return (
-            <details key={title} className="form-section" open={on || title === 'Default server' || list.some((f) => errors[f.key])}>
+            <details key={title} className="form-section" open={on || title === tr('Default server') || list.some((f) => errors[f.key])}>
               <summary>
-                <h2 style={{ display: 'inline' }}>{title}</h2> <span className="faint small">{on ? '' : 'off'}</span>
+                <h2 style={{ display: 'inline' }}>{title}</h2> <span className="faint small">{on ? '' : tr('off')}</span>
               </summary>
               {fieldsGrid}
             </details>
@@ -232,7 +233,7 @@ function CategoryForm({ cat, editable }: { cat: string; editable: boolean }) {
         return (
         <section key={title || 'main'} className="form-section">
           {title && <h2>{title}</h2>}
-          {title === 'Group mapping' ? (
+          {title === tr('Group mapping') ? (
             <MappingEditor value={(draft.OIDC_MAPPING as Rule[]) ?? []} onChange={(v) => set('OIDC_MAPPING', v)} editable={editable} error={errors.OIDC_MAPPING} groupsClaim={String(draft.OIDC_GROUPS_CLAIM ?? 'groups')} />
           ) : (
             <div className="form-grid">
@@ -258,16 +259,16 @@ function CategoryForm({ cat, editable }: { cat: string; editable: boolean }) {
       {editable && (
         <div className="form-actions settings-actions">
           <button className="btn primary" disabled={busy || dirty.length === 0} onClick={save}>
-            {busy ? 'Saving…' : dirty.length ? `Save ${dirty.length} change${dirty.length === 1 ? '' : 's'}` : 'No changes'}
+            {busy ? tr('Saving…') : dirty.length ? trn(dirty.length, 'Save {n} change', 'Save {n} changes') : tr('No changes')}
           </button>
           {dirty.length > 0 && (
             <button className="btn ghost" onClick={() => setDraft(values.data!)}>
-              Discard
+              {tr('Discard')}
             </button>
           )}
           {cat === 'logging' && <LoggingTest values={values.data} unsaved={dirty.length > 0} />}
           <button className="btn ghost" style={{ marginLeft: 'auto' }} onClick={resetAll}>
-            Reset category to defaults
+            {tr('Reset category to defaults')}
           </button>
         </div>
       )}
@@ -302,17 +303,17 @@ function SettingField({
   const changed = JSON.stringify(value) !== JSON.stringify(saved)
   const help: ReactNode = (
     <>
-      {meta.help_text && meta.help_text !== label ? `${meta.help_text} ` : ''}
+      {meta.help_text && meta.help_text !== label ? tr('{help_text} ', { help_text: meta.help_text }) : ''}
       <span className="mono">{k}</span>
       {!isDefault && !disabled && (
         <>
           {' · '}
           <button type="button" className="link-btn small" onClick={() => onChange(meta.default ?? (meta.type === 'boolean' ? false : meta.type === 'list' ? [] : ''))}>
-            restore default
+            {tr('restore default')}
           </button>
         </>
       )}
-      {changed && <span className="tag" style={{ marginLeft: 6 }}>unsaved</span>}
+      {changed && <span className="tag" style={{ marginLeft: 6 }}>{tr('unsaved')}</span>}
     </>
   )
   const id = `s-${k}`
@@ -383,7 +384,7 @@ function ListField({ id, label, help, error, value, onChange, disabled }: { id: 
   const simple = list.every((x) => typeof x === 'string' || typeof x === 'number')
   if (!simple) return <JsonField id={id} label={label} help={help} error={error} value={value} onChange={onChange} disabled={disabled} />
   return (
-    <Field label={label} help={<>One per line. {help}</>} error={error} htmlFor={id}>
+    <Field label={label} help={<>{tr('One per line.')} {help}</>} error={error} htmlFor={id}>
       <textarea
         id={id}
         className="textarea mono"
@@ -431,7 +432,7 @@ function JsonField({ id, label, help, error, value, onChange, disabled }: { id: 
             onChange(JSON.parse(e.target.value))
             setBad(null)
           } catch (err) {
-            setBad('Not valid JSON: ' + (err as Error).message)
+            setBad(tr('Not valid JSON: ') + (err as Error).message)
           }
         }}
       />
@@ -452,7 +453,7 @@ function ArchiveCredentialField({ label, help, error, value, onChange, disabled,
   if (disabled)
     return (
       <Field label={label} help={help}>
-        <span>{cred.data?.name ?? (value ? `#${value}` : 'Not set')}</span>
+        <span>{cred.data?.name ?? (value ? tr('#{value}', { value }) : tr('Not set'))}</span>
       </Field>
     )
   return <Lookup label={label} help={help} error={error} optional resource="credentials/" params={archiveCredentialParams(storage)} value={cred.data ?? null} onChange={(r) => onChange(r?.id ?? null)} />
@@ -463,7 +464,7 @@ function EEField({ label, help, value, onChange, disabled }: { label: string; he
   if (disabled)
     return (
       <Field label={label} help={help}>
-        <span>{ee.data?.name ?? (value ? `#${value}` : 'Not set')}</span>
+        <span>{ee.data?.name ?? (value ? tr('#{value}', { value }) : tr('Not set'))}</span>
       </Field>
     )
   return <Lookup label={label} help={help} optional resource="execution_environments/" value={ee.data ?? null} onChange={(r) => onChange(r?.id ?? null)} meta={(r) => r.image} />
@@ -474,15 +475,15 @@ function ChangedSettings() {
   if (meta.error || values.error) return <ErrorNote error={meta.error ?? values.error} />
   if (!values.data) return <Loading />
   const entries = Object.entries(values.data)
-  if (!entries.length) return <Empty title="Everything is at its default" />
+  if (!entries.length) return <Empty title={tr('Everything is at its default')} />
   return (
     <Panel pad={false}>
       <table className="data">
         <thead>
           <tr>
-            <th scope="col">Setting</th>
-            <th scope="col">Value</th>
-            <th scope="col">Category</th>
+            <th scope="col">{tr('Setting')}</th>
+            <th scope="col">{tr('Value')}</th>
+            <th scope="col">{tr('Category')}</th>
           </tr>
         </thead>
         <tbody>
@@ -556,27 +557,27 @@ function MappingEditor({ value, onChange, editable, error, groupsClaim }: { valu
   return (
     <div className="stack" style={{ gap: 12 }}>
       <p className="muted" style={{ margin: 0 }}>
-        At every sign-in, the groups in the token's <span className="mono">{groupsClaim}</span> claim are matched against these rules. Access granted by rules is replaced on each sign-in: if a group disappears, so does the access it gave. Access granted by hand in the UI is kept.
+        {tr('At every sign-in, the groups in the token\'s')} <span className="mono">{groupsClaim}</span> {tr('claim are matched against these rules. Access granted by rules is replaced on each sign-in: if a group disappears, so does the access it gave. Access granted by hand in the UI is kept.')}
       </p>
       <div className="row">
         <span className="grow" />
         <label className="check small">
           <input type="checkbox" checked={asJson} onChange={(e) => setAsJson(e.target.checked)} />
-          Edit as JSON
+          {tr('Edit as JSON')}
         </label>
       </div>
       {asJson ? (
-        <JsonField id="oidc-map-json" label="Rules" help="A list of rule objects." error={error} value={rules} onChange={(v) => onChange(Array.isArray(v) ? (v as Rule[]) : [])} disabled={!editable} />
+        <JsonField id="oidc-map-json" label={tr('Rules')} help={tr('A list of rule objects.')} error={error} value={rules} onChange={(v) => onChange(Array.isArray(v) ? (v as Rule[]) : [])} disabled={!editable} />
       ) : (
         <div className="table-wrap">
           <table className="data mapping">
             <thead>
               <tr>
-                <th scope="col">When the user is in group</th>
-                <th scope="col">Grant</th>
-                <th scope="col">Where</th>
+                <th scope="col">{tr('When the user is in group')}</th>
+                <th scope="col">{tr('Grant')}</th>
+                <th scope="col">{tr('Where')}</th>
                 <th scope="col" className="end">
-                  <span className="sr-only">Actions</span>
+                  <span className="sr-only">{tr('Actions')}</span>
                 </th>
               </tr>
             </thead>
@@ -588,48 +589,48 @@ function MappingEditor({ value, onChange, editable, error, groupsClaim }: { valu
                   <tr key={i}>
                     <td>
                       <div className="row" style={{ gap: 6 }}>
-                        <select className="select" style={{ width: 128, flex: '0 0 128px' }} aria-label="Match" disabled={!editable} value={regex ? 'regex' : 'exact'} onChange={(e) => update(i, e.target.value === 'regex' ? { group_regex: r.group ?? '', group: undefined } : { group: r.group_regex ?? '', group_regex: undefined })}>
-                          <option value="exact">named</option>
-                          <option value="regex">matching</option>
+                        <select className="select" style={{ width: 128, flex: '0 0 128px' }} aria-label={tr('Match')} disabled={!editable} value={regex ? 'regex' : 'exact'} onChange={(e) => update(i, e.target.value === 'regex' ? { group_regex: r.group ?? '', group: undefined } : { group: r.group_regex ?? '', group_regex: undefined })}>
+                          <option value="exact">{tr('named')}</option>
+                          <option value="regex">{tr('matching')}</option>
                         </select>
                         <input
                           className="input mono"
-                          aria-label="Group"
+                          aria-label={tr('Group')}
                           disabled={!editable}
-                          placeholder={regex ? '^team-(.+)$' : 'awx-admins'}
+                          placeholder={regex ? tr('^team-(.+)$') : tr('awx-admins')}
                           value={(regex ? r.group_regex : r.group) ?? ''}
                           onChange={(e) => update(i, regex ? { group_regex: e.target.value } : { group: e.target.value })}
                         />
                       </div>
                     </td>
                     <td>
-                      <select className="select" style={{ minWidth: 180 }} aria-label="Grant" disabled={!editable} value={g} onChange={(e) => setGrant(i, e.target.value as Grant)}>
-                        <option value="superuser">Superuser</option>
-                        <option value="auditor">System auditor</option>
-                        <option value="org">Organization role</option>
-                        <option value="team">Team membership</option>
-                        <option value="roledef">Role definition</option>
+                      <select className="select" style={{ minWidth: 180 }} aria-label={tr('Grant')} disabled={!editable} value={g} onChange={(e) => setGrant(i, e.target.value as Grant)}>
+                        <option value="superuser">{tr('Superuser')}</option>
+                        <option value="auditor">{tr('System auditor')}</option>
+                        <option value="org">{tr('Organization role')}</option>
+                        <option value="team">{tr('Team membership')}</option>
+                        <option value="roledef">{tr('Role definition')}</option>
                       </select>
                     </td>
                     <td>
                       {g === 'superuser' || g === 'auditor' ? (
-                        <span className="faint small">Everywhere</span>
+                        <span className="faint small">{tr('Everywhere')}</span>
                       ) : (
                         <div className="row wrap" style={{ gap: 6 }}>
-                          <input className="input" style={{ flex: '1 1 140px' }} aria-label="Organization" placeholder="Organization" disabled={!editable} value={r.organization ?? ''} onChange={(e) => update(i, { organization: e.target.value })} />
-                          {g === 'team' && <input className="input" style={{ flex: '1 1 120px' }} aria-label="Team" placeholder="Team (or $1)" disabled={!editable} value={r.team ?? ''} onChange={(e) => update(i, { team: e.target.value })} />}
+                          <input className="input" style={{ flex: '1 1 140px' }} aria-label={tr('Organization')} placeholder={tr('Organization')} disabled={!editable} value={r.organization ?? ''} onChange={(e) => update(i, { organization: e.target.value })} />
+                          {g === 'team' && <input className="input" style={{ flex: '1 1 120px' }} aria-label={tr('Team')} placeholder={tr('Team (or $1)')} disabled={!editable} value={r.team ?? ''} onChange={(e) => update(i, { team: e.target.value })} />}
                           {g === 'roledef' ? (
-                            <input className="input" style={{ flex: '1 1 160px' }} aria-label="Role definition" placeholder="Organization Execute" disabled={!editable} value={r.role_definition ?? ''} onChange={(e) => update(i, { role_definition: e.target.value })} />
+                            <input className="input" style={{ flex: '1 1 160px' }} aria-label={tr('Role definition')} placeholder={tr('Organization Execute')} disabled={!editable} value={r.role_definition ?? ''} onChange={(e) => update(i, { role_definition: e.target.value })} />
                           ) : (
-                            <select className="select" style={{ width: 120 }} aria-label="Role" disabled={!editable} value={r.role ?? 'member'} onChange={(e) => update(i, { role: e.target.value })}>
-                              <option value="member">member</option>
-                              <option value="admin">admin</option>
-                              {g === 'org' && <option value="auditor">auditor</option>}
+                            <select className="select" style={{ width: 120 }} aria-label={tr('Role')} disabled={!editable} value={r.role ?? 'member'} onChange={(e) => update(i, { role: e.target.value })}>
+                              <option value="member">{tr('member')}</option>
+                              <option value="admin">{tr('admin')}</option>
+                              {g === 'org' && <option value="auditor">{tr('auditor')}</option>}
                             </select>
                           )}
-                          <label className="check small" title="Create the organization or team when it does not exist">
+                          <label className="check small" title={tr('Create the organization or team when it does not exist')}>
                             <input type="checkbox" disabled={!editable} checked={r.create !== false} onChange={(e) => update(i, { create: e.target.checked ? undefined : false })} />
-                            create
+                            {tr('create')}
                           </label>
                         </div>
                       )}
@@ -637,13 +638,13 @@ function MappingEditor({ value, onChange, editable, error, groupsClaim }: { valu
                     <td className="end nowrap">
                       {editable && (
                         <>
-                          <button type="button" className="btn ghost sm icon" aria-label="Move up" disabled={i === 0} onClick={() => move(i, -1)}>
+                          <button type="button" className="btn ghost sm icon" aria-label={tr('Move up')} disabled={i === 0} onClick={() => move(i, -1)}>
                             ↑
                           </button>
-                          <button type="button" className="btn ghost sm icon" aria-label="Move down" disabled={i === rules.length - 1} onClick={() => move(i, 1)}>
+                          <button type="button" className="btn ghost sm icon" aria-label={tr('Move down')} disabled={i === rules.length - 1} onClick={() => move(i, 1)}>
                             ↓
                           </button>
-                          <button type="button" className="btn ghost sm icon" aria-label="Remove rule" onClick={() => onChange(rules.filter((_, j) => j !== i))}>
+                          <button type="button" className="btn ghost sm icon" aria-label={tr('Remove rule')} onClick={() => onChange(rules.filter((_, j) => j !== i))}>
                             <Icon name="x" size={12} />
                           </button>
                         </>
@@ -654,12 +655,12 @@ function MappingEditor({ value, onChange, editable, error, groupsClaim }: { valu
               })}
             </tbody>
           </table>
-          {rules.length === 0 && <Empty title="No rules">Without rules, SSO users can sign in but get no access until granted in the UI.</Empty>}
+          {rules.length === 0 && <Empty title={tr('No rules')}>{tr('Without rules, SSO users can sign in but get no access until granted in the UI.')}</Empty>}
           {editable && (
             <div className="table-foot">
               <button type="button" className="btn sm" onClick={() => onChange([...rules, { group: '', organization: '', role: 'member' }])}>
                 <Icon name="plus" size={12} />
-                Add rule
+                {tr('Add rule')}
               </button>
               {error && <span className="fail-text">{error}</span>}
             </div>
@@ -713,27 +714,27 @@ function MappingTester({ rules, groupsClaim }: { rules: Rule[]; groupsClaim: str
     }
   }
   return (
-    <Panel title="Try the rules" actions={<label className="check small"><input type="checkbox" checked={advanced} onChange={(e) => setAdvanced(e.target.checked)} />Paste full token claims</label>}>
+    <Panel title={tr('Try the rules')} actions={<label className="check small"><input type="checkbox" checked={advanced} onChange={(e) => setAdvanced(e.target.checked)} />{tr('Paste full token claims')}</label>}>
       <div className="stack" style={{ gap: 10 }}>
         <p className="small muted" style={{ margin: 0 }}>
-          Nothing is saved or changed: this shows what a user with these groups would get from the rules above, including unsaved edits, and from the saved organization and team maps of the Authentication settings, which match the username and email.
+          {tr('Nothing is saved or changed: this shows what a user with these groups would get from the rules above, including unsaved edits, and from the saved organization and team maps of the Authentication settings, which match the username and email.')}
         </p>
         {advanced ? (
-          <textarea className="textarea mono" rows={6} spellCheck={false} placeholder={`{\n  "preferred_username": "alice",\n  "${groupsClaim}": ["ops", "team-payments"]\n}`} value={claimsText} onChange={(e) => setClaimsText(e.target.value)} aria-label="Token claims" />
+          <textarea className="textarea mono" rows={6} spellCheck={false} placeholder={tr('{\n  "preferred_username": "alice",\n  "{groupsClaim}": ["ops", "team-payments"]\n}', { groupsClaim })} value={claimsText} onChange={(e) => setClaimsText(e.target.value)} aria-label={tr('Token claims')} />
         ) : (
           <div className="row" style={{ flexWrap: 'wrap' }}>
-            <input className="input mono" style={{ flex: '1 1 10rem', width: 'auto' }} aria-label="Username" placeholder="test-user" value={user} onChange={(e) => setUser(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && run()} />
-            <input className="input mono" style={{ flex: '1 1 12rem', width: 'auto' }} aria-label="Email" placeholder="email (optional)" value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && run()} />
-            <input className="input mono" style={{ flex: '2 1 16rem', width: 'auto' }} aria-label="Groups" placeholder="ops, team-payments, awx-admins" value={groups} onChange={(e) => setGroups(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && run()} />
+            <input className="input mono" style={{ flex: '1 1 10rem', width: 'auto' }} aria-label={tr('Username')} placeholder={tr('test-user')} value={user} onChange={(e) => setUser(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && run()} />
+            <input className="input mono" style={{ flex: '1 1 12rem', width: 'auto' }} aria-label={tr('Email')} placeholder={tr('email (optional)')} value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && run()} />
+            <input className="input mono" style={{ flex: '2 1 16rem', width: 'auto' }} aria-label={tr('Groups')} placeholder={tr('ops, team-payments, awx-admins')} value={groups} onChange={(e) => setGroups(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && run()} />
             <button type="button" className="btn" onClick={run}>
-              Evaluate
+              {tr('Evaluate')}
             </button>
           </div>
         )}
         {advanced && (
           <div>
             <button type="button" className="btn" onClick={run}>
-              Evaluate
+              {tr('Evaluate')}
             </button>
           </div>
         )}
@@ -742,16 +743,16 @@ function MappingTester({ rules, groupsClaim }: { rules: Rule[]; groupsClaim: str
           <div className="stack" style={{ gap: 8 }}>
             <div className="small">
               <span className="mono">{result.username}</span>
-              {result.email ? <span className="mono faint"> ({result.email})</span> : null} with groups {result.groups.length ? result.groups.map((g) => <span key={g} className="chip" style={{ marginRight: 4 }}>{g}</span>) : <span className="faint">none</span>}
+              {result.email ? <span className="mono faint"> ({result.email})</span> : null} {tr('with groups')} {result.groups.length ? result.groups.map((g) => <span key={g} className="chip" style={{ marginRight: 4 }}>{g}</span>) : <span className="faint">{tr('none')}</span>}
             </div>
-            {(result.superuser || result.auditor) && <div className="notice accent">{result.superuser ? 'Becomes a superuser.' : 'Becomes a system auditor.'}</div>}
+            {(result.superuser || result.auditor) && <div className="notice accent">{result.superuser ? tr('Becomes a superuser.') : tr('Becomes a system auditor.')}</div>}
             {result.grants?.length ? (
               <table className="data">
                 <thead>
                   <tr>
-                    <th scope="col">Role</th>
-                    <th scope="col">On</th>
-                    <th scope="col">Because of</th>
+                    <th scope="col">{tr('Role')}</th>
+                    <th scope="col">{tr('On')}</th>
+                    <th scope="col">{tr('Because of')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -765,14 +766,14 @@ function MappingTester({ rules, groupsClaim }: { rules: Rule[]; groupsClaim: str
                 </tbody>
               </table>
             ) : (
-              !result.superuser && !result.auditor && <div className="notice">No rule matches: the user could sign in but would have no access.</div>
+              !result.superuser && !result.auditor && <div className="notice">{tr('No rule matches: the user could sign in but would have no access.')}</div>
             )}
             {result.kept?.length ? (
               <div className="small muted">
-                Left as they are (kept if the user has them from an earlier login): {result.kept.map((g) => `${g.role_definition} on ${grantTarget(g)}`).join(', ')}
+                {tr('Left as they are (kept if the user has them from an earlier login):')} {result.kept.map((g) => `${g.role_definition} on ${grantTarget(g)}`).join(', ')}
               </div>
             ) : null}
-            {result.would_create?.length ? <div className="small muted">Would create: {result.would_create.join(', ')}</div> : null}
+            {result.would_create?.length ? <div className="small muted">{tr('Would create:')} {result.would_create.join(', ')}</div> : null}
             {result.errors?.length ? <div className="form-error">{result.errors.join('; ')}</div> : null}
           </div>
         )}

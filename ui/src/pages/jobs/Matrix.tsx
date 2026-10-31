@@ -8,8 +8,9 @@ import { diffLines, hunks, taskDiffs, tooLargeToCompare, unifiedKind, type TaskD
 import type { CellSize } from '../../lib/cells'
 import { active, jobPath, plural } from '../../lib/format'
 import { isBad, peers, projectPath, type firstFailure, type Grid, type TaskState } from './events'
+import { tr } from '../../lib/i18n'
 
-const word: Record<TaskState, string> = { ok: 'ok', changed: 'changed', failed: 'failed', unreachable: 'unreachable', skipped: 'skipped', none: 'not run' }
+const word: Record<TaskState, string> = { ok: tr('ok'), changed: tr('changed'), failed: tr('failed'), unreachable: tr('unreachable'), skipped: tr('skipped'), none: tr('not run') }
 const HOSTS = 24
 const TASK_LIST = 40
 
@@ -63,7 +64,7 @@ export function Matrix({ grid, job, failure, onHost, onJump }: { grid: Grid; job
   return (
     <section className="panel" aria-labelledby="mx-h">
       <div className="panel-head">
-        <h2 id="mx-h">Hosts × tasks</h2>
+        <h2 id="mx-h">{tr('Hosts × tasks')}</h2>
         <span className="mono small muted matrix-counts">
           {plural(grid.hosts.length, 'host')} · {plural(n, 'task')}
           {([['ok', c.ok], ['changed', c.changed], ['failed', c.failed + c.unreachable], ['skipped', c.skipped], ['none', c.none]] as const).map(([s, v]) => (
@@ -76,13 +77,13 @@ export function Matrix({ grid, job, failure, onHost, onJump }: { grid: Grid; job
           ))}
         </span>
         <span className="small muted hint" style={{ marginLeft: 'auto' }}>
-          Click a cell, then arrows to move
+          {tr('Click a cell, then arrows to move')}
         </span>
       </div>
       <div className="panel-body matrix-body">
         <div className="matrix-main">
           <div className="matrix-scroll">
-            <div ref={box} className="matrix" data-size={size} style={{ gridTemplateColumns: `max-content repeat(${n}, auto)` }} role="group" aria-label={`Results of ${plural(grid.hosts.length, 'host')} by ${plural(n, 'task')}`} onKeyDown={onKey}>
+            <div ref={box} className="matrix" data-size={size} style={{ gridTemplateColumns: `max-content repeat(${n}, auto)` }} role="group" aria-label={tr('Results of {count} by {count2}', { count: plural(grid.hosts.length, 'host'), count2: plural(n, 'task') })} onKeyDown={onKey}>
               <span />
               {grid.tasks.map((t, i) => (
                 <span key={t.key} className={`matrix-no${t.bad ? ' bad' : ''}${cur?.task === i ? ' sel' : ''}`} title={t.name} aria-hidden="true">
@@ -102,7 +103,7 @@ export function Matrix({ grid, job, failure, onHost, onJump }: { grid: Grid; job
                         selected={on}
                         tabIndex={on || (!cur && row === 0 && t === 0) ? 0 : -1}
                         data-cell={`${row}:${t}`}
-                        label={`${h.name}, task ${t + 1} ${grid.tasks[t].name}: ${word[s]}`}
+                        label={tr('{host}, task {n} {task}: {state}', { host: h.name, n: t + 1, task: grid.tasks[t].name, state: word[s] })}
                         onClick={() => select(row, t)}
                       />
                     )
@@ -113,7 +114,7 @@ export function Matrix({ grid, job, failure, onHost, onJump }: { grid: Grid; job
           </div>
           {shown.length < ordered.length && (
             <button className="link-btn small" style={{ marginTop: 10 }} onClick={() => setAllHosts(true)}>
-              Show {plural(ordered.length - shown.length, 'more host')} (no failures)
+              {tr('Show')} {plural(ordered.length - shown.length, 'more host')} {tr('(no failures)')}
             </button>
           )}
           <ol className="matrix-tasks mono">
@@ -127,14 +128,14 @@ export function Matrix({ grid, job, failure, onHost, onJump }: { grid: Grid; job
           </ol>
           {!allTasks && n > TASK_LIST && (
             <button className="link-btn small" onClick={() => setAllTasks(true)}>
-              Show all {n} tasks
+              {tr('Show all')} {n} {tr('tasks')}
             </button>
           )}
         </div>
         {cur && curRow >= 0 ? (
           <CellDetail grid={grid} host={grid.hosts.findIndex((h) => h.name === cur.host)} task={cur.task} job={job} failure={failure} onHost={onHost} onJump={onJump} />
         ) : (
-          <aside className="cell-detail empty-detail small muted">Select a cell to see what that task did on that host.</aside>
+          <aside className="cell-detail empty-detail small muted">{tr('Select a cell to see what that task did on that host.')}</aside>
         )}
       </div>
     </section>
@@ -156,15 +157,15 @@ function CellDetail({ grid, host, task, job, failure, onHost, onJump }: { grid: 
     : h.bad && h.cells.slice(0, task).some(isBad)
       ? `Not run: ${h.name} failed an earlier task.`
       : active(job.status)
-        ? 'Not run yet.'
-        : 'Did not run on this host: not targeted, skipped by the play, or the play ended first.'
+        ? tr('Not run yet.')
+        : tr('Did not run on this host: not targeted, skipped by the play, or the play ended first.')
   return (
-    <aside className="cell-detail" aria-label="Selected cell" aria-live="polite">
+    <aside className="cell-detail" aria-label={tr('Selected cell')} aria-live="polite">
       <div className="cd-head">
         <Cell state={s} size="lg" />
         <div className="grow">
           <div className="mono small muted">
-            {h.name} · TASK {task + 1}
+            {h.name} {tr('· TASK')} {task + 1}
           </div>
           <div className="cd-task">{t.name}</div>
           {path && <div className="mono small faint ellipsis">{path}</div>}
@@ -178,15 +179,15 @@ function CellDetail({ grid, host, task, job, failure, onHost, onJump }: { grid: 
       {e && <Diffs diffs={taskDiffs(e.event_data?.res)} onJump={() => onJump(e.start_line + 1)} />}
       {bad && (
         <div className="cd-note small muted">
-          {failure?.stopped && failure.task === t.name && <p>The play stopped here: no hosts were left to continue (max_fail_percentage or any_errors_fatal).</p>}
+          {failure?.stopped && failure.task === t.name && <p>{tr('The play stopped here: no hosts were left to continue (max_fail_percentage or any_errors_fatal).')}</p>}
           <p>
-            Last success of this template:{' '}
+            {tr('Last success of this template:')}{' '}
             {p ? (
               <>
                 <Link to={jobPath(p)}>#{p.id}</Link> <Ago at={p.finished} />
               </>
             ) : (
-              'none before this run'
+              tr('none before this run')
             )}
           </p>
         </div>
@@ -194,13 +195,13 @@ function CellDetail({ grid, host, task, job, failure, onHost, onJump }: { grid: 
       <div className="cd-links small">
         {e && (
           <button className="link-btn" onClick={() => onJump(e.start_line + 1)}>
-            Jump to line in output
+            {tr('Jump to line in output')}
           </button>
         )}
         <button className="link-btn" onClick={() => onHost(h.name)}>
-          Only this host in output
+          {tr('Only this host in output')}
         </button>
-        {h.id && <Link to={`/hosts/${h.id}`}>Open host →</Link>}
+        {h.id && <Link to={`/hosts/${h.id}`}>{tr('Open host →')}</Link>}
       </div>
     </aside>
   )
@@ -215,10 +216,10 @@ function Diffs({ diffs, onJump }: { diffs: TaskDiff[]; onJump: () => void }) {
         <div key={i}>
           <div className="mono small cd-diff-path" title={d.path}>
             {d.item !== undefined && <span className="faint">{d.item} · </span>}
-            {d.path || 'Changes'}
+            {d.path || tr('Changes')}
           </div>
           {d.prepared ? (
-            <div className="diff" role="table" aria-label={`Changes to ${d.path || 'the host'}`}>
+            <div className="diff" role="table" aria-label={d.path ? tr('Changes to {path}', { path: d.path }) : tr('Changes to the host')}>
               {d.prepared.replace(/\n$/, '').split('\n').map((l, j) => {
                 const k = unifiedKind(l)
                 return (
@@ -230,13 +231,13 @@ function Diffs({ diffs, onJump }: { diffs: TaskDiff[]; onJump: () => void }) {
             </div>
           ) : tooLargeToCompare(d.before, d.after) ? (
             <p className="small muted" style={{ margin: '6px 0 0' }}>
-              Too large to compare here.{' '}
+              {tr('Too large to compare here.')}{' '}
               <button className="link-btn" onClick={onJump}>
-                See the diff in the output
+                {tr('See the diff in the output')}
               </button>
             </p>
           ) : (
-            <div className="diff" role="table" aria-label={`Diff of ${d.path || 'the change'}`}>
+            <div className="diff" role="table" aria-label={d.path ? tr('Diff of {path}', { path: d.path }) : tr('Diff of the change')}>
               {hunks(diffLines(d.before, d.after)).map((l, j) =>
                 l.kind === 'skip' ? (
                   <div key={j} role="row" className="skip">

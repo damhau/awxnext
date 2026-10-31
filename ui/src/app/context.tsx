@@ -5,6 +5,7 @@ import type { Me, Ref } from '../api/types'
 import { live, useLive } from '../api/live'
 import { useStored } from '../lib/storage'
 import { Login } from '../pages/Login'
+import { tr } from '../lib/i18n'
 
 interface Session {
   me: Me
@@ -15,7 +16,7 @@ const SessionCtx = createContext<Session | null>(null)
 
 export function useSession(): Session {
   const s = useContext(SessionCtx)
-  if (!s) throw new Error('no session')
+  if (!s) throw new Error(tr('no session'))
   return s
 }
 

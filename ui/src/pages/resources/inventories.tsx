@@ -19,6 +19,7 @@ import { compile, type KeyTable } from '../../lib/query'
 import { syncRelation } from '../../lib/relations'
 import { applyErrors, Count, FilterBox, KindTag, ManagedNotice, NameCell, Provenance, refOf, useDelete, useOrgColumn, folderColumn, folderKey } from './common'
 import { UsedByPanel } from '../../components/UsedBy'
+import { tr } from '../../lib/i18n'
 
 export interface Inventory extends Base {
   kind: '' | 'smart' | 'constructed'
@@ -55,26 +56,26 @@ export function InventoryList() {
   const sel = useSelection<Inventory>(list.data?.results)
   const run = useBulk<Inventory>(['inventory', 'inventories'], 'inventories', 'inventory_sources')
   const del = useDelete('inventories')
-  const copy = useCopy('inventories', { to: (id) => `/inventories/${id}`, what: 'Hosts and groups are copied with their variables. Inventory sources are not.' })
+  const copy = useCopy('inventories', { to: (id) => `/inventories/${id}`, what: tr('Hosts and groups are copied with their variables. Inventory sources are not.') })
   const orgCol = useOrgColumn<Inventory>()
   const cols: Column<Inventory>[] = [
     {
       key: 'name',
-      header: 'Inventory',
+      header: tr('Inventory'),
       sort: 'name',
       render: (r) => <NameCell to={`/inventories/${r.id}`} name={r.name} sub={r.description || (r.kind === 'smart' ? <code>{r.host_filter}</code> : undefined)} />,
     },
-    { key: 'kind', header: 'Kind', render: (r) => (r.kind ? <KindTag>{kindLabel(r.kind)}</KindTag> : <span className="faint small">inventory</span>) },
-    { key: 'hosts', header: 'Hosts', render: (r) => <Count n={r.total_hosts} bad={r.hosts_with_active_failures} /> },
-    { key: 'groups', header: 'Groups', render: (r) => <span className="mono small">{r.kind === 'smart' ? '—' : r.total_groups}</span> },
+    { key: 'kind', header: tr('Kind'), render: (r) => (r.kind ? <KindTag>{kindLabel(r.kind)}</KindTag> : <span className="faint small">{tr('inventory')}</span>) },
+    { key: 'hosts', header: tr('Hosts'), render: (r) => <Count n={r.total_hosts} bad={r.hosts_with_active_failures} /> },
+    { key: 'groups', header: tr('Groups'), render: (r) => <span className="mono small">{r.kind === 'smart' ? '—' : r.total_groups}</span> },
     {
       key: 'sources',
-      header: 'Sources',
+      header: tr('Sources'),
       render: (r) =>
         r.inventory_sources_with_failures ? (
           <Status status="failed">
             <span className="small">
-              {r.total_inventory_sources} · {r.inventory_sources_with_failures} failing
+              {r.total_inventory_sources} · {r.inventory_sources_with_failures} {tr('failing')}
             </span>
           </Status>
         ) : r.total_inventory_sources ? (
@@ -85,20 +86,20 @@ export function InventoryList() {
     },
     ...orgCol,
     ...folderColumn(list.data?.results),
-    { key: 'modified', header: 'Edited', sort: 'modified', render: (r) => <span className="small faint nowrap"><Ago at={r.modified} /></span> },
+    { key: 'modified', header: tr('Edited'), sort: 'modified', render: (r) => <span className="small faint nowrap"><Ago at={r.modified} /></span> },
     {
       key: 'menu',
-      header: <span className="sr-only">Actions</span>,
+      header: <span className="sr-only">{tr('Actions')}</span>,
       className: 'end',
       render: (r) => (
-        <Menu label={`Actions for ${r.name}`} className="btn sm icon ghost">
-          <Link to={`/inventories/${r.id}/edit`}>Edit</Link>
-          <Link to={`/inventories/${r.id}/hosts`}>Hosts</Link>
-          {r.kind !== 'smart' && <Link to={`/inventories/${r.id}/sources`}>Sources</Link>}
-          {r.summary_fields.user_capabilities?.copy && <button onClick={() => copy.open(r)}>Copy…</button>}
+        <Menu label={tr('Actions for {name}', { name: r.name })} className="btn sm icon ghost">
+          <Link to={`/inventories/${r.id}/edit`}>{tr('Edit')}</Link>
+          <Link to={`/inventories/${r.id}/hosts`}>{tr('Hosts')}</Link>
+          {r.kind !== 'smart' && <Link to={`/inventories/${r.id}/sources`}>{tr('Sources')}</Link>}
+          {r.summary_fields.user_capabilities?.copy && <button onClick={() => copy.open(r)}>{tr('Copy…')}</button>}
           <hr />
           <button className="danger" onClick={() => del(r, 'inventory with all its hosts and groups')}>
-            Delete…
+            {tr('Delete…')}
           </button>
         </Menu>
       ),
@@ -107,29 +108,29 @@ export function InventoryList() {
   return (
     <div className="page">
       <PageHead
-        title="Inventories"
-        subtitle="Hosts and groups that jobs run against. Smart inventories filter hosts across inventories; constructed inventories compute groups from inputs."
+        title={tr('Inventories')}
+        subtitle={tr('Hosts and groups that jobs run against. Smart inventories filter hosts across inventories; constructed inventories compute groups from inputs.')}
         bordered={false}
         actions={<NewInventoryMenu />}
       />
       {copy.dialog}
       <div className="page-body">
-        <FilterBox value={ls.q} onApply={ls.setQ} placeholder="name…  try  kind:smart  org:Acme*  folder:checkout" />
+        <FilterBox value={ls.q} onApply={ls.setQ} placeholder={tr('name…  try  kind:smart  org:Acme*  folder:checkout')} />
         <BulkBar sel={sel} page={list.data?.results} total={list.data?.count} path="inventories/" params={params} style={{ marginBottom: 12 }}>
           <button
             className="btn"
             onClick={() =>
-              run('Sync sources', sel.rows, (r) =>
-                r.kind === 'smart' ? Promise.reject(new Error(`${r.name} is a smart inventory, with no sources`)) : api.post(`inventories/${r.id}/update_inventory_sources/`, {}),
+              run(tr('Sync sources'), sel.rows, (r) =>
+                r.kind === 'smart' ? Promise.reject(new Error(tr('{name} is a smart inventory, with no sources', { name: r.name }))) : api.post(`inventories/${r.id}/update_inventory_sources/`, {}),
               )
             }
           >
-            Sync sources
+            {tr('Sync sources')}
           </button>
-          <BulkDelete sel={sel} resource="inventories" noun={['inventory', 'inventories']} name={(r) => r.name} note="Their hosts, groups and sources are deleted with them; job history stays." />
+          <BulkDelete sel={sel} resource="inventories" noun={['inventory', 'inventories']} name={(r) => r.name} note={tr('Their hosts, groups and sources are deleted with them; job history stays.')} />
         </BulkBar>
         <DataTable
-          label="Inventories"
+          label={tr('Inventories')}
           rows={list.data?.results}
           columns={cols}
           selected={sel.selected}
@@ -141,14 +142,14 @@ export function InventoryList() {
           onOrder={ls.setOrder}
           onOpen={(r) => nav(`/inventories/${r.id}`)}
           empty={
-            <Empty title={ls.q ? 'No inventory matches' : 'No inventories yet'} action={!ls.q && <NewInventoryMenu />}>
-              {ls.q ? 'Try a shorter filter.' : 'Create an inventory, then add hosts or a source that imports them.'}
+            <Empty title={ls.q ? tr('No inventory matches') : tr('No inventories yet')} action={!ls.q && <NewInventoryMenu />}>
+              {ls.q ? tr('Try a shorter filter.') : tr('Create an inventory, then add hosts or a source that imports them.')}
             </Empty>
           }
           footer={
             <div className="table-foot">
-              <span>{list.data ? `${plural(list.data.count, 'inventory', 'inventories')}` : ''}</span>
-              <span className="mono">j/k move · enter open · / filter</span>
+              <span>{list.data ? tr('{count}', { count: plural(list.data.count, 'inventory', 'inventories') }) : ''}</span>
+              <span className="mono">{tr('j/k move · enter open · / filter')}</span>
               <Pager count={list.data?.count ?? 0} page={ls.page} pageSize={ls.pageSize} onPage={ls.setPage} />
             </div>
           }
@@ -162,30 +163,30 @@ function NewInventoryMenu() {
   const nav = useNavigate()
   return (
     <Menu
-      label="New inventory"
+      label={tr('New inventory')}
       className="btn primary"
       trigger={
         <>
-          New inventory <Icon name="chevron" size={12} />
+          {tr('New inventory')} <Icon name="chevron" size={12} />
         </>
       }
     >
       <button onClick={() => nav('/inventories/new')}>
         <span className="stack" style={{ gap: 0 }}>
-          <span>Inventory</span>
-          <span className="small faint">Hosts and groups you add or import</span>
+          <span>{tr('Inventory')}</span>
+          <span className="small faint">{tr('Hosts and groups you add or import')}</span>
         </span>
       </button>
       <button onClick={() => nav('/inventories/new?kind=smart')}>
         <span className="stack" style={{ gap: 0 }}>
-          <span>Smart inventory</span>
-          <span className="small faint">Hosts matching a filter, across inventories</span>
+          <span>{tr('Smart inventory')}</span>
+          <span className="small faint">{tr('Hosts matching a filter, across inventories')}</span>
         </span>
       </button>
       <button onClick={() => nav('/inventories/new?kind=constructed')}>
         <span className="stack" style={{ gap: 0 }}>
-          <span>Constructed inventory</span>
-          <span className="small faint">Groups computed from input inventories</span>
+          <span>{tr('Constructed inventory')}</span>
+          <span className="small faint">{tr('Groups computed from input inventories')}</span>
         </span>
       </button>
     </Menu>
@@ -279,7 +280,7 @@ function InventoryFormInner({ kind, inv, extra, inputs, groups }: { kind: Invent
       await syncRelation(`inventories/${saved.id}/instance_groups/`, groups.map((g) => g.id), v.instance_groups.map((g) => g.id), true)
       await syncRelation(`inventories/${saved.id}/labels/`, (inv?.summary_fields.labels?.results ?? []).map((l: Ref) => l.id), v.labels.map((l) => l.id))
       invalidate('inventories', 'constructed_inventories')
-      toast(inv ? `Saved ${saved.name}` : `Created ${saved.name}`)
+      toast(inv ? tr('Saved {name}', { name: saved.name }) : tr('Created {name}', { name: saved.name }))
       nav(`/inventories/${saved.id}`)
     } catch (err) {
       setError(applyErrors(err, f.setErrors))
@@ -287,42 +288,42 @@ function InventoryFormInner({ kind, inv, extra, inputs, groups }: { kind: Invent
       setBusy(false)
     }
   }
-  const title = inv ? `Edit ${inv.name}` : kind === 'smart' ? 'New smart inventory' : kind === 'constructed' ? 'New constructed inventory' : 'New inventory'
+  const title = inv ? `Edit ${inv.name}` : kind === 'smart' ? tr('New smart inventory') : kind === 'constructed' ? tr('New constructed inventory') : tr('New inventory')
   return (
     <div className="page">
       <PageHead
-        crumbs={[{ label: 'Inventories', to: '/inventories' }, ...(inv ? [{ label: inv.name, to: `/inventories/${inv.id}` }] : []), { label: inv ? 'Edit' : 'New' }]}
+        crumbs={[{ label: tr('Inventories'), to: '/inventories' }, ...(inv ? [{ label: inv.name, to: `/inventories/${inv.id}` }] : []), { label: inv ? tr('Edit') : tr('New') }]}
         title={title}
       />
       <form className="page-body form" onSubmit={submit} style={{ maxWidth: 920 }}>
         <ManagedNotice managedBy={inv?.managed_by} />
         <div className="form-grid">
-          <TextInput label="Name" value={v.name} onChange={(x) => f.set('name', x)} error={f.errors.name} autoFocus />
-          <Lookup label="Organization" resource="organizations/" value={v.organization} onChange={(x) => f.set('organization', x)} error={f.errors.organization} />
-          <TextInput label="Description" optional value={v.description} onChange={(x) => f.set('description', x)} error={f.errors.description} full />
+          <TextInput label={tr('Name')} value={v.name} onChange={(x) => f.set('name', x)} error={f.errors.name} autoFocus />
+          <Lookup label={tr('Organization')} resource="organizations/" value={v.organization} onChange={(x) => f.set('organization', x)} error={f.errors.organization} />
+          <TextInput label={tr('Description')} optional value={v.description} onChange={(x) => f.set('description', x)} error={f.errors.description} full />
           <Lookup
-            label="Folder"
+            label={tr('Folder')}
             optional
             resource="folders/"
             params={v.organization ? { organization: v.organization.id } : undefined}
             value={v.folder}
             onChange={(x) => f.set('folder', x)}
             error={f.errors.folder}
-            help="Roles granted on the folder apply to this inventory."
+            help={tr('Roles granted on the folder apply to this inventory.')}
           />
         </div>
         {kind === 'smart' && (
           <div className="form-section">
-            <h2>Host filter</h2>
+            <h2>{tr('Host filter')}</h2>
             <TextInput
-              label="Filter"
+              label={tr('Filter')}
               mono
               value={v.host_filter}
               onChange={(x) => f.set('host_filter', x)}
               error={f.errors.host_filter}
               help={
                 <>
-                  Hosts from every inventory of the organization that match, e.g. <code>name__icontains=web</code> or{' '}
+                  {tr('Hosts from every inventory of the organization that match, e.g.')} <code>name__icontains=web</code> {tr('or')}{' '}
                   <code>groups__name=db and enabled=true</code>.
                 </>
               }
@@ -332,18 +333,18 @@ function InventoryFormInner({ kind, inv, extra, inputs, groups }: { kind: Invent
         )}
         {kind === 'constructed' && (
           <div className="form-section">
-            <h2>Construction</h2>
+            <h2>{tr('Construction')}</h2>
             <MultiLookup
-              label="Input inventories"
+              label={tr('Input inventories')}
               resource="inventories/"
               params={{ ...(v.organization ? { organization: v.organization.id } : {}), not__kind: 'constructed' }}
               values={v.inputs}
               onChange={(x) => f.set('inputs', x)}
-              help="Hosts and groups of these inventories, in order, feed the constructed plugin."
+              help={tr('Hosts and groups of these inventories, in order, feed the constructed plugin.')}
               full
             />
             <VarsEditor
-              label="Constructed plugin configuration"
+              label={tr('Constructed plugin configuration')}
               optional={false}
               rows={8}
               value={v.source_vars}
@@ -351,45 +352,45 @@ function InventoryFormInner({ kind, inv, extra, inputs, groups }: { kind: Invent
               error={f.errors.source_vars}
               help={
                 <>
-                  YAML for the <code>constructed</code> inventory plugin: <code>groups</code>, <code>keyed_groups</code>, <code>compose</code>.
+                  {tr('YAML for the')} <code>constructed</code> {tr('inventory plugin:')} <code>groups</code>, <code>keyed_groups</code>, <code>compose</code>.
                 </>
               }
             />
             <div className="form-grid">
-              <TextInput label="Limit" optional mono value={v.limit} onChange={(x) => f.set('limit', x)} help="Host pattern applied to the result." />
+              <TextInput label={tr('Limit')} optional mono value={v.limit} onChange={(x) => f.set('limit', x)} help={tr('Host pattern applied to the result.')} />
               <TextInput
-                label="Cache timeout (seconds)"
+                label={tr('Cache timeout (seconds)')}
                 type="number"
                 value={v.update_cache_timeout}
                 onChange={(x) => f.set('update_cache_timeout', Number(x))}
-                help="Reuse a recent update instead of rebuilding before each job."
+                help={tr('Reuse a recent update instead of rebuilding before each job.')}
               />
-              <SelectField label="Verbosity" value={v.verbosity} onChange={(x) => f.set('verbosity', Number(x))} options={[[0, '0 (warning)'], [1, '1 (info)'], [2, '2 (debug)']]} />
+              <SelectField label={tr('Verbosity')} value={v.verbosity} onChange={(x) => f.set('verbosity', Number(x))} options={[[0, '0 (warning)'], [1, '1 (info)'], [2, '2 (debug)']]} />
             </div>
           </div>
         )}
         <div className="form-section">
-          <h2>Where jobs run</h2>
+          <h2>{tr('Where jobs run')}</h2>
           <div className="form-grid">
             <MultiLookup
-              label="Instance groups"
+              label={tr('Instance groups')}
               optional
               resource="instance_groups/"
               values={v.instance_groups}
               onChange={(x) => f.set('instance_groups', x)}
-              help="Tried in this order for jobs on this inventory, after the template's. Empty uses the organization's."
+              help={tr('Tried in this order for jobs on this inventory, after the template\'s. Empty uses the organization\'s.')}
               ordered
               full
             />
             <div className="field full">
               <Check
-                label="Only these instance groups: do not fall back to the organization's"
+                label={tr('Only these instance groups: do not fall back to the organization\'s')}
                 checked={v.prevent_instance_group_fallback}
                 onChange={(x) => f.set('prevent_instance_group_fallback', x)}
               />
             </div>
             <MultiLookup
-              label="Labels"
+              label={tr('Labels')}
               optional
               resource="labels/"
               params={v.organization ? { organization: v.organization.id } : undefined}
@@ -399,14 +400,14 @@ function InventoryFormInner({ kind, inv, extra, inputs, groups }: { kind: Invent
             />
           </div>
         </div>
-        <VarsEditor value={v.variables} onChange={(x) => f.set('variables', x)} error={f.errors.variables} help="Inventory-wide variables, the equivalent of group_vars/all." />
+        <VarsEditor value={v.variables} onChange={(x) => f.set('variables', x)} error={f.errors.variables} help={tr('Inventory-wide variables, the equivalent of group_vars/all.')} />
         <FormError error={error} />
         <div className="form-actions">
           <button className="btn primary" disabled={busy || !v.name || !v.organization}>
-            {busy ? 'Saving…' : inv ? 'Save' : 'Create inventory'}
+            {busy ? tr('Saving…') : inv ? tr('Save') : tr('Create inventory')}
           </button>
           <button type="button" className="btn ghost" onClick={() => nav(-1)}>
-            Cancel
+            {tr('Cancel')}
           </button>
         </div>
       </form>
@@ -419,14 +420,14 @@ export function InventoryDetail() {
   const { id } = useParams()
   const inv = useObject<Inventory>(`inventories/${id}/`)
   const del = useDelete('inventories', '/inventories')
-  const copy = useCopy('inventories', { to: (id) => `/inventories/${id}`, what: 'Hosts and groups are copied with their variables. Inventory sources are not.' })
+  const copy = useCopy('inventories', { to: (id) => `/inventories/${id}`, what: tr('Hosts and groups are copied with their variables. Inventory sources are not.') })
   const invalidate = useInvalidate()
   // Source updates and commands change hosts, groups and statuses.
   useLive({ jobs: ['status_changed'] }, (m) => {
     if (m.type === 'inventory_update' || m.type === 'ad_hoc_command') invalidate(`inventories/${id}/`, 'hosts', 'groups')
   })
   if (inv.isPending) return <Loading />
-  if (inv.error || !inv.data) return <div className="page-body"><ErrorNote error={inv.error ?? 'Not found'} /></div>
+  if (inv.error || !inv.data) return <div className="page-body"><ErrorNote error={inv.error ?? tr('Not found')} /></div>
   const i = inv.data
   const caps = i.summary_fields.user_capabilities ?? {}
   const base = `/inventories/${i.id}`
@@ -434,7 +435,7 @@ export function InventoryDetail() {
     <div className="page">
       {copy.dialog}
       <PageHead
-        crumbs={[{ label: 'Inventories', to: '/inventories' }, { label: i.name }]}
+        crumbs={[{ label: tr('Inventories'), to: '/inventories' }, { label: i.name }]}
         title={i.name}
         badge={i.kind ? <KindTag>{kindLabel(i.kind)}</KindTag> : undefined}
         subtitle={i.description || undefined}
@@ -442,19 +443,19 @@ export function InventoryDetail() {
           <>
             {caps.edit && !i.managed_by && (
               <Link className="btn" to={`${base}/edit`}>
-                Edit
+                {tr('Edit')}
               </Link>
             )}
-            <Menu label="More actions">
+            <Menu label={tr('More actions')}>
               <a href={`/api/v2/inventories/${i.id}/script/?hostvars=1`} target="_blank" rel="noreferrer">
-                View as JSON inventory <Icon name="external" size={12} />
+                {tr('View as JSON inventory')} <Icon name="external" size={12} />
               </a>
-              {caps.copy && <button onClick={() => copy.open(i)}>Copy…</button>}
+              {caps.copy && <button onClick={() => copy.open(i)}>{tr('Copy…')}</button>}
               {caps.delete && (
                 <>
                   <hr />
                   <button className="danger" onClick={() => del(i, 'inventory with all its hosts and groups')}>
-                    Delete…
+                    {tr('Delete…')}
                   </button>
                 </>
               )}
@@ -464,23 +465,23 @@ export function InventoryDetail() {
         tabs={
           <>
             <Tab to={base} end>
-              Details
+              {tr('Details')}
             </Tab>
             <Tab to={`${base}/hosts`} n={i.total_hosts}>
-              Hosts
+              {tr('Hosts')}
             </Tab>
             {i.kind !== 'smart' && (
               <Tab to={`${base}/groups`} n={i.total_groups}>
-                Groups
+                {tr('Groups')}
               </Tab>
             )}
             {i.kind === '' && (
               <Tab to={`${base}/sources`} n={i.total_inventory_sources}>
-                Sources
+                {tr('Sources')}
               </Tab>
             )}
-            <Tab to={`${base}/jobs`}>Jobs</Tab>
-            <Tab to={`${base}/access`}>Access</Tab>
+            <Tab to={`${base}/jobs`}>{tr('Jobs')}</Tab>
+            <Tab to={`${base}/access`}>{tr('Access')}</Tab>
           </>
         }
       />
@@ -500,10 +501,10 @@ export function InventoryDetailsTab({ inv }: { inv: Inventory }) {
     if (!src) return
     try {
       await api.post(`inventory_sources/${src.id}/update/`)
-      toast('Constructed inventory update started')
+      toast(tr('Constructed inventory update started'))
       invalidate('inventories', 'inventory_sources', 'inventory_updates')
     } catch (e) {
-      toast(e instanceof Error ? e.message : 'Update failed', 'error')
+      toast(e instanceof Error ? e.message : tr('Update failed'), 'error')
     }
   }
   return (
@@ -511,16 +512,16 @@ export function InventoryDetailsTab({ inv }: { inv: Inventory }) {
       <ManagedNotice managedBy={inv.managed_by} />
       <div className="split">
         <div className="wide stack" style={{ gap: 16 }}>
-          <Panel title="About">
+          <Panel title={tr('About')}>
             <KV
               items={[
-                ['Organization', inv.summary_fields.organization ? <Link to={`/organizations/${inv.organization}`}>{inv.summary_fields.organization.name}</Link> : '—'],
-                ['Kind', inv.kind === 'smart' ? 'Smart inventory' : inv.kind === 'constructed' ? 'Constructed inventory' : 'Inventory'],
-                ['Folder', inv.summary_fields.folder?.name ?? ''],
-                inv.kind === 'smart' ? ['Host filter', <code>{inv.host_filter || '—'}</code>] : [null, null],
+                [tr('Organization'), inv.summary_fields.organization ? <Link to={`/organizations/${inv.organization}`}>{inv.summary_fields.organization.name}</Link> : '—'],
+                [tr('Kind'), inv.kind === 'smart' ? tr('Smart inventory') : inv.kind === 'constructed' ? tr('Constructed inventory') : tr('Inventory')],
+                [tr('Folder'), inv.summary_fields.folder?.name ?? ''],
+                inv.kind === 'smart' ? [tr('Host filter'), <code>{inv.host_filter || '—'}</code>] : [null, null],
                 inv.kind === 'constructed'
                   ? [
-                      'Inputs',
+                      tr('Inputs'),
                       inputs.data?.results.length ? (
                         <span className="row wrap" style={{ gap: 6 }}>
                           {inputs.data.results.map((x) => (
@@ -530,23 +531,23 @@ export function InventoryDetailsTab({ inv }: { inv: Inventory }) {
                           ))}
                         </span>
                       ) : (
-                        <span className="faint">none</span>
+                        <span className="faint">{tr('none')}</span>
                       ),
                     ]
                   : [null, null],
-                ['History', <Provenance obj={inv} />],
+                [tr('History'), <Provenance obj={inv} />],
               ].filter(([k]) => k !== null) as [string, ReactNode][]}
             />
           </Panel>
           {inv.kind === 'constructed' && (
             <Panel
-              title="Constructed plugin configuration"
+              title={tr('Constructed plugin configuration')}
               actions={
                 src ? (
                   <>
                     <Status status={src.status} />
                     <button className="btn sm" onClick={syncConstructed}>
-                      <Icon name="refresh" size={14} /> Update now
+                      <Icon name="refresh" size={14} /> {tr('Update now')}
                     </button>
                   </>
                 ) : undefined
@@ -555,39 +556,39 @@ export function InventoryDetailsTab({ inv }: { inv: Inventory }) {
               <pre className="code">{constructed.data?.source_vars || '—'}</pre>
             </Panel>
           )}
-          <Panel title="Variables">{inv.variables?.trim() ? <pre className="code">{inv.variables}</pre> : <span className="faint">No inventory variables.</span>}</Panel>
+          <Panel title={tr('Variables')}>{inv.variables?.trim() ? <pre className="code">{inv.variables}</pre> : <span className="faint">{tr('No inventory variables.')}</span>}</Panel>
         </div>
         <div className="narrow stack" style={{ gap: 16 }}>
-          <Panel title="Hosts">
+          <Panel title={tr('Hosts')}>
             <div className="stack small" style={{ gap: 6 }}>
               <div className="row">
-                <span className="grow">Total</span>
+                <span className="grow">{tr('Total')}</span>
                 <Link to={`/inventories/${inv.id}/hosts`} className="mono">
                   {inv.total_hosts}
                 </Link>
               </div>
               <div className="row">
-                <span className="grow">Failed in their last job</span>
+                <span className="grow">{tr('Failed in their last job')}</span>
                 <span className={`mono ${inv.hosts_with_active_failures ? 'fail-text' : ''}`}>{inv.hosts_with_active_failures}</span>
               </div>
               {inv.kind !== 'smart' && (
                 <div className="row">
-                  <span className="grow">Groups</span>
+                  <span className="grow">{tr('Groups')}</span>
                   <span className="mono">{inv.total_groups}</span>
                 </div>
               )}
               {inv.kind === '' && (
                 <div className="row">
-                  <span className="grow">Sources</span>
+                  <span className="grow">{tr('Sources')}</span>
                   <span className={`mono ${inv.inventory_sources_with_failures ? 'fail-text' : ''}`}>
                     {inv.total_inventory_sources}
-                    {inv.inventory_sources_with_failures ? ` · ${inv.inventory_sources_with_failures} failing` : ''}
+                    {inv.inventory_sources_with_failures ? tr(' · {inventory_sources_with_failures} failing', { inventory_sources_with_failures: inv.inventory_sources_with_failures }) : ''}
                   </span>
                 </div>
               )}
             </div>
           </Panel>
-          <UsedByPanel resource="inventories" id={inv.id} empty="Nothing uses this inventory." />
+          <UsedByPanel resource="inventories" id={inv.id} empty={tr('Nothing uses this inventory.')} />
         </div>
       </div>
     </div>
@@ -607,7 +608,7 @@ export function InventorySourceRedirect() {
   const { id } = useParams()
   const src = useObject<Base>(`inventory_sources/${id}/`)
   if (src.isPending) return <Loading />
-  if (src.error || !src.data) return <div className="page-body"><ErrorNote error={src.error ?? 'Not found'} /></div>
+  if (src.error || !src.data) return <div className="page-body"><ErrorNote error={src.error ?? tr('Not found')} /></div>
   return <Navigate replace to={`/inventories/${src.data.inventory}/sources?source=${id}`} />
 }
 
@@ -620,10 +621,10 @@ export function InventoryJobsTab({ inv }: { inv: Inventory }) {
   const rows = [...(updates.data?.results ?? []), ...(adhoc.data?.results ?? [])].sort((a, b) => b.id - a.id).slice(0, 25 * page)
   const total = (updates.data?.count ?? 0) + (adhoc.data?.count ?? 0)
   const cols: Column<Base>[] = [
-    { key: 'status', header: 'Status', width: 130, render: (r) => <Status status={r.status} /> },
+    { key: 'status', header: tr('Status'), width: 130, render: (r) => <Status status={r.status} /> },
     {
       key: 'name',
-      header: 'Job',
+      header: tr('Job'),
       render: (r) => (
         <NameCell
           to={`/jobs/${r.type}/${r.id}`}
@@ -632,28 +633,28 @@ export function InventoryJobsTab({ inv }: { inv: Inventory }) {
         />
       ),
     },
-    { key: 'id', header: 'ID', render: (r) => <span className="mono small faint">#{r.id}</span> },
-    { key: 'by', header: 'Launched by', render: (r) => <span className="small">{r.launched_by?.name ?? r.launch_type}</span> },
-    { key: 'when', header: 'Finished', render: (r) => <span className="small nowrap">{r.finished ? <Ago at={r.finished} /> : <span className="faint">{r.status}</span>}</span> },
+    { key: 'id', header: tr('ID'), render: (r) => <span className="mono small faint">#{r.id}</span> },
+    { key: 'by', header: tr('Launched by'), render: (r) => <span className="small">{r.launched_by?.name ?? r.launch_type}</span> },
+    { key: 'when', header: tr('Finished'), render: (r) => <span className="small nowrap">{r.finished ? <Ago at={r.finished} /> : <span className="faint">{r.status}</span>}</span> },
   ]
   return (
     <div className="page-body">
       <DataTable
-        label="Jobs for this inventory"
+        label={tr('Jobs for this inventory')}
         rows={rows}
         columns={cols}
         loading={updates.isPending || adhoc.isPending}
         error={updates.error || adhoc.error}
         onOpen={(r) => nav(`/jobs/${r.type}/${r.id}`)}
-        empty={<Empty title="No jobs yet">Source updates and commands run on this inventory show up here.</Empty>}
+        empty={<Empty title={tr('No jobs yet')}>{tr('Source updates and commands run on this inventory show up here.')}</Empty>}
         footer={
           rows.length < total ? (
             <div className="table-foot">
               <span>
-                {rows.length} of {total}
+                {rows.length} {tr('of')} {total}
               </span>
               <button className="btn sm" onClick={() => setPage((p) => p + 1)}>
-                Show more
+                {tr('Show more')}
               </button>
             </div>
           ) : undefined

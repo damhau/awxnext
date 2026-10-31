@@ -10,8 +10,9 @@ import { Icon } from '../../components/icons'
 import { useConfirm, useToast } from '../../components/overlay'
 import { DeleteEffects, fetchUsedBy } from '../../components/UsedBy'
 import { HAS_USED_BY } from '../../lib/usedBy'
-import { userName } from '../../lib/format'
+import { dateOnly, userName } from '../../lib/format'
 import type { KeySpec } from '../../lib/query'
+import { tr } from '../../lib/i18n'
 
 /** Filter box bound to the list's ?q=; Enter applies, Escape clears. "/" focuses it. */
 export function FilterBox({ value, onApply, placeholder, hint }: { value: string; onApply: (q: string) => void; placeholder: string; hint?: ReactNode }) {
@@ -26,7 +27,7 @@ export function FilterBox({ value, onApply, placeholder, hint }: { value: string
   return (
     <div className="filterbar">
       <label className="filter-input">
-        <span className="sr-only">Filter</span>
+        <span className="sr-only">{tr('Filter')}</span>
         <Icon name="search" size={14} style={{ color: 'var(--muted-2)' }} />
         <input
           data-filter
@@ -46,7 +47,7 @@ export function FilterBox({ value, onApply, placeholder, hint }: { value: string
           <button
             type="button"
             className="btn ghost sm icon"
-            aria-label="Clear filter"
+            aria-label={tr('Clear filter')}
             onClick={() => {
               setText('')
               onApply('')
@@ -68,14 +69,14 @@ export function useOrgColumn<T extends Base>() {
   return [
     {
       key: 'org',
-      header: 'Organization',
+      header: tr('Organization'),
       render: (r: T) => <span className="small">{r.summary_fields.organization?.name ?? <span className="faint">—</span>}</span>,
     },
   ]
 }
 
 /** Filter on the folder an object is in, by name: folder:checkout (or a path, folder:apps/checkout). */
-export const folderKey: KeySpec = { field: 'folder__name', lookup: 'iexact', map: (v) => v.split('/').pop() ?? v, help: 'checkout' }
+export const folderKey: KeySpec = { field: 'folder__name', lookup: 'iexact', map: (v) => v.split('/').pop() ?? v, help: tr('checkout') }
 
 /** Folder column, shown only when some row of the page is in a folder. */
 export function folderColumn<T extends Base>(rows: T[] | undefined) {
@@ -83,7 +84,7 @@ export function folderColumn<T extends Base>(rows: T[] | undefined) {
   return [
     {
       key: 'folder',
-      header: 'Folder',
+      header: tr('Folder'),
       className: 'small',
       render: (r: T) => {
         const f = r.summary_fields.folder
@@ -102,25 +103,25 @@ export function useDelete(resource: string, after?: string) {
   return async (obj: { id: number; name: string }, what = 'object', body?: ReactNode) => {
     const used = HAS_USED_BY.has(resource) ? await fetchUsedBy(resource, obj.id) : null
     const ok = await confirm({
-      title: `Delete ${obj.name}?`,
+      title: tr('Delete {name}?', { name: obj.name }),
       body: (
         <>
-          {body ?? <p style={{ margin: 0 }}>This permanently deletes the {what}. It cannot be undone.</p>}
+          {body ?? <p style={{ margin: 0 }}>{tr('This permanently deletes the')} {what}{tr('. It cannot be undone.')}</p>}
           <DeleteEffects u={used} />
         </>
       ),
-      confirm: 'Delete',
+      confirm: tr('Delete'),
       danger: true,
     })
     if (!ok) return false
     try {
       await api.del(`${resource}/${obj.id}/`)
-      toast(`Deleted ${obj.name}`)
+      toast(tr('Deleted {name}', { name: obj.name }))
       invalidate(resource)
       if (after) nav(after)
       return true
     } catch (e) {
-      toast(e instanceof Error ? e.message : 'Delete failed', 'error')
+      toast(e instanceof Error ? e.message : tr('Delete failed'), 'error')
       return false
     }
   }
@@ -134,7 +135,7 @@ export function ManagedNotice({ managedBy }: { managedBy?: string }) {
     <div className="notice accent row" role="note">
       <Icon name="git" />
       <span>
-        Managed by {m ? <Link to={`/gitops`}>GitOps source #{m[1]}</Link> : <span className="mono">{managedBy}</span>}. Change it in Git; edits here are rejected.
+        {tr('Managed by')} {m ? <Link to={`/gitops`}>{tr('GitOps source #')}{m[1]}</Link> : <span className="mono">{managedBy}</span>}{tr('. Change it in Git; edits here are rejected.')}
       </span>
     </div>
   )
@@ -145,9 +146,9 @@ export function Provenance({ obj }: { obj: Base }) {
   const sf = obj.summary_fields
   return (
     <span className="small faint">
-      Created {obj.created ? new Date(obj.created).toLocaleDateString() : '—'}
-      {sf.created_by ? ` by ${userName(sf.created_by)}` : ''}
-      {obj.modified && obj.modified !== obj.created ? ` · edited ${new Date(obj.modified).toLocaleDateString()}${sf.modified_by ? ` by ${userName(sf.modified_by)}` : ''}` : ''}
+      {tr('Created')} {dateOnly(obj.created)}
+      {sf.created_by ? tr(' by {user}', { user: userName(sf.created_by) }) : ''}
+      {obj.modified && obj.modified !== obj.created ? ' · ' + (sf.modified_by ? tr('edited {date} by {user}', { date: dateOnly(obj.modified), user: userName(sf.modified_by) }) : tr('edited {date}', { date: dateOnly(obj.modified) })) : ''}
     </span>
   )
 }
@@ -158,7 +159,7 @@ export function applyErrors(e: unknown, setErrors: (f: Record<string, string>) =
     const f = e.fields
     setErrors(f)
     const known = Object.keys(f).length
-    return known ? new Error('Fix the highlighted fields.') : e
+    return known ? new Error(tr('Fix the highlighted fields.')) : e
   }
   return e
 }
@@ -172,7 +173,7 @@ export function Count({ n, bad }: { n: number | undefined; bad?: number }) {
   return (
     <span className="mono small">
       {n ?? 0}
-      {bad ? <span className="fail-text"> · {bad} failing</span> : null}
+      {bad ? <span className="fail-text"> · {bad} {tr('failing')}</span> : null}
     </span>
   )
 }

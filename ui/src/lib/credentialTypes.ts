@@ -1,4 +1,5 @@
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml'
+import { tr } from './i18n'
 
 /** A credential type's inputs or injectors, edited as YAML or JSON. */
 export type Spec = Record<string, unknown>
@@ -14,7 +15,7 @@ export function parseSpec(text: string): { value?: Spec; error?: string } {
     return { error: `Not valid YAML or JSON: ${(e as Error).message.split('\n')[0]}` }
   }
   if (v === null || v === undefined) return { value: {} }
-  if (typeof v !== 'object' || Array.isArray(v)) return { error: 'Must be a mapping (keys and values), not a list or a single value.' }
+  if (typeof v !== 'object' || Array.isArray(v)) return { error: tr('Must be a mapping (keys and values), not a list or a single value.') }
   return { value: v as Spec }
 }
 

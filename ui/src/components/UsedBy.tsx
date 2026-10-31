@@ -7,6 +7,7 @@ import { api } from '../api/client'
 import { countKinds, deleteEffects, distinct, howUsed, kindOf, linkTo, type Dependent, type UsedBy } from '../lib/usedBy'
 import { Dialog } from './overlay'
 import { Loading, Panel } from './ui'
+import { tr } from '../lib/i18n'
 
 export function useUsedBy(resource: string, id: number | undefined) {
   return useQuery({ queryKey: [`${resource}/`, id, 'used_by'], enabled: !!id, queryFn: () => api.get<UsedBy>(`${resource}/${id}/used_by/`) })
@@ -33,7 +34,7 @@ function Item({ d }: { d: Dependent }) {
         <span>{d.name}</span>
       )}
       <div className="faint">
-        {kindOf(d)} · {d.effect === 'deleted' ? 'deleted with it' : howUsed(d)}
+        {kindOf(d)} · {d.effect === 'deleted' ? tr('deleted with it') : howUsed(d)}
       </div>
     </li>
   )
@@ -47,11 +48,11 @@ export function UsedByList({ u, max = 12, empty }: { u: UsedBy; max?: number; em
       {all.slice(0, max).map((d) => (
         <Item key={`${d.type}/${d.id ?? d.name}/${d.field}`} d={d} />
       ))}
-      {all.length > max && <li className="faint">and {countKinds(all.slice(max))} more</li>}
+      {all.length > max && <li className="faint">{tr('and')} {countKinds(all.slice(max))} {tr('more')}</li>}
       {u.hidden > 0 && (
         <li className="faint">
-          {all.length ? 'and ' : ''}
-          {u.hidden} you cannot see
+          {all.length ? tr('and ') : ''}
+          {u.hidden} {tr('you cannot see')}
         </li>
       )}
     </ul>
@@ -61,8 +62,8 @@ export function UsedByList({ u, max = 12, empty }: { u: UsedBy; max?: number; em
 export function UsedByPanel({ resource, id, empty, children }: { resource: string; id: number; empty: ReactNode; children?: ReactNode }) {
   const u = useUsedBy(resource, id)
   return (
-    <Panel title="Used by">
-      {u.isPending ? <Loading rows={2} /> : u.data ? <UsedByList u={u.data} empty={empty} /> : <span className="faint small">Could not be read.</span>}
+    <Panel title={tr('Used by')}>
+      {u.isPending ? <Loading rows={2} /> : u.data ? <UsedByList u={u.data} empty={empty} /> : <span className="faint small">{tr('Could not be read.')}</span>}
       {children}
     </Panel>
   )
@@ -72,15 +73,15 @@ export function UsedByDialog({ resource, id, name, empty, onClose }: { resource:
   const u = useUsedBy(resource, id)
   return (
     <Dialog
-      title={`What uses ${name}`}
+      title={tr('What uses {name}', { name })}
       onClose={onClose}
       footer={
         <button className="btn" onClick={onClose}>
-          Done
+          {tr('Done')}
         </button>
       }
     >
-      {u.isPending ? <Loading rows={3} /> : u.data ? <UsedByList u={u.data} max={50} empty={empty} /> : <span className="faint small">Could not be read.</span>}
+      {u.isPending ? <Loading rows={3} /> : u.data ? <UsedByList u={u.data} max={50} empty={empty} /> : <span className="faint small">{tr('Could not be read.')}</span>}
     </Dialog>
   )
 }
@@ -90,11 +91,11 @@ function Names({ ds, max = 6 }: { ds: Dependent[]; max?: number }) {
     <>
       {ds.slice(0, max).map((d, i) => (
         <span key={`${d.type}/${d.id ?? d.name}`}>
-          {i > 0 && (i === ds.length - 1 && ds.length <= max ? ' and ' : ', ')}
+          {i > 0 && (i === ds.length - 1 && ds.length <= max ? tr(' and ') : ', ')}
           <b>{d.name}</b> <span className="faint">({kindOf(d)})</span>
         </span>
       ))}
-      {ds.length > max && <> and {countKinds(ds.slice(max))} more</>}
+      {ds.length > max && <> {tr('and')} {countKinds(ds.slice(max))} {tr('more')}</>}
     </>
   )
 }
@@ -108,15 +109,15 @@ export function DeleteEffects({ u }: { u: UsedBy | null }) {
     <div className="notice warn small stack" role="note" style={{ gap: 6, marginTop: 10 }}>
       {e.deleted.length > 0 && (
         <div>
-          Deleted with it: <Names ds={e.deleted} />.
+          {tr('Deleted with it:')} <Names ds={e.deleted} />.
         </div>
       )}
       {e.cleared.length > 0 && (
         <div>
-          In use by <Names ds={e.cleared} />, which will lose it.
+          {tr('In use by')} <Names ds={e.cleared} />{tr(', which will lose it.')}
         </div>
       )}
-      {e.hidden > 0 && <div>{e.hidden === 1 ? 'One more object you cannot see uses it.' : `${e.hidden} more objects you cannot see use it.`}</div>}
+      {e.hidden > 0 && <div>{e.hidden === 1 ? tr('One more object you cannot see uses it.') : tr('{hidden} more objects you cannot see use it.', { hidden: e.hidden })}</div>}
     </div>
   )
 }

@@ -20,6 +20,7 @@ import { History } from './History'
 import { SurveyEditor } from './SurveyEditor'
 import { TemplateForm } from './TemplateForm'
 import { DeleteEffects, fetchUsedBy, UsedByPanel } from '../../components/UsedBy'
+import { tr } from '../../lib/i18n'
 
 export type Kind = 'job' | 'workflow'
 export const resOf = (k: Kind) => (k === 'job' ? 'job_templates' : 'workflow_job_templates')
@@ -38,7 +39,7 @@ export function TemplateDetail({ kind }: { kind: Kind }) {
   const tree = useMemo(() => buildTree(folders.data ?? []), [folders.data])
   const copy = useCopy(res, {
     to: (nid) => `/templates/${kind}/${nid}`,
-    what: kind === 'job' ? 'Credentials, labels and the survey are copied.' : 'Nodes, links and the survey are copied.',
+    what: kind === 'job' ? tr('Credentials, labels and the survey are copied.') : tr('Nodes, links and the survey are copied.'),
     invalidates: ['unified_job_templates', 'folders'],
   })
 
@@ -48,7 +49,7 @@ export function TemplateDetail({ kind }: { kind: Kind }) {
   const caps = tpl.summary_fields.user_capabilities ?? {}
   const folder = tpl.folder ? tree.byId.get(tpl.folder) : undefined
   const crumbs = [
-    { label: 'Templates', to: '/templates' },
+    { label: tr('Templates'), to: '/templates' },
     ...ancestors(folder, tree.byId).map((a) => ({ label: a.folder.name, to: `/templates?folder=${a.folder.id}` })),
   ]
   const base = `/templates/${kind}/${id}`
@@ -57,11 +58,11 @@ export function TemplateDetail({ kind }: { kind: Kind }) {
     const used = await fetchUsedBy(res, tpl.id)
     const body = (
       <>
-        <p style={{ margin: 0 }}>Its schedules are deleted too. Job history stays.</p>
+        <p style={{ margin: 0 }}>{tr('Its schedules are deleted too. Job history stays.')}</p>
         <DeleteEffects u={used} />
       </>
     )
-    if (!(await confirm({ title: `Delete ${tpl.name}?`, body, confirm: 'Delete', danger: true }))) return
+    if (!(await confirm({ title: tr('Delete {name}?', { name: tpl.name }), body, confirm: tr('Delete'), danger: true }))) return
     try {
       await api.del(`${res}/${id}/`)
       invalidate('unified_job_templates', res)
@@ -81,15 +82,15 @@ export function TemplateDetail({ kind }: { kind: Kind }) {
           <span className="small muted">
             {kind === 'job' ? (
               <>
-                job template · <span className="mono">{tpl.playbook}</span>
+                {tr('job template ·')} <span className="mono">{tpl.playbook}</span>
               </>
             ) : (
-              'workflow template'
+              tr('workflow template')
             )}
             {tpl.managed_by && (
               <>
                 {' '}
-                · <span className="tag">managed by {tpl.managed_by}</span>
+                · <span className="tag">{tr('managed by')} {tpl.managed_by}</span>
               </>
             )}
           </span>
@@ -98,25 +99,25 @@ export function TemplateDetail({ kind }: { kind: Kind }) {
           <>
             {caps.edit && !tpl.managed_by && (
               <Link className="btn" to={`${base}/edit`}>
-                Edit
+                {tr('Edit')}
               </Link>
             )}
             {caps.start !== false && (
               <Link className="btn primary" to={`/launch/${kind}/${id}`}>
                 <Icon name="play" size={10} />
-                Launch
+                {tr('Launch')}
               </Link>
             )}
-            <Menu label="More actions">
-              {caps.copy && <button onClick={() => copy.open(tpl)}>Copy…</button>}
+            <Menu label={tr('More actions')}>
+              {caps.copy && <button onClick={() => copy.open(tpl)}>{tr('Copy…')}</button>}
               <a href={`/api/v2/${res}/${id}/`} target="_blank" rel="noreferrer">
-                View in API
+                {tr('View in API')}
               </a>
               {caps.delete && (
                 <>
                   <hr />
                   <button className="danger" onClick={remove}>
-                    Delete
+                    {tr('Delete')}
                   </button>
                 </>
               )}
@@ -126,18 +127,18 @@ export function TemplateDetail({ kind }: { kind: Kind }) {
         tabs={
           <>
             <Tab to={base} end>
-              Details
+              {tr('Details')}
             </Tab>
-            {kind === 'workflow' && <Tab to={`${base}/visualizer`}>Visualizer</Tab>}
-            <Tab to={`${base}/survey`}>Survey</Tab>
-            <Tab to={`${base}/access`}>Access</Tab>
-            <Tab to={`${base}/notifications`}>Notifications</Tab>
+            {kind === 'workflow' && <Tab to={`${base}/visualizer`}>{tr('Visualizer')}</Tab>}
+            <Tab to={`${base}/survey`}>{tr('Survey')}</Tab>
+            <Tab to={`${base}/access`}>{tr('Access')}</Tab>
+            <Tab to={`${base}/notifications`}>{tr('Notifications')}</Tab>
             <Tab to={`${base}/schedules`} n={schedules.data?.count || undefined}>
-              Schedules
+              {tr('Schedules')}
             </Tab>
-            <Tab to={`${base}/jobs`}>Jobs</Tab>
+            <Tab to={`${base}/jobs`}>{tr('Jobs')}</Tab>
             <Tab to={`${base}/history`} n={history.data?.count || undefined}>
-              History
+              {tr('History')}
             </Tab>
           </>
         }
@@ -177,17 +178,17 @@ function Details({ kind, tpl }: { kind: Kind; tpl: Template }) {
     <div className="page-body">
       <div className="split">
         <div className="wide stack" style={{ gap: 16 }}>
-          <Panel title="Settings">
+          <Panel title={tr('Settings')}>
             {kind === 'job' ? (
               <KV
                 items={[
-                  ['Description', <Maybe v={tpl.description} />],
-                  ['Project', sf.project ? <Link to={`/projects/${sf.project.id}`}>{sf.project.name}</Link> : <Maybe v={null} />],
-                  ['Playbook', <span className="mono">{tpl.playbook}</span>],
-                  ['Branch', tpl.scm_branch ? <span className="mono">{tpl.scm_branch}</span> : <span className="faint">project default</span>],
-                  ['Inventory', sf.inventory ? <Link to={`/inventories/${sf.inventory.id}`}>{sf.inventory.name}</Link> : <span className="faint">asked at launch</span>],
+                  [tr('Description'), <Maybe v={tpl.description} />],
+                  [tr('Project'), sf.project ? <Link to={`/projects/${sf.project.id}`}>{sf.project.name}</Link> : <Maybe v={null} />],
+                  [tr('Playbook'), <span className="mono">{tpl.playbook}</span>],
+                  [tr('Branch'), tpl.scm_branch ? <span className="mono">{tpl.scm_branch}</span> : <span className="faint">{tr('project default')}</span>],
+                  [tr('Inventory'), sf.inventory ? <Link to={`/inventories/${sf.inventory.id}`}>{sf.inventory.name}</Link> : <span className="faint">{tr('asked at launch')}</span>],
                   [
-                    'Credentials',
+                    tr('Credentials'),
                     sf.credentials?.length ? (
                       <span className="row wrap" style={{ gap: 4 }}>
                         {sf.credentials.map((c) => (
@@ -198,24 +199,24 @@ function Details({ kind, tpl }: { kind: Kind; tpl: Template }) {
                         ))}
                       </span>
                     ) : (
-                      <span className="faint">none</span>
+                      <span className="faint">{tr('none')}</span>
                     ),
                   ],
-                  ['Execution environment', sf.execution_environment ? sf.execution_environment.name : <span className="faint">default</span>],
-                  ['Job type', tpl.job_type],
-                  ['Limit', <Maybe v={tpl.limit} mono />],
-                  ['Forks', tpl.forks ? tpl.forks : <span className="faint">default</span>],
-                  ['Verbosity', ['0 (normal)', '1 (verbose)', '2 (more verbose)', '3 (debug)', '4 (connection debug)', '5 (WinRM debug)'][tpl.verbosity] ?? tpl.verbosity],
-                  ['Timeout', tpl.timeout ? duration(tpl.timeout) : <span className="faint">none</span>],
-                  ['Slices', tpl.job_slice_count > 1 ? tpl.job_slice_count : null],
-                  ['Tags', <Maybe v={tpl.job_tags} mono />],
-                  ['Skip tags', tpl.skip_tags ? <span className="mono">{tpl.skip_tags}</span> : null],
+                  [tr('Execution environment'), sf.execution_environment ? sf.execution_environment.name : <span className="faint">{tr('default')}</span>],
+                  [tr('Job type'), tpl.job_type],
+                  [tr('Limit'), <Maybe v={tpl.limit} mono />],
+                  [tr('Forks'), tpl.forks ? tpl.forks : <span className="faint">{tr('default')}</span>],
+                  [tr('Verbosity'), ['0 (normal)', '1 (verbose)', '2 (more verbose)', '3 (debug)', '4 (connection debug)', '5 (WinRM debug)'][tpl.verbosity] ?? tpl.verbosity],
+                  [tr('Timeout'), tpl.timeout ? duration(tpl.timeout) : <span className="faint">{tr('none')}</span>],
+                  [tr('Slices'), tpl.job_slice_count > 1 ? tpl.job_slice_count : null],
+                  [tr('Tags'), <Maybe v={tpl.job_tags} mono />],
+                  [tr('Skip tags'), tpl.skip_tags ? <span className="mono">{tpl.skip_tags}</span> : null],
                   [
-                    'Outputs',
+                    tr('Outputs'),
                     (tpl.outputs as OutputDecl[] | undefined)?.length ? (
                       <span className="row wrap" style={{ gap: 4 }}>
                         {(tpl.outputs as OutputDecl[]).map((o) => (
-                          <span key={o.name} className="chip" title={o.required ? 'required' : 'optional'}>
+                          <span key={o.name} className="chip" title={o.required ? tr('required') : tr('optional')}>
                             {o.name}
                             <span className="faint">
                               {o.type}
@@ -227,7 +228,7 @@ function Details({ kind, tpl }: { kind: Kind; tpl: Template }) {
                     ) : null,
                   ],
                   [
-                    'Labels',
+                    tr('Labels'),
                     sf.labels?.results.length ? (
                       <span className="row wrap" style={{ gap: 4 }}>
                         {sf.labels.results.map((l) => (
@@ -239,100 +240,100 @@ function Details({ kind, tpl }: { kind: Kind; tpl: Template }) {
                     ) : null,
                   ],
                   [
-                    'Options',
+                    tr('Options'),
                     [tpl.become_enabled && 'privilege escalation', tpl.diff_mode && 'show changes', tpl.allow_simultaneous && 'concurrent runs', tpl.use_fact_cache && 'fact cache', tpl.force_handlers && 'force handlers']
                       .filter(Boolean)
-                      .join(', ') || <span className="faint">none</span>,
+                      .join(', ') || <span className="faint">{tr('none')}</span>,
                   ],
-                  ['Asked at launch', prompts.length ? prompts.join(', ') : <span className="faint">nothing</span>],
-                  ['Webhook', tpl.webhook_service ? `${tpl.webhook_service} · /api/v2/job_templates/${tpl.id}/${tpl.webhook_service === 'generic' ? 'webhook' : tpl.webhook_service}/` : null],
-                  ['Callback', tpl.host_config_key ? <span className="mono">/api/v2/job_templates/{tpl.id}/callback/</span> : null],
+                  [tr('Asked at launch'), prompts.length ? prompts.join(', ') : <span className="faint">{tr('nothing')}</span>],
+                  [tr('Webhook'), tpl.webhook_service ? tr('{webhook_service} · /api/v2/job_templates/{id}/{v}/', { webhook_service: tpl.webhook_service, id: tpl.id, v: tpl.webhook_service === 'generic' ? 'webhook' : tpl.webhook_service }) : null],
+                  [tr('Callback'), tpl.host_config_key ? <span className="mono">{tr('/api/v2/job_templates/')}{tpl.id}{tr('/callback/')}</span> : null],
                 ]}
               />
             ) : (
               <KV
                 items={[
-                  ['Description', <Maybe v={tpl.description} />],
-                  ['Organization', sf.organization?.name],
-                  ['Inventory', sf.inventory ? <Link to={`/inventories/${sf.inventory.id}`}>{sf.inventory.name}</Link> : <span className="faint">each node's own</span>],
-                  ['Limit', <Maybe v={tpl.limit} mono />],
-                  ['Branch', <Maybe v={tpl.scm_branch} mono />],
-                  ['Options', [tpl.allow_simultaneous && 'concurrent runs'].filter(Boolean).join(', ') || <span className="faint">none</span>],
-                  ['Asked at launch', prompts.length ? prompts.join(', ') : <span className="faint">nothing</span>],
-                  ['Webhook', tpl.webhook_service || null],
+                  [tr('Description'), <Maybe v={tpl.description} />],
+                  [tr('Organization'), sf.organization?.name],
+                  [tr('Inventory'), sf.inventory ? <Link to={`/inventories/${sf.inventory.id}`}>{sf.inventory.name}</Link> : <span className="faint">{tr('each node\'s own')}</span>],
+                  [tr('Limit'), <Maybe v={tpl.limit} mono />],
+                  [tr('Branch'), <Maybe v={tpl.scm_branch} mono />],
+                  [tr('Options'), [tpl.allow_simultaneous && 'concurrent runs'].filter(Boolean).join(', ') || <span className="faint">{tr('none')}</span>],
+                  [tr('Asked at launch'), prompts.length ? prompts.join(', ') : <span className="faint">{tr('nothing')}</span>],
+                  [tr('Webhook'), tpl.webhook_service || null],
                 ]}
               />
             )}
           </Panel>
           {extra && (
-            <Panel title="Extra variables">
+            <Panel title={tr('Extra variables')}>
               <pre className="code">{extra}</pre>
             </Panel>
           )}
         </div>
         <aside className="narrow stack" style={{ gap: 16 }}>
-          <Panel title="Recent runs">
+          <Panel title={tr('Recent runs')}>
             {runs.length ? (
               <>
                 <div className="row" style={{ gap: 24, alignItems: 'baseline' }}>
                   <div>
                     <div style={{ fontSize: 18, fontWeight: 500 }}>{done.length}</div>
-                    <div className="small muted">finished runs</div>
+                    <div className="small muted">{tr('finished runs')}</div>
                   </div>
                   <div>
                     <div style={{ fontSize: 18, fontWeight: 500 }} className={failed.length ? 'fail-text' : 'ok-text'}>
                       {failed.length}
                     </div>
-                    <div className="small muted">failed</div>
+                    <div className="small muted">{tr('failed')}</div>
                   </div>
                   <div>
                     <div style={{ fontSize: 18, fontWeight: 500 }}>{median !== null ? duration(median) : '—'}</div>
-                    <div className="small muted">median</div>
+                    <div className="small muted">{tr('median')}</div>
                   </div>
                 </div>
                 {failed[0] && (
                   <p className="small" style={{ margin: '10px 0 0' }}>
-                    Last failure <Link to={jobPath(failed[0])}>#{failed[0].id}</Link> <Ago at={failed[0].finished} />
+                    {tr('Last failure')} <Link to={jobPath(failed[0])}>#{failed[0].id}</Link> <Ago at={failed[0].finished} />
                   </p>
                 )}
               </>
             ) : (
               <p className="small muted" style={{ margin: 0 }}>
-                Never run.
+                {tr('Never run.')}
               </p>
             )}
           </Panel>
-          <UsedByPanel resource={resOf(kind)} id={tpl.id} empty={tpl.webhook_service ? '' : 'Only launched by hand.'}>
+          <UsedByPanel resource={resOf(kind)} id={tpl.id} empty={tpl.webhook_service ? '' : tr('Only launched by hand.')}>
             {tpl.webhook_service && (
               <div className="small" style={{ marginTop: 10 }}>
-                <span>{tpl.webhook_service} webhook</span>
-                <div className="faint">launches on incoming events</div>
+                <span>{tpl.webhook_service} {tr('webhook')}</span>
+                <div className="faint">{tr('launches on incoming events')}</div>
               </div>
             )}
           </UsedByPanel>
-          <Panel title="Source of truth">
+          <Panel title={tr('Source of truth')}>
             {tpl.managed_by ? (
               <p className="small" style={{ margin: 0 }}>
-                Managed from Git ({tpl.managed_by.startsWith('gitops:') ? <Link to={`/gitops/${tpl.managed_by.split(':')[1]}`}>GitOps source {tpl.managed_by.split(':')[1]}</Link> : tpl.managed_by}). Change the files in the repository; edits here are refused.
+                {tr('Managed from Git (')}{tpl.managed_by.startsWith('gitops:') ? <Link to={`/gitops/${tpl.managed_by.split(':')[1]}`}>{tr('GitOps source')} {tpl.managed_by.split(':')[1]}</Link> : tpl.managed_by}{tr('). Change the files in the repository; edits here are refused.')}
               </p>
             ) : (
               <>
                 <p className="small" style={{ margin: 0 }}>
-                  Edited in the UI. Not managed from Git.
+                  {tr('Edited in the UI. Not managed from Git.')}
                 </p>
                 <Link to="/gitops/new" className="small" style={{ display: 'inline-block', marginTop: 6 }}>
-                  Manage from a Git repository…
+                  {tr('Manage from a Git repository…')}
                 </Link>
               </>
             )}
           </Panel>
-          <Panel title="Changed">
+          <Panel title={tr('Changed')}>
             <p className="small" style={{ margin: 0 }}>
-              <Ago at={tpl.modified} /> by {userName(sf.modified_by)} ·{' '}
-              <Link to={`/templates/${kind}/${tpl.id}/history`}>history</Link>
+              <Ago at={tpl.modified} /> {tr('by')} {userName(sf.modified_by)} ·{' '}
+              <Link to={`/templates/${kind}/${tpl.id}/history`}>{tr('history')}</Link>
             </p>
             <p className="small muted" style={{ margin: '4px 0 0' }}>
-              Created <Ago at={tpl.created} /> by {userName(sf.created_by)}
+              {tr('Created')} <Ago at={tpl.created} /> {tr('by')} {userName(sf.created_by)}
             </p>
           </Panel>
         </aside>

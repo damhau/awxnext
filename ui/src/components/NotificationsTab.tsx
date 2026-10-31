@@ -7,13 +7,14 @@ import type { Base } from '../api/types'
 import { Dialog, useToast } from './overlay'
 import { DataTable, type Column } from './table'
 import { Empty } from './ui'
+import { tr } from '../lib/i18n'
 
 /** The events a notification can be attached for, as the API names its sub-lists. */
 export const notificationEvents = [
-  { key: 'started', label: 'Start' },
-  { key: 'success', label: 'Success' },
-  { key: 'error', label: 'Failure' },
-  { key: 'approvals', label: 'Approval' },
+  { key: 'started', label: tr('Start') },
+  { key: 'success', label: tr('Success') },
+  { key: 'error', label: tr('Failure') },
+  { key: 'approvals', label: tr('Approval') },
 ] as const
 
 type NT = Base & { notification_type: string }
@@ -55,14 +56,14 @@ export function NotificationsTab({ resource, id, approvals, editable }: { resour
   const cols: Column<NT>[] = [
     {
       key: 'name',
-      header: 'Notification',
+      header: tr('Notification'),
       render: (n) => (
         <>
           <Link to={`/notifications/${n.id}`} className="cell-title">
             {n.name}
           </Link>
           <div className="cell-sub">
-            {n.notification_type} · {n.summary_fields.organization?.name ?? 'no organization'}
+            {n.notification_type} · {n.summary_fields.organization?.name ?? tr('no organization')}
           </div>
         </>
       ),
@@ -78,10 +79,10 @@ export function NotificationsTab({ resource, id, approvals, editable }: { resour
           return (
             <input
               type="checkbox"
-              aria-label={`${n.name} on ${e.label.toLowerCase()}`}
+              aria-label={tr('{name} on {toLowerCase}', { name: n.name, toLowerCase: e.label.toLowerCase() })}
               checked={on(e.key, n.id)}
               disabled={!may || busy === `${n.id}:${e.key}`}
-              title={may ? undefined : editable ? 'You may not change this notification' : 'You may not change this object'}
+              title={may ? undefined : editable ? tr('You may not change this notification') : tr('You may not change this object')}
               onChange={(ev) => toggle(n, e.key, ev.target.checked)}
             />
           )
@@ -94,20 +95,20 @@ export function NotificationsTab({ resource, id, approvals, editable }: { resour
     <div className="stack" style={{ gap: 10 }}>
       <div className="row wrap" style={{ gap: 8 }}>
         <p className="muted grow" style={{ margin: 0 }}>
-          Choose which notifications fire when a job {approvals ? 'starts, succeeds, fails or waits for approval' : 'starts, succeeds or fails'}.
+          {tr('Choose which notifications fire when a job')} {approvals ? tr('starts, succeeds, fails or waits for approval') : tr('starts, succeeds or fails')}.
         </p>
-        <input className="input" type="search" placeholder="Filter notifications…" aria-label="Filter notifications" value={q} onChange={(e) => setQ(e.target.value)} style={{ maxWidth: 260 }} />
+        <input className="input" type="search" placeholder={tr('Filter notifications…')} aria-label={tr('Filter notifications')} value={q} onChange={(e) => setQ(e.target.value)} style={{ maxWidth: 260 }} />
       </div>
       <DataTable
-        label="Notifications"
+        label={tr('Notifications')}
         rows={rows}
         columns={cols}
         loading={all.isPending || attached.some((a) => a.isPending)}
         error={all.error ?? attached.find((a) => a.error)?.error}
         keyboard={false}
         empty={
-          <Empty title={q ? 'No match' : 'No notifications yet'} action={q ? undefined : <Link to="/notifications/new" className="btn primary">New notification</Link>}>
-            {q ? 'No notification matches this filter.' : 'Create a notification first, then come back to choose its events.'}
+          <Empty title={q ? tr('No match') : tr('No notifications yet')} action={q ? undefined : <Link to="/notifications/new" className="btn primary">{tr('New notification')}</Link>}>
+            {q ? tr('No notification matches this filter.') : tr('Create a notification first, then come back to choose its events.')}
           </Empty>
         }
       />
@@ -118,7 +119,7 @@ export function NotificationsTab({ resource, id, approvals, editable }: { resour
 /** The notifications tab in a dialog, for objects without a page (inventory sources). */
 export function NotificationsDialog({ title, onClose, ...props }: Parameters<typeof NotificationsTab>[0] & { title: string; onClose: () => void }) {
   return (
-    <Dialog title={title} onClose={onClose} wide footer={<button className="btn" onClick={onClose}>Done</button>}>
+    <Dialog title={title} onClose={onClose} wide footer={<button className="btn" onClick={onClose}>{tr('Done')}</button>}>
       <NotificationsTab {...props} />
     </Dialog>
   )

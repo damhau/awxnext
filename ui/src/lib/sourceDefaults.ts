@@ -1,3 +1,4 @@
+import { tr } from './i18n'
 /**
  * AWX's per-source defaults for the enabled variable and value: used when a
  * source sets none (internal/resources/inventory_sources.go keeps the same).
@@ -22,7 +23,7 @@ export function enabledDefault(source: string): { variable: string; value: strin
 /** Help for the enabled variable field of a source type. */
 export function enabledHelp(source: string): string {
   const d = enabledDefault(source)
-  const base = 'Host variable deciding whether a host is enabled, e.g. status.power_state.'
+  const base = tr('Host variable deciding whether a host is enabled, e.g. status.power_state.')
   return d ? `${base} Empty uses ${d.variable} = ${d.value}.` : base
 }
 
