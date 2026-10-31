@@ -1,14 +1,6 @@
 import { tr } from './i18n'
-// The external logging settings (LOG_AGGREGATOR_*): their sections, and
-// where the server sends messages, built as it builds the address.
-
-export const loggingSections = [tr('Aggregator'), tr('Messages'), tr('Queue')]
-
-export function loggingSection(key: string): string {
-  if (/LOGGERS|_LEVEL|INDIVIDUAL_FACTS|TOWER_UUID/.test(key)) return tr('Messages')
-  if (/QUEUE|DISK|RSYSLOGD/.test(key)) return tr('Queue')
-  return tr('Aggregator')
-}
+// The external logging settings (LOG_AGGREGATOR_*): where the server sends
+// messages, built as it builds the address.
 
 /**
  * The address messages go to: for HTTPS/HTTP, https:// unless the host says

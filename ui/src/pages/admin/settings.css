@@ -1,0 +1,153 @@
+/* The settings pages (roadmap M8), from the approved mockups in
+   docs/awxnext-design/mockups/settings: what they add to the app's styles,
+   with its tokens only, scoped to the settings page. */
+
+
+.page.settings { flex-direction: row; }
+.settings .settings-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.settings .settings-main .page-body { max-width: 980px; gap: 28px; padding-bottom: 96px; }
+
+/* The settings menu: search, pages, and the login methods under Sign-in. */
+.settings .settings-nav { gap: 12px; }
+.settings .s-search { position: relative; display: flex; align-items: center; }
+.settings .s-search svg { position: absolute; left: 9px; color: var(--muted-2); }
+.settings .s-search .input { padding-left: 28px; padding-right: 28px; width: 100%; }
+.settings .s-search .key { position: absolute; right: 7px; font-family: var(--mono); font-size: 11px; color: var(--muted-2); border: 1px solid var(--line-strong); border-radius: 4px; padding: 0 5px; }
+.settings .settings-nav .sub { display: flex; flex-direction: column; gap: 1px; margin: 2px 0 4px 10px; padding-left: 8px; border-left: 1px solid var(--line); }
+.settings .settings-nav .sub a { font-size: 13px; color: var(--ink-3); display: flex; align-items: center; gap: 8px; }
+.settings .settings-nav .n { margin-left: auto; font-family: var(--mono); font-size: 11px; color: var(--muted-2); }
+.settings .settings-nav a.changed-link { display: flex; align-items: center; gap: 8px; }
+
+/* What a page is about, and its sections, as links. */
+.settings .s-index { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
+.settings .s-index a { font-size: 12px; color: var(--ink-3); border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 2px 10px; text-decoration: none; }
+.settings .s-index a:hover { border-color: var(--line-strong); }
+
+/* A section: a heading, what it is for, and one setting per row. */
+.settings .s-section { display: flex; flex-direction: column; }
+.settings .s-section > h2 { font-size: 15px; font-weight: 600; margin: 0; }
+.settings .s-section > .s-intro { margin: 4px 0 10px; color: var(--muted); max-width: 64ch; }
+.settings .s-rows { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-lg); }
+
+/* One setting: what it does on the left, its control on the right. */
+.settings .srow { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: 24px; padding: 14px 16px; border-top: 1px solid var(--line-soft); }
+.settings .srow:first-child { border-top: none; }
+.settings .s-name { font-weight: 600; display: flex; align-items: center; gap: 7px; }
+.settings .s-help { margin: 3px 0 0; color: var(--muted-2); font-size: 12.5px; line-height: 1.45; }
+.settings .s-help code, .settings .s-control code { font-family: var(--mono); font-size: 11.5px; }
+.settings .s-meta { margin-top: 6px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; font-size: 12px; color: var(--muted-2); }
+.settings .s-key { font-family: var(--mono); font-size: 11px; color: var(--muted-2); background: none; border: none; padding: 0; cursor: copy; }
+.settings .s-key:hover { color: var(--ink); text-decoration: underline; text-decoration-color: var(--line-strong); }
+.settings .s-default b { font-weight: 500; color: var(--ink-3); }
+.settings .s-control { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; min-width: 0; }
+.settings .s-control .input, .settings .s-control .select { width: 100%; max-width: 420px; }
+.settings .s-control .note { font-size: 12px; color: var(--muted-2); }
+.settings .srow.edited { box-shadow: inset 3px 0 0 var(--ink); }
+.settings .srow.edited .unsaved { font-size: 11px; border: 1px solid var(--ink); border-radius: 4px; padding: 0 5px; color: var(--ink); }
+
+/* Launch safety: the switches that let launchers do more than run the
+   template. Set apart, not alarming. */
+.settings .s-section.safety .s-rows { border-color: var(--line-strong); }
+.settings .s-section.safety > h2 { display: flex; align-items: center; gap: 8px; }
+.settings .s-section.safety > h2 svg { color: var(--ink-3); }
+.settings .s-consequence { font-size: 12.5px; color: var(--ink-3); background: var(--surface-3); border: 1px solid var(--line-soft); border-radius: var(--radius); padding: 6px 9px; max-width: 460px; }
+
+/* Switch: a checkbox drawn as on/off, with its state in words. */
+.settings .switch { display: inline-flex; align-items: center; gap: 9px; cursor: pointer; font-weight: 500; }
+.settings .switch input { position: absolute; opacity: 0; pointer-events: none; }
+.settings .switch .track { width: 30px; height: 18px; border-radius: 999px; background: var(--line-strong); position: relative; flex: none; transition: background 0.15s; }
+.settings .switch .track::after { content: ''; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: var(--surface); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25); transition: left 0.15s; }
+.settings .switch input:checked + .track { background: var(--ink); }
+.settings .switch input:checked + .track::after { left: 14px; }
+.settings .switch input:focus-visible + .track { box-shadow: 0 0 0 3px var(--accent-ring); }
+
+/* Durations and sizes: a number and its unit, or no limit. */
+.settings .amount { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.settings .amount .input { width: 96px; font-family: var(--mono); }
+.settings .amount .select { width: auto; }
+.settings .amount .input:disabled { color: var(--muted-2); }
+.settings .amounts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; width: 100%; max-width: 460px; }
+.settings .amounts label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+.settings .amounts .input { width: 100%; font-family: var(--mono); }
+
+/* Key and value pairs, and lists, edited as rows. */
+.settings .kv { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) auto; gap: 6px; width: 100%; max-width: 460px; align-items: center; }
+.settings .kv .input { font-family: var(--mono); font-size: 12px; }
+.settings .kv .head { font-size: 11px; color: var(--muted-2); font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
+.settings .icon-x { border: 1px solid transparent; background: none; color: var(--muted-2); border-radius: var(--radius); width: 26px; height: 26px; cursor: pointer; }
+.settings .icon-x:hover { border-color: var(--line); color: var(--ink); }
+.settings .chips { display: flex; flex-wrap: wrap; gap: 6px; max-width: 460px; }
+.settings .chips .add { font-family: var(--mono); font-size: 12px; border: 1px dashed var(--line-strong); border-radius: 4px; padding: 1px 8px; color: var(--muted-2); background: none; }
+
+/* Values to give somewhere else, with a copy button; secrets as set or not. */
+.settings .copyval { display: flex; align-items: center; gap: 6px; width: 100%; max-width: 460px; }
+.settings .copyval code { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; background: var(--surface-3); border: 1px solid var(--line); border-radius: var(--radius); padding: 6px 9px; }
+.settings .secret { display: flex; align-items: center; gap: 10px; }
+.settings .secret .set { display: inline-flex; align-items: center; gap: 6px; font-weight: 500; }
+
+/* Sign-in: one card per login method. */
+.settings .methods { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+.settings .method { display: flex; flex-direction: column; gap: 6px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-lg); padding: 12px 14px; color: inherit; text-decoration: none; }
+.settings .method:hover { border-color: var(--line-strong); }
+.settings .method.off { background: var(--surface-2); }
+.settings .m-head { display: flex; align-items: center; gap: 8px; }
+.settings .m-head b { font-weight: 600; }
+.settings .m-state { margin-left: auto; font-size: 12px; color: var(--muted); }
+.settings .method.on .m-state { color: var(--ink); font-weight: 500; }
+.settings .m-what { margin: 0; font-family: var(--mono); font-size: 12px; color: var(--ink-3); overflow-wrap: anywhere; }
+.settings .m-sub { margin: 0; font-size: 12.5px; color: var(--muted-2); }
+.settings .method .btn { margin-top: auto; align-self: flex-start; }
+
+/* A login method's form: steps in the order the provider is set up. */
+.settings .steps { counter-reset: step; }
+.settings .steps > .s-section > h2::before { counter-increment: step; content: counter(step); display: inline-grid; place-items: center; width: 20px; height: 20px; margin-right: 8px; border-radius: var(--radius-cell); background: var(--ink); color: var(--ground); font-family: var(--mono); font-size: 11px; vertical-align: 1px; }
+.settings .choice { display: flex; flex-direction: column; gap: 8px; }
+.settings .choice label { display: flex; gap: 8px; align-items: flex-start; cursor: pointer; }
+.settings .choice label span { display: flex; flex-direction: column; }
+.settings .choice label small { color: var(--muted-2); font-size: 12px; }
+.settings .choice .indent { margin-left: 22px; }
+.settings .saved-as { font-size: 12px; color: var(--muted-2); }
+
+/* Organization and team maps, as rows instead of JSON. */
+.settings .maps { width: 100%; border-collapse: collapse; }
+.settings .maps th { text-align: left; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted-2); padding: 0 8px 6px; }
+.settings .maps td { border-top: 1px solid var(--line-soft); padding: 9px 8px; vertical-align: top; font-size: 13px; }
+.settings .maps td .sub { display: block; color: var(--muted-2); font-size: 12px; margin-top: 2px; }
+.settings .maps .who code { background: var(--surface-3); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; }
+.settings .map-actions { display: flex; gap: 8px; padding: 10px 8px 2px; }
+
+/* The page's changes, saved at once. Lime: the one primary action. */
+.settings .s-savebar { position: sticky; bottom: 0; z-index: 2; display: flex; align-items: center; gap: 10px; padding: 10px 24px; background: var(--surface); border-top: 1px solid var(--line); }
+.settings .s-savebar .what { margin-right: auto; font-size: 13px; }
+.settings .s-hidden { margin: 0; font-size: 12.5px; color: var(--muted-2); }
+
+/* Smaller pieces. */
+.settings .amounts.amounts-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.settings .amounts.amounts-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.settings .amount-l { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+.settings .kv.kv-paths { grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) 64px auto; }
+.settings .map-wrap { padding: 10px 8px 8px; }
+.settings .badge.ok-badge { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 500; }
+.settings .settings-nav a, .settings .s-index a, .settings a.method { text-decoration: none; }
+
+/* Drawn from the layout: anchors under the sticky bar, LDAP servers folded
+   while they have no URI, a control as wide as its row, the read-only notice. */
+.settings .s-section, .settings .srow { scroll-margin-top: 68px; }
+.settings details.s-section > summary { cursor: pointer; display: flex; align-items: center; gap: 8px; margin-bottom: 10px; list-style: none; }
+.settings details.s-section > summary::-webkit-details-marker { display: none; }
+.settings details.s-section > summary::before { content: '▸'; color: var(--muted-2); font-size: 11px; width: 10px; }
+.settings details.s-section[open] > summary::before { content: '▾'; }
+.settings details.s-section > summary h2 { font-size: 15px; font-weight: 600; margin: 0; }
+.settings details.s-section > summary .off { font-size: 12px; color: var(--muted-2); }
+.settings .srow.wide { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+.settings .srow.wide .s-control { align-items: stretch; }
+.settings .s-control .textarea { width: 100%; max-width: 460px; }
+.settings .s-control .err { color: var(--fail-ink); font-size: 12px; }
+.settings .s-parts { display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 460px; }
+.settings .s-section.no-effect .s-rows { background: var(--surface-2); }
+.settings .s-savebar .others { font-size: 12.5px; color: var(--muted-2); }
+.settings .s-reset { align-self: flex-start; }
+.settings .s-value { font-family: var(--mono); font-size: 12px; overflow-wrap: anywhere; }
+.settings .settings-nav { position: sticky; top: 52px; align-self: flex-start; max-height: calc(100vh - 52px); overflow-y: auto; }
+.settings .s-control .input.num { max-width: 160px; }
+.settings .amounts .input.num { max-width: none; }

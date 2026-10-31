@@ -11,8 +11,9 @@ labels written for them, and the app's shell around them.
 | A login method: GitHub | [github.html](github.html) | [github.png](screenshots/github.png) |
 | Jobs | [jobs.html](jobs.html) | [jobs.png](screenshots/jobs.png) |
 
-`settings-mockup.css` holds what the pages add to the app's styles; it is
-meant to become the settings page's stylesheet.
+`settings-mockup.css` holds what the pages add to the app's styles. It became
+the settings pages' stylesheet, `ui/src/pages/admin/settings.css`, scoped to
+them (M8-01).
 
 ## What they show
 

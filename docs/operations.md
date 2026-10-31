@@ -291,6 +291,33 @@ stay readable where they are, and deleting a job deletes its object at the next 
 (every 10 minutes). A backup holds the database only: archives in object storage are not in it, so keep
 the bucket's own backups or versioning.
 
+## Settings
+
+The Settings pages group AWX's settings by what they set up rather than by AWX's categories:
+System, Sign-in with a page for each login method, Jobs, Logging, and Login page and UI. Each
+row says what its setting does, with the setting's AWX name below it (click it to copy it). Changes
+are kept from page to page until you save them, and Save writes each one to its AWX category
+(`PATCH /api/v2/settings/<category>/`): the API, the `awx` CLI and the `awx.awx` collection see the
+same categories and names as in AWX. "Changed from default" lists every setting that differs from
+its default, with a link to where it is set. The settings AWX has but awxnext ignores are last on
+their page, under "No effect in awxnext". The former addresses (`/settings/authentication`,
+`/settings/github-org`...) lead to the new pages.
+
+| AWX category | Page |
+|---|---|
+| `system`, `named-url` | System |
+| `authentication` | Sign-in |
+| `oidc`, `ldap`, `saml` | Sign-in: OpenID Connect, LDAP, SAML |
+| `github`, `github-org`, `github-team`, `github-enterprise`, `github-enterprise-org`, `github-enterprise-team` | Sign-in: GitHub, a section each |
+| `google-oauth2`, `azuread-oauth2` | Sign-in: Google, Microsoft Entra ID |
+| `jobs` | Jobs |
+| `logging` | Logging |
+| `ui` | Login page and UI |
+
+The pages are drawn from `ui/src/lib/settingsLayout.ts`, which places each setting on a page, in
+a section, in order, with its label and its control. A setting it does not place is still shown,
+under "Other settings" on its category's page.
+
 ## Observe
 
 - **Metrics:** `/metrics` (Prometheus; `AWXNEXT_METRICS_TOKEN` to protect it) and

@@ -1,113 +1,562 @@
 import { useQuery } from '@tanstack/react-query'
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { NavLink, useParams } from 'react-router'
-import { api, type Page } from '../../api/client'
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { Link, Navigate, useLocation, useParams } from 'react-router'
+import { api, ApiError } from '../../api/client'
 import { useInvalidate, useObject } from '../../api/hooks'
 import type { FieldMeta, OptionsMeta, Ref } from '../../api/types'
 import { useSession } from '../../app/context'
-import { Field, FormError, Lookup } from '../../components/form'
+import { FormError, Picker } from '../../components/form'
 import { Icon } from '../../components/icons'
 import { useConfirm, useToast } from '../../components/overlay'
 import { Empty, ErrorNote, Loading, PageHead, Panel } from '../../components/ui'
 import { humanize } from './common'
 import { grantReason, grantTarget, testerClaims, type MappedGrant } from '../../lib/mapping'
-import { ldapPrefix, ldapServer, ldapServerOn, ldapServerOrder } from '../../lib/ldapSettings'
-import { aggregatorTarget, loggingSection, loggingSections, testOutcome } from '../../lib/logging'
-import { archiveCredentialParams, compareSettings, jobsSection, jobsSections } from '../../lib/jobSettings'
+import { aggregatorTarget, testOutcome } from '../../lib/logging'
+import { archiveCredentialParams } from '../../lib/jobSettings'
+import {
+  categoryPage,
+  changesByCategory,
+  childPages,
+  hasNoEffect,
+  pageSections,
+  rowAnchor,
+  settingLabel,
+  settingPlace,
+  settingsPage,
+  settingsPages,
+  type Row,
+  type Section,
+  type SettingsPage,
+} from '../../lib/settingsLayout'
 import { tr, trn } from '../../lib/i18n'
+import './settings.css'
 
-interface Category {
-  slug: string
-  name: string
+// The settings pages are drawn from the layout (lib/settingsLayout.ts): its
+// pages, their sections and rows. Every setting is loaded at once, from
+// settings/all/; changes are kept across pages until saved, and saving
+// sends each AWX category its own changes.
+
+type Values = Record<string, unknown>
+
+interface AllSettings {
+  meta: Record<string, FieldMeta>
+  writable: Set<string>
+  /** Each setting's AWX category. */
+  categories: Record<string, string>
 }
-
-const blurbs: Record<string, string> = {
-  system: tr('Base URL, activity stream, proxies and the default execution environment.'),
-  jobs: tr('Job defaults, timeouts, ad hoc modules, Galaxy and isolation.'),
-  authentication: tr('Sessions, basic auth and local accounts.'),
-  oidc: tr('Single sign-on with an OpenID Connect provider, and how its groups map to access.'),
-  ldap: tr('Up to six LDAP servers, tried in order before local accounts, and how their groups map to access.'),
-  saml: tr('Single sign-on with SAML identity providers: the service provider awxnext is, the providers, and how their attributes map to access.'),
-  github: tr('Login with GitHub accounts.'),
-  'github-org': tr('Login with GitHub accounts that are members of an organization.'),
-  'github-team': tr('Login with GitHub accounts that are members of a team.'),
-  'github-enterprise': tr('Login with GitHub Enterprise accounts.'),
-  'github-enterprise-org': tr('Login with GitHub Enterprise accounts that are members of an organization.'),
-  'github-enterprise-team': tr('Login with GitHub Enterprise accounts that are members of a team.'),
-  'google-oauth2': tr('Login with Google accounts, optionally of some domains only.'),
-  'azuread-oauth2': tr('Login with Microsoft Entra ID (Azure AD) accounts.'),
-  logging: tr('Shipping logs to an external aggregator.'),
-  ui: tr('Login page and live updates.'),
-  changed: tr('Every setting that differs from its default.'),
-}
-
-const order = ['system', 'jobs', 'authentication', 'oidc', 'ldap', 'saml', 'github', 'github-org', 'github-team', 'github-enterprise', 'github-enterprise-org', 'github-enterprise-team', 'google-oauth2', 'azuread-oauth2', 'logging', 'ui', 'changed']
 
 const isSecret = (key: string) => /SECRET|PASSWORD/.test(key)
+const same = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null)
+const metaLabel = (k: string, m?: FieldMeta) => (m?.label && m.label !== k ? m.label : humanize(k))
+const defaultOf = (m: FieldMeta) => m.default ?? (m.type === 'boolean' ? false : m.type === 'list' ? [] : '')
+const atDefault = (v: unknown, m: FieldMeta) => same(v, m.default) || (v === '' && (m.default ?? '') === '')
 
-function SettingsNav({ cats, active }: { cats: Category[]; active: string }) {
-  return (
-    <nav className="sidelist" aria-label={tr('Settings categories')}>
-      <div className="group">
-        <div className="group-head">
-          <span>{tr('Settings')}</span>
-        </div>
-        {cats.map((c) => (
-          <NavLink key={c.slug} to={`/settings/${c.slug}`} className={c.slug === active ? 'active' : ''}>
-            {c.slug === 'oidc' ? tr('Single sign-on (OIDC)') : c.name}
-          </NavLink>
-        ))}
-      </div>
-    </nav>
-  )
+function useAllSettings() {
+  const options = useQuery({ queryKey: ['settings/all/', 'options'], queryFn: () => api.options<OptionsMeta>('settings/all/') })
+  const values = useObject<Values>('settings/all/')
+  const data = useMemo<AllSettings | null>(() => {
+    const get = options.data?.actions?.GET
+    if (!get) return null
+    const categories: Record<string, string> = {}
+    for (const [k, m] of Object.entries(get)) categories[k] = String(m.category_slug ?? '')
+    return { meta: get, writable: new Set(Object.keys(options.data?.actions?.PUT ?? {})), categories }
+  }, [options.data])
+  return { data, saved: values.data, error: options.error ?? values.error }
 }
 
 export function Settings() {
   const { me } = useSession()
-  const cat = useParams().category ?? 'system'
-  const cats = useQuery({ queryKey: ['settings/', 'cats'], queryFn: () => api.get<Page<Category>>('settings/') })
-  const list = (cats.data?.results ?? []).filter((c) => c.slug !== 'all').sort((a, b) => order.indexOf(a.slug) - order.indexOf(b.slug))
-  const current = list.find((c) => c.slug === cat)
+  const slug = useParams().category ?? 'system'
+  const { hash } = useLocation()
+  const { data, saved, error: loadError } = useAllSettings()
+  const changed = useObject<Values>('settings/changed/')
+  const [edits, setEdits] = useState<Values>({})
+  const [errors, setErrors] = useState<Record<string, string>>({})
+  const [error, setError] = useState<unknown>(null)
+  const [busy, setBusy] = useState(false)
+  const toast = useToast()
+  const confirm = useConfirm()
+  const invalidate = useInvalidate()
+  const editable = me.is_superuser
+  const page = settingsPage(slug)
+  const loaded = !!(data && saved)
+  // A link to a section or a setting: scrolled to once the page is drawn.
+  useEffect(() => {
+    if (loaded && hash) document.getElementById(decodeURIComponent(hash.slice(1)))?.scrollIntoView({ block: 'start' })
+  }, [loaded, hash, slug])
+  if (!page && slug !== 'changed') {
+    // A former category page (/settings/authentication, /settings/github-org…).
+    const moved = categoryPage(slug)
+    return <Navigate replace to={moved ? `/settings/${moved.slug}${moved.section ? `#${moved.section}` : ''}` : '/settings/system'} />
+  }
+  const sections = page && data ? pageSections(page, data.categories, (k) => hasNoEffect(data.meta[k]?.help_text)) : []
+  const values: Values = { ...saved, ...edits }
+  const dirty = saved ? Object.keys(edits).filter((k) => !same(edits[k], saved[k])) : []
+  const set = (k: string, v: unknown) => {
+    setEdits((e) => ({ ...e, [k]: v }))
+    if (errors[k]) setErrors(({ [k]: _, ...rest }) => rest)
+  }
+  const save = async () => {
+    if (!data) return
+    setBusy(true)
+    setError(null)
+    const left: Values = { ...edits }
+    const failed: Record<string, string> = {}
+    let other: unknown = null
+    let n = 0
+    for (const [cat, body] of Object.entries(changesByCategory(dirty, edits, data.categories))) {
+      try {
+        await api.patch(`settings/${cat}/`, body)
+        for (const k of Object.keys(body)) delete left[k]
+        n += Object.keys(body).length
+      } catch (e) {
+        const fields = e instanceof ApiError ? e.fields : {}
+        if (Object.keys(fields).length) Object.assign(failed, fields)
+        else other ??= e
+      }
+    }
+    await invalidate('settings/')
+    setEdits(left)
+    setErrors(failed)
+    setError(other)
+    setBusy(false)
+    if (n) toast(trn(n, 'Saved {n} setting', 'Saved {n} settings'))
+    if (other || Object.keys(failed).length) toast(tr('Some changes were not saved: see the settings marked.'), 'error')
+  }
+  const discard = () => {
+    setEdits({})
+    setErrors({})
+    setError(null)
+  }
+  // Resetting a page resets the AWX categories it shows: each is on one page only.
+  const resettable = page && data ? page.categories.filter((c) => Object.keys(data.categories).some((k) => data.categories[k] === c && data.writable.has(k))) : []
+  const resetPage = async () => {
+    if (!page || !data) return
+    if (!(await confirm({ title: tr('Reset every setting of {page} to its default?', { page: page.title }), confirm: tr('Reset'), danger: true }))) return
+    try {
+      for (const c of resettable) await api.del(`settings/${c}/`)
+      toast(tr('Reset to defaults'))
+    } catch (e) {
+      toast((e as Error).message, 'error')
+    }
+    await invalidate('settings/')
+    setEdits((e) => Object.fromEntries(Object.entries(e).filter(([k]) => !resettable.includes(data.categories[k]))))
+  }
+  const placed = data ? dirty.map((k) => settingPlace(k, data.categories[k], hasNoEffect(data.meta[k]?.help_text))?.page) : []
+  const elsewhere = settingsPages.filter((p) => p.slug !== slug && placed.includes(p.slug))
+  const ctx: Ctx | null = data && saved ? { data, saved, values, set, errors, editable, page: slug, hash: hash.slice(1) } : null
   return (
-    <div className="page" style={{ flexDirection: 'row' }}>
-      <SettingsNav cats={list} active={cat} />
-      <div className="grow" style={{ display: 'flex', flexDirection: 'column' }}>
-        <PageHead title={cat === 'oidc' ? tr('Single sign-on') : (current?.name ?? tr('Settings'))} subtitle={blurbs[cat]} />
+    <div className="page settings">
+      <SettingsNav active={slug} sections={sections} changed={changed.data ? Object.keys(changed.data).length : undefined} />
+      <div className="settings-main">
+        <PageHead title={page?.title ?? tr('Changed from default')} subtitle={page?.blurb ?? tr('Every setting that differs from its default, and where it is.')}>
+          {sections.length > 1 && (
+            <nav className="s-index" aria-label={tr('On this page')}>
+              {sections.map((s) => (
+                <a key={s.id} href={`#${s.id}`}>
+                  {s.title}
+                </a>
+              ))}
+            </nav>
+          )}
+        </PageHead>
         <div className="page-body">
-          {!me.is_superuser && <div className="notice">{tr('Only superusers can change settings. You can review them here.')}</div>}
-          {cat === 'changed' ? <ChangedSettings /> : <CategoryForm key={cat} cat={cat} editable={me.is_superuser} />}
+          {!editable && <div className="notice">{tr('Only superusers can change settings. You can review them here.')}</div>}
+          {loadError ? (
+            <ErrorNote error={loadError} />
+          ) : !ctx ? (
+            <Loading />
+          ) : !page ? (
+            changed.error ? <ErrorNote error={changed.error} /> : changed.data ? <ChangedSettings all={ctx.data} changed={changed.data} /> : <Loading />
+          ) : (
+            sections.map((s) => <SectionView key={s.id} section={s} ctx={ctx} />)
+          )}
+          <FormError error={error} />
+          {page && ctx && editable && resettable.length > 0 && (
+            <button type="button" className="btn ghost s-reset" onClick={resetPage}>
+              {tr('Reset this page to defaults')}
+            </button>
+          )}
         </div>
+        {editable && (dirty.length > 0 || busy) && (
+          <div className="s-savebar" role="region" aria-label={tr('Unsaved changes')}>
+            <span className="what">
+              {trn(dirty.length, '{n} change not saved', '{n} changes not saved')}
+              {elsewhere.length > 0 && (
+                <span className="others">
+                  {' · '}
+                  {tr('Also on:')}{' '}
+                  {elsewhere.map((p, i) => (
+                    <Fragment key={p.slug}>
+                      {i ? ', ' : ''}
+                      <Link to={`/settings/${p.slug}`}>{p.title}</Link>
+                    </Fragment>
+                  ))}
+                </span>
+              )}
+            </span>
+            <button type="button" className="btn ghost" disabled={busy} onClick={discard}>
+              {tr('Discard')}
+            </button>
+            <button type="button" className="btn primary" disabled={busy || dirty.length === 0} onClick={save}>
+              {busy ? tr('Saving…') : tr('Save')}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )
 }
 
-type Values = Record<string, unknown>
-
-function useCategory(cat: string) {
-  const meta = useQuery({ queryKey: [`settings/${cat}/`, 'options'], queryFn: () => api.options<OptionsMeta>(`settings/${cat}/`) })
-  const values = useObject<Values>(`settings/${cat}/`)
-  return { meta, values }
+/** The menu: the pages, the login methods under Sign-in, the current page's sections. */
+function SettingsNav({ active, sections, changed }: { active: string; sections: Section[]; changed?: number }) {
+  const link = (p: SettingsPage) => (
+    <Link key={p.slug} to={`/settings/${p.slug}`} className={p.slug === active ? 'active' : ''} aria-current={p.slug === active ? 'page' : undefined}>
+      {p.menu ?? p.title}
+    </Link>
+  )
+  return (
+    <nav className="sidelist settings-nav" aria-label={tr('Settings')}>
+      <div className="group">
+        <div className="group-head">
+          <span>{tr('Settings')}</span>
+        </div>
+        {settingsPages
+          .filter((p) => !p.parent)
+          .map((p) => {
+            const children = childPages(p.slug)
+            return (
+              <Fragment key={p.slug}>
+                {link(p)}
+                {children.length > 0 && <div className="sub">{children.map(link)}</div>}
+                {children.length === 0 && p.slug === active && sections.length > 1 && (
+                  <div className="sub">
+                    {sections.map((s) => (
+                      <a key={s.id} href={`#${s.id}`}>
+                        {s.title}
+                      </a>
+                    ))}
+                  </div>
+                )}
+              </Fragment>
+            )
+          })}
+      </div>
+      <div className="group">
+        <Link to="/settings/changed" className={`changed-link ${active === 'changed' ? 'active' : ''}`} aria-current={active === 'changed' ? 'page' : undefined}>
+          <span className="cell" data-size="xs" data-state="changed" aria-hidden="true" />
+          {tr('Changed from default')}
+          {changed !== undefined && <span className="n">{changed}</span>}
+        </Link>
+      </div>
+    </nav>
+  )
 }
 
-/** Groups related settings under readable headings. */
-function sectionOf(cat: string, key: string): string {
-  if (cat === 'oidc') return key.startsWith('SOCIAL_AUTH_') ? tr('Provider') : key === 'OIDC_MAPPING' ? tr('Group mapping') : tr('Claims and tokens')
-  if (cat === 'authentication') return key.endsWith('_MAP') ? tr('Organization and team maps') : key.startsWith('LOCAL_PASSWORD_') ? tr('Local passwords') : tr('Sessions and accounts')
-  if (cat === 'ldap') return ldapServer(key)
-  if (cat === 'logging') return loggingSection(key)
-  if (cat === 'saml') return /_MAP$|_ATTR$|FLAGS/.test(key) ? tr('Organizations, teams and flags') : /IDPS|SECURITY|EXTRA_DATA/.test(key) ? tr('Identity providers') : tr('Service provider')
-  if (cat === 'jobs') return jobsSection(key)
-  return ''
+interface Ctx {
+  data: AllSettings
+  saved: Values
+  /** The saved values with the changes not saved yet. */
+  values: Values
+  set: (k: string, v: unknown) => void
+  errors: Record<string, string>
+  editable: boolean
+  /** The page shown, and the anchor linked to. */
+  page: string
+  hash: string
 }
 
-const sectionOrder: Record<string, string[]> = {
-  oidc: [tr('Provider'), tr('Claims and tokens'), tr('Group mapping')],
-  authentication: [tr('Sessions and accounts'), tr('Local passwords'), tr('Organization and team maps')],
-  ldap: ldapServerOrder,
-  saml: [tr('Service provider'), tr('Identity providers'), tr('Organizations, teams and flags')],
-  jobs: jobsSections,
-  logging: loggingSections,
+function SectionView({ section, ctx }: { section: Section; ctx: Ctx }) {
+  const rows = (
+    <div className="s-rows">
+      {section.rows.map((r) => (
+        <SettingRow key={rowAnchor(r)} row={r} ctx={ctx} />
+      ))}
+      {ctx.page === 'logging' && section.id === 'aggregator' && (
+        <div className="srow">
+          <div>
+            <div className="s-name">{tr('Send a test message')}</div>
+            <p className="s-help">{tr('To the aggregator, with the saved settings.')}</p>
+          </div>
+          <div className="s-control">
+            <div className="row wrap">
+              <LoggingTest values={ctx.saved} unsaved={Object.keys(ctx.data.categories).some((k) => ctx.data.categories[k] === 'logging' && !same(ctx.values[k], ctx.saved[k]))} />
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+  if (section.on) {
+    // An LDAP server: folded while it has no URI, unless it holds the change or error linked to.
+    const on = section.on(ctx.values)
+    const open = on || ctx.hash === section.id || section.rows.some((r) => r.keys.some((k) => ctx.errors[k] || k === ctx.hash || !same(ctx.values[k], ctx.saved[k])))
+    return (
+      <details className="s-section" id={section.id} open={open}>
+        <summary>
+          <h2>{section.title}</h2>
+          {!on && <span className="off">{tr('off')}</span>}
+        </summary>
+        {rows}
+      </details>
+    )
+  }
+  return (
+    <section className={`s-section ${section.noEffect ? 'no-effect' : ''}`} id={section.id}>
+      <h2>{section.title}</h2>
+      {section.intro && <p className="s-intro">{section.intro}</p>}
+      {section.children ? <LoginMethods parent={ctx.page} /> : rows}
+    </section>
+  )
+}
+
+/** The login methods, each opening its page. */
+function LoginMethods({ parent }: { parent: string }) {
+  return (
+    <div className="methods">
+      {childPages(parent).map((p) => (
+        <Link key={p.slug} className="method" to={`/settings/${p.slug}`}>
+          <div className="m-head">
+            <b>{p.title}</b>
+          </div>
+          <p className="m-sub">{p.blurb}</p>
+        </Link>
+      ))}
+    </div>
+  )
+}
+
+/** One row: what it sets on the left, with its AWX keys; its control on the right. */
+function SettingRow({ row, ctx }: { row: Row; ctx: Ctx }) {
+  const { data, values, saved, set, errors, editable } = ctx
+  const keys = row.keys
+  const single = keys.length === 1
+  const k0 = keys[0]
+  const label = row.label ?? (single ? metaLabel(k0, data.meta[k0]) : keys.map((k) => metaLabel(k, data.meta[k])).join(', '))
+  const metaHelp = data.meta[k0]?.help_text
+  const help = row.help ?? (single && metaHelp && metaHelp !== label ? metaHelp : undefined)
+  const edited = keys.some((k) => !same(values[k], saved[k]))
+  const resettable = keys.filter((k) => editable && data.writable.has(k) && !atDefault(values[k], data.meta[k]))
+  const errs = keys.map((k) => errors[k]).filter(Boolean)
+  return (
+    <div className={`srow${edited ? ' edited' : ''}${row.wide ? ' wide' : ''}`} id={rowAnchor(row)}>
+      <div>
+        <div className="s-name">
+          {single && !row.control ? <label htmlFor={`s-${k0}`}>{label}</label> : label}
+          {edited && <span className="unsaved">{tr('unsaved')}</span>}
+        </div>
+        {help && <p className="s-help">{help}</p>}
+        <div className="s-meta">
+          {keys.map((k) => (
+            <KeyButton key={k} k={k} />
+          ))}
+          {resettable.length > 0 && (
+            <button type="button" className="link-btn" onClick={() => resettable.forEach((k) => set(k, defaultOf(data.meta[k])))}>
+              {tr('restore default')}
+            </button>
+          )}
+        </div>
+      </div>
+      <div className="s-control">
+        {single ? <SettingControl k={k0} row={row} ctx={ctx} /> : <Parts row={row} ctx={ctx} />}
+        {errs.map((e, i) => (
+          <span key={i} className="err">
+            {e}
+          </span>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+/** A setting's AWX key, copied on click. */
+function KeyButton({ k }: { k: string }) {
+  const toast = useToast()
+  return (
+    <button type="button" className="s-key" title={tr('Copy')} onClick={() => navigator.clipboard?.writeText(k).then(() => toast(tr('Copied {key}', { key: k })), () => {})}>
+      {k}
+    </button>
+  )
+}
+
+/** The settings of a row of several, each with its part's label. */
+function Parts({ row, ctx }: { row: Row; ctx: Ctx }) {
+  const meta = (k: string) => ctx.data.meta[k]
+  if (row.keys.every((k) => ['integer', 'float'].includes(meta(k)?.type)))
+    return (
+      <div className={`amounts amounts-${row.keys.length}`}>
+        {row.keys.map((k, i) => (
+          <label key={k}>
+            {row.parts?.[i] ?? metaLabel(k, meta(k))}
+            <SettingControl k={k} row={{ keys: [k] }} ctx={ctx} />
+          </label>
+        ))}
+      </div>
+    )
+  return (
+    <div className="s-parts">
+      {row.keys.map((k, i) =>
+        meta(k)?.type === 'boolean' ? (
+          <SettingControl key={k} k={k} row={{ keys: [k], states: [row.parts?.[i] ?? metaLabel(k, meta(k)), row.parts?.[i] ?? metaLabel(k, meta(k))] }} ctx={ctx} />
+        ) : (
+          <div key={k} className="amount-l">
+            <label htmlFor={`s-${k}`}>{row.parts?.[i] ?? metaLabel(k, meta(k))}</label>
+            <SettingControl k={k} row={{ keys: [k] }} ctx={ctx} />
+          </div>
+        ),
+      )}
+    </div>
+  )
+}
+
+/** The control that edits a setting, from the layout's control or its type. */
+function SettingControl({ k, row, ctx }: { k: string; row: Row; ctx: Ctx }) {
+  const meta = ctx.data.meta[k]
+  const value = ctx.values[k]
+  const disabled = !ctx.editable || !ctx.data.writable.has(k)
+  const onChange = (v: unknown) => ctx.set(k, v)
+  const id = `s-${k}`
+  if (!meta) return null
+  switch (row.control) {
+    case 'oidc-mapping':
+      return <MappingEditor value={(value as Rule[]) ?? []} onChange={onChange} editable={!disabled} groupsClaim={String(ctx.values.OIDC_GROUPS_CLAIM ?? 'groups')} />
+    case 'archive-credential':
+      return <ObjectControl id={id} resource="credentials/" params={archiveCredentialParams(ctx.values.JOB_EVENTS_ARCHIVE_STORAGE)} value={value as number | null} onChange={onChange} disabled={disabled} />
+    case 'json':
+      return <JsonControl id={id} value={value} onChange={onChange} disabled={disabled} />
+  }
+  switch (meta.type) {
+    case 'boolean': {
+      const on = row.invert ? !value : !!value
+      const [off, yes] = row.states ?? [tr('Disabled'), tr('Enabled')]
+      return (
+        <label className="switch">
+          <input id={id} type="checkbox" checked={on} disabled={disabled} onChange={(e) => onChange(row.invert ? !e.target.checked : e.target.checked)} />
+          <span className="track" aria-hidden="true" />
+          {on ? yes : off}
+        </label>
+      )
+    }
+    case 'integer':
+    case 'float':
+      return <input id={id} className="input mono num" type="number" disabled={disabled} value={value === null || value === undefined ? '' : String(value)} onChange={(e) => onChange(e.target.value === '' ? null : Number(e.target.value))} />
+    case 'choice':
+      return (
+        <select id={id} className="select" disabled={disabled} value={String(value ?? '')} onChange={(e) => onChange(e.target.value === '' ? null : e.target.value)}>
+          {(meta.default === null || value === null || value === undefined) && <option value="">---------</option>}
+          {(meta.choices ?? []).map(([v, l]) => (
+            <option key={String(v)} value={String(v)}>
+              {l}
+            </option>
+          ))}
+        </select>
+      )
+    case 'list':
+      return <ListControl id={id} value={value} onChange={onChange} disabled={disabled} />
+    case 'nested object':
+    case 'dict':
+      return <JsonControl id={id} value={value} onChange={onChange} disabled={disabled} />
+    case 'field':
+      return <ObjectControl id={id} resource="execution_environments/" value={value as number | null} onChange={onChange} disabled={disabled} meta={(r) => r.image} />
+  }
+  return (
+    <input
+      id={id}
+      className={`input ${/URL|PATH|HOST|CLAIM|ENDPOINT|KEY|ENTITY/.test(k) ? 'mono' : ''}`}
+      type={isSecret(k) ? 'password' : 'text'}
+      disabled={disabled}
+      autoComplete="off"
+      value={String(value ?? '')}
+      onChange={(e) => onChange(e.target.value)}
+    />
+  )
+}
+
+/** Lists of strings edited one per line; lists of objects as JSON. */
+function ListControl({ id, value, onChange, disabled }: { id: string; value: unknown; onChange: (v: unknown) => void; disabled: boolean }) {
+  const list = Array.isArray(value) ? value : []
+  if (!list.every((x) => typeof x === 'string' || typeof x === 'number')) return <JsonControl id={id} value={value} onChange={onChange} disabled={disabled} />
+  return (
+    <>
+      <textarea
+        id={id}
+        className="textarea mono"
+        rows={Math.min(8, Math.max(2, list.length + 1))}
+        disabled={disabled}
+        value={list.join('\n')}
+        onChange={(e) =>
+          onChange(
+            e.target.value
+              .split('\n')
+              .map((s) => s.trim())
+              .filter(Boolean),
+          )
+        }
+      />
+      <span className="note">{tr('One per line.')}</span>
+    </>
+  )
+}
+
+function JsonControl({ id, value, onChange, disabled, label }: { id: string; value: unknown; onChange: (v: unknown) => void; disabled: boolean; label?: string }) {
+  const [text, setText] = useState(() => JSON.stringify(value ?? {}, null, 2))
+  const [bad, setBad] = useState<string | null>(null)
+  useEffect(() => {
+    try {
+      if (JSON.stringify(JSON.parse(text)) !== JSON.stringify(value ?? {})) setText(JSON.stringify(value ?? {}, null, 2))
+    } catch {
+      /* keep the user's text while it is invalid */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value])
+  return (
+    <>
+      <textarea
+        id={id}
+        className="textarea mono"
+        rows={Math.min(12, text.split('\n').length + 1)}
+        disabled={disabled}
+        spellCheck={false}
+        value={text}
+        aria-label={label}
+        aria-invalid={!!bad}
+        onChange={(e) => {
+          setText(e.target.value)
+          try {
+            onChange(JSON.parse(e.target.value))
+            setBad(null)
+          } catch (err) {
+            setBad(tr('Not valid JSON: ') + (err as Error).message)
+          }
+        }}
+      />
+      {bad && <span className="err">{bad}</span>}
+    </>
+  )
+}
+
+/** A setting that holds an API object's ID: an execution environment, a credential. */
+function ObjectControl({ id, resource, params, value, onChange, disabled, meta }: {
+  id: string
+  resource: string
+  params?: Record<string, string | number>
+  value: number | null
+  onChange: (v: unknown) => void
+  disabled: boolean
+  meta?: (r: Ref) => ReactNode
+}) {
+  const obj = useObject<Ref>(value ? `${resource}${value}/` : null)
+  if (disabled) return <span>{obj.data?.name ?? (value ? tr('#{value}', { value }) : tr('Not set'))}</span>
+  return (
+    <div style={{ width: '100%', maxWidth: 420 }}>
+      <Picker id={id} resource={resource} params={params} placeholder={tr('Search…')} display={(r) => r.name} meta={meta} values={obj.data ? [obj.data] : []} single onChange={(v) => onChange(v[0]?.id ?? null)} />
+      {value ? (
+        <button type="button" className="link-btn small" onClick={() => onChange(null)}>
+          {tr('Clear')}
+        </button>
+      ) : null}
+    </div>
+  )
 }
 
 /** AWX's logging test: a message sent with the saved settings. */
@@ -128,7 +577,7 @@ function LoggingTest({ values, unsaved }: { values: Values; unsaved: boolean }) 
   }
   return (
     <>
-      <button className="btn" disabled={busy || unsaved} title={unsaved ? tr('Save first: the test uses the saved settings.') : undefined} onClick={run}>
+      <button type="button" className="btn" disabled={busy || unsaved} title={unsaved ? tr('Save first: the test uses the saved settings.') : undefined} onClick={run}>
         {busy ? tr('Testing…') : tr('Test')}
       </button>
       <span className={`small ${outcome?.ok === false ? '' : 'faint'}`} style={outcome?.ok === false ? { color: 'var(--fail-deep)' } : undefined} role="status">
@@ -138,343 +587,9 @@ function LoggingTest({ values, unsaved }: { values: Values; unsaved: boolean }) 
   )
 }
 
-function CategoryForm({ cat, editable }: { cat: string; editable: boolean }) {
-  const { meta, values } = useCategory(cat)
-  const [draft, setDraft] = useState<Values>({})
-  const [errors, setErrors] = useState<Record<string, string>>({})
-  const [error, setError] = useState<unknown>(null)
-  const [busy, setBusy] = useState(false)
-  const toast = useToast()
-  const confirm = useConfirm()
-  const invalidate = useInvalidate()
-  useEffect(() => {
-    if (values.data) setDraft(values.data)
-  }, [values.data])
-  const fields = useMemo(() => {
-    const put = meta.data?.actions?.PUT ?? {}
-    const get = meta.data?.actions?.GET ?? {}
-    return Object.entries(get)
-      .map(([k, m]) => ({ key: k, meta: m, writable: editable && k in put }))
-      .sort((a, b) => compareSettings(a.key, b.key))
-  }, [meta.data, editable])
-  if (meta.error || values.error) return <ErrorNote error={meta.error ?? values.error} />
-  if (!meta.data || !values.data) return <Loading />
-  const dirty = fields.filter((f) => f.writable && JSON.stringify(draft[f.key]) !== JSON.stringify(values.data![f.key])).map((f) => f.key)
-  const save = async () => {
-    setBusy(true)
-    setError(null)
-    setErrors({})
-    const body: Values = {}
-    for (const k of dirty) body[k] = draft[k]
-    try {
-      await api.patch(`settings/${cat}/`, body)
-      invalidate(`settings/`)
-      toast(trn(dirty.length, 'Saved {n} setting', 'Saved {n} settings'))
-    } catch (e) {
-      setError(e)
-      if (e && typeof e === 'object' && 'fields' in e) setErrors((e as { fields: Record<string, string> }).fields)
-    } finally {
-      setBusy(false)
-    }
-  }
-  const resetAll = async () => {
-    if (!(await confirm({ title: tr('Reset all {cat} settings to their defaults?', { cat }), confirm: tr('Reset'), danger: true }))) return
-    try {
-      await api.del(`settings/${cat}/`)
-      invalidate('settings/')
-      toast(tr('Reset to defaults'))
-    } catch (e) {
-      toast((e as Error).message, 'error')
-    }
-  }
-  const sections = new Map<string, typeof fields>()
-  for (const s of sectionOrder[cat] ?? []) sections.set(s, [])
-  for (const f of fields) {
-    const s = sectionOf(cat, f.key)
-    sections.set(s, [...(sections.get(s) ?? []), f])
-  }
-  for (const [k, v] of sections) if (!v.length) sections.delete(k)
-  const set = (k: string, v: unknown) => {
-    setDraft((d) => ({ ...d, [k]: v }))
-    if (errors[k]) setErrors((e) => ({ ...e, [k]: '' }))
-  }
-  return (
-    <div className="stack settings-form" style={{ gap: 20 }}>
-      {[...sections.entries()].map(([title, list]) => {
-        const fieldsGrid = (
-          <div className="form-grid">
-            {list.map((f) => (
-              <SettingField
-                key={f.key}
-                k={f.key}
-                meta={f.meta}
-                value={draft[f.key]}
-                saved={values.data![f.key]}
-                onChange={(v) => set(f.key, v)}
-                disabled={!f.writable}
-                error={errors[f.key]}
-                prefix={cat === 'ldap' ? ldapPrefix(f.key) : undefined}
-                draft={draft}
-              />
-            ))}
-          </div>
-        )
-        if (cat === 'ldap') {
-          const on = ldapServerOn(draft, title)
-          return (
-            <details key={title} className="form-section" open={on || title === tr('Default server') || list.some((f) => errors[f.key])}>
-              <summary>
-                <h2 style={{ display: 'inline' }}>{title}</h2> <span className="faint small">{on ? '' : tr('off')}</span>
-              </summary>
-              {fieldsGrid}
-            </details>
-          )
-        }
-        return (
-        <section key={title || 'main'} className="form-section">
-          {title && <h2>{title}</h2>}
-          {title === tr('Group mapping') ? (
-            <MappingEditor value={(draft.OIDC_MAPPING as Rule[]) ?? []} onChange={(v) => set('OIDC_MAPPING', v)} editable={editable} error={errors.OIDC_MAPPING} groupsClaim={String(draft.OIDC_GROUPS_CLAIM ?? 'groups')} />
-          ) : (
-            <div className="form-grid">
-              {list.map((f) => (
-                <SettingField
-                  key={f.key}
-                  k={f.key}
-                  meta={f.meta}
-                  value={draft[f.key]}
-                  saved={values.data![f.key]}
-                  onChange={(v) => set(f.key, v)}
-                  disabled={!f.writable}
-                  error={errors[f.key]}
-                  prefix={cat === 'oidc' ? (f.key.startsWith('SOCIAL_AUTH_OIDC_') ? 'SOCIAL_AUTH_OIDC_' : 'OIDC_') : undefined}
-                />
-              ))}
-            </div>
-          )}
-        </section>
-        )
-      })}
-      <FormError error={error} />
-      {editable && (
-        <div className="form-actions settings-actions">
-          <button className="btn primary" disabled={busy || dirty.length === 0} onClick={save}>
-            {busy ? tr('Saving…') : dirty.length ? trn(dirty.length, 'Save {n} change', 'Save {n} changes') : tr('No changes')}
-          </button>
-          {dirty.length > 0 && (
-            <button className="btn ghost" onClick={() => setDraft(values.data!)}>
-              {tr('Discard')}
-            </button>
-          )}
-          {cat === 'logging' && <LoggingTest values={values.data} unsaved={dirty.length > 0} />}
-          <button className="btn ghost" style={{ marginLeft: 'auto' }} onClick={resetAll}>
-            {tr('Reset category to defaults')}
-          </button>
-        </div>
-      )}
-    </div>
-  )
-}
-
-function SettingField({
-  k,
-  meta,
-  value,
-  saved,
-  onChange,
-  disabled,
-  error,
-  prefix,
-  draft,
-}: {
-  k: string
-  meta: FieldMeta
-  value: unknown
-  saved: unknown
-  onChange: (v: unknown) => void
-  disabled: boolean
-  error?: string
-  prefix?: string
-  /** The category's values being edited (fields that depend on others). */
-  draft?: Values
-}) {
-  const label = meta.label && meta.label !== k ? meta.label : humanize(k, prefix)
-  const isDefault = JSON.stringify(value) === JSON.stringify(meta.default ?? null) || (value === '' && (meta.default ?? '') === '')
-  const changed = JSON.stringify(value) !== JSON.stringify(saved)
-  const help: ReactNode = (
-    <>
-      {meta.help_text && meta.help_text !== label ? tr('{help_text} ', { help_text: meta.help_text }) : ''}
-      <span className="mono">{k}</span>
-      {!isDefault && !disabled && (
-        <>
-          {' · '}
-          <button type="button" className="link-btn small" onClick={() => onChange(meta.default ?? (meta.type === 'boolean' ? false : meta.type === 'list' ? [] : ''))}>
-            {tr('restore default')}
-          </button>
-        </>
-      )}
-      {changed && <span className="tag" style={{ marginLeft: 6 }}>{tr('unsaved')}</span>}
-    </>
-  )
-  const id = `s-${k}`
-  if (k === 'JOB_EVENTS_ARCHIVE_CREDENTIAL')
-    return <ArchiveCredentialField label={label} help={help} error={error} value={value as number | null} onChange={onChange} disabled={disabled} storage={draft?.JOB_EVENTS_ARCHIVE_STORAGE} />
-  switch (meta.type) {
-    case 'boolean':
-      return (
-        <div className="field">
-          <label className="check">
-            <input id={id} type="checkbox" checked={!!value} disabled={disabled} onChange={(e) => onChange(e.target.checked)} />
-            <span style={{ fontWeight: 500 }}>{label}</span>
-          </label>
-          <span className="help" style={{ marginLeft: 22 }}>
-            {help}
-          </span>
-          {error && <span className="err">{error}</span>}
-        </div>
-      )
-    case 'integer':
-    case 'float':
-      return (
-        <Field label={label} help={help} error={error} htmlFor={id}>
-          <input id={id} className="input mono" type="number" disabled={disabled} value={value === null || value === undefined ? '' : String(value)} onChange={(e) => onChange(e.target.value === '' ? null : Number(e.target.value))} />
-        </Field>
-      )
-    case 'choice':
-      return (
-        <Field label={label} help={help} error={error} htmlFor={id}>
-          <select id={id} className="select" disabled={disabled} value={String(value ?? '')} onChange={(e) => onChange(e.target.value === '' ? null : e.target.value)}>
-            {(meta.default === null || value === null || value === undefined) && <option value="">---------</option>}
-            {(meta.choices ?? []).map(([v, l]) => (
-              <option key={String(v)} value={String(v)}>
-                {l}
-              </option>
-            ))}
-          </select>
-        </Field>
-      )
-    case 'list':
-      // LDAP searches are [base, scope, filter], or a list of them.
-      if (/^AUTH_LDAP_(\d_)?(USER|GROUP)_SEARCH$/.test(k)) return <JsonField id={id} label={label} help={help} error={error} value={value} onChange={onChange} disabled={disabled} />
-      return <ListField id={id} label={label} help={help} error={error} value={value} onChange={onChange} disabled={disabled} />
-    case 'nested object':
-    case 'dict':
-      return <JsonField id={id} label={label} help={help} error={error} value={value} onChange={onChange} disabled={disabled} />
-    case 'field':
-      return <EEField label={label} help={help} value={value as number | null} onChange={onChange} disabled={disabled} />
-  }
-  return (
-    <Field label={label} help={help} error={error} htmlFor={id}>
-      <input
-        id={id}
-        className={`input ${/URL|PATH|HOST|CLAIM|ENDPOINT|KEY/.test(k) ? 'mono' : ''}`}
-        type={isSecret(k) ? 'password' : 'text'}
-        disabled={disabled}
-        autoComplete="off"
-        value={String(value ?? '')}
-        onChange={(e) => onChange(e.target.value)}
-      />
-    </Field>
-  )
-}
-
-/** Lists of strings edited one per line; lists of objects as JSON. */
-function ListField({ id, label, help, error, value, onChange, disabled }: { id: string; label: string; help: ReactNode; error?: string; value: unknown; onChange: (v: unknown) => void; disabled: boolean }) {
-  const list = Array.isArray(value) ? value : []
-  const simple = list.every((x) => typeof x === 'string' || typeof x === 'number')
-  if (!simple) return <JsonField id={id} label={label} help={help} error={error} value={value} onChange={onChange} disabled={disabled} />
-  return (
-    <Field label={label} help={<>{tr('One per line.')} {help}</>} error={error} htmlFor={id}>
-      <textarea
-        id={id}
-        className="textarea mono"
-        rows={Math.min(8, Math.max(2, list.length + 1))}
-        disabled={disabled}
-        value={list.join('\n')}
-        onChange={(e) =>
-          onChange(
-            e.target.value
-              .split('\n')
-              .map((s) => s.trim())
-              .filter((s, i, all) => s !== '' || i < all.length - 1)
-              .filter(Boolean),
-          )
-        }
-      />
-    </Field>
-  )
-}
-
-function JsonField({ id, label, help, error, value, onChange, disabled }: { id: string; label: string; help: ReactNode; error?: string; value: unknown; onChange: (v: unknown) => void; disabled: boolean }) {
-  const [text, setText] = useState(() => JSON.stringify(value ?? {}, null, 2))
-  const [bad, setBad] = useState<string | null>(null)
-  useEffect(() => {
-    try {
-      if (JSON.stringify(JSON.parse(text)) !== JSON.stringify(value ?? {})) setText(JSON.stringify(value ?? {}, null, 2))
-    } catch {
-      /* keep the user's text while it is invalid */
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value])
-  return (
-    <Field label={label} help={help} error={error ?? bad ?? undefined} htmlFor={id} full>
-      <textarea
-        id={id}
-        className="textarea mono"
-        rows={Math.min(12, text.split('\n').length + 1)}
-        disabled={disabled}
-        spellCheck={false}
-        value={text}
-        aria-invalid={!!bad}
-        onChange={(e) => {
-          setText(e.target.value)
-          try {
-            onChange(JSON.parse(e.target.value))
-            setBad(null)
-          } catch (err) {
-            setBad(tr('Not valid JSON: ') + (err as Error).message)
-          }
-        }}
-      />
-    </Field>
-  )
-}
-
-function ArchiveCredentialField({ label, help, error, value, onChange, disabled, storage }: {
-  label: string
-  help: ReactNode
-  error?: string
-  value: number | null
-  onChange: (v: unknown) => void
-  disabled: boolean
-  storage: unknown
-}) {
-  const cred = useObject<Ref>(value ? `credentials/${value}/` : null)
-  if (disabled)
-    return (
-      <Field label={label} help={help}>
-        <span>{cred.data?.name ?? (value ? tr('#{value}', { value }) : tr('Not set'))}</span>
-      </Field>
-    )
-  return <Lookup label={label} help={help} error={error} optional resource="credentials/" params={archiveCredentialParams(storage)} value={cred.data ?? null} onChange={(r) => onChange(r?.id ?? null)} />
-}
-
-function EEField({ label, help, value, onChange, disabled }: { label: string; help: ReactNode; value: number | null; onChange: (v: unknown) => void; disabled: boolean }) {
-  const ee = useObject<Ref>(value ? `execution_environments/${value}/` : null)
-  if (disabled)
-    return (
-      <Field label={label} help={help}>
-        <span>{ee.data?.name ?? (value ? tr('#{value}', { value }) : tr('Not set'))}</span>
-      </Field>
-    )
-  return <Lookup label={label} help={help} optional resource="execution_environments/" value={ee.data ?? null} onChange={(r) => onChange(r?.id ?? null)} meta={(r) => r.image} />
-}
-
-function ChangedSettings() {
-  const { meta, values } = useCategory('changed')
-  if (meta.error || values.error) return <ErrorNote error={meta.error ?? values.error} />
-  if (!values.data) return <Loading />
-  const entries = Object.entries(values.data)
+/** Every setting changed from its default, with a link to where it is set. */
+function ChangedSettings({ all, changed }: { all: AllSettings; changed: Values }) {
+  const entries = Object.entries(changed)
   if (!entries.length) return <Empty title={tr('Everything is at its default')} />
   return (
     <Panel pad={false}>
@@ -483,23 +598,29 @@ function ChangedSettings() {
           <tr>
             <th scope="col">{tr('Setting')}</th>
             <th scope="col">{tr('Value')}</th>
-            <th scope="col">{tr('Category')}</th>
+            <th scope="col">{tr('Where')}</th>
           </tr>
         </thead>
         <tbody>
           {entries.map(([k, v]) => {
-            const m = meta.data?.actions?.GET?.[k]
+            const place = settingPlace(k, all.categories[k] ?? '', hasNoEffect(all.meta[k]?.help_text))
+            const page = place && settingsPage(place.page)
+            const section = page && place && (page.sections.find((s) => s.id === place.section)?.title ?? (place.section === 'no-effect' ? tr('No effect in awxnext') : tr('Other settings')))
             return (
               <tr key={k}>
                 <td>
-                  <div style={{ fontWeight: 500 }}>{m?.label && m.label !== k ? m.label : humanize(k)}</div>
-                  <div className="cell-sub">{k}</div>
+                  <div style={{ fontWeight: 500 }}>{settingLabel(k) ?? metaLabel(k, all.meta[k])}</div>
+                  <div className="cell-sub mono">{k}</div>
                 </td>
-                <td className="mono small" style={{ maxWidth: 520, overflowWrap: 'anywhere' }}>
+                <td className="s-value" style={{ maxWidth: 520 }}>
                   {isSecret(k) ? '••••••' : JSON.stringify(v)}
                 </td>
                 <td>
-                  <NavLink to={`/settings/${m?.category_slug ?? m?.category ?? ''}`}>{m?.category ?? ''}</NavLink>
+                  {page && place && (
+                    <Link to={`/settings/${page.slug}#${place.anchor}`}>
+                      {page.title} › {section}
+                    </Link>
+                  )}
                 </td>
               </tr>
             )
@@ -567,7 +688,10 @@ function MappingEditor({ value, onChange, editable, error, groupsClaim }: { valu
         </label>
       </div>
       {asJson ? (
-        <JsonField id="oidc-map-json" label={tr('Rules')} help={tr('A list of rule objects.')} error={error} value={rules} onChange={(v) => onChange(Array.isArray(v) ? (v as Rule[]) : [])} disabled={!editable} />
+        <>
+          <JsonControl id="oidc-map-json" label={tr('Rules')} value={rules} onChange={(v) => onChange(Array.isArray(v) ? (v as Rule[]) : [])} disabled={!editable} />
+          <span className="note">{tr('A list of rule objects.')}</span>
+        </>
       ) : (
         <div className="table-wrap">
           <table className="data mapping">
@@ -717,7 +841,7 @@ function MappingTester({ rules, groupsClaim }: { rules: Rule[]; groupsClaim: str
     <Panel title={tr('Try the rules')} actions={<label className="check small"><input type="checkbox" checked={advanced} onChange={(e) => setAdvanced(e.target.checked)} />{tr('Paste full token claims')}</label>}>
       <div className="stack" style={{ gap: 10 }}>
         <p className="small muted" style={{ margin: 0 }}>
-          {tr('Nothing is saved or changed: this shows what a user with these groups would get from the rules above, including unsaved edits, and from the saved organization and team maps of the Authentication settings, which match the username and email.')}
+          {tr('Nothing is saved or changed: this shows what a user with these groups would get from the rules above, including unsaved edits, and from the saved default organization and team maps of the Sign-in page, which match the username and email.')}
         </p>
         {advanced ? (
           <textarea className="textarea mono" rows={6} spellCheck={false} placeholder={tr('{\n  "preferred_username": "alice",\n  "{groupsClaim}": ["ops", "team-payments"]\n}', { groupsClaim })} value={claimsText} onChange={(e) => setClaimsText(e.target.value)} aria-label={tr('Token claims')} />

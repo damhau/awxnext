@@ -348,7 +348,8 @@ export function MultiLookup({
   )
 }
 
-function Picker({
+/** A search-as-you-type picker of API objects, without a label: for controls labelled elsewhere. */
+export function Picker({
   id,
   resource,
   params,
