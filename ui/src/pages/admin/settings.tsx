@@ -50,11 +50,13 @@ import {
   settingPlace,
   settingsPage,
   settingsPages,
+  visibleSections,
   type Row,
   type Section,
   type SettingsPage,
 } from '../../lib/settingsLayout'
 import { asIs, tr, trn } from '../../lib/i18n'
+import { useStored } from '../../lib/storage'
 import './settings.css'
 
 // The settings pages are drawn from the layout (lib/settingsLayout.ts): its
@@ -103,6 +105,7 @@ export function Settings() {
   const confirm = useConfirm()
   const invalidate = useInvalidate()
   const editable = me.is_superuser
+  const [showNoEffect, setShowNoEffect] = useStored('settings.noEffect', false)
   const page = settingsPage(slug)
   const loaded = !!(data && saved)
   // A link to a section or a setting: scrolled to once the page is drawn.
@@ -114,9 +117,16 @@ export function Settings() {
     const moved = categoryPage(slug)
     return <Navigate replace to={moved ? `/settings/${moved.slug}${moved.section ? `#${moved.section}` : ''}` : '/settings/system'} />
   }
-  const sections = page && data ? pageSections(page, data.categories, (k) => hasNoEffect(data.meta[k]?.help_text)) : []
   const values: Values = { ...saved, ...edits }
   const dirty = saved ? Object.keys(edits).filter((k) => !same(edits[k], saved[k])) : []
+  // The settings with no effect are hidden unless asked for, linked to, edited or in error.
+  const target = decodeURIComponent(hash.slice(1))
+  const { sections, hidden } = visibleSections(
+    page && data ? pageSections(page, data.categories, (k) => hasNoEffect(data.meta[k]?.help_text)) : [],
+    showNoEffect,
+    (k) => k === target || dirty.includes(k) || !!errors[k],
+    target,
+  )
   const set = (k: string, v: unknown) => {
     setEdits((e) => ({ ...e, [k]: v }))
     if (errors[k]) setErrors(({ [k]: _, ...rest }) => rest)
@@ -195,6 +205,21 @@ export function Settings() {
             changed.error ? <ErrorNote error={changed.error} /> : changed.data ? <ChangedSettings all={ctx.data} changed={changed.data} /> : <Loading />
           ) : (
             sections.map((s) => <SectionView key={s.id} section={s} ctx={ctx} />)
+          )}
+          {page && ctx && hidden > 0 && (
+            <p className="s-hidden">
+              {trn(hidden, '{n} AWX setting that has no effect in awxnext is hidden.', '{n} AWX settings that have no effect in awxnext are hidden.')}{' '}
+              <button type="button" className="link-btn" onClick={() => setShowNoEffect(true)}>
+                {trn(hidden, 'Show it', 'Show them')}
+              </button>
+            </p>
+          )}
+          {page && ctx && showNoEffect && sections.some((s) => s.noEffect) && (
+            <p className="s-hidden">
+              <button type="button" className="link-btn" onClick={() => setShowNoEffect(false)}>
+                {tr('Hide the settings with no effect')}
+              </button>
+            </p>
           )}
           <FormError error={error} />
           {page && ctx && editable && resettable.length > 0 && (

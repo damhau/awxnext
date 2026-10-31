@@ -299,8 +299,10 @@ row says what its setting does, with the setting's AWX name below it (click it t
 are kept from page to page until you save them, and Save writes each one to its AWX category
 (`PATCH /api/v2/settings/<category>/`): the API, the `awx` CLI and the `awx.awx` collection see the
 same categories and names as in AWX. "Changed from default" lists every setting that differs from
-its default, with a link to where it is set. The settings AWX has but awxnext ignores are last on
-their page, under "No effect in awxnext". The former addresses (`/settings/authentication`,
+its default, with a link to where it is set. The settings AWX has but awxnext ignores are hidden:
+the end of their page says how many, with a link that shows them, under "No effect in awxnext",
+on every page until you hide them again. A link to one of them, or a change to one, shows them
+too. Rows are labelled by what they do; the API keeps AWX's labels. The former addresses (`/settings/authentication`,
 `/settings/github-org`...) lead to the new pages.
 
 | AWX category | Page |

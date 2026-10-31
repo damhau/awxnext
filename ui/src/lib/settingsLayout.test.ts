@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { categoryPage, changesByCategory, childPages, hasNoEffect, pageSections, placements, settingLabel, settingPlace, settingsPage, settingsPages } from './settingsLayout'
+import { categoryPage, changesByCategory, childPages, hasNoEffect, pageSections, placements, settingLabel, settingPlace, settingsPage, settingsPages, visibleSections } from './settingsLayout'
 
 // AWX's settings categories, as the API lists them at settings/: they do
 // not change, so AWX's clients keep working.
@@ -107,7 +107,8 @@ describe('the settings layout', () => {
   it('labels a setting as its row does', () => {
     expect(settingLabel('MAX_FORKS')).toBe('Forks per job, at most')
     expect(settingLabel('DEFAULT_PROJECT_UPDATE_TIMEOUT')).toBe('Sync timeouts: Project syncs')
-    expect(settingLabel('TOWER_URL_BASE')).toBeUndefined()
+    expect(settingLabel('TOWER_URL_BASE')).toBe('Service URL')
+    expect(settingLabel('AUTH_LDAP_3_BIND_DN')).toBe('Bind DN')
     expect(settingLabel('A_NEW_SETTING')).toBeUndefined()
   })
 
@@ -118,6 +119,31 @@ describe('the settings layout', () => {
       jobs: { MAX_FORKS: 50, SCHEDULE_MAX_JOBS: 5 },
       system: { TOWER_URL_BASE: 'https://awx.example.com' },
     })
+  })
+
+  it('labels every setting it places in plain words, not with AWX\'s label', () => {
+    for (const p of settingsPages)
+      for (const s of p.sections)
+        for (const r of s.rows) {
+          expect(r.label, r.keys.join()).toBeTruthy()
+          if (r.keys.length > 1) expect(r.parts?.every(Boolean), r.keys.join()).toBe(true)
+          // AWX's labels name the login method or start with "Enable": the page already says which.
+          expect(r.label, r.keys.join()).not.toMatch(/^(LDAP|SAML|OIDC|GitHub|Google|Azure|Logging|Enable)\b|OAuth2/)
+        }
+  })
+
+  it('hides the settings with no effect unless asked for', () => {
+    const jobs = settingsPage('jobs')!
+    const categories = { DEFAULT_JOB_TIMEOUT: 'jobs', AN_OLD_ONE: 'jobs', ANOTHER: 'jobs' }
+    const sections = pageSections(jobs, categories, (k) => k !== 'DEFAULT_JOB_TIMEOUT')
+    const ids = (v: ReturnType<typeof visibleSections>) => [v.sections.map((s) => s.id), v.hidden]
+    const none = () => false
+    expect(ids(visibleSections(sections, false, none))).toEqual([['limits'], 2])
+    expect(ids(visibleSections(sections, true, none))).toEqual([['limits', 'no-effect'], 0])
+    // Shown when one of them is linked to, edited or in error, or their section linked to.
+    expect(ids(visibleSections(sections, false, (k) => k === 'ANOTHER'))).toEqual([['limits', 'no-effect'], 0])
+    expect(ids(visibleSections(sections, false, none, 'no-effect'))).toEqual([['limits', 'no-effect'], 0])
+    expect(ids(visibleSections(sections, false, none, 'limits'))).toEqual([['limits'], 2])
   })
 
   it('knows the settings that have no effect from their help', () => {

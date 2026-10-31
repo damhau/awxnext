@@ -100,7 +100,26 @@ const ldapFields = [
   'CONNECTION_OPTIONS',
 ]
 
-// How an LDAP server's settings that are not text are edited.
+// Each LDAP field's label, and how those that are not text are edited.
+const ldapLabels: Record<string, string> = {
+  SERVER_URI: tr('Server URI'),
+  START_TLS: tr('StartTLS'),
+  BIND_DN: tr('Bind DN'),
+  BIND_PASSWORD: tr('Bind password'),
+  USER_SEARCH: tr('User search'),
+  USER_DN_TEMPLATE: tr('User DN template'),
+  USER_ATTR_MAP: tr('User attributes'),
+  GROUP_SEARCH: tr('Group search'),
+  GROUP_TYPE: tr('Group type'),
+  GROUP_TYPE_PARAMS: tr('Group type parameters'),
+  REQUIRE_GROUP: tr('Group required to log in'),
+  DENY_GROUP: tr('Group refused'),
+  USER_FLAGS_BY_GROUP: tr('Superusers and auditors by group'),
+  ORGANIZATION_MAP: tr('Organization map'),
+  TEAM_MAP: tr('Team map'),
+  CONNECTION_OPTIONS: tr('Connection options'),
+}
+
 const ldapControls: Record<string, Partial<Row>> = {
   USER_SEARCH: {
     control: 'ldap-search',
@@ -131,7 +150,7 @@ const ldapSections: Section[] = ['', '1_', '2_', '3_', '4_', '5_'].map((p, n) =>
   id: n ? `server-${n}` : 'default-server',
   title: n ? tr('Server {n}', { n }) : tr('Default server'),
   on: n ? (v) => filled(v[`AUTH_LDAP_${p}SERVER_URI`]) : undefined,
-  rows: ldapFields.map((f) => row(`AUTH_LDAP_${p}${f}`, ldapControls[f])),
+  rows: ldapFields.map((f) => row(`AUTH_LDAP_${p}${f}`, { label: ldapLabels[f], ...ldapControls[f] })),
 }))
 
 // GitHub's six AWX categories: github.com or GitHub Enterprise, then any
@@ -145,19 +164,38 @@ const githubVariants: [string, string, string, string[]][] = [
   ['github-enterprise-team', 'GITHUB_ENTERPRISE_TEAM_', tr('GitHub Enterprise: members of a team'), ['URL', 'API_URL', 'ID']],
 ]
 
+// The fields of the OAuth2 logins, in their providers' words.
+const oauthLabels: Record<string, string> = {
+  CALLBACK_URL: tr('Callback URL'),
+  URL: tr('Server URL'),
+  API_URL: tr('API URL'),
+  KEY: tr('Client ID'),
+  SECRET: tr('Client secret'),
+  NAME: tr('Organization'),
+  ID: tr('Team ID'),
+  ORGANIZATION_MAP: tr('Organization map'),
+  TEAM_MAP: tr('Team map'),
+}
+const oauthRow = (p: string, f: string, more: Partial<Row> = {}) => row(`SOCIAL_AUTH_${p}${f}`, { label: oauthLabels[f], ...more })
+
 const githubSections: Section[] = githubVariants.map(([slug, p, title, extra]) => {
   const where = extra.filter((f) => f.endsWith('URL'))
   const who = extra.filter((f) => !f.endsWith('URL'))
   return {
     id: slug,
     title,
-    rows: ['CALLBACK_URL', ...where, 'KEY', 'SECRET', ...who, 'ORGANIZATION_MAP', 'TEAM_MAP'].map((f) => row(`SOCIAL_AUTH_${p}${f}`)),
+    rows: ['CALLBACK_URL', ...where, 'KEY', 'SECRET', ...who, 'ORGANIZATION_MAP', 'TEAM_MAP'].map((f) => oauthRow(p, f)),
   }
 })
 
 const oauth = (p: string, extra: Row[] = []): Section[] => [
-  { id: 'provider', title: tr('Provider'), rows: [...['CALLBACK_URL', 'KEY', 'SECRET'].map((f) => row(`SOCIAL_AUTH_${p}${f}`)), ...extra] },
-  { id: 'maps', title: tr('Organizations and teams'), rows: ['ORGANIZATION_MAP', 'TEAM_MAP'].map((f) => row(`SOCIAL_AUTH_${p}${f}`)) },
+  {
+    id: 'provider',
+    title: tr('Provider'),
+    // Google and Microsoft call the callback URL the redirect URI.
+    rows: [oauthRow(p, 'CALLBACK_URL', { label: tr('Redirect URI') }), oauthRow(p, 'KEY'), oauthRow(p, 'SECRET'), ...extra],
+  },
+  { id: 'maps', title: tr('Organizations and teams'), rows: ['ORGANIZATION_MAP', 'TEAM_MAP'].map((f) => oauthRow(p, f)) },
 ]
 
 export const settingsPages: SettingsPage[] = [
@@ -167,9 +205,14 @@ export const settingsPages: SettingsPage[] = [
     blurb: tr('The service\'s address, the activity stream, what organization admins may do, and proxies.'),
     categories: ['system', 'named-url'],
     sections: [
-      { id: 'service', title: tr('Service'), rows: [row('TOWER_URL_BASE'), row('DEFAULT_EXECUTION_ENVIRONMENT'), row('INSTALL_UUID', { label: tr('Installation ID') })] },
-      { id: 'activity-stream', title: tr('Activity stream'), rows: [row('ACTIVITY_STREAM_ENABLED'), row('ACTIVITY_STREAM_ENABLED_FOR_INVENTORY_SYNC')] },
-      { id: 'organization-admins', title: tr('Organization admins'), rows: [row('ORG_ADMINS_CAN_SEE_ALL_USERS'), row('MANAGE_ORGANIZATION_AUTH')] },
+      { id: 'service', title: tr('Service'), rows: [
+          row('TOWER_URL_BASE', { label: tr('Service URL'), help: tr('The address people reach awxnext at: links in notifications, callback URLs and SAML\'s entity ID start with it.') }),
+          row('DEFAULT_EXECUTION_ENVIRONMENT', { label: tr('Default execution environment') }),
+          row('INSTALL_UUID', { label: tr('Installation ID') }),
+        ],
+      },
+      { id: 'activity-stream', title: tr('Activity stream'), rows: [row('ACTIVITY_STREAM_ENABLED', { label: tr('Record the activity stream') }), row('ACTIVITY_STREAM_ENABLED_FOR_INVENTORY_SYNC', { label: tr('Also record inventory syncs') })] },
+      { id: 'organization-admins', title: tr('Organization admins'), rows: [row('ORG_ADMINS_CAN_SEE_ALL_USERS', { label: tr('Organization admins see every user') }), row('MANAGE_ORGANIZATION_AUTH', { label: tr('Organization admins manage users and teams') })] },
       {
         id: 'proxies',
         title: tr('Behind a proxy'),
@@ -178,7 +221,7 @@ export const settingsPages: SettingsPage[] = [
           row('PROXY_IP_ALLOWED_LIST', { label: tr('Proxies trusted to set them') }),
         ],
       },
-      { id: 'named-url', title: tr('Named URLs'), rows: [row('NAMED_URL_FORMATS'), row('NAMED_URL_GRAPH_NODES')] },
+      { id: 'named-url', title: tr('Named URLs'), rows: [row('NAMED_URL_FORMATS', { label: tr('Named URL formats') }), row('NAMED_URL_GRAPH_NODES', { label: tr('Named URL graph') })] },
     ],
   },
   {
@@ -229,7 +272,7 @@ export const settingsPages: SettingsPage[] = [
         id: 'default-maps',
         title: tr('Default organization and team maps'),
         intro: tr('Where OpenID Connect logins place people, by username or email, besides its group mapping. GitHub, Google, Microsoft Entra ID and SAML use maps of their own, and LDAP too.'),
-        rows: [row('SOCIAL_AUTH_ORGANIZATION_MAP'), row('SOCIAL_AUTH_TEAM_MAP')],
+        rows: [row('SOCIAL_AUTH_ORGANIZATION_MAP', { label: tr('Organization map') }), row('SOCIAL_AUTH_TEAM_MAP', { label: tr('Team map') })],
       },
     ],
   },
@@ -240,7 +283,16 @@ export const settingsPages: SettingsPage[] = [
     parent: 'signin',
     categories: ['oidc'],
     sections: [
-      { id: 'provider', title: tr('Provider'), rows: ['OIDC_ENDPOINT', 'KEY', 'SECRET', 'VERIFY_SSL'].map((f) => row(`SOCIAL_AUTH_OIDC_${f}`)) },
+      {
+        id: 'provider',
+        title: tr('Provider'),
+        rows: [
+          row('SOCIAL_AUTH_OIDC_OIDC_ENDPOINT', { label: tr('Provider URL') }),
+          row('SOCIAL_AUTH_OIDC_KEY', { label: tr('Client ID') }),
+          row('SOCIAL_AUTH_OIDC_SECRET', { label: tr('Client secret') }),
+          row('SOCIAL_AUTH_OIDC_VERIFY_SSL', { label: tr('Provider\'s certificate'), states: [tr('Not checked'), tr('Checked')] }),
+        ],
+      },
       {
         id: 'claims',
         title: tr('Claims and tokens'),
@@ -253,7 +305,7 @@ export const settingsPages: SettingsPage[] = [
           row('OIDC_AUDIENCES', { label: tr('Accepted token audiences') }),
         ],
       },
-      { id: 'group-mapping', title: tr('Group mapping'), rows: [row('OIDC_MAPPING', { control: 'oidc-mapping', wide: true })] },
+      { id: 'group-mapping', title: tr('Group mapping'), rows: [row('OIDC_MAPPING', { label: tr('Rules'), control: 'oidc-mapping', wide: true })] },
     ],
   },
   {
@@ -275,10 +327,13 @@ export const settingsPages: SettingsPage[] = [
         id: 'service-provider',
         title: tr('Service provider'),
         rows: [
-          ...['SP_ENTITY_ID', 'CALLBACK_URL', 'METADATA_URL'].map((f) => row(`SOCIAL_AUTH_SAML_${f}`)),
-          row('SOCIAL_AUTH_SAML_SP_PUBLIC_CERT', { lines: true }),
-          row('SOCIAL_AUTH_SAML_SP_PRIVATE_KEY', { lines: true }),
+          row('SOCIAL_AUTH_SAML_SP_ENTITY_ID', { label: tr('Entity ID') }),
+          row('SOCIAL_AUTH_SAML_CALLBACK_URL', { label: tr('Assertion consumer service (ACS) URL') }),
+          row('SOCIAL_AUTH_SAML_METADATA_URL', { label: tr('Metadata URL') }),
+          row('SOCIAL_AUTH_SAML_SP_PUBLIC_CERT', { label: tr('Certificate'), lines: true }),
+          row('SOCIAL_AUTH_SAML_SP_PRIVATE_KEY', { label: tr('Private key'), lines: true }),
           row('SOCIAL_AUTH_SAML_ORG_INFO', {
+            label: tr('Organization'),
             control: 'records',
             help: tr('Your organization, as the service provider\'s metadata names it, by language: en-US at least.'),
             name: tr('Language'),
@@ -289,8 +344,12 @@ export const settingsPages: SettingsPage[] = [
               { key: 'url', label: tr('URL') },
             ],
           }),
-          ...['TECHNICAL_CONTACT', 'SUPPORT_CONTACT'].map((f) =>
+          ...[
+            ['TECHNICAL_CONTACT', tr('Technical contact')],
+            ['SUPPORT_CONTACT', tr('Support contact')],
+          ].map(([f, label]) =>
             row(`SOCIAL_AUTH_SAML_${f}`, {
+              label,
               control: 'fields',
               help: tr('Published in the service provider\'s metadata.'),
               fields: [
@@ -306,6 +365,7 @@ export const settingsPages: SettingsPage[] = [
         title: tr('Identity providers'),
         rows: [
           row('SOCIAL_AUTH_SAML_ENABLED_IDPS', {
+            label: tr('Identity providers'),
             control: 'records',
             wide: true,
             help: tr('Each identity provider, by a name of your choice: its entity ID, its single sign-on URL and its signing certificate, and the attributes users are read from. Empty attributes are the standard ones.'),
@@ -323,6 +383,7 @@ export const settingsPages: SettingsPage[] = [
             ],
           }),
           row('SOCIAL_AUTH_SAML_SECURITY_CONFIG', {
+            label: tr('Signatures and requirements'),
             control: 'fields',
             help: tr('How requests are signed, and what responses must hold. A response or its assertion must always be signed.'),
             fields: [
@@ -363,7 +424,13 @@ export const settingsPages: SettingsPage[] = [
       {
         id: 'maps',
         title: tr('Organizations, teams and flags'),
-        rows: ['ORGANIZATION_MAP', 'TEAM_MAP', 'ORGANIZATION_ATTR', 'TEAM_ATTR', 'USER_FLAGS_BY_ATTR'].map((f) => row(`SOCIAL_AUTH_SAML_${f}`)),
+        rows: [
+          row('SOCIAL_AUTH_SAML_ORGANIZATION_MAP', { label: tr('Organization map') }),
+          row('SOCIAL_AUTH_SAML_TEAM_MAP', { label: tr('Team map') }),
+          row('SOCIAL_AUTH_SAML_ORGANIZATION_ATTR', { label: tr('Organizations from attributes') }),
+          row('SOCIAL_AUTH_SAML_TEAM_ATTR', { label: tr('Teams from an attribute') }),
+          row('SOCIAL_AUTH_SAML_USER_FLAGS_BY_ATTR', { label: tr('Superusers and auditors by attribute') }),
+        ],
       },
     ],
   },
@@ -382,8 +449,9 @@ export const settingsPages: SettingsPage[] = [
     parent: 'signin',
     categories: ['google-oauth2'],
     sections: oauth('GOOGLE_OAUTH2_', [
-      row('SOCIAL_AUTH_GOOGLE_OAUTH2_WHITELISTED_DOMAINS'),
+      row('SOCIAL_AUTH_GOOGLE_OAUTH2_WHITELISTED_DOMAINS', { label: tr('Allowed email domains') }),
       row('SOCIAL_AUTH_GOOGLE_OAUTH2_AUTH_EXTRA_ARGUMENTS', {
+        label: tr('Extra authorization parameters'),
         control: 'pairs',
         columns: [tr('Parameter'), tr('Value')],
         add: tr('Add a parameter'),
@@ -535,11 +603,11 @@ export const settingsPages: SettingsPage[] = [
             parts: [tr('In the database first'), tr('Archives kept in')],
             unit: tr('days'),
           },
-          row('JOB_EVENTS_ARCHIVE_BUCKET'),
-          row('JOB_EVENTS_ARCHIVE_ENDPOINT'),
-          row('JOB_EVENTS_ARCHIVE_REGION'),
-          row('JOB_EVENTS_ARCHIVE_PREFIX'),
-          row('JOB_EVENTS_ARCHIVE_CREDENTIAL', { control: 'archive-credential' }),
+          row('JOB_EVENTS_ARCHIVE_BUCKET', { label: tr('Archive bucket or container') }),
+          row('JOB_EVENTS_ARCHIVE_ENDPOINT', { label: tr('Archive endpoint') }),
+          row('JOB_EVENTS_ARCHIVE_REGION', { label: tr('Archive region') }),
+          row('JOB_EVENTS_ARCHIVE_PREFIX', { label: tr('Archive key prefix') }),
+          row('JOB_EVENTS_ARCHIVE_CREDENTIAL', { label: tr('Archive credential'), control: 'archive-credential' }),
         ],
       },
     ],
@@ -554,9 +622,21 @@ export const settingsPages: SettingsPage[] = [
         id: 'aggregator',
         title: tr('Aggregator'),
         rows: [
-          ...['ENABLED', 'TYPE', 'PROTOCOL', 'HOST', 'PORT', 'VERIFY_CERT'].map((f) => row(`LOG_AGGREGATOR_${f}`)),
-          row('LOG_AGGREGATOR_TCP_TIMEOUT', { help: tr('How long a connection to the aggregator may take, over HTTPS or TCP, and the wait between retries.'), unit: 'duration' }),
-          ...['USERNAME', 'PASSWORD'].map((f) => row(`LOG_AGGREGATOR_${f}`)),
+          row('LOG_AGGREGATOR_ENABLED', { label: tr('Send logs to the aggregator'), help: tr('Off: nothing is sent, whatever the rest says.') }),
+          row('LOG_AGGREGATOR_TYPE', { label: tr('Aggregator') }),
+          row('LOG_AGGREGATOR_PROTOCOL', { label: tr('Protocol') }),
+          row('LOG_AGGREGATOR_HOST', { label: tr('Host or URL') }),
+          row('LOG_AGGREGATOR_PORT', { label: tr('Port'), help: tr('When the host or URL gives none.') }),
+          row('LOG_AGGREGATOR_VERIFY_CERT', {
+            label: tr('Aggregator\'s certificate'),
+            help: tr('Over HTTPS. Skip the check only for an aggregator with a self-signed certificate.'),
+            states: [tr('Not checked'), tr('Checked')],
+          }),
+          row('LOG_AGGREGATOR_TCP_TIMEOUT', {
+            label: tr('Connection timeout'),
+            help: tr('How long a connection to the aggregator may take, over HTTPS or TCP, and the wait between retries.'), unit: 'duration' }),
+          row('LOG_AGGREGATOR_USERNAME', { label: tr('Username'), help: tr('Over HTTPS or HTTP, when the aggregator asks for one.') }),
+          row('LOG_AGGREGATOR_PASSWORD', { label: tr('Password or token') }),
         ],
       },
       {
@@ -564,6 +644,7 @@ export const settingsPages: SettingsPage[] = [
         title: tr('Messages'),
         rows: [
           row('LOG_AGGREGATOR_LOGGERS', {
+            label: tr('Logs sent'),
             help: tr('What is sent to the aggregator.'),
             options: [
               ['awx', tr('Service logs')],
@@ -573,10 +654,16 @@ export const settingsPages: SettingsPage[] = [
               ['broadcast_websocket', tr('Websocket broadcasts: none in awxnext')],
             ],
           }),
-          ...['LEVEL', 'INDIVIDUAL_FACTS', 'TOWER_UUID'].map((f) => row(`LOG_AGGREGATOR_${f}`)),
+          row('LOG_AGGREGATOR_LEVEL', { label: tr('Least severe level sent') }),
+          row('LOG_AGGREGATOR_INDIVIDUAL_FACTS', { label: tr('One message per fact') }),
+          row('LOG_AGGREGATOR_TOWER_UUID', { label: tr('Cluster identifier') }),
         ],
       },
-      { id: 'queue', title: tr('Queue'), rows: [row('LOG_AGGREGATOR_ACTION_QUEUE_SIZE', { unit: tr('messages') }), row('LOG_AGGREGATOR_RSYSLOGD_DEBUG')] },
+      { id: 'queue', title: tr('Queue'), rows: [
+          row('LOG_AGGREGATOR_ACTION_QUEUE_SIZE', { label: tr('Messages waiting, at most'), unit: tr('messages') }),
+          row('LOG_AGGREGATOR_RSYSLOGD_DEBUG', { label: tr('Log each delivery') }),
+        ],
+      },
     ],
   },
   {
@@ -588,9 +675,24 @@ export const settingsPages: SettingsPage[] = [
       {
         id: 'login-page',
         title: tr('Login page'),
-        rows: [row('CUSTOM_LOGO', { control: 'image', help: tr('Shown on the login page: a GIF, PNG or JPEG image.') }), row('CUSTOM_LOGIN_INFO', { lines: true })],
+        rows: [
+          row('CUSTOM_LOGO', { label: tr('Logo'), control: 'image', help: tr('Shown on the login page: a GIF, PNG or JPEG image.') }),
+          row('CUSTOM_LOGIN_INFO', { label: tr('Text on the login page'), lines: true }),
+        ],
       },
-      { id: 'job-output', title: tr('Job output'), rows: [row('UI_LIVE_UPDATES_ENABLED'), row('MAX_UI_JOB_EVENTS', { unit: tr('events'), none: [0, tr('All')] })] },
+      {
+        id: 'job-output',
+        title: tr('Job output'),
+        rows: [
+          row('UI_LIVE_UPDATES_ENABLED', { label: tr('Live updates') }),
+          row('MAX_UI_JOB_EVENTS', {
+            label: tr('Events the job page loads at once'),
+            help: tr('More can be loaded on demand, or the output downloaded.'),
+            unit: tr('events'),
+            none: [0, tr('All')],
+          }),
+        ],
+      },
     ],
   },
 ]
@@ -692,6 +794,21 @@ export function pageSections(page: SettingsPage, categories: Record<string, stri
       rows: none.map((k) => row(k)),
     })
   return sections
+}
+
+/**
+ * The sections shown: the settings with no effect in awxnext only when asked
+ * for (`show`), or when one of them is wanted (linked to, edited, in error),
+ * or their section is linked to (`hash`); and how many settings are hidden.
+ */
+export function visibleSections(sections: Section[], show: boolean, wanted: (key: string) => boolean, hash = ''): { sections: Section[]; hidden: number } {
+  let hidden = 0
+  const shown = sections.filter((s) => {
+    if (!s.noEffect || show || hash === s.id || s.rows.some((r) => r.keys.some(wanted))) return true
+    hidden += s.rows.reduce((n, r) => n + r.keys.length, 0)
+    return false
+  })
+  return { sections: shown, hidden }
 }
 
 /** The pages under a page in the menu. */
