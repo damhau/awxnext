@@ -1,8 +1,25 @@
 name: CI
 
+# Not for pushes that change only documentation, .gitignore or LICENSE:
+# nothing builds or tests them, except docs/configuration.md, which a test
+# compares with the settings it is generated from.
 on:
   push:
+    paths:
+      - '**'
+      - '!**.md'
+      - '!docs/**'
+      - '!.gitignore'
+      - '!LICENSE'
+      - 'docs/configuration.md'
   pull_request:
+    paths:
+      - '**'
+      - '!**.md'
+      - '!docs/**'
+      - '!.gitignore'
+      - '!LICENSE'
+      - 'docs/configuration.md'
 
 jobs:
   # The short suite (go test -short, no race detector): what each change

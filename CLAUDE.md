@@ -36,7 +36,8 @@ The tests run in tiers.
   storage tests need `AWXNEXT_TEST_S3_*` and `AWXNEXT_TEST_AZURITE_BLOB_ENDPOINT` (see
   `test/archive_storage_test.go`).
 - **CI on push:**
-  - `ci.yml` runs on every push: the short suite and the UI.
+  - `ci.yml` runs on every push that changes more than docs, `.gitignore` or `LICENSE`: the
+    short suite and the UI.
   - `deploy.yml` runs when the Dockerfile, `deploy/`, the job helper or the agent change.
 - **Checking the UI in a browser:** use the compat stack at http://localhost:8053
   (`admin` / `compat`), started with the UI override:
