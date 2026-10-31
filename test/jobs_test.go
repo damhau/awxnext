@@ -518,6 +518,15 @@ func TestLaunchRefusesUnpromptedFields(t *testing.T) {
 	}
 	// Empty values change nothing and pass.
 	must(t, a.post(fmt.Sprintf("job_templates/%d/launch/", jt), map[string]any{"limit": "", "extra_vars": map[string]any{}}), 201)
+	// So does the group the template's jobs run on, which the Terraform
+	// provider reads back from a job and sends when it launches again: here
+	// "default", then the organization's once it has one.
+	def := must(t, a.get("instance_groups/?name=default"), 200).results()[0]["id"]
+	must(t, a.post(fmt.Sprintf("job_templates/%d/launch/", jt), map[string]any{"instance_groups": []any{def}}), 201)
+	orgIG := must(t, a.post("instance_groups/", map[string]any{"name": uniq("ig")}), 201).id()
+	must(t, a.post(fmt.Sprintf("organizations/%d/instance_groups/", f.org), map[string]any{"id": orgIG}), 204)
+	must(t, a.post(fmt.Sprintf("job_templates/%d/launch/", jt), map[string]any{"instance_groups": []any{orgIG}}), 201)
+	must(t, a.post(fmt.Sprintf("job_templates/%d/launch/", jt), map[string]any{"instance_groups": []any{def}}), 400)
 	// So do the template's own values, which the Terraform provider sends
 	// again when it updates a job; they are still reported as ignored.
 	own := f.template(t, "site.yml", map[string]any{"extra_vars": "env: prod\n", "limit": "h1"})

@@ -268,25 +268,66 @@ func sameAsTemplate(c *Ctx, tpl Obj, field string, v any) bool {
 	case "labels":
 		return sameIDs(v, templateLabels(c, id))
 	case "instance_groups":
-		var have []int64
-		rows, err := c.DB().Query(c, "SELECT instance_group_id FROM instance_group_links WHERE content_type = $1 AND object_id = $2",
-			strings.ReplaceAll(str(tpl["type"]), "_", ""), id)
-		if err != nil {
-			return false
-		}
-		for rows.Next() {
-			var ig int64
-			rows.Scan(&ig)
-			have = append(have, ig)
-		}
-		rows.Close()
-		return sameIDs(v, have)
+		// The template's own groups, or the ones its jobs run on: the
+		// provider sends back the group a job ran on.
+		have := groupLinks(c, strings.ReplaceAll(str(tpl["type"]), "_", ""), id)
+		return sameIDs(v, have) || sameIDs(v, effectiveGroups(c, tpl))
 	case "inventory", "execution_environment":
 		a, aok := api.ID(v)
 		b, bok := api.ID(tpl[field])
 		return aok && bok && a == b
 	}
 	return vars.MustJSON(v) == vars.MustJSON(tpl[field])
+}
+
+func groupLinks(c *Ctx, ct string, id int64) []int64 {
+	var out []int64
+	rows, err := c.DB().Query(c, "SELECT instance_group_id FROM instance_group_links WHERE content_type = $1 AND object_id = $2 ORDER BY position", ct, id)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var g int64
+		if rows.Scan(&g) == nil {
+			out = append(out, g)
+		}
+	}
+	return out
+}
+
+// effectiveGroups is where a template's jobs run when the launch picks no
+// group, as the dispatcher resolves it (jobs.instanceGroupsFor): the
+// template's groups, then its inventory's, then its organization's, each
+// prevent_instance_group_fallback ending the chain; "default" when none has one.
+func effectiveGroups(c *Ctx, tpl Obj) []int64 {
+	id, _ := api.ID(tpl["id"])
+	out := groupLinks(c, strings.ReplaceAll(str(tpl["type"]), "_", ""), id)
+	if !boolv(tpl["prevent_instance_group_fallback"]) {
+		invNoFallback := false
+		if inv, ok := api.ID(tpl["inventory"]); ok {
+			out = append(out, groupLinks(c, "inventory", inv)...)
+			c.DB().QueryRow(c, "SELECT prevent_instance_group_fallback FROM inventories WHERE id = $1", inv).Scan(&invNoFallback)
+		}
+		if org, ok := api.ID(tpl["organization"]); ok && !invNoFallback {
+			out = append(out, groupLinks(c, "organization", org)...)
+		}
+	}
+	if len(out) == 0 {
+		var def int64
+		if c.DB().QueryRow(c, "SELECT id FROM instance_groups WHERE name = 'default'").Scan(&def) == nil {
+			out = append(out, def)
+		}
+	}
+	seen := map[int64]bool{}
+	var uniq []int64
+	for _, g := range out {
+		if !seen[g] {
+			seen[g] = true
+			uniq = append(uniq, g)
+		}
+	}
+	return uniq
 }
 
 // sameIDs compares a launch list (ids or objects with an id) with ids, as sets.
