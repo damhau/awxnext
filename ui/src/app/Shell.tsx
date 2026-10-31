@@ -15,6 +15,8 @@ import { THEMES, useTheme } from '../lib/theme'
 import { useStored } from '../lib/storage'
 import { useOrg, useSession } from './context'
 import { Palette } from './Palette'
+import { AboutDialog, ShortcutsDialog } from '../components/About'
+import { JUMPS } from '../lib/shortcuts'
 
 /** Refreshes job-related queries when job statuses change anywhere. */
 function LiveRefresh() {
@@ -182,7 +184,7 @@ function OrgSwitcher() {
   )
 }
 
-function Account() {
+function Account({ onAbout, onShortcuts }: { onAbout: () => void; onShortcuts: () => void }) {
   const { me, logout } = useSession()
   const [theme, setTheme] = useTheme()
   const name = userName(me)
@@ -192,6 +194,13 @@ function Account() {
       <Link to={`/users/${me.id}`}>Profile and tokens</Link>
       <Link to="/run">Operator view</Link>
       <Link to="/api/docs">API docs</Link>
+      <button onClick={onShortcuts}>
+        Keyboard shortcuts
+        <kbd className="keycap" style={{ marginLeft: 'auto' }}>
+          ?
+        </kbd>
+      </button>
+      <button onClick={onAbout}>About awxnext</button>
       <hr />
       <div className="head">Theme</div>
       <div className="menu-segmented" role="radiogroup" aria-label="Theme">
@@ -213,12 +222,14 @@ function Account() {
 export function Shell() {
   const [palette, setPalette] = useState(false)
   const [menu, setMenu] = useState(false)
+  const [about, setAbout] = useState<null | 'about' | 'shortcuts'>(null)
   // Saved views and stars kept in this browser before they moved to the server.
   useUploadLocalPrefs()
   const nav = useNavigate()
   const loc = useLocation()
   useHotkeys({
     'mod+k': () => setPalette((p) => !p),
+    '?': () => setAbout('shortcuts'),
     '/': () => {
       const f = document.querySelector<HTMLInputElement>('[data-filter]')
       if (f) f.focus()
@@ -236,10 +247,10 @@ export function Shell() {
         return
       }
       if (Date.now() - armed > 1000) return
-      const to: Record<string, string> = { n: '/', t: '/templates', j: '/jobs', i: '/inventories', p: '/projects', s: '/schedules', a: '/approvals', c: '/credentials' }
-      if (to[e.key]) {
+      const to = JUMPS[e.key]?.to
+      if (to) {
         armed = 0
-        nav(to[e.key])
+        nav(to)
       }
     }
     window.addEventListener('keydown', on)
@@ -276,7 +287,7 @@ export function Shell() {
         <div className="topbar-right">
           {loc.pathname === '/' && <RecentStrip />}
           <LiveCount />
-          <Account />
+          <Account onAbout={() => setAbout('about')} onShortcuts={() => setAbout('shortcuts')} />
         </div>
       </header>
       <div className="body">
@@ -289,7 +300,9 @@ export function Shell() {
           </ErrorBoundary>
         </main>
       </div>
-      {palette && <Palette onClose={() => setPalette(false)} />}
+      {palette && <Palette onClose={() => setPalette(false)} onAbout={() => setAbout('about')} onShortcuts={() => setAbout('shortcuts')} />}
+      {about === 'about' && <AboutDialog onClose={() => setAbout(null)} />}
+      {about === 'shortcuts' && <ShortcutsDialog onClose={() => setAbout(null)} />}
     </div>
   )
 }

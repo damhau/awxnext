@@ -43,7 +43,7 @@ function highlight(text: string, q: string): ReactNode {
   )
 }
 
-export function Palette({ onClose }: { onClose: () => void }) {
+export function Palette({ onClose, onAbout, onShortcuts }: { onClose: () => void; onAbout?: () => void; onShortcuts?: () => void }) {
   const [q, setQ] = useState('')
   const [hi, setHi] = useState(0)
   const [scope, setScope] = useState<Scope>('all')
@@ -97,7 +97,16 @@ export function Palette({ onClose }: { onClose: () => void }) {
         ['Go to approvals', '/approvals'],
         ['Go to settings', '/settings'],
         ['Go to activity stream', '/activity'],
-      ].map(([title, path]) => ({ key: 'c' + path, group: 'Commands', glyph: '›', tone: 'act' as const, title, run: () => go(path, title, '›') })),
+      ]
+        .map(([title, path]): Item => ({ key: 'c' + path, group: 'Commands', glyph: '›', tone: 'act' as const, title, run: () => go(path, title, '›') }))
+        .concat(
+          [
+            ['Keyboard shortcuts', onShortcuts, '?'],
+            ['About awxnext', onAbout, undefined],
+          ]
+            .filter((x): x is [string, () => void, string | undefined] => !!x[1])
+            .map(([title, fn, hint]) => ({ key: 'c-' + title, group: 'Commands', glyph: '›', tone: 'act' as const, title, hint, run: () => (onClose(), fn()) })),
+        ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   )

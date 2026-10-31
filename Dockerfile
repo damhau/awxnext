@@ -11,7 +11,14 @@ COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
 COPY --from=ui /ui/dist ./ui/dist
-RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/awxnext ./cmd/awxnext \
+# awxnext's version and build, shown in the UI's About dialog (release.yml
+# sets them; .git is not copied, so there is no VCS stamp to fall back on).
+ARG VERSION=dev
+ARG COMMIT=
+ARG BUILT=
+RUN pkg=github.com/damhau/awxnext/internal/version \
+	&& flags="-s -w -X $pkg.Version=$VERSION -X $pkg.Commit=$COMMIT -X $pkg.Built=$BUILT" \
+	&& CGO_ENABLED=0 go build -trimpath -ldflags="$flags" -o /out/awxnext ./cmd/awxnext \
 	&& CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/awxnext-jobexec ./cmd/awxnext-jobexec
 
 # All-in-one: the control plane runs jobs itself with ansible-runner (no

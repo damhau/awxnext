@@ -9,6 +9,7 @@ import (
 	"github.com/damhau/awxnext/internal/capacity"
 	"github.com/damhau/awxnext/internal/jobs"
 	"github.com/damhau/awxnext/internal/rbac"
+	"github.com/damhau/awxnext/internal/version"
 )
 
 // Install registers non-resource routes (ping, config, settings, ...).
@@ -169,5 +170,7 @@ func configView(c *Ctx, w http.ResponseWriter, r *http.Request) {
 		"project_base_dir":    c.App.Cfg.ProjectsRoot,
 		"project_local_paths": []string{},
 		"custom_virtualenvs":  []string{},
+		// awxnext's own version and build; AWX's config has no such key.
+		"awxnext": version.Get(),
 	})
 }

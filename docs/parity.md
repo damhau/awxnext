@@ -201,7 +201,8 @@ The gaps fall in four groups:
 | UI: dashboard, approvals bell, instances, management jobs | Yes | Done | Redesigned dashboard; no topology |
 | UI: dark mode | Yes | Done | Roadmap M7-13: follows the system setting, with a System, Light or Dark choice in the account menu, kept in the browser and applied before the first paint. Every text colour meets WCAG AA contrast (4.5:1, 3:1 for large text) in both themes: a test checks the colour tokens, and every page was checked in a browser |
 | UI: phones and tablets | Yes | Done | Roadmap M7-14: at 900px and below the navigation is a drawer from the top bar's menu button; at 600px and below the top bar is compact, and approvals (one card per approval, with its Deny and Approve buttons across it), job output, the operator catalog and launch fit a 375px screen with no sideways scrolling. Every other page fits a tablet (768px); wide tables scroll inside their frame |
-| UI: translations, about dialog | Yes | Missing | |
+| UI: about dialog, keyboard shortcuts | Yes | Done | Roadmap M7-15: About shows awxnext's version and build (release builds stamp them; `awxnext version` prints them too) beside the AWX API version clients see, with "Copy details" for bug reports; `?` lists every shortcut, from the list the key bindings use. Both open from the account menu and the command palette |
+| UI: translations | Yes | Missing | |
 
 ## Only in awxnext
 

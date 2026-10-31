@@ -458,6 +458,16 @@ legend { font-weight: 500; margin-bottom: 8px; padding: 0; }
 .menu-list .menu-segmented { display: flex; gap: 2px; margin: 2px 8px 6px; padding: 2px; border: 1px solid var(--line); border-radius: var(--radius); }
 .menu-list .menu-segmented button { flex: 1; justify-content: center; padding: 4px 6px; border-radius: 4px; font-size: 12px; }
 .menu-list .menu-segmented button.on { background: var(--ink); color: var(--ground); font-weight: 600; }
+.keycap {
+  display: inline-flex; align-items: center; justify-content: center; min-width: 22px; height: 22px; padding: 0 6px; margin: 0 2px;
+  font-family: var(--mono); font-size: 11px; color: var(--ink-2); background: var(--surface-3); border: 1px solid var(--line-strong); border-bottom-width: 2px; border-radius: 4px;
+}
+.shortcuts { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr)); gap: 18px 28px; }
+.shortcuts h3 { text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted-2); margin-bottom: 8px; font-size: 11px; }
+.shortcuts dl { margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.shortcuts dl > div { display: grid; grid-template-columns: 120px 1fr; gap: 10px; align-items: baseline; }
+.shortcuts dt { white-space: nowrap; }
+.shortcuts dd { margin: 0; color: var(--ink-3); }
 .menu-list .menu-check { display: flex; gap: 8px; align-items: center; padding: 6px 12px; cursor: pointer; }
 .menu-list .menu-check:hover { background: var(--hover); }
 table.data th.cols-pick, table.data td.cols-pick { width: 36px; padding-left: 0; padding-right: 8px; text-align: right; }

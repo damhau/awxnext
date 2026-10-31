@@ -26,6 +26,9 @@ services:
     build:
       context: ..
       target: all-in-one
+      # The build shown in the UI's About dialog: AWXNEXT_COMMIT=$(git rev-parse HEAD).
+      args:
+        COMMIT: ${AWXNEXT_COMMIT:-}
     depends_on:
       postgres:
         condition: service_healthy

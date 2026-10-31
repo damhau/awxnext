@@ -97,7 +97,9 @@ awxnext serve
      migrations, then the replicas roll.
    - Binary: replace it, then restart each node. The first to start migrates; the others wait
      on the migration lock.
-3. Check `GET /api/v2/ping/` (the version) and `awxnext list-instances` (every node back).
+3. Check the version with `awxnext version` on each node, or in the UI's About dialog (`awxnext` in
+   `GET /api/v2/config/`), and `awxnext list-instances` (every node back). `GET /api/v2/ping/`
+   reports the AWX API version awxnext answers to, 24.6.1, whatever awxnext's own.
 
 Jobs running on a node that stops are failed when it starts again ("Task was marked as running
 at system start up"), and jobs of a node that never comes back are reaped, as in AWX. Workflow

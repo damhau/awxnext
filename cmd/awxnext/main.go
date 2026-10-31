@@ -26,6 +26,7 @@ import (
 	"github.com/damhau/awxnext/internal/runners/ansible"
 	"github.com/damhau/awxnext/internal/server"
 	"github.com/damhau/awxnext/internal/tracing"
+	"github.com/damhau/awxnext/internal/version"
 )
 
 func usage() {
@@ -102,7 +103,19 @@ func main() {
 		}
 		err = agent.InstallShim(os.Args[2])
 	case "version":
-		fmt.Println(api.ProductVersion)
+		v := version.Get()
+		fmt.Printf("awxnext %s", v.Version)
+		if v.Commit != "" {
+			fmt.Printf(" (%s", v.Commit[:min(12, len(v.Commit))])
+			if v.Modified {
+				fmt.Print(", modified")
+			}
+			if v.Built != "" {
+				fmt.Printf(", built %s", v.Built)
+			}
+			fmt.Print(")")
+		}
+		fmt.Printf("\nAWX API %s\n%s\n", api.ProductVersion, v.Go)
 	default:
 		if name, ok := manageCommand(os.Args[1]); ok {
 			err = manage(ctx, cfg, name, os.Args[2:])
