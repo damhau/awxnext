@@ -11,6 +11,7 @@ import { useConfirm, useLeaveGuard, useToast } from '../../components/overlay'
 import { Empty, ErrorNote, Loading, PageHead, Panel } from '../../components/ui'
 import { humanize } from './common'
 import { grantReason, grantTarget, testerClaims, type MappedGrant } from '../../lib/mapping'
+import { samlIdps, statusText, stepLabel, stepState, unsavedFor, type TestStep } from '../../lib/connectionTest'
 import {
   asPattern,
   describeExpr,
@@ -469,6 +470,7 @@ function SectionView({ section, ctx }: { section: Section; ctx: Ctx }) {
       {section.rows.map((r) => (
         <SettingRow key={rowAnchor(r)} row={r} ctx={ctx} />
       ))}
+      {section.test && ctx.editable && <ConnectionTest login={section.test} ctx={ctx} />}
       {ctx.page === 'logging' && section.id === 'aggregator' && (
         <div className="srow">
           <div>
@@ -2188,6 +2190,125 @@ function MappedResult({ result, none, flagsLost = false }: { result: MapResult; 
       {result.would_create?.length ? <div className="small muted">{tr('Would create:')} {result.would_create.join(', ')}</div> : null}
       {result.errors?.length ? <div className="form-error">{result.errors.join('; ')}</div> : null}
     </>
+  )
+}
+
+/** What a connection test found of an LDAP user: their entry, groups, and what the maps give them. */
+interface LDAPTestUser extends Partial<MapResult> {
+  dn: string
+  first_name?: string
+  last_name?: string
+  email?: string
+  groups?: string[]
+}
+
+interface ConnTest {
+  login: string
+  ok: boolean
+  steps: TestStep[]
+  user?: LDAPTestUser
+}
+
+/** Tries a login method's settings as shown, unsaved changes included, against its server or provider. */
+function ConnectionTest({ login, ctx }: { login: string; ctx: Ctx }) {
+  const [user, setUser] = useState('')
+  const [password, setPassword] = useState('')
+  const [urls, setUrls] = useState<Record<string, string>>({})
+  const [busy, setBusy] = useState(false)
+  const [result, setResult] = useState<ConnTest | null>(null)
+  const [error, setError] = useState<unknown>(null)
+  const ldap = login.startsWith('ldap')
+  const idps = login === 'saml' ? samlIdps(ctx.values.SOCIAL_AUTH_SAML_ENABLED_IDPS) : []
+  const run = async () => {
+    setBusy(true)
+    setError(null)
+    const body: Record<string, unknown> = { login, settings: unsavedFor(login, ctx.data.categories, ctx.values, ctx.saved) }
+    if (ldap && user.trim()) Object.assign(body, { username: user.trim(), password })
+    if (login === 'saml') body.metadata_urls = Object.fromEntries(Object.entries(urls).filter(([, u]) => u.trim()))
+    try {
+      setResult(await api.post<ConnTest>('settings/connections/test/', body))
+    } catch (e) {
+      setError(e)
+      setResult(null)
+    } finally {
+      setBusy(false)
+    }
+  }
+  const u = result?.user
+  return (
+    <div className="srow conn-test">
+      <div>
+        <div className="s-name">{tr('Test the connection')}</div>
+        <p className="s-help">
+          {ldap
+            ? tr('Connects and binds with these settings as shown, unsaved changes included. Give a username to also find the user, with their groups and what they would get, and their password to check it.')
+            : login === 'oidc'
+              ? tr("Reads the provider's discovery document and signing keys, with these settings as shown, unsaved changes included.")
+              : tr("Checks the service provider's certificate and key, then each identity provider's certificate, metadata and sign-in URL, with these settings as shown, unsaved changes included.")}
+        </p>
+      </div>
+      <div className="s-control">
+        <div className="stack" style={{ gap: 8 }}>
+          {ldap && (
+            <div className="row wrap">
+              <input className="input mono" style={{ width: '12rem' }} aria-label={tr('Username')} placeholder={tr('username (optional)')} value={user} onChange={(e) => setUser(e.target.value)} />
+              <input className="input mono" style={{ width: '12rem' }} type="password" autoComplete="new-password" aria-label={tr('Password')} placeholder={tr('password (optional)')} value={password} onChange={(e) => setPassword(e.target.value)} disabled={!user.trim()} />
+            </div>
+          )}
+          {idps.map((p) => (
+            <label key={p.name} className="stack" style={{ gap: 2 }}>
+              <span className="small muted">{tr('Metadata URL of {name}', { name: p.name })}</span>
+              <input
+                className="input mono"
+                value={urls[p.name] ?? ''}
+                onChange={(e) => setUrls({ ...urls, [p.name]: e.target.value })}
+                placeholder={p.isUrl ? tr('{url} (its entity ID)', { url: p.entityId }) : tr('Not compared without one')}
+              />
+            </label>
+          ))}
+          <div className="row wrap">
+            <button type="button" className="btn" disabled={busy} onClick={run}>
+              {busy ? tr('Testing…') : tr('Test')}
+            </button>
+            {result && (
+              <span className="small" role="status">
+                {result.ok ? tr('Passed: each step works.') : tr('Failed: see the step marked.')}
+              </span>
+            )}
+          </div>
+          <FormError error={error} />
+          {result && (
+            <ol className="test-steps">
+              {result.steps.map((s, i) => (
+                <li key={i}>
+                  <span className="cell" data-size="xs" data-state={stepState[s.status]} role="img" aria-label={statusText(s.status)} title={statusText(s.status)} />
+                  <span className="t-step">
+                    {stepLabel(s.step)}
+                    {s.idp ? <span className="mono"> · {s.idp}</span> : null}
+                  </span>
+                  <span className="t-detail">{s.detail}</span>
+                </li>
+              ))}
+            </ol>
+          )}
+          {u && (
+            <div className="stack" style={{ gap: 8 }}>
+              <div className="small">
+                <span className="mono">{u.dn}</span>
+                {[u.first_name, u.last_name].filter(Boolean).length ? <span> · {[u.first_name, u.last_name].filter(Boolean).join(' ')}</span> : null}
+                {u.email ? <span className="mono faint"> · {u.email}</span> : null}
+              </div>
+              {u.groups && (
+                <div className="small">
+                  {tr('Groups:')} {u.groups.length ? u.groups.map((g) => <span key={g} className="chip mono" style={{ marginRight: 4 }}>{g}</span>) : <span className="faint">{tr('none')}</span>}
+                </div>
+              )}
+              {u.grants && <MappedResult result={u as MapResult} none={tr('Nothing matches: the user could sign in, with no access from these maps.')} flagsLost />}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
   )
 }
 

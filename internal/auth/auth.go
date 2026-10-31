@@ -143,6 +143,7 @@ func Install(app *api.App) *Auth {
 	app.Handle("GET", "/api/v2/me/", a.me)
 	app.HandlePublic("GET", "/api/v2/auth/", a.authBackends)
 	app.Handle("POST", "/api/v2/settings/maps/test/", a.mapTest)
+	app.Handle("POST", "/api/v2/settings/connections/test/", a.connectionTest)
 	a.oidc.Routes()
 	a.saml.Routes()
 	a.social.Routes()

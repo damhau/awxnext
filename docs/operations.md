@@ -384,6 +384,32 @@ superusers: `login` is `default` (the maps OIDC uses), `github`, `github-org`, `
 yet, of that login's map settings only, checked as saving them would check them; `groups` and
 `attributes` describe the user for LDAP and SAML.
 
+**Test the connection** ends each LDAP server's section, OIDC's provider and SAML's identity
+providers. It tries the settings as shown, unsaved edits included, and reports each step, up to
+the first that fails, with why; nothing is saved, and no one is signed in.
+
+- **LDAP** connects to each server URI in turn (with StartTLS when it is on) and binds as the
+  bind DN, or anonymously. Give a username to also find the user, by the DN template or the user
+  searches, which must find exactly one entry; read their groups; check the required and denied
+  groups; and show their DN, name, email, groups, and what the maps would give them. Give their
+  password too to check it, with a bind as the user, as at login.
+- **OIDC** reads the discovery document at the provider URL, warns of scopes the provider does
+  not list, and counts the signing keys of its `jwks_uri`. The client secret is not checked:
+  providers answer a token request without a user in different ways.
+- **SAML** checks that the service provider's certificate is valid and matches its private key.
+  Then, for each identity provider, its certificate's dates (a warning 30 days before it
+  expires), its metadata, and that its sign-in URL answers. The metadata is read from the URL
+  given in the test, or else from the entity ID when that is a URL, as many identity providers
+  serve it there; the entity ID, the signing certificate and the sign-in URL are compared with
+  the settings. With neither, that step is skipped.
+
+The API is `POST /api/v2/settings/connections/test/`, for superusers: `login` is `ldap`,
+`ldap1`... `ldap5`, `oidc` or `saml`; `settings` holds the values not saved yet, of that login's
+settings only (a secret left as `$encrypted$` is the saved one); `username` and `password` are
+LDAP's user, and `metadata_urls` gives SAML's metadata URL by identity provider name. It answers
+`ok` and the `steps`, each with its `step`, `idp` for SAML, `status` (`ok`, `warning`, `skipped`
+or `failed`) and `detail`, and for LDAP the `user` found.
+
 Only three settings with no effect, whose shape is free-form, are still JSON:
 `OAUTH2_PROVIDER`, `SOCIAL_AUTH_SAML_SP_EXTRA` and `SOCIAL_AUTH_SAML_EXTRA_DATA`.
 

@@ -211,3 +211,8 @@
 .settings details.map-test > summary::before { content: '▸ '; color: var(--muted-2); font-size: 11px; }
 .settings details.map-test[open] > summary { margin-bottom: 10px; }
 .settings details.map-test[open] > summary::before { content: '▾ '; }
+/* A login method's connection test: its steps, each with its status. */
+.settings .test-steps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 10px max-content 1fr; gap: 6px 10px; align-items: baseline; font-size: 13px; }
+.settings .test-steps li { display: contents; }
+.settings .test-steps .t-step { font-weight: 600; }
+.settings .test-steps .t-detail { color: var(--ink-3); overflow-wrap: anywhere; }

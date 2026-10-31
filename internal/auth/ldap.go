@@ -431,32 +431,39 @@ func loadLDAPServer(get func(string) any, decrypt func(string) (string, error), 
 func (s *ldapServer) dial() (*ldap.Conn, error) {
 	var last error
 	for _, u := range s.uris {
-		p, _ := url.Parse(u)
-		tc := &tls.Config{ServerName: p.Hostname(), InsecureSkipVerify: s.opts.skipVerify, MinVersion: tls.VersionTLS12}
-		if s.opts.caFile != "" {
-			pem, err := os.ReadFile(s.opts.caFile)
-			if err != nil {
-				return nil, err
-			}
-			tc.RootCAs = x509.NewCertPool()
-			tc.RootCAs.AppendCertsFromPEM(pem)
+		conn, err := s.dialURI(u)
+		if err == nil {
+			return conn, nil
 		}
-		conn, err := ldap.DialURL(u, ldap.DialWithDialer(&net.Dialer{Timeout: s.opts.timeout}), ldap.DialWithTLSConfig(tc))
-		if err != nil {
-			last = err
-			continue
-		}
-		conn.SetTimeout(s.opts.timeout)
-		if s.startTLS && p.Scheme == "ldap" {
-			if err := conn.StartTLS(tc); err != nil {
-				conn.Close()
-				last = err
-				continue
-			}
-		}
-		return conn, nil
+		last = err
 	}
 	return nil, last
+}
+
+// dialURI connects to one of the server's URIs, with StartTLS if set.
+func (s *ldapServer) dialURI(u string) (*ldap.Conn, error) {
+	p, _ := url.Parse(u)
+	tc := &tls.Config{ServerName: p.Hostname(), InsecureSkipVerify: s.opts.skipVerify, MinVersion: tls.VersionTLS12}
+	if s.opts.caFile != "" {
+		pem, err := os.ReadFile(s.opts.caFile)
+		if err != nil {
+			return nil, err
+		}
+		tc.RootCAs = x509.NewCertPool()
+		tc.RootCAs.AppendCertsFromPEM(pem)
+	}
+	conn, err := ldap.DialURL(u, ldap.DialWithDialer(&net.Dialer{Timeout: s.opts.timeout}), ldap.DialWithTLSConfig(tc))
+	if err != nil {
+		return nil, err
+	}
+	conn.SetTimeout(s.opts.timeout)
+	if s.startTLS && p.Scheme == "ldap" {
+		if err := conn.StartTLS(tc); err != nil {
+			conn.Close()
+			return nil, fmt.Errorf("StartTLS: %w", err)
+		}
+	}
+	return conn, nil
 }
 
 // bindService binds as the bind DN, or anonymously.

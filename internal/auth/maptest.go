@@ -74,32 +74,11 @@ func (a *Auth) mapTest(c *api.Ctx, w http.ResponseWriter, r *http.Request) {
 		api.WriteError(w, api.FieldError("username", "This field may not be blank."))
 		return
 	}
-	// The values not saved yet, checked as saving them would be.
-	given := map[string]any{}
-	if v, ok := data["settings"]; ok && v != nil {
-		if given, ok = normalizeJSON(v).(map[string]any); !ok {
-			api.WriteError(w, api.FieldError("settings", "Expected an object of setting values."))
-			return
-		}
+	form, ok := readFormSettings(c, w, data, func(k string) bool { return slices.Contains(login.keys, k) }, "map setting of "+name)
+	if !ok {
+		return
 	}
-	for k, v := range given {
-		if !slices.Contains(login.keys, k) {
-			api.WriteError(w, api.FieldError("settings", fmt.Sprintf("%s is not a map setting of %s.", k, name)))
-			return
-		}
-		if d := settings.Lookup(k); d != nil && d.Validate != nil && v != nil {
-			if err := d.Validate(v); err != nil {
-				api.WriteError(w, api.FieldError(k, err.Error()))
-				return
-			}
-		}
-	}
-	get := func(k string) any {
-		if v, ok := given[k]; ok {
-			return v
-		}
-		return c.App.Settings.Get(c, k)
-	}
+	get := form.get
 	// An existing user keeps its email unless one is given, and its flags
 	// count where a map leaves them as they are (SAML's remove options).
 	var known string
@@ -167,22 +146,9 @@ func (a *Auth) mapTest(c *api.Ctx, w http.ResponseWriter, r *http.Request) {
 		res = samlMapping(cfg, username, email, attrs, superuser, auditor)
 		out["attributes"] = attrs
 	}
-	// A role granted is not also removed (OIDC rules can grant what a map
-	// does not).
-	removed := []Grant{}
-	for _, g := range res.Revoke {
-		if !slices.ContainsFunc(res.Grants, func(x Grant) bool {
-			return x.RoleDefinition == g.RoleDefinition && x.Organization == g.Organization && x.Team == g.Team
-		}) {
-			removed = append(removed, g)
-		}
+	for k, v := range mapResultObj(c, res) {
+		out[k] = v
 	}
-	out["superuser"], out["auditor"] = res.Superuser, res.Auditor
-	out["grants"] = nonNil(res.Grants)
-	out["kept"] = nonNil(res.Keep)
-	out["removed"] = removed
-	out["would_create"] = wouldCreate(c, res.Grants)
-	out["errors"] = nonNilStrings(res.Errors)
 	api.WriteJSON(w, 200, out)
 }
 
@@ -202,6 +168,23 @@ func stringList(v any) []string {
 		add(v)
 	}
 	return out
+}
+
+// mapResultObj is what a login would give: the flags, the roles granted,
+// kept and taken away, and what would be created.
+func mapResultObj(c *api.Ctx, res MappingResult) api.Obj {
+	// A role granted is not also removed (OIDC rules can grant what a map
+	// does not).
+	removed := []Grant{}
+	for _, g := range res.Revoke {
+		if !slices.ContainsFunc(res.Grants, func(x Grant) bool {
+			return x.RoleDefinition == g.RoleDefinition && x.Organization == g.Organization && x.Team == g.Team
+		}) {
+			removed = append(removed, g)
+		}
+	}
+	return api.Obj{"superuser": res.Superuser, "auditor": res.Auditor, "grants": nonNil(res.Grants), "kept": nonNil(res.Keep),
+		"removed": removed, "would_create": wouldCreate(c, res.Grants), "errors": nonNilStrings(res.Errors)}
 }
 
 func nonNil(g []Grant) []Grant {

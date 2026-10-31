@@ -66,6 +66,8 @@ export interface Section {
   on?: (values: Record<string, unknown>) => boolean
   /** Lists the pages under this one (the login methods under Sign-in). */
   children?: boolean
+  /** Ends with the connection test of this login: ldap, ldap1… ldap5, oidc or saml. */
+  test?: string
 }
 
 export interface SettingsPage {
@@ -160,6 +162,7 @@ const ldapSections: Section[] = ['', '1_', '2_', '3_', '4_', '5_'].map((p, n) =>
   id: n ? `server-${n}` : 'default-server',
   title: n ? tr('Server {n}', { n }) : tr('Default server'),
   on: n ? (v) => filled(v[`AUTH_LDAP_${p}SERVER_URI`]) : undefined,
+  test: n ? `ldap${n}` : 'ldap',
   rows: ldapFields
     .filter((f) => f !== 'TEAM_MAP')
     .map((f) =>
@@ -316,6 +319,7 @@ export const settingsPages: SettingsPage[] = [
       {
         id: 'provider',
         title: tr('Provider'),
+        test: 'oidc',
         rows: [
           row('SOCIAL_AUTH_OIDC_OIDC_ENDPOINT', { label: tr('Provider URL') }),
           row('SOCIAL_AUTH_OIDC_KEY', { label: tr('Client ID') }),
@@ -394,6 +398,7 @@ export const settingsPages: SettingsPage[] = [
       {
         id: 'identity-providers',
         title: tr('Identity providers'),
+        test: 'saml',
         rows: [
           row('SOCIAL_AUTH_SAML_ENABLED_IDPS', {
             label: tr('Identity providers'),

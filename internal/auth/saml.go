@@ -350,7 +350,12 @@ func samlBase(app *api.App, get func(string) any) string {
 
 func (s *SAML) config(ctx context.Context) (*samlConfig, error) {
 	app := s.auth.app
-	get := func(k string) any { return app.Settings.Get(ctx, k) }
+	return loadSAMLConfig(app, func(k string) any { return app.Settings.Get(ctx, k) }, app.Crypto.Decrypt)
+}
+
+// loadSAMLConfig reads SAML's settings: saved ones at login, a form's in
+// the connection test.
+func loadSAMLConfig(app *api.App, get func(string) any, decrypt func(string) (string, error)) (*samlConfig, error) {
 	base := samlBase(app, get)
 	cfg := &samlConfig{}
 	cfg.entityID, _ = get("SOCIAL_AUTH_SAML_SP_ENTITY_ID").(string)
@@ -371,7 +376,7 @@ func (s *SAML) config(ctx context.Context) (*samlConfig, error) {
 		missing = append(missing, "SOCIAL_AUTH_SAML_SP_PUBLIC_CERT")
 	}
 	if enc, _ := get("SOCIAL_AUTH_SAML_SP_PRIVATE_KEY").(string); enc != "" {
-		keyPEM, err := app.Crypto.Decrypt(enc)
+		keyPEM, err := decrypt(enc)
 		if err != nil {
 			return nil, err
 		}
