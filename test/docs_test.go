@@ -22,6 +22,17 @@ func TestConfigurationReferenceCurrent(t *testing.T) {
 	}
 }
 
+// The settings list the UI's layout test reads is the API's.
+func TestSettingsListCurrent(t *testing.T) {
+	b, err := os.ReadFile("../ui/src/lib/settings.generated.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(b) != docsgen.SettingsList() {
+		t.Fatal("ui/src/lib/settings.generated.json is out of date: run go run ./cmd/gendocs")
+	}
+}
+
 // Every environment variable the code reads is in config.Vars, and every
 // one there is read somewhere.
 func TestConfigurationVarsComplete(t *testing.T) {

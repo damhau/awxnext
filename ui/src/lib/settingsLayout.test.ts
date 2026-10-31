@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { categoryPage, changesByCategory, childPages, githubForm, hasNoEffect, inSettings, pageSections, placements, searchSettings, settingLabel, settingPlace, settingsPage, settingsPages, visibleSections, type SettingInfo } from './settingsLayout'
 import { githubVariantOf, githubVariants } from './loginMethods'
+import generated from './settings.generated.json'
 
 // AWX's settings categories, as the API lists them at settings/: they do
 // not change, so AWX's clients keep working.
@@ -194,6 +195,32 @@ describe('the settings layout', () => {
     expect(hasNoEffect('No effect in awxnext: it has no Pendo integration.')).toBe(true)
     expect(hasNoEffect('Maximum number of forks.')).toBe(false)
     expect(hasNoEffect(undefined)).toBe(false)
+  })
+})
+
+// The API's settings, generated from their definitions by go run
+// ./cmd/gendocs; a Go test checks the file is current. A setting added to
+// the server fails here until the layout places it.
+describe('every setting the API has', () => {
+  const api: Record<string, { category: string; no_effect?: boolean }> = generated.settings
+  const list = Object.entries(api)
+  const placed = placements()
+
+  it('is in one of the categories the pages show', () => {
+    expect([...new Set(list.map(([, s]) => s.category))].sort()).toEqual([...awxCategories].sort())
+  })
+
+  it('is placed in the layout, unless it has no effect', () => {
+    expect(list.filter(([k, s]) => !s.no_effect && !placed.has(k)).map(([k]) => k)).toEqual([])
+  })
+
+  it('is placed on a page that shows its category', () => {
+    const elsewhere = list.filter(([k, s]) => placed.has(k) && !settingsPage(placed.get(k)!.page)!.categories.includes(s.category))
+    expect(elsewhere.map(([k, s]) => `${k} (${s.category}) on ${placed.get(k)!.page}`)).toEqual([])
+  })
+
+  it('is every setting the layout names', () => {
+    expect([...placed.keys()].filter((k) => !(k in api))).toEqual([])
   })
 })
 

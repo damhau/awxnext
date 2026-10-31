@@ -1,5 +1,6 @@
-// Command gendocs writes docs/configuration.md (run from the repository's
-// root): go run ./cmd/gendocs
+// Command gendocs writes docs/configuration.md and the settings list the
+// UI's layout test reads, ui/src/lib/settings.generated.json (run from the
+// repository's root): go run ./cmd/gendocs
 package main
 
 import (
@@ -10,8 +11,13 @@ import (
 )
 
 func main() {
-	if err := os.WriteFile("docs/configuration.md", []byte(docsgen.Configuration()), 0o644); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+	for path, content := range map[string]string{
+		"docs/configuration.md":              docsgen.Configuration(),
+		"ui/src/lib/settings.generated.json": docsgen.SettingsList(),
+	} {
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
 	}
 }

@@ -344,7 +344,11 @@ once the service provider's certificate is set.
 
 The pages are drawn from `ui/src/lib/settingsLayout.ts`, which places each setting on a page, in
 a section, in order, with its label and its control. A setting it does not place is still shown,
-under "Other settings" on its category's page.
+under "Other settings" on its category's page. Tests keep the layout complete: `go run
+./cmd/gendocs` writes the API's settings to `ui/src/lib/settings.generated.json` (a Go test fails
+when it is out of date), and the layout's test fails when a setting with an effect is not
+placed, is placed on a page that does not show its category, or when the layout names a setting
+the API does not have.
 
 Each kind of value has its control, and is saved in AWX's format:
 
