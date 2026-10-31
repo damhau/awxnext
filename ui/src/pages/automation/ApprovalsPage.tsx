@@ -167,6 +167,7 @@ export function ApprovalsPage() {
         )}
         <DataTable
           label="Pending approvals"
+          stack
           rows={rows}
           columns={pendingCols}
           loading={pending.isPending}
@@ -192,6 +193,7 @@ export function ApprovalsPage() {
         </div>
         <DataTable
           label="Decided approvals"
+          stack
           rows={decided.data?.results}
           columns={decidedCols}
           loading={decided.isPending}

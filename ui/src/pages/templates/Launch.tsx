@@ -466,7 +466,7 @@ function LaunchForm({ kind, tpl, info, survey, operator }: { kind: Kind; tpl: Te
                 </span>
               </div>
               {varRows.length ? (
-                <table className="data small">
+                <table className="data small vars-table">
                   <thead>
                     <tr>
                       <th>name</th>

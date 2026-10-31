@@ -38,6 +38,11 @@
 .countdown .bar > div { height: 3px; background: var(--changed); }
 .countdown.late .bar > div { background: var(--fail); }
 .approval-actions { display: inline-flex; gap: 6px; justify-content: flex-end; }
+/* Phones: the decision buttons across the card, big enough to tap. */
+@media (max-width: 600px) {
+  .approval-actions { display: flex; gap: 8px; width: 100%; }
+  .approval-actions .btn { flex: 1; height: 40px; font-size: 14px; }
+}
 .section-title { display: flex; align-items: baseline; gap: 10px; margin: 4px 0 -4px; }
 .section-title h2 { font-size: 14px; }
 

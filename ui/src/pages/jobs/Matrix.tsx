@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type KeyboardEvent } from 'react'
+import { Fragment, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { Link } from 'react-router'
 import { useList } from '../../api/hooks'
 import type { Job } from '../../api/types'
@@ -67,13 +67,15 @@ export function Matrix({ grid, job, failure, onHost, onJump }: { grid: Grid; job
         <span className="mono small muted matrix-counts">
           {plural(grid.hosts.length, 'host')} · {plural(n, 'task')}
           {([['ok', c.ok], ['changed', c.changed], ['failed', c.failed + c.unreachable], ['skipped', c.skipped], ['none', c.none]] as const).map(([s, v]) => (
-            <span key={s}>
+            <Fragment key={s}>
               {' · '}
-              <Cell state={s} size="xs" /> {word[s]} {v}
-            </span>
+              <span>
+                <Cell state={s} size="xs" /> {word[s]} {v}
+              </span>
+            </Fragment>
           ))}
         </span>
-        <span className="small muted" style={{ marginLeft: 'auto' }}>
+        <span className="small muted hint" style={{ marginLeft: 'auto' }}>
           Click a cell, then arrows to move
         </span>
       </div>

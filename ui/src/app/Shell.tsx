@@ -51,9 +51,14 @@ function LiveCount() {
   const r = running.data?.count ?? 0
   const q = queued.data?.count ?? 0
   return (
-    <Link to="/jobs?q=status:running" className="live-count" title="Jobs running and waiting for capacity">
+    <Link to="/jobs?q=status:running" className="live-count" title="Jobs running and waiting for capacity" aria-label={`${r} running, ${q} queued`}>
       <span aria-hidden="true" className={`live-dot ${r ? '' : 'idle'}`} />
-      {r} running · {q} queued
+      <span className="live-long" aria-hidden="true">
+        {r} running · {q} queued
+      </span>
+      <span className="live-short" aria-hidden="true">
+        {r}·{q}
+      </span>
     </Link>
   )
 }
@@ -115,30 +120,36 @@ function useNav(): { label: string; items: NavItem[] }[] {
   ]
 }
 
-function Nav() {
-  const [collapsed, setCollapsed] = useStored('nav-collapsed', false)
+/** The navigation: a column on wide screens, a drawer opened from the top
+ * bar's menu button on tablets and phones. */
+function Nav({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const [stored, setCollapsed] = useStored('nav-collapsed', false)
+  const collapsed = stored && !open
   const { me } = useSession()
   const groups = useNav()
   return (
-    <nav aria-label="Main" className={`nav ${collapsed ? 'collapsed' : ''}`}>
-      {groups.map((g) => (
-        <div key={g.label} className="nav-group">
-          {!collapsed && <div className="nav-label">{g.label}</div>}
-          {g.items
-            .filter((i) => !i.superuser || me.is_superuser || me.is_system_auditor)
-            .map((i) => (
-              <NavLink key={i.to} to={i.to} end={i.end} className={({ isActive }) => (isActive ? 'active' : '')} title={collapsed ? i.label : undefined} aria-label={collapsed ? i.label : undefined}>
-                {collapsed ? <Icon name={i.icon} /> : <span className="mark" aria-hidden="true" />}
-                {!collapsed && <span>{i.label}</span>}
-                {!collapsed && i.count ? <span className="count">{i.count}</span> : null}
-              </NavLink>
-            ))}
-        </div>
-      ))}
-      <button className="nav-toggle" onClick={() => setCollapsed(!collapsed)} aria-label={collapsed ? 'Expand navigation' : 'Collapse navigation'}>
-        {collapsed ? '»' : '« Collapse'}
-      </button>
-    </nav>
+    <>
+      {open && <div className="nav-backdrop" onClick={onClose} aria-hidden="true" />}
+      <nav id="main-nav" aria-label="Main" className={`nav ${collapsed ? 'collapsed' : ''} ${open ? 'open' : ''}`}>
+        {groups.map((g) => (
+          <div key={g.label} className="nav-group">
+            {!collapsed && <div className="nav-label">{g.label}</div>}
+            {g.items
+              .filter((i) => !i.superuser || me.is_superuser || me.is_system_auditor)
+              .map((i) => (
+                <NavLink key={i.to} to={i.to} end={i.end} className={({ isActive }) => (isActive ? 'active' : '')} title={collapsed ? i.label : undefined} aria-label={collapsed ? i.label : undefined}>
+                  {collapsed ? <Icon name={i.icon} /> : <span className="mark" aria-hidden="true" />}
+                  {!collapsed && <span>{i.label}</span>}
+                  {!collapsed && i.count ? <span className="count">{i.count}</span> : null}
+                </NavLink>
+              ))}
+          </div>
+        ))}
+        <button className="nav-toggle" onClick={() => setCollapsed(!collapsed)} aria-label={collapsed ? 'Expand navigation' : 'Collapse navigation'}>
+          {collapsed ? '»' : '« Collapse'}
+        </button>
+      </nav>
+    </>
   )
 }
 
@@ -201,6 +212,7 @@ function Account() {
 
 export function Shell() {
   const [palette, setPalette] = useState(false)
+  const [menu, setMenu] = useState(false)
   // Saved views and stars kept in this browser before they moved to the server.
   useUploadLocalPrefs()
   const nav = useNavigate()
@@ -233,18 +245,30 @@ export function Shell() {
     window.addEventListener('keydown', on)
     return () => window.removeEventListener('keydown', on)
   }, [nav])
-  useEffect(() => setPalette(false), [loc.pathname])
+  useEffect(() => {
+    setPalette(false)
+    setMenu(false)
+  }, [loc.pathname])
+  useEffect(() => {
+    if (!menu) return
+    const on = (e: KeyboardEvent) => e.key === 'Escape' && setMenu(false)
+    window.addEventListener('keydown', on)
+    return () => window.removeEventListener('keydown', on)
+  }, [menu])
   return (
     <div className="shell">
       <LiveRefresh />
       <LiveSwitch />
       <header className="topbar">
+        <button className="bar-button icon nav-open" aria-label="Menu" aria-expanded={menu} aria-controls="main-nav" onClick={() => setMenu((m) => !m)}>
+          <Icon name={menu ? 'x' : 'menu'} size={16} />
+        </button>
         <Link to="/" className="brand" aria-label="awxnext home">
           <BrandMark />
           <span>awxnext</span>
         </Link>
         <OrgSwitcher />
-        <button className="bar-button jump" onClick={() => setPalette(true)}>
+        <button className="bar-button jump" onClick={() => setPalette(true)} aria-label="Jump to template, host, job">
           <Icon name="search" size={14} />
           <span className="grow">Jump to template, host, job…</span>
           <span className="kbd">{navigator.platform.includes('Mac') ? '⌘K' : 'Ctrl K'}</span>
@@ -256,7 +280,7 @@ export function Shell() {
         </div>
       </header>
       <div className="body">
-        <Nav />
+        <Nav open={menu} onClose={() => setMenu(false)} />
         <main className="main" id="main">
           <ErrorBoundary resetKey={loc.pathname}>
             <Suspense fallback={<div className="page"><Loading /></div>}>

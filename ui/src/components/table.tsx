@@ -45,6 +45,9 @@ interface Props<T> {
   /** Offers a column chooser; the hidden columns are kept with the user's
    * preferences as columns.<columnsKey>. */
   columnsKey?: string
+  /** On phones, each row becomes a card: the first column as its title, the
+   * others labelled by their headers. */
+  stack?: boolean
 }
 
 export function DataTable<T>({
@@ -66,6 +69,7 @@ export function DataTable<T>({
   label,
   lead,
   columnsKey,
+  stack,
 }: Props<T>) {
   const [cursor, setCursor] = useState(-1)
   const [hidden, setHidden] = usePref<string[]>(`columns.${columnsKey ?? 'none'}`, [])
@@ -109,7 +113,7 @@ export function DataTable<T>({
   if (error) return <ErrorNote error={error} />
   return (
     <div className="table-wrap">
-      <table className="data" style={minWidth ? { minWidth } : undefined} aria-label={label}>
+      <table className={`data${stack ? ' stack-sm' : ''}`} style={minWidth ? { minWidth } : undefined} aria-label={label}>
         <thead>
           <tr>
             {onSelect && (
@@ -168,8 +172,8 @@ export function DataTable<T>({
                     <input type="checkbox" aria-label="Select row" checked={!!sel} onChange={() => toggle(k)} />
                   </td>
                 )}
-                {columns.map((c) => (
-                  <td key={c.key} className={c.className}>
+                {columns.map((c, ci) => (
+                  <td key={c.key} className={c.className} data-label={stack && ci > 0 ? (columnLabel(c) ?? '') : undefined}>
                     {c.render(r)}
                   </td>
                 ))}

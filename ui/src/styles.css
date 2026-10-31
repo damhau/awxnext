@@ -650,6 +650,7 @@ table.data tr.folder-row:hover td { background: var(--hover); }
 
 /* ---------- job matrix (hosts x tasks) ---------- */
 /* Columns are task numbers; the numbered list under the matrix names them. */
+.matrix-counts { min-width: 0; }
 .matrix-counts > span { white-space: nowrap; }
 .matrix-body { display: flex; gap: 28px; flex-wrap: wrap; align-items: flex-start; }
 .matrix-main { flex: 1 1 520px; min-width: 0; }
@@ -739,13 +740,59 @@ table.data tr.folder-row:hover td { background: var(--hover); }
 .wf-edges { position: absolute; left: 0; top: 0; pointer-events: none; }
 
 /* ---------- responsive ---------- */
+/* Wide: the navigation is a column. Tablet (900px and below): it is a
+   drawer from the menu button. Phone (600px and below): a compact top bar;
+   approvals, job output, the operator catalog and launch are built for it. */
+.nav-open, .nav-backdrop, .live-short { display: none; }
 @media (max-width: 900px) {
   .nav { display: none; }
+  .nav.open {
+    display: flex; position: fixed; top: 52px; left: 0; bottom: 0; width: min(280px, 85vw); height: auto; z-index: 45;
+    background: var(--surface); box-shadow: var(--shadow-modal);
+  }
+  .nav.open .nav-toggle { display: none; }
+  .nav.open a { padding: 9px 10px; }
+  .nav-backdrop { display: block; position: fixed; inset: 52px 0 0 0; background: rgba(21, 23, 26, 0.42); z-index: 44; }
+  .nav-open { display: inline-flex; width: 36px; padding: 0; justify-content: center; flex: 0 0 36px; }
   .sidelist { display: none; }
   .qchip.tree-toggle { display: none; }
   .page-head, .page-body { padding-left: 16px; padding-right: 16px; }
   .topbar { gap: 10px; }
   .topbar .org { display: none; }
+}
+@media (max-width: 600px) {
+  .topbar { padding: 0 10px; gap: 8px; }
+  .brand > span { display: none; }
+  .jump { flex: 1 1 auto; min-width: 0; max-width: none; }
+  .jump .grow { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .jump .kbd, .topbar .runbars, .live-long { display: none; }
+  .live-short { display: inline; }
+  .topbar-right { gap: 10px; }
+  .page-head, .page-body { padding-left: 12px; padding-right: 12px; }
+  h1 { font-size: 24px; }
+  /* Launch: each variable on its own lines, its value across the width. */
+  .vars-table thead { display: none; }
+  .vars-table tr { display: grid; grid-template-columns: 1fr auto; column-gap: 8px; border-bottom: 1px solid var(--line-soft); }
+  .vars-table td { border-bottom: none; padding: 4px 12px; }
+  .vars-table td:first-child { padding-top: 8px; overflow-wrap: anywhere; }
+  .vars-table td:nth-child(2) { grid-column: 1 / -1; grid-row: 2; max-width: none !important; padding-bottom: 8px; }
+  .vars-table td:nth-child(3) { padding-top: 8px; text-align: right; }
+  /* Tables with stack: one card per row. */
+  table.data.stack-sm thead { display: none; }
+  table.data.stack-sm, table.data.stack-sm tbody, table.data.stack-sm tr, table.data.stack-sm td { display: block; width: 100%; }
+  table.data.stack-sm tr { position: relative; padding: 10px 12px; border-bottom: 1px solid var(--line-soft); }
+  table.data.stack-sm td { border-bottom: none; padding: 2px 0; text-align: left; }
+  table.data.stack-sm td[data-label]:not([data-label=''])::before { content: attr(data-label); display: inline-block; min-width: 92px; color: var(--muted-2); font-size: 12px; }
+  table.data.stack-sm td.sel { position: absolute; top: 10px; right: 12px; width: auto; padding: 0; }
+  table.data.stack-sm td.sel + td { padding-right: 36px; }
+  table.data.stack-sm td.end { padding-top: 8px; }
+}
+/* Touch screens: checkboxes and the running count big enough to tap. */
+@media (pointer: coarse) {
+  input[type='checkbox'], input[type='radio'] { width: 20px; height: 20px; }
+  .live-count { min-height: 32px; }
+  /* Keyboard hints mean nothing without a keyboard. */
+  .hint { display: none; }
 }
 
 /* Operator catalog tiles */
