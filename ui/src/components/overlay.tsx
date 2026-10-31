@@ -1,7 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
+import { useBlocker } from 'react-router'
 import { Icon } from './icons'
-import { tr } from '../lib/i18n'
+import { tr, trn } from '../lib/i18n'
 import { placeMenu } from '../lib/menuPosition'
 
 /** Modal dialog: focus moves inside, Escape and backdrop clicks close it. */
@@ -96,6 +97,33 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
 }
 
 export const useConfirm = () => useContext(ConfirmCtx)
+
+/**
+ * Asks before a page with changes not saved (`count`) is left: by a link,
+ * the palette or Back, when `leaving` says the next path is a way out; and,
+ * through the browser, before the tab is closed or reloaded.
+ */
+export function useLeaveGuard(count: number, leaving: (path: string) => boolean = () => true) {
+  const confirm = useConfirm()
+  const blocker = useBlocker(({ currentLocation, nextLocation }) => count > 0 && currentLocation.pathname !== nextLocation.pathname && leaving(nextLocation.pathname))
+  useEffect(() => {
+    if (blocker.state !== 'blocked') return
+    confirm({
+      title: tr('Leave without saving?'),
+      body: <p style={{ margin: 0 }}>{trn(count, '{n} change is not saved: it is lost if you leave.', '{n} changes are not saved: they are lost if you leave.')}</p>,
+      confirm: tr('Leave'),
+      danger: true,
+    }).then((ok) => (ok ? blocker.proceed() : blocker.reset()))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [blocker.state])
+  const dirty = count > 0
+  useEffect(() => {
+    if (!dirty) return
+    const on = (e: BeforeUnloadEvent) => e.preventDefault()
+    window.addEventListener('beforeunload', on)
+    return () => window.removeEventListener('beforeunload', on)
+  }, [dirty])
+}
 
 interface Toast {
   id: number

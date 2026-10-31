@@ -16,6 +16,7 @@ import {
   recordsValue,
   searchesOf,
   searchesValue,
+  valueText,
   withField,
   type Field,
 } from './settingValues'
@@ -196,5 +197,50 @@ describe('lists and objects', () => {
     expect(recordsValue(recordsOf(idps))).toEqual(idps)
     expect(recordsValue([...recordsOf(idps), { name: ' ', value: { url: 'x' } }])).toEqual(idps)
     expect(recordsOf(null)).toEqual([])
+  })
+})
+
+describe('values in words', () => {
+  it('say amounts in their unit, or what none means', () => {
+    const timeout = layoutRow('DEFAULT_JOB_TIMEOUT')
+    expect(valueText(0, undefined, timeout)).toBe('No limit')
+    expect(valueText(7200, undefined, timeout)).toBe('2 hours')
+    expect(valueText(90, undefined, { unit: 'duration' })).toBe('90 seconds')
+    expect(valueText(1073741824, undefined, { unit: 'size' })).toBe('1 GiB')
+    expect(valueText(4000, undefined, { unit: 'events' })).toBe('4000 events')
+    expect(valueText(3, undefined, {})).toBe('3')
+  })
+
+  it('say a switch\'s state in its own words', () => {
+    expect(valueText(true, undefined, {})).toBe('Enabled')
+    // DISABLE_LOCAL_AUTH: the switch is on when the setting is false.
+    expect(valueText(false, undefined, layoutRow('DISABLE_LOCAL_AUTH'))).toBe('Enabled')
+    expect(valueText(false, undefined, { states: ['Inside the project only', 'Followed anywhere'] })).toBe('Inside the project only')
+    // A part named by its label both ways says enabled or disabled.
+    expect(valueText(false, undefined, { states: ['Project syncs', 'Project syncs'] })).toBe('Disabled')
+  })
+
+  it('name choices and list items by their labels', () => {
+    expect(valueText('json', { choices: [['json', 'JSON lines'], ['text', 'Text']] })).toBe('JSON lines')
+    expect(valueText('json', { choices: [['json', 'JSON lines']] }, { options: [['json', 'One event per line']] })).toBe('One event per line')
+    expect(valueText(['awx', 'activity_stream'], undefined, { options: [['awx', 'awxnext'], ['activity_stream', 'Activity stream']] })).toBe('awxnext, Activity stream')
+    expect(valueText(['a', 'b'], undefined, {})).toBe('a, b')
+    expect(valueText(Array(20).fill('example.com'), undefined, {})).toBe('20 items')
+  })
+
+  it('say what is not set, empty, or too long to show', () => {
+    expect(valueText('', undefined, {})).toBe('not set')
+    expect(valueText(null, undefined, {})).toBe('not set')
+    expect(valueText([], undefined, {})).toBe('none')
+    expect(valueText({}, undefined, {})).toBe('none')
+    expect(valueText({ a: 1, b: 2 }, undefined, {})).toBe('2 entries')
+    const long = valueText('x'.repeat(100), undefined, {})
+    expect(long).toHaveLength(60)
+    expect(long.endsWith('…')).toBe(true)
+  })
+
+  it('never show a secret', () => {
+    expect(valueText('$encrypted$', undefined, {}, 'SOCIAL_AUTH_GITHUB_SECRET')).toBe('set')
+    expect(valueText('', undefined, {}, 'SOCIAL_AUTH_GITHUB_SECRET')).toBe('not set')
   })
 })

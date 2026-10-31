@@ -1019,7 +1019,6 @@
   "Reset to defaults": "Rétablir les valeurs par défaut",
   "off": "désactivé",
   "Discard": "Abandonner",
-  "restore default": "rétablir la valeur par défaut",
   "unsaved": "non enregistré",
   "One per line.": "Un par ligne.",
   "Not valid JSON: ": "JSON invalide :",
@@ -2799,5 +2798,28 @@
   "Set to one of": "Ayant l’une des valeurs",
   "Any value": "Toute valeur",
   "Otherwise": "Sinon",
-  "Organization and team maps": "Correspondances des organisations et des équipes"
+  "Organization and team maps": "Correspondances des organisations et des équipes",
+  "Leave without saving?": "Quitter sans enregistrer ?",
+  "{n} changes are not saved: they are lost if you leave.": {
+    "one": "{n} modification n’est pas enregistrée : elle est perdue si vous quittez.",
+    "other": "{n} modifications ne sont pas enregistrées : elles sont perdues si vous quittez."
+  },
+  "{n} items": {
+    "one": "{n} élément",
+    "other": "{n} éléments"
+  },
+  "{n} entries": {
+    "one": "{n} entrée",
+    "other": "{n} entrées"
+  },
+  "Search settings": "Rechercher un paramètre",
+  "Settings found": "Paramètres trouvés",
+  "{n} settings found": {
+    "one": "{n} paramètre trouvé",
+    "other": "{n} paramètres trouvés"
+  },
+  "More settings match: add a word.": "D’autres paramètres correspondent : ajoutez un mot.",
+  "Changed from its default": "Modifié par rapport à sa valeur par défaut",
+  "Default:": "Par défaut :",
+  "Default for {part}:": "Par défaut pour {part} :"
 }

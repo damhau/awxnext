@@ -1,13 +1,13 @@
 import { useQuery } from '@tanstack/react-query'
 import { Fragment, useEffect, useId, useMemo, useState, type ReactNode } from 'react'
-import { Link, Navigate, useLocation, useParams } from 'react-router'
+import { Link, Navigate, useLocation, useNavigate, useParams } from 'react-router'
 import { api, ApiError, getAll } from '../../api/client'
 import { useInvalidate, useObject } from '../../api/hooks'
 import type { FieldMeta, OptionsMeta, Ref } from '../../api/types'
 import { useSession } from '../../app/context'
 import { FormError, Picker } from '../../components/form'
 import { Icon } from '../../components/icons'
-import { useConfirm, useToast } from '../../components/overlay'
+import { useConfirm, useLeaveGuard, useToast } from '../../components/overlay'
 import { Empty, ErrorNote, Loading, PageHead, Panel } from '../../components/ui'
 import { humanize } from './common'
 import { grantReason, grantTarget, testerClaims, type MappedGrant } from '../../lib/mapping'
@@ -54,7 +54,6 @@ import {
   controlKind,
   ENCRYPTED,
   fieldValue,
-  isSecret,
   mountsOf,
   mountsValue,
   pairsOf,
@@ -65,6 +64,7 @@ import {
   searchesValue,
   searchScopes,
   unitsOf,
+  valueText,
   withField,
   type Field,
   type Mount,
@@ -92,8 +92,11 @@ import {
   childPages,
   githubForm,
   hasNoEffect,
+  inSettings,
+  layoutRow,
   pageSections,
   rowAnchor,
+  searchSettings,
   settingLabel,
   settingPlace,
   settingsPage,
@@ -164,13 +167,15 @@ export function Settings() {
   useEffect(() => {
     if (loaded && hash) document.getElementById(decodeURIComponent(hash.slice(1)))?.scrollIntoView({ block: 'start' })
   }, [loaded, hash, slug])
+  // Changes are kept from one settings page to another until saved: leaving the settings asks first.
+  const dirty = saved ? Object.keys(edits).filter((k) => !same(edits[k], saved[k])) : []
+  useLeaveGuard(editable ? dirty.length : 0, (path) => !inSettings(path))
   if (!page && slug !== 'changed') {
     // A former category page (/settings/authentication, /settings/github-org…).
     const moved = categoryPage(slug)
     return <Navigate replace to={moved ? `/settings/${moved.slug}${moved.section ? `#${moved.section}` : ''}` : '/settings/system'} />
   }
   const values: Values = { ...saved, ...edits }
-  const dirty = saved ? Object.keys(edits).filter((k) => !same(edits[k], saved[k])) : []
   // The settings with no effect are hidden unless asked for, linked to, edited or in error.
   const target = decodeURIComponent(hash.slice(1))
   const { sections, hidden } = visibleSections(
@@ -249,7 +254,7 @@ export function Settings() {
   const ctx: Ctx | null = data && saved ? { data, saved, values, set, errors, editable, page: slug, hash: hash.slice(1) } : null
   return (
     <div className="page settings">
-      <SettingsNav active={slug} sections={sections} states={states} changed={changed.data ? Object.keys(changed.data).length : undefined} />
+      <SettingsNav active={slug} sections={sections} states={states} changed={changed.data ? Object.keys(changed.data).length : undefined} meta={data?.meta} />
       <div className="settings-main">
         <PageHead
           crumbs={page?.parent ? [{ label: settingsPage(page.parent)?.title ?? page.parent, to: `/settings/${page.parent}` }] : undefined}
@@ -341,7 +346,8 @@ export function Settings() {
 }
 
 /** The menu: the pages, the login methods under Sign-in, the current page's sections. */
-function SettingsNav({ active, sections, states, changed }: { active: string; sections: Section[]; states?: Record<string, MethodState>; changed?: number }) {
+function SettingsNav({ active, sections, states, changed, meta }: { active: string; sections: Section[]; states?: Record<string, MethodState>; changed?: number; meta?: Record<string, FieldMeta> }) {
+  const [query, setQuery] = useState('')
   const link = (p: SettingsPage) => {
     const state = p.parent ? states?.[p.slug] : undefined
     return (
@@ -353,39 +359,90 @@ function SettingsNav({ active, sections, states, changed }: { active: string; se
   }
   return (
     <nav className="sidelist settings-nav" aria-label={tr('Settings')}>
-      <div className="group">
-        <div className="group-head">
-          <span>{tr('Settings')}</span>
-        </div>
-        {settingsPages
-          .filter((p) => !p.parent)
-          .map((p) => {
-            const children = childPages(p.slug)
-            return (
-              <Fragment key={p.slug}>
-                {link(p)}
-                {children.length > 0 && <div className="sub">{children.map(link)}</div>}
-                {children.length === 0 && p.slug === active && sections.length > 1 && (
-                  <div className="sub">
-                    {sections.map((s) => (
-                      <a key={s.id} href={`#${s.id}`}>
-                        {s.title}
-                      </a>
-                    ))}
-                  </div>
-                )}
-              </Fragment>
-            )
-          })}
-      </div>
-      <div className="group">
-        <Link to="/settings/changed" className={`changed-link ${active === 'changed' ? 'active' : ''}`} aria-current={active === 'changed' ? 'page' : undefined}>
-          <span className="cell" data-size="xs" data-state="changed" aria-hidden="true" />
-          {tr('Changed from default')}
-          {changed !== undefined && <span className="n">{changed}</span>}
-        </Link>
-      </div>
+      <SettingsSearch meta={meta} query={query} setQuery={setQuery} />
+      {query.trim() === '' && (
+        <>
+          <div className="group">
+            <div className="group-head">
+              <span>{tr('Settings')}</span>
+            </div>
+            {settingsPages
+              .filter((p) => !p.parent)
+              .map((p) => {
+                const children = childPages(p.slug)
+                return (
+                  <Fragment key={p.slug}>
+                    {link(p)}
+                    {children.length > 0 && <div className="sub">{children.map(link)}</div>}
+                    {children.length === 0 && p.slug === active && sections.length > 1 && (
+                      <div className="sub">
+                        {sections.map((s) => (
+                          <a key={s.id} href={`#${s.id}`}>
+                            {s.title}
+                          </a>
+                        ))}
+                      </div>
+                    )}
+                  </Fragment>
+                )
+              })}
+          </div>
+          <div className="group">
+            <Link to="/settings/changed" className={`changed-link ${active === 'changed' ? 'active' : ''}`} aria-current={active === 'changed' ? 'page' : undefined}>
+              <span className="cell" data-size="xs" data-state="changed" aria-hidden="true" />
+              {tr('Changed from default')}
+              {changed !== undefined && <span className="n">{changed}</span>}
+            </Link>
+          </div>
+        </>
+      )}
     </nav>
+  )
+}
+
+/** The search of the settings menu: by label, key or help (lib/settingsLayout.ts).
+ * The results replace the menu while it has words; Enter goes to the first. */
+function SettingsSearch({ meta, query, setQuery }: { meta?: Record<string, FieldMeta>; query: string; setQuery: (q: string) => void }) {
+  const nav = useNavigate()
+  const found = useMemo(() => (meta ? searchSettings(query, meta, (k) => hasNoEffect(meta[k]?.help_text), (k) => metaLabel(k, meta[k])) : []), [meta, query])
+  const to = (f: (typeof found)[number]) => `/settings/${f.place.page}#${f.place.anchor}`
+  return (
+    <>
+      <label className="s-search">
+        <Icon name="search" size={14} />
+        <input
+          className="input"
+          type="search"
+          data-filter
+          placeholder={tr('Search settings')}
+          aria-label={tr('Search settings')}
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && found[0]) nav(to(found[0]))
+            if (e.key === 'Escape') setQuery('')
+          }}
+        />
+        {!query && <span className="key" aria-hidden="true">/</span>}
+      </label>
+      {query.trim() !== '' && (
+        <div className="group s-found" role="region" aria-label={tr('Settings found')}>
+          <div className="group-head">
+            <span>{meta ? trn(found.length, '{n} setting found', '{n} settings found') : tr('Loading…')}</span>
+          </div>
+          {found.slice(0, 50).map((f) => (
+            <Link key={f.key} to={to(f)}>
+              <span className="what">{f.label}</span>
+              <span className="where">
+                {f.pageTitle} › {f.sectionTitle}
+                {f.by !== 'label' && <> · <span className="mono">{f.key}</span></>}
+              </span>
+            </Link>
+          ))}
+          {found.length > 50 && <p className="s-more">{tr('More settings match: add a word.')}</p>}
+        </div>
+      )}
+    </>
   )
 }
 
@@ -625,12 +682,15 @@ function SettingRow({ row, ctx }: { row: Row; ctx: Ctx }) {
   const metaHelp = data.meta[k0]?.help_text
   const help = row.help ?? (single && metaHelp && metaHelp !== label ? metaHelp : undefined)
   const edited = keys.some((k) => !same(values[k], saved[k]))
-  const resettable = keys.filter((k) => editable && data.writable.has(k) && !atDefault(values[k], data.meta[k]))
+  // Changed from its default: the settings that can be changed, with the changes not saved.
+  const changed = keys.filter((k) => data.writable.has(k) && data.meta[k] && !atDefault(values[k], data.meta[k]))
   const errs = keys.map((k) => errors[k]).filter(Boolean)
+  const defaultText = (k: string) => valueText(defaultOf(data.meta[k]), data.meta[k], row, k)
   return (
-    <div className={`srow${edited ? ' edited' : ''}${row.wide ? ' wide' : ''}`} id={rowAnchor(row)}>
+    <div className={`srow${edited ? ' edited' : ''}${row.wide ? ' wide' : ''}${ctx.hash === rowAnchor(row) ? ' target' : ''}`} id={rowAnchor(row)}>
       <div>
         <div className="s-name">
+          {changed.length > 0 && <span className="cell" data-size="xs" data-state="changed" title={tr('Changed from its default')} aria-label={tr('Changed from its default')} />}
           {single && !row.control ? <label htmlFor={`s-${k0}`}>{label}</label> : label}
           {edited && <span className="unsaved">{tr('unsaved')}</span>}
         </div>
@@ -639,10 +699,30 @@ function SettingRow({ row, ctx }: { row: Row; ctx: Ctx }) {
           {keys.map((k) => (
             <KeyButton key={k} k={k} />
           ))}
-          {resettable.length > 0 && (
-            <button type="button" className="link-btn" onClick={() => resettable.forEach((k) => set(k, defaultOf(data.meta[k])))}>
-              {tr('restore default')}
-            </button>
+          {changed.length > 0 && (
+            <span className="s-default">
+              {/* A row of several says each part's default, unless they have the same. */}
+              {single || new Set(changed.map(defaultText)).size === 1 ? (
+                <>
+                  {tr('Default:')} <b>{defaultText(changed[0])}</b>
+                </>
+              ) : (
+                changed.map((k, i) => (
+                  <Fragment key={k}>
+                    {i > 0 && ' · '}
+                    {tr('Default for {part}:', { part: row.parts?.[keys.indexOf(k)] ?? metaLabel(k, data.meta[k]) })} <b>{defaultText(k)}</b>
+                  </Fragment>
+                ))
+              )}
+              {editable && (
+                <>
+                  {' · '}
+                  <button type="button" className="link-btn" onClick={() => changed.forEach((k) => set(k, defaultOf(data.meta[k])))}>
+                    {tr('Reset')}
+                  </button>
+                </>
+              )}
+            </span>
           )}
         </div>
       </div>
@@ -1832,6 +1912,7 @@ function ChangedSettings({ all, changed }: { all: AllSettings; changed: Values }
           <tr>
             <th scope="col">{tr('Setting')}</th>
             <th scope="col">{tr('Value')}</th>
+            <th scope="col">{tr('Default')}</th>
             <th scope="col">{tr('Where')}</th>
           </tr>
         </thead>
@@ -1846,9 +1927,8 @@ function ChangedSettings({ all, changed }: { all: AllSettings; changed: Values }
                   <div style={{ fontWeight: 500 }}>{settingLabel(k) ?? metaLabel(k, all.meta[k])}</div>
                   <div className="cell-sub mono">{k}</div>
                 </td>
-                <td className="s-value" style={{ maxWidth: 520 }}>
-                  {isSecret(k) ? '••••••' : JSON.stringify(v)}
-                </td>
+                <td className="s-word">{valueText(v, all.meta[k], layoutRow(k), k)}</td>
+                <td className="s-word muted">{all.meta[k] ? valueText(defaultOf(all.meta[k]), all.meta[k], layoutRow(k), k) : ''}</td>
                 <td>
                   {page && place && (
                     <Link to={`/settings/${page.slug}#${place.anchor}`}>

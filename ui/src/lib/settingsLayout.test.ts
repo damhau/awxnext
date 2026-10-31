@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { categoryPage, changesByCategory, childPages, githubForm, hasNoEffect, pageSections, placements, settingLabel, settingPlace, settingsPage, settingsPages, visibleSections } from './settingsLayout'
+import { categoryPage, changesByCategory, childPages, githubForm, hasNoEffect, inSettings, pageSections, placements, searchSettings, settingLabel, settingPlace, settingsPage, settingsPages, visibleSections, type SettingInfo } from './settingsLayout'
 import { githubVariantOf, githubVariants } from './loginMethods'
 
 // AWX's settings categories, as the API lists them at settings/: they do
@@ -194,5 +194,54 @@ describe('the settings layout', () => {
     expect(hasNoEffect('No effect in awxnext: it has no Pendo integration.')).toBe(true)
     expect(hasNoEffect('Maximum number of forks.')).toBe(false)
     expect(hasNoEffect(undefined)).toBe(false)
+  })
+})
+
+describe('searching the settings', () => {
+  // As the API's OPTIONS gives them: AWX's labels and help, each setting's category.
+  const info: Record<string, SettingInfo> = {
+    DEFAULT_JOB_TIMEOUT: { label: 'Default Job Timeout', help_text: 'Maximum time in seconds to allow jobs to run.', category_slug: 'jobs' },
+    DEFAULT_PROJECT_UPDATE_TIMEOUT: { label: 'Default Project Update Timeout', category_slug: 'jobs' },
+    DISABLE_LOCAL_AUTH: { label: 'Disable the built-in authentication system', category_slug: 'authentication' },
+    SESSION_COOKIE_AGE: { label: 'Idle Time Force Log Out', category_slug: 'authentication' },
+    AWX_UNPLACED_THING: { label: 'Délai of something', help_text: 'Waits for the timeout.', category_slug: 'jobs' },
+    AWX_OLD_TIMEOUT: { label: 'Old timeout', help_text: 'No effect in awxnext: jobs run elsewhere.', category_slug: 'jobs' },
+  }
+  const none = (k: string) => hasNoEffect(info[k]?.help_text)
+  const keys = (q: string) => searchSettings(q, info, none).map((f) => `${f.key}:${f.by}`)
+
+  it('finds by label first, then by key, then by help, those with no effect last', () => {
+    expect(keys('timeout')).toEqual(['DEFAULT_JOB_TIMEOUT:label', 'DEFAULT_PROJECT_UPDATE_TIMEOUT:label', 'AWX_OLD_TIMEOUT:label', 'AWX_UNPLACED_THING:help'])
+    // Every word, anywhere in the label, the key or the help; case and accents aside.
+    expect(keys('TIMEOUT jobs run')).toEqual(['AWX_OLD_TIMEOUT:help'])
+    expect(keys('delai')).toEqual(['AWX_UNPLACED_THING:label'])
+    expect(keys('timeout nowhere')).toEqual([])
+    expect(keys('  ')).toEqual([])
+  })
+
+  it('finds a setting by its key, or its key\'s words', () => {
+    expect(keys('DISABLE_LOCAL_AUTH')).toEqual(['DISABLE_LOCAL_AUTH:key'])
+    expect(keys('cookie age')).toEqual(['SESSION_COOKIE_AGE:key'])
+  })
+
+  it('says where each one is, with the layout\'s label', () => {
+    const [job, sync] = searchSettings('timeout', info, none)
+    expect(job).toMatchObject({ label: 'Job timeout', place: { page: 'jobs', section: 'limits', anchor: 'DEFAULT_JOB_TIMEOUT' }, pageTitle: 'Jobs', sectionTitle: 'Limits and timeouts' })
+    expect(sync).toMatchObject({ label: 'Sync timeouts: Project syncs', place: { anchor: 'DEFAULT_PROJECT_UPDATE_TIMEOUT' } })
+    const [auth] = searchSettings('disable local', info, none)
+    expect(auth.label).toBe('Password login for everyone')
+    expect(auth.place).toEqual(settingPlace('DISABLE_LOCAL_AUTH', 'authentication'))
+    // The settings the layout does not place are where their page lists them.
+    expect(searchSettings('delai', info, none)[0]).toMatchObject({ place: { page: 'jobs', section: 'other', anchor: 'AWX_UNPLACED_THING' }, sectionTitle: 'Other settings' })
+    expect(searchSettings('old', info, none)[0].place.section).toBe('no-effect')
+  })
+})
+
+describe('leaving the settings', () => {
+  it('is going to a page that is not a settings page', () => {
+    expect(inSettings('/settings')).toBe(true)
+    expect(inSettings('/settings/jobs')).toBe(true)
+    expect(inSettings('/settings-other')).toBe(false)
+    expect(inSettings('/jobs')).toBe(false)
   })
 })

@@ -192,3 +192,15 @@
 .settings .chips.lines { max-width: 560px; }
 .settings .chips.lines .chip-input { width: 100%; max-width: 420px; }
 .settings .kv.kv-teams { grid-template-columns: repeat(3, minmax(0, 1fr)) auto; max-width: 560px; }
+
+/* Search: the settings found replace the menu, each with where it is. */
+.settings .s-search .input::-webkit-search-cancel-button { cursor: pointer; }
+.settings .s-found a { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding-top: 6px; padding-bottom: 6px; }
+.settings .s-found .what { font-size: 13px; color: var(--ink); line-height: 1.3; }
+.settings .s-found .where { font-size: 11.5px; color: var(--muted-2); line-height: 1.3; }
+.settings .s-found .mono { font-family: var(--mono); font-size: 11px; }
+.settings .s-more { font-size: 12px; color: var(--muted-2); margin: 6px 8px 0; }
+/* The setting a link or a search led to. */
+.settings .srow.target { background: var(--lime-wash); }
+.settings .s-word { max-width: 360px; overflow-wrap: anywhere; }
+.settings .s-word.muted { color: var(--muted-2); }

@@ -885,3 +885,61 @@ export function changesByCategory(keys: string[], values: Record<string, unknown
   }
   return out
 }
+
+/** A setting found by a search: its label, where it is, and what matched. */
+export interface Found {
+  key: string
+  label: string
+  place: Place
+  /** Its page's title, and its section's. */
+  pageTitle: string
+  sectionTitle: string
+  /** Found by its label, by its key, or only by its help. */
+  by: 'label' | 'key' | 'help'
+}
+
+/** What a search reads of a setting, from the API's OPTIONS. */
+export interface SettingInfo {
+  label?: string
+  help_text?: string
+  category_slug?: string
+}
+
+// Searches ignore case and accents: "delai" finds "Délai".
+const fold = (s: string) =>
+  s
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+
+/**
+ * The settings with every word searched for in their label, their key or
+ * their help: those found by their label first, then by their key, then by
+ * their help, each in the menu's order, the settings with no effect in
+ * awxnext last. A key's words count apart: "job timeout" finds
+ * DEFAULT_JOB_TIMEOUT. `labelOf` names a setting the layout does not.
+ */
+export function searchSettings(query: string, info: Record<string, SettingInfo>, noEffect: (key: string) => boolean = () => false, labelOf?: (key: string) => string): Found[] {
+  const words = fold(query).split(/\s+/).filter(Boolean)
+  if (!words.length) return []
+  const categories = Object.fromEntries(Object.entries(info).map(([k, m]) => [k, String(m.category_slug ?? '')]))
+  const has = (text: string) => words.every((w) => text.includes(w))
+  const rank = { label: 0, key: 1, help: 2 }
+  const found: (Found & { none: boolean })[] = []
+  for (const p of settingsPages)
+    for (const s of pageSections(p, categories, noEffect))
+      for (const r of s.rows)
+        for (const k of r.keys) {
+          const m = info[k]
+          const label = settingLabel(k) ?? labelOf?.(k) ?? (m?.label || k)
+          const l = fold(label)
+          const key = `${l} ${fold(k)} ${fold(k.replace(/_/g, ' '))}`
+          const by = has(l) ? 'label' : has(key) ? 'key' : has(`${key} ${fold(r.help ?? m?.help_text ?? '')}`) ? 'help' : null
+          if (by) found.push({ key: k, label, place: { page: p.slug, section: s.id, anchor: rowAnchor(r) }, pageTitle: p.title, sectionTitle: s.title, by, none: noEffect(k) })
+        }
+  return found.sort((a, b) => rank[a.by] - rank[b.by] || Number(a.none) - Number(b.none)).map(({ none: _, ...f }) => f)
+}
+
+/** Whether a path is one of the settings pages: their changes are kept
+ * from one to another until saved, and lost on leaving them. */
+export const inSettings = (path: string) => path === '/settings' || path.startsWith('/settings/')

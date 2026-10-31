@@ -298,8 +298,13 @@ System, Sign-in with a page for each login method, Jobs, Logging, and Login page
 row says what its setting does, with the setting's AWX name below it (click it to copy it). Changes
 are kept from page to page until you save them, and Save writes each one to its AWX category
 (`PATCH /api/v2/settings/<category>/`): the API, the `awx` CLI and the `awx.awx` collection see the
-same categories and names as in AWX. "Changed from default" lists every setting that differs from
-its default, with a link to where it is set. The settings AWX has but awxnext ignores are hidden:
+same categories and names as in AWX. A setting changed from its default is marked where it is,
+with its default and a "Reset" link, which takes effect when you save. "Changed from default" lists
+every one of them, with its value, its default and a link to where it is set. The search above the
+menu (press `/`) finds a setting by its label, its AWX name or its help, and the command palette
+(`Ctrl K`) finds settings too. Leaving the settings with changes not saved asks first, and so does
+closing or reloading the tab; going from one settings page to another keeps them. The settings
+AWX has but awxnext ignores are hidden:
 the end of their page says how many, with a link that shows them, under "No effect in awxnext",
 on every page until you hide them again. A link to one of them, or a change to one, shows them
 too. Rows are labelled by what they do; the API keeps AWX's labels. The former addresses (`/settings/authentication`,

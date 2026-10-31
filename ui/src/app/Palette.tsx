@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router'
 import { api, type Page } from '../api/client'
-import type { Base, Job, Template } from '../api/types'
+import type { Base, Job, OptionsMeta, Template } from '../api/types'
 import { Icon } from '../components/icons'
 import { ago, jobPath, statusKind, statusLabel, templatePath, typeLabel } from '../lib/format'
 import { load, save } from '../lib/storage'
@@ -50,7 +50,7 @@ export function Palette({ onClose, onAbout, onShortcuts }: { onClose: () => void
   const [scope, setScope] = useState<Scope>('all')
   const nav = useNavigate()
   const { org, scope: orgScope } = useOrg()
-  const { logout } = useSession()
+  const { me, logout } = useSession()
   const input = useRef<HTMLInputElement>(null)
   const commandMode = q.startsWith('>')
   const term = (commandMode ? q.slice(1) : q).trim()
@@ -78,6 +78,23 @@ export function Palette({ onClose, onAbout, onShortcuts }: { onClose: () => void
     },
     placeholderData: (prev) => prev,
   })
+
+  // Settings are found as the settings pages find them, from their OPTIONS
+  // (shared with those pages), for those who may see them. The settings
+  // layout is loaded only then: it is not in the main bundle.
+  const findSettings = (me.is_superuser || me.is_system_auditor) && !commandMode && term.length > 0 && scope === 'all'
+  const settings = useQuery({
+    queryKey: ['settings/all/', 'options'],
+    queryFn: () => api.options<OptionsMeta>('settings/all/'),
+    enabled: findSettings,
+    staleTime: 5 * 60_000,
+  })
+  const layout = useQuery({ queryKey: ['settings-layout'], queryFn: () => import('../lib/settingsLayout'), enabled: findSettings, staleTime: Infinity })
+  const settingsFound = useMemo(() => {
+    const info = settings.data?.actions?.GET
+    const lib = layout.data
+    return info && lib && findSettings ? lib.searchSettings(term, info, (k) => lib.hasNoEffect(info[k]?.help_text)).slice(0, 5) : []
+  }, [settings.data, layout.data, term, findSettings])
 
   const go = (path: string, title: string, glyph: string, meta?: string) => {
     remember({ title, path, glyph, meta })
@@ -125,7 +142,12 @@ export function Palette({ onClose, onAbout, onShortcuts }: { onClose: () => void
       return out
     }
     const d = search.data
-    if (!d) return out
+    const found = () =>
+      settingsFound.map((f): Item => {
+        const where = `${f.pageTitle} › ${f.sectionTitle}`
+        return { key: 's' + f.key, group: tr('Settings'), glyph: 'S', title: f.label, meta: where, run: () => go(`/settings/${f.place.page}#${f.place.anchor}`, f.label, 'S', where) }
+      })
+    if (!d) return [...out, ...found()]
     for (const t of d.tpls.slice(0, 3)) {
       if (!t.summary_fields?.user_capabilities?.start) continue
       const launch = () => go(`/launch/${t.type === 'workflow_job_template' ? 'workflow' : 'job'}/${t.id}`, `Launch ${t.name}`, '▶')
@@ -170,9 +192,10 @@ export function Palette({ onClose, onAbout, onShortcuts }: { onClose: () => void
     for (const i of d.invs) {
       out.push({ key: 'i' + i.id, group: tr('Inventories'), glyph: 'I', title: i.name, meta: trn(i.total_hosts ?? 0, '{n} host', '{n} hosts'), run: () => go(`/inventories/${i.id}`, i.name, 'I') })
     }
+    out.push(...found())
     return out
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search.data, term, commandMode, commands, org])
+  }, [search.data, term, commandMode, commands, org, settingsFound])
 
   useEffect(() => setHi(0), [term, scope])
   useEffect(() => {

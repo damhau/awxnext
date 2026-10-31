@@ -1,4 +1,4 @@
-import { tr } from './i18n'
+import { tr, trn } from './i18n'
 
 // How each kind of setting value is edited: amounts in a unit, secrets,
 // lists, variables, small forms and records. The API's values do not
@@ -108,6 +108,54 @@ export function amountValue(text: string, factor = 1): number | null {
   if (text.trim() === '') return null
   const n = Number(text)
   return Number.isFinite(n) ? Math.round(n * factor) : null
+}
+
+/** What valueText reads of a row: see Row in settingsLayout.ts. */
+export interface ValueHints {
+  unit?: UnitKind | string
+  none?: [number, string]
+  options?: [string, string][]
+  states?: [string, string]
+  invert?: boolean
+}
+
+const short = (s: string, n = 60) => (s.length > n ? `${s.slice(0, n - 1)}…` : s)
+
+/** A value in words, as its control shows it: a setting's default ("No
+ * limit", "2 hours", "Enabled"), or what it was changed to. A secret only
+ * says whether it is set. */
+export function valueText(value: unknown, meta?: { choices?: [string | number, string][] }, hints: ValueHints = {}, key = ''): string {
+  if (key && isSecret(key)) return value ? tr('set') : tr('not set')
+  if (value === null || value === undefined || value === '') return tr('not set')
+  if (typeof value === 'boolean') {
+    const on = hints.invert ? !value : value
+    // A part of a row of several is a switch named by its label both ways.
+    const [off, yes] = hints.states && hints.states[0] !== hints.states[1] ? hints.states : [tr('Disabled'), tr('Enabled')]
+    return on ? yes : off
+  }
+  const label = (v: unknown) => hints.options?.find(([o]) => o === v)?.[1] ?? meta?.choices?.find(([c]) => c === v)?.[1]
+  const named = label(value)
+  if (named !== undefined) return named
+  if (typeof value === 'number') {
+    if (hints.none && value === hints.none[0]) return hints.none[1]
+    if (hints.unit === 'duration' || hints.unit === 'size') {
+      const f = bestUnit(value, hints.unit)
+      return `${amountText(value, f)} ${unitsOf(hints.unit).find(([, n]) => n === f)?.[0] ?? ''}`.trim()
+    }
+    return hints.unit ? `${value} ${hints.unit}` : String(value)
+  }
+  if (typeof value === 'string') return short(value)
+  if (Array.isArray(value)) {
+    if (!value.length) return tr('none')
+    const words = value.map((v) => (typeof v === 'string' || typeof v === 'number' ? (label(v) ?? String(v)) : null))
+    const text = words.join(', ')
+    return words.every((w) => w !== null) && text.length <= 60 ? text : trn(value.length, '{n} item', '{n} items')
+  }
+  if (isObject(value)) {
+    const n = Object.keys(value).length
+    return n ? trn(n, '{n} entry', '{n} entries') : tr('none')
+  }
+  return short(String(value))
 }
 
 /** A name and a value: an environment variable, a parameter. */
