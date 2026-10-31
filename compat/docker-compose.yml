@@ -50,6 +50,10 @@ services:
       awxnext:
         condition: service_healthy
     command: caddy reverse-proxy --from https://localhost:8443 --to awxnext:8052 --internal-certs
+    # Caddy, as PID 1, does not reap orphans: each health check's wget leaves
+    # its TLS helper (ssl_client) behind as a zombie, one every 2 s, until the
+    # host runs out of processes. An init process reaps them.
+    init: true
     ports:
       - "${COMPAT_TLS_PORT:-8054}:8443"
     healthcheck:
