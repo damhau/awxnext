@@ -24,7 +24,8 @@ export interface Row {
   unit?: UnitKind | string
   /** The amount that means none, and what it is called ("No limit"). */
   none?: [number, string]
-  /** A list's possible items: each one's value and label. */
+  /** A list's possible items, or a choice's, in order: each one's value and
+   * label. A choice's labels replace the API's. */
   options?: [string, string][]
   /** Text on several lines: a certificate, the login page's text. */
   lines?: boolean
@@ -42,6 +43,10 @@ export interface Row {
   multiple?: boolean
   /** A switch's words for off and on. */
   states?: [string, string]
+  /** A switch drawn as its two states side by side, neither the default look. */
+  segmented?: boolean
+  /** What the riskier value lets someone do, under the control. */
+  consequence?: string
   /** The switch is on when the setting is false (DISABLE_LOCAL_AUTH). */
   invert?: boolean
   /** The control takes the row's whole width, under its label. */
@@ -482,13 +487,26 @@ export const settingsPages: SettingsPage[] = [
             label: tr('Variables named ansible_* at launch'),
             help: tr('In extra variables, survey answers, schedules and ad hoc commands. Variables on templates, inventories and hosts are not affected.'),
             states: [tr('Refused'), tr('Allowed')],
+            segmented: true,
+            consequence: tr('Allowed lets a launcher change how Ansible connects and escalates, for example ansible_ssh_common_args or ansible_become_exe, and so run other commands than the playbook\'s.'),
           }),
           row('IGNORE_UNPROMPTED_LAUNCH_FIELDS', {
             label: tr('Launch fields the template does not prompt for'),
             help: tr('A limit, an inventory, extra variables… sent at launch when the template does not ask for them.'),
             states: [tr('Refused'), tr('Ignored, as in AWX')],
+            segmented: true,
+            consequence: tr('Ignored: the job starts without them, and the response lists them in ignored_fields. For clients written for AWX that send every field.'),
           }),
-          row('ALLOW_JINJA_IN_EXTRA_VARS', { label: tr('Jinja in extra variables'), help: tr('Whether {{ … }} in extra variables is evaluated by Ansible.') }),
+          row('ALLOW_JINJA_IN_EXTRA_VARS', {
+            label: tr('Jinja in extra variables'),
+            help: tr('Whether {{ … }} in extra variables is evaluated by Ansible.'),
+            options: [
+              ['template', tr('Only in the template\'s own variables')],
+              ['never', tr('Never')],
+              ['always', tr('Also in a launcher\'s variables')],
+            ],
+            consequence: tr('A launcher\'s Jinja runs where the playbook runs, and its lookups can read files and run commands there.'),
+          }),
           row('AD_HOC_COMMANDS', {
             label: tr('Modules for ad hoc commands'),
             help: tr('The modules people with the run commands permission may use. command and shell run anything.'),
@@ -497,11 +515,14 @@ export const settingsPages: SettingsPage[] = [
             label: tr('Projects from the server\'s own files'),
             help: tr('Git projects with a file:// URL or a local path.'),
             states: [tr('Not allowed'), tr('Allowed')],
+            consequence: tr('Allowed lets anyone who may create a project check out any directory the server can read. Only for single-tenant installs you trust.'),
           }),
           row('AWX_SHOW_PLAYBOOK_LINKS', {
             label: tr('Symbolic links in projects'),
             help: tr('When awxnext lists a project\'s playbooks and inventory files.'),
             states: [tr('Inside the project only'), tr('Followed anywhere, as in AWX')],
+            segmented: true,
+            consequence: tr('Followed anywhere lets a project link to files elsewhere on the server and have them listed.'),
           }),
         ],
       },

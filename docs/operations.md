@@ -312,7 +312,7 @@ too. Rows are labelled by what they do; the API keeps AWX's labels. The former a
 | `oidc`, `ldap`, `saml` | Sign-in: OpenID Connect, LDAP, SAML |
 | `github`, `github-org`, `github-team`, `github-enterprise`, `github-enterprise-org`, `github-enterprise-team` | Sign-in: GitHub, a section each |
 | `google-oauth2`, `azuread-oauth2` | Sign-in: Google, Microsoft Entra ID |
-| `jobs` | Jobs |
+| `jobs` | Jobs: launch safety, limits and timeouts, content, execution, output and events |
 | `logging` | Logging |
 | `ui` | Login page and UI |
 

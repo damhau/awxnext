@@ -409,6 +409,7 @@ function SettingRow({ row, ctx }: { row: Row; ctx: Ctx }) {
       </div>
       <div className="s-control">
         {single ? <SettingControl k={k0} row={row} ctx={ctx} /> : <Parts row={row} ctx={ctx} />}
+        {row.consequence && <span className="s-consequence">{row.consequence}</span>}
         {errs.map((e, i) => (
           <span key={i} className="err">
             {e}
@@ -482,6 +483,18 @@ function SettingControl({ k, row, ctx }: { k: string; row: Row; ctx: Ctx }) {
     case 'switch': {
       const on = row.invert ? !value : !!value
       const [off, yes] = row.states ?? [tr('Disabled'), tr('Enabled')]
+      const turn = (v: boolean) => onChange(row.invert ? !v : v)
+      if (row.segmented)
+        return (
+          <div className="segmented" role="radiogroup" aria-label={row.label ?? metaLabel(k, meta)}>
+            {[off, yes].map((l, i) => (
+              <label key={i} className={on === !!i ? 'on' : ''}>
+                <input id={i ? undefined : id} type="radio" name={id} checked={on === !!i} disabled={disabled} onChange={() => turn(!!i)} />
+                {l}
+              </label>
+            ))}
+          </div>
+        )
       return (
         <label className="switch">
           <input id={id} type="checkbox" checked={on} disabled={disabled} onChange={(e) => onChange(row.invert ? !e.target.checked : e.target.checked)} />
@@ -496,7 +509,7 @@ function SettingControl({ k, row, ctx }: { k: string; row: Row; ctx: Ctx }) {
       return (
         <select id={id} className="select" disabled={disabled} value={String(value ?? '')} onChange={(e) => onChange(e.target.value === '' ? null : e.target.value)}>
           {(meta.default === null || value === null || value === undefined) && <option value="">---------</option>}
-          {(meta.choices ?? []).map(([v, l]) => (
+          {(row.options ?? meta.choices ?? []).map(([v, l]) => (
             <option key={String(v)} value={String(v)}>
               {l}
             </option>

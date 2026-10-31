@@ -2675,5 +2675,12 @@
   "{n} AWX settings that have no effect in awxnext are hidden.": {
     "one": "{n} réglage d’AWX sans effet dans awxnext est masqué.",
     "other": "{n} réglages d’AWX sans effet dans awxnext sont masqués."
-  }
+  },
+  "A launcher's Jinja runs where the playbook runs, and its lookups can read files and run commands there.": "Le Jinja d’une personne qui lance s’exécute là où tourne le playbook, et ses lookups peuvent y lire des fichiers et y lancer des commandes.",
+  "Allowed lets a launcher change how Ansible connects and escalates, for example ansible_ssh_common_args or ansible_become_exe, and so run other commands than the playbook's.": "Autorisées, elles permettent à qui lance de changer comment Ansible se connecte et élève ses droits, par exemple ansible_ssh_common_args ou ansible_become_exe, et donc de lancer d’autres commandes que celles du playbook.",
+  "Allowed lets anyone who may create a project check out any directory the server can read. Only for single-tenant installs you trust.": "Autorisé, quiconque peut créer un projet peut récupérer n’importe quel répertoire que le serveur peut lire. Seulement pour une installation à un seul locataire, de confiance.",
+  "Also in a launcher's variables": "Aussi dans les variables de qui lance",
+  "Followed anywhere lets a project link to files elsewhere on the server and have them listed.": "Suivis partout, ils permettent à un projet de pointer vers des fichiers ailleurs sur le serveur et de les faire lister.",
+  "Ignored: the job starts without them, and the response lists them in ignored_fields. For clients written for AWX that send every field.": "Ignorés : la tâche démarre sans eux, et la réponse les liste dans ignored_fields. Pour les clients écrits pour AWX qui envoient tous les champs.",
+  "Only in the template's own variables": "Seulement dans les variables du modèle"
 }
