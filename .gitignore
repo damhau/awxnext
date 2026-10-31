@@ -3,3 +3,19 @@ node_modules/
 ui/dist/
 *.local
 compat-report/
+
+# Local tooling, not part of the project: the agent's settings and browser
+# snapshots, and the empty read-only dotfiles its sandbox places at the root.
+/.claude/
+/.playwright-mcp/
+/.bash_profile
+/.bashrc
+/.gitconfig
+/.gitmodules
+/.idea
+/.mcp.json
+/.profile
+/.ripgreprc
+/.vscode
+/.zprofile
+/.zshrc

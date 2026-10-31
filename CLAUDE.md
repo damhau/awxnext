@@ -66,5 +66,6 @@ The tests run in tiers.
 ## Git
 
 - Commit on `main`, with no Claude or co-author trailers.
-- Stage explicit paths, never `git add -A`. The untracked dotfiles at the root (`.bashrc`,
-  `.claude/`, `.idea`, `.mcp.json`, `.playwright-mcp/`...) are not part of the project.
+- Stage explicit paths, never `git add -A`. The dotfiles at the root (`.bashrc`, `.claude/`,
+  `.idea`, `.mcp.json`, `.playwright-mcp/`...) are not part of the project; `.gitignore` lists
+  them.
