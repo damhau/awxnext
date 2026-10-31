@@ -1,4 +1,5 @@
 import { asIs, tr } from './i18n'
+import type { GitHubVariant } from './loginMethods'
 import type { Field, Kind, UnitKind } from './settingValues'
 
 // The settings pages, laid out by what an admin sets up rather than by AWX's
@@ -193,6 +194,19 @@ const githubSections: Section[] = githubVariants.map(([slug, p, title, extra]) =
   }
 })
 
+/** The rows of the GitHub form for one of its six variants: where the
+ * Enterprise server is, the organization or team people must be in, the
+ * OAuth app, then the maps. */
+export function githubForm(v: GitHubVariant): { where: Row[]; who?: Row; app: Row[]; maps: Row[] } {
+  const p = v.prefix.replace(/^SOCIAL_AUTH_/, '')
+  return {
+    where: v.host === 'enterprise' ? [oauthRow(p, 'URL'), oauthRow(p, 'API_URL')] : [],
+    who: v.who === 'org' ? oauthRow(p, 'NAME') : v.who === 'team' ? oauthRow(p, 'ID') : undefined,
+    app: [oauthRow(p, 'CALLBACK_URL', { label: tr('Authorization callback URL'), help: tr('Made from the service URL, on the System page.') }), oauthRow(p, 'KEY'), oauthRow(p, 'SECRET')],
+    maps: [oauthRow(p, 'ORGANIZATION_MAP'), oauthRow(p, 'TEAM_MAP')],
+  }
+}
+
 const oauth = (p: string, extra: Row[] = []): Section[] => [
   {
     id: 'provider',
@@ -333,8 +347,6 @@ export const settingsPages: SettingsPage[] = [
         title: tr('Service provider'),
         rows: [
           row('SOCIAL_AUTH_SAML_SP_ENTITY_ID', { label: tr('Entity ID') }),
-          row('SOCIAL_AUTH_SAML_CALLBACK_URL', { label: tr('Assertion consumer service (ACS) URL') }),
-          row('SOCIAL_AUTH_SAML_METADATA_URL', { label: tr('Metadata URL') }),
           row('SOCIAL_AUTH_SAML_SP_PUBLIC_CERT', { label: tr('Certificate'), lines: true }),
           row('SOCIAL_AUTH_SAML_SP_PRIVATE_KEY', { label: tr('Private key'), lines: true }),
           row('SOCIAL_AUTH_SAML_ORG_INFO', {
@@ -363,6 +375,9 @@ export const settingsPages: SettingsPage[] = [
               ],
             }),
           ),
+          // What to give the identity providers, once the rest is saved.
+          row('SOCIAL_AUTH_SAML_METADATA_URL', { label: tr('Metadata URL'), help: tr('Give it to each identity provider: it holds the entity ID, the ACS URL and the certificate above.') }),
+          row('SOCIAL_AUTH_SAML_CALLBACK_URL', { label: tr('Assertion consumer service (ACS) URL'), help: tr('Where identity providers send people back, for one that asks for it rather than the metadata.') }),
         ],
       },
       {

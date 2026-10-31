@@ -1039,8 +1039,8 @@ GitHub, Google, Azure AD) saying whether it is on, and opening its form.
 GitHub's six categories become one card: github.com or GitHub Enterprise,
 then any account, the members of an organization, or the members of a team;
 it writes the matching AWX category. Each form is in the order the provider
-is set up, and ends with what to give the provider (callback URL, SAML
-service provider metadata), with copy buttons.
+is set up, and shows what to give the provider where the provider asks for
+it (callback URL, SAML service provider metadata), with copy buttons.
 
 **Done when:** each login method can be set up from its card, and the
 overview shows which ones are on. The GitHub card covers its six AWX

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { categoryPage, changesByCategory, childPages, hasNoEffect, pageSections, placements, settingLabel, settingPlace, settingsPage, settingsPages, visibleSections } from './settingsLayout'
+import { categoryPage, changesByCategory, childPages, githubForm, hasNoEffect, pageSections, placements, settingLabel, settingPlace, settingsPage, settingsPages, visibleSections } from './settingsLayout'
+import { githubVariantOf, githubVariants } from './loginMethods'
 
 // AWX's settings categories, as the API lists them at settings/: they do
 // not change, so AWX's clients keep working.
@@ -169,6 +170,24 @@ describe('the settings layout', () => {
     expect(safety.rows.filter((r) => !r.consequence).map((r) => r.keys[0])).toEqual(['AD_HOC_COMMANDS'])
     // Jinja's choices in plain words, the default first.
     expect(safety.rows.find((r) => r.keys[0] === 'ALLOW_JINJA_IN_EXTRA_VARS')?.options?.map(([v]) => v)).toEqual(['template', 'never', 'always'])
+  })
+
+  it('draws each of GitHub\'s six categories as one form, with every setting of it', () => {
+    const page = settingsPage('github')!
+    for (const v of githubVariants) {
+      const form = githubForm(v)
+      const keys = [...form.where, ...(form.who ? [form.who] : []), ...form.app, ...form.maps].flatMap((r) => r.keys)
+      const section = page.sections.find((s) => s.id === v.category)!
+      expect(keys.sort()).toEqual(section.rows.flatMap((r) => r.keys).sort())
+      expect(keys.every((k) => k.startsWith(v.prefix) && githubVariantOf(k) === v)).toBe(true)
+    }
+    // The callback URL comes first in the OAuth app step: GitHub asks for it before it gives a client ID.
+    expect(githubForm(githubVariants[1]).app.map((r) => r.keys[0])).toEqual(['SOCIAL_AUTH_GITHUB_ORG_CALLBACK_URL', 'SOCIAL_AUTH_GITHUB_ORG_KEY', 'SOCIAL_AUTH_GITHUB_ORG_SECRET'])
+  })
+
+  it('ends the SAML service provider with what to give the identity providers', () => {
+    const sp = settingsPage('saml')!.sections.find((s) => s.id === 'service-provider')!
+    expect(sp.rows.slice(-2).map((r) => r.keys[0])).toEqual(['SOCIAL_AUTH_SAML_METADATA_URL', 'SOCIAL_AUTH_SAML_CALLBACK_URL'])
   })
 
   it('knows the settings that have no effect from their help', () => {

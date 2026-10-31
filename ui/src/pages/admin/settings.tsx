@@ -40,9 +40,24 @@ import {
   type Search,
 } from '../../lib/settingValues'
 import {
+  githubChosen,
+  githubOn,
+  githubVariant,
+  githubVariants,
+  githubWho,
+  localState,
+  methodStates,
+  type GitHubHost,
+  type GitHubVariant,
+  type GitHubWho,
+  type MethodState,
+} from '../../lib/loginMethods'
+import type { Backend } from '../../lib/sso'
+import {
   categoryPage,
   changesByCategory,
   childPages,
+  githubForm,
   hasNoEffect,
   pageSections,
   rowAnchor,
@@ -108,6 +123,10 @@ export function Settings() {
   const [showNoEffect, setShowNoEffect] = useStored('settings.noEffect', false)
   const page = settingsPage(slug)
   const loaded = !!(data && saved)
+  const states = useMemo(() => (saved ? methodStates(saved) : undefined), [saved])
+  // The GitHub variant the form shows, once chosen; until then, the one linked to or on.
+  const [ghChoice, setGhChoice] = useState<string | null>(null)
+  useEffect(() => setGhChoice(null), [hash, slug])
   // A link to a section or a setting: scrolled to once the page is drawn.
   useEffect(() => {
     if (loaded && hash) document.getElementById(decodeURIComponent(hash.slice(1)))?.scrollIntoView({ block: 'start' })
@@ -127,6 +146,10 @@ export function Settings() {
     (k) => k === target || dirty.includes(k) || !!errors[k],
     target,
   )
+  const gh = slug === 'github' && saved ? (githubVariants.find((v) => v.category === ghChoice) ?? githubChosen(saved, target)) : undefined
+  // A login method's page says whether it is on.
+  const methodOn = page?.parent === 'signin' && saved ? (gh ? githubOn(saved, gh) : !!states?.[slug]?.on) : undefined
+  const index = gh ? githubIndex() : sections
   const set = (k: string, v: unknown) => {
     setEdits((e) => ({ ...e, [k]: v }))
     if (errors[k]) setErrors(({ [k]: _, ...rest }) => rest)
@@ -165,29 +188,53 @@ export function Settings() {
   }
   // Resetting a page resets the AWX categories it shows: each is on one page only.
   const resettable = page && data ? page.categories.filter((c) => Object.keys(data.categories).some((k) => data.categories[k] === c && data.writable.has(k))) : []
-  const resetPage = async () => {
-    if (!page || !data) return
-    if (!(await confirm({ title: tr('Reset every setting of {page} to its default?', { page: page.title }), confirm: tr('Reset'), danger: true }))) return
+  const resetCategories = async (cats: string[], ask: { title: string; body?: ReactNode; confirm: string }, done: string) => {
+    if (!data) return
+    if (!(await confirm({ ...ask, danger: true }))) return
     try {
-      for (const c of resettable) await api.del(`settings/${c}/`)
-      toast(tr('Reset to defaults'))
+      for (const c of cats) await api.del(`settings/${c}/`)
+      toast(done)
     } catch (e) {
       toast((e as Error).message, 'error')
     }
     await invalidate('settings/')
-    setEdits((e) => Object.fromEntries(Object.entries(e).filter(([k]) => !resettable.includes(data.categories[k]))))
+    setEdits((e) => Object.fromEntries(Object.entries(e).filter(([k]) => !cats.includes(data.categories[k]))))
+  }
+  const resetPage = () => page && resetCategories(resettable, { title: tr('Reset every setting of {page} to its default?', { page: page.title }), confirm: tr('Reset') }, tr('Reset to defaults'))
+  // Turning a login method off resets its settings; GitHub's, those of the variant shown.
+  const turnOff = () => {
+    if (!page || !saved) return
+    const method = gh ? `${page.title} (${githubWho(saved, gh)})` : page.title
+    return resetCategories(
+      gh ? [gh.category] : page.categories,
+      { title: tr('Turn off {method}?', { method }), body: tr('Its settings go back to their defaults, secrets included, and people can no longer sign in with it.'), confirm: tr('Turn off') },
+      tr('{method} turned off', { method }),
+    )
   }
   const placed = data ? dirty.map((k) => settingPlace(k, data.categories[k], hasNoEffect(data.meta[k]?.help_text))?.page) : []
   const elsewhere = settingsPages.filter((p) => p.slug !== slug && placed.includes(p.slug))
   const ctx: Ctx | null = data && saved ? { data, saved, values, set, errors, editable, page: slug, hash: hash.slice(1) } : null
   return (
     <div className="page settings">
-      <SettingsNav active={slug} sections={sections} changed={changed.data ? Object.keys(changed.data).length : undefined} />
+      <SettingsNav active={slug} sections={sections} states={states} changed={changed.data ? Object.keys(changed.data).length : undefined} />
       <div className="settings-main">
-        <PageHead title={page?.title ?? tr('Changed from default')} subtitle={page?.blurb ?? tr('Every setting that differs from its default, and where it is.')}>
-          {sections.length > 1 && (
+        <PageHead
+          crumbs={page?.parent ? [{ label: settingsPage(page.parent)?.title ?? page.parent, to: `/settings/${page.parent}` }] : undefined}
+          title={page?.title ?? tr('Changed from default')}
+          badge={methodOn !== undefined && <OnBadge on={methodOn} />}
+          actions={
+            methodOn &&
+            editable && (
+              <button type="button" className="btn ghost" onClick={turnOff}>
+                {tr('Turn off…')}
+              </button>
+            )
+          }
+          subtitle={page?.blurb ?? tr('Every setting that differs from its default, and where it is.')}
+        >
+          {index.length > 1 && (
             <nav className="s-index" aria-label={tr('On this page')}>
-              {sections.map((s) => (
+              {index.map((s) => (
                 <a key={s.id} href={`#${s.id}`}>
                   {s.title}
                 </a>
@@ -195,7 +242,7 @@ export function Settings() {
             </nav>
           )}
         </PageHead>
-        <div className="page-body">
+        <div className={`page-body${gh ? ' steps' : ''}`}>
           {!editable && <div className="notice">{tr('Only superusers can change settings. You can review them here.')}</div>}
           {loadError ? (
             <ErrorNote error={loadError} />
@@ -203,6 +250,8 @@ export function Settings() {
             <Loading />
           ) : !page ? (
             changed.error ? <ErrorNote error={changed.error} /> : changed.data ? <ChangedSettings all={ctx.data} changed={changed.data} /> : <Loading />
+          ) : gh ? (
+            <GitHubForm v={gh} ctx={ctx} choose={(v) => setGhChoice(v.category)} />
           ) : (
             sections.map((s) => <SectionView key={s.id} section={s} ctx={ctx} />)
           )}
@@ -259,12 +308,16 @@ export function Settings() {
 }
 
 /** The menu: the pages, the login methods under Sign-in, the current page's sections. */
-function SettingsNav({ active, sections, changed }: { active: string; sections: Section[]; changed?: number }) {
-  const link = (p: SettingsPage) => (
-    <Link key={p.slug} to={`/settings/${p.slug}`} className={p.slug === active ? 'active' : ''} aria-current={p.slug === active ? 'page' : undefined}>
-      {p.menu ?? p.title}
-    </Link>
-  )
+function SettingsNav({ active, sections, states, changed }: { active: string; sections: Section[]; states?: Record<string, MethodState>; changed?: number }) {
+  const link = (p: SettingsPage) => {
+    const state = p.parent ? states?.[p.slug] : undefined
+    return (
+      <Link key={p.slug} to={`/settings/${p.slug}`} className={p.slug === active ? 'active' : ''} aria-current={p.slug === active ? 'page' : undefined}>
+        {state && <span className="cell" data-size="xs" data-state={state.on ? 'ok' : 'none'} title={state.on ? tr('Enabled') : tr('Not set up')} />}
+        {p.menu ?? p.title}
+      </Link>
+    )
+  }
   return (
     <nav className="sidelist settings-nav" aria-label={tr('Settings')}>
       <div className="group">
@@ -319,6 +372,7 @@ interface Ctx {
 function SectionView({ section, ctx }: { section: Section; ctx: Ctx }) {
   const rows = (
     <div className="s-rows">
+      {ctx.page === 'oidc' && section.id === 'provider' && <OIDCRedirect />}
       {section.rows.map((r) => (
         <SettingRow key={rowAnchor(r)} row={r} ctx={ctx} />
       ))}
@@ -355,24 +409,175 @@ function SectionView({ section, ctx }: { section: Section; ctx: Ctx }) {
     <section className={`s-section ${section.noEffect ? 'no-effect' : ''}`} id={section.id}>
       <h2>{section.title}</h2>
       {section.intro && <p className="s-intro">{section.intro}</p>}
-      {section.children ? <LoginMethods parent={ctx.page} /> : rows}
+      {section.children ? <LoginMethods ctx={ctx} /> : rows}
     </section>
   )
 }
 
-/** The login methods, each opening its page. */
-function LoginMethods({ parent }: { parent: string }) {
+/** A login method on or off, in a word. */
+function OnBadge({ on }: { on: boolean }) {
+  return (
+    <span className="badge ok-badge">
+      <span className="cell" data-size="xs" data-state={on ? 'ok' : 'none'} aria-hidden="true" />
+      {on ? tr('Enabled') : tr('Not set up')}
+    </span>
+  )
+}
+
+/** The login methods, those on first: local accounts, then a card for each, opening its page. */
+function LoginMethods({ ctx }: { ctx: Ctx }) {
+  const states = methodStates(ctx.saved)
+  const local = localState(ctx.saved)
+  const pages = childPages(ctx.page)
+  const ordered = [...pages.filter((p) => states[p.slug]?.on), ...pages.filter((p) => !states[p.slug]?.on)]
   return (
     <div className="methods">
-      {childPages(parent).map((p) => (
-        <Link key={p.slug} className="method" to={`/settings/${p.slug}`}>
-          <div className="m-head">
-            <b>{p.title}</b>
-          </div>
-          <p className="m-sub">{p.blurb}</p>
-        </Link>
-      ))}
+      <a className="method on" href="#local-accounts">
+        <div className="m-head">
+          <span className="cell" data-state="ok" aria-hidden="true" />
+          <b>{tr('Local accounts')}</b>
+          <span className="m-state">{tr('Enabled')}</span>
+        </div>
+        <p className="m-what">{local.what}</p>
+        <p className="m-sub">{tr('Passwords kept by awxnext. Superusers keep theirs even when local accounts are off for others.')}</p>
+      </a>
+      {ordered.map((p) => {
+        const s = states[p.slug] ?? { on: false }
+        return (
+          <Link key={p.slug} className={`method ${s.on ? 'on' : 'off'}`} to={`/settings/${p.slug}`}>
+            <div className="m-head">
+              <span className="cell" data-state={s.on ? 'ok' : 'none'} aria-hidden="true" />
+              <b>{p.title}</b>
+              <span className="m-state">{s.on ? tr('Enabled') : tr('Not set up')}</span>
+            </div>
+            {s.what && <p className="m-what">{s.what}</p>}
+            <p className="m-sub">{s.on ? s.sub : p.blurb}</p>
+            <span className="btn sm">{s.on ? tr('Edit') : tr('Set up')}</span>
+          </Link>
+        )
+      })}
     </div>
+  )
+}
+
+/** The address OIDC sends people back to: the server's, known once OIDC is on. */
+function OIDCRedirect() {
+  const backends = useQuery({ queryKey: ['settings/auth-backends'], queryFn: () => api.get<Record<string, Backend & { complete_url?: string }>>('auth/'), retry: false })
+  const url = backends.data?.oidc?.complete_url
+  return (
+    <div className="srow" id="redirect-uri">
+      <div>
+        <div className="s-name">{tr('Redirect URI')}</div>
+        <p className="s-help">{tr('Give it to the provider when you register awxnext as a client.')}</p>
+      </div>
+      <div className="s-control">
+        {url ? <ReadOnlyValue value={url} /> : <span className="note">{tr('Shown once a provider URL and a client ID are saved: the server\'s external URL, AWXNEXT_BASE_URL, followed by /sso/complete/oidc/.')}</span>}
+      </div>
+    </div>
+  )
+}
+
+/** The sections of the GitHub form, for the page's index. */
+const githubIndex = () => [
+  { id: 'who', title: tr('Who may sign in') },
+  { id: 'oauth-app', title: tr('OAuth app on GitHub') },
+  { id: 'maps', title: tr('Organizations and teams') },
+]
+
+/** GitHub's six AWX categories as one form: github.com or GitHub Enterprise,
+ * then who may sign in. It edits the settings of the category they make. */
+function GitHubForm({ v, ctx, choose }: { v: GitHubVariant; ctx: Ctx; choose: (v: GitHubVariant) => void }) {
+  const form = githubForm(v)
+  const others = githubVariants.filter((o) => o !== v && githubOn(ctx.saved, o))
+  const hosts: [GitHubHost, string][] = [
+    ['github.com', asIs('github.com')],
+    ['enterprise', tr('GitHub Enterprise')],
+  ]
+  const whos: [GitHubWho, string, string][] = [
+    ['any', tr('Any GitHub account'), tr('Anyone with an account can sign in, and gets what the maps below give.')],
+    ['org', tr('Members of an organization'), tr('As in its URL: https://github.com/<organization>')],
+    ['team', tr('Members of a team'), tr('The team\'s numeric ID, from GET /orgs/<org>/teams/<team>')],
+  ]
+  const whoKey = form.who?.keys[0]
+  const rows = (rs: Row[]) => rs.map((r) => <SettingRow key={rowAnchor(r)} row={r} ctx={ctx} />)
+  return (
+    <>
+      <section className="s-section" id="who">
+        <h2>{tr('Who may sign in')}</h2>
+        <div className="s-rows">
+          <div className="srow">
+            <div>
+              <div className="s-name">{asIs('GitHub')}</div>
+              <p className="s-help">{tr('github.com, or your own GitHub Enterprise Server.')}</p>
+            </div>
+            <div className="s-control">
+              <div className="segmented" role="radiogroup" aria-label={asIs('GitHub')}>
+                {hosts.map(([h, label]) => (
+                  <label key={h} className={v.host === h ? 'on' : ''}>
+                    <input type="radio" name="gh-host" checked={v.host === h} onChange={() => choose(githubVariant(h, v.who))} />
+                    {label}
+                  </label>
+                ))}
+              </div>
+            </div>
+          </div>
+          {rows(form.where)}
+          <div className={`srow${whoKey && !same(ctx.values[whoKey], ctx.saved[whoKey]) ? ' edited' : ''}`} id={form.who ? rowAnchor(form.who) : undefined}>
+            <div>
+              <div className="s-name">{tr('Accounts')}</div>
+              <p className="s-help">{tr('GitHub checks membership at each login: someone who leaves the organization or team can no longer sign in.')}</p>
+            </div>
+            <div className="s-control">
+              <div className="choice" role="radiogroup" aria-label={tr('Accounts')}>
+                {whos.map(([w, label, help]) => (
+                  <Fragment key={w}>
+                    <label>
+                      <input type="radio" name="gh-who" checked={v.who === w} onChange={() => choose(githubVariant(v.host, w))} />
+                      <span>
+                        {label}
+                        <small>{help}</small>
+                      </span>
+                    </label>
+                    {v.who === w && form.who && whoKey && (
+                      <div className="indent">
+                        <SettingControl k={whoKey} row={{ ...form.who, label }} ctx={ctx} />
+                        {ctx.errors[whoKey] && <span className="err">{ctx.errors[whoKey]}</span>}
+                      </div>
+                    )}
+                  </Fragment>
+                ))}
+              </div>
+              <span className="saved-as">
+                {tr('Saved in AWX\'s category')} <code>{v.category}</code>: <code>{v.prefix}*</code>
+              </span>
+              {others.length > 0 && (
+                <span className="note">
+                  {tr('Also set up, and offered on the login page:')}{' '}
+                  {others.map((o, i) => (
+                    <Fragment key={o.category}>
+                      {i ? ', ' : ''}
+                      <button type="button" className="link-btn" onClick={() => choose(o)}>
+                        {githubWho(ctx.saved, o)}
+                      </button>
+                    </Fragment>
+                  ))}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      </section>
+      <section className="s-section" id="oauth-app">
+        <h2>{tr('OAuth app on GitHub')}</h2>
+        <p className="s-intro">{tr('On GitHub, under Settings → Developer settings → OAuth Apps, register an app with this callback URL, then copy its client ID and a client secret here.')}</p>
+        <div className="s-rows">{rows(form.app)}</div>
+      </section>
+      <section className="s-section" id="maps">
+        <h2>{tr('Organizations and teams')}</h2>
+        <p className="s-intro">{tr('Applied at each login. GitHub uses only these maps, not the default ones: without them, people join no organization.')}</p>
+        <div className="s-rows">{rows(form.maps)}</div>
+      </section>
+    </>
   )
 }
 

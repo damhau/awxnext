@@ -305,6 +305,18 @@ on every page until you hide them again. A link to one of them, or a change to o
 too. Rows are labelled by what they do; the API keeps AWX's labels. The former addresses (`/settings/authentication`,
 `/settings/github-org`...) lead to the new pages.
 
+Sign-in starts with a card for each login method, those on first, with what each is set to; the
+menu marks them too. A method is on as the server decides it: OIDC with a provider URL and a
+client ID, LDAP with a server URI, SAML with an identity provider, GitHub, Google and Microsoft
+Entra ID with a client ID and a secret. A method's page says whether it is on, and "Turn off…"
+resets its settings. GitHub's six AWX categories are one form: github.com or GitHub Enterprise,
+then any account, the members of an organization or those of a team, which pick the category it
+saves to (`github`, `github-org`... `github-enterprise-team`). Each category keeps its own
+settings, as in AWX, and the form names the others set up, which the login page offers too. Each
+form shows what to give the provider, with a copy button, where the provider asks for it: the
+callback URL before the client ID, OIDC's redirect URI once OIDC is on, and SAML's metadata URL
+once the service provider's certificate is set.
+
 | AWX category | Page |
 |---|---|
 | `system`, `named-url` | System |

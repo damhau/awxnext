@@ -2682,5 +2682,62 @@
   "Also in a launcher's variables": "Aussi dans les variables de qui lance",
   "Followed anywhere lets a project link to files elsewhere on the server and have them listed.": "Suivis partout, ils permettent à un projet de pointer vers des fichiers ailleurs sur le serveur et de les faire lister.",
   "Ignored: the job starts without them, and the response lists them in ignored_fields. For clients written for AWX that send every field.": "Ignorés : la tâche démarre sans eux, et la réponse les liste dans ignored_fields. Pour les clients écrits pour AWX qui envoient tous les champs.",
-  "Only in the template's own variables": "Seulement dans les variables du modèle"
+  "Only in the template's own variables": "Seulement dans les variables du modèle",
+  "Accounts": "Comptes",
+  "Also set up, and offered on the login page:": "Aussi configurées, et proposées sur la page de connexion :",
+  "And {n} other GitHub logins": {
+    "one": "Et {n} autre connexion GitHub",
+    "other": "Et {n} autres connexions GitHub"
+  },
+  "Any GitHub account": "Tout compte GitHub",
+  "Any Google account": "Tout compte Google",
+  "Anyone with an account can sign in, and gets what the maps below give.": "Toute personne qui a un compte peut se connecter, et reçoit ce que donnent les correspondances ci-dessous.",
+  "Applied at each login. GitHub uses only these maps, not the default ones: without them, people join no organization.": "Appliquées à chaque connexion. GitHub n’utilise que ces correspondances, pas celles par défaut : sans elles, personne ne rejoint d’organisation.",
+  "As in its URL: https://github.com/<organization>": "Comme dans son URL : https://github.com/<organization>",
+  "Authorization callback URL": "URL de rappel d’autorisation",
+  "Everyone with a password": "Toute personne avec un mot de passe",
+  "GitHub Enterprise": "GitHub Enterprise",
+  "GitHub checks membership at each login: someone who leaves the organization or team can no longer sign in.": "GitHub vérifie l’appartenance à chaque connexion : qui quitte l’organisation ou l’équipe ne peut plus se connecter.",
+  "Give it to each identity provider: it holds the entity ID, the ACS URL and the certificate above.": "À donner à chaque fournisseur d’identité : elle contient l’ID d’entité, l’URL ACS et le certificat ci-dessus.",
+  "Give it to the provider when you register awxnext as a client.": "À donner au fournisseur quand vous y enregistrez awxnext comme client.",
+  "Its maps place people in {n} organizations": {
+    "one": "Ses correspondances placent les gens dans {n} organisation",
+    "other": "Ses correspondances placent les gens dans {n} organisations"
+  },
+  "Its settings go back to their defaults, secrets included, and people can no longer sign in with it.": "Ses réglages reviennent à leurs valeurs par défaut, secrets compris, et personne ne peut plus se connecter par elle.",
+  "Made from the service URL, on the System page.": "Construite à partir de l’URL du service, sur la page Système.",
+  "Members of a team": "Membres d’une équipe",
+  "Members of an organization": "Membres d’une organisation",
+  "No map: people join no organization": "Aucune correspondance : personne ne rejoint d’organisation",
+  "Not set up": "Non configurée",
+  "OAuth app on GitHub": "Application OAuth sur GitHub",
+  "On GitHub, under Settings → Developer settings → OAuth Apps, register an app with this callback URL, then copy its client ID and a client secret here.": "Sur GitHub, sous Settings → Developer settings → OAuth Apps, enregistrez une application avec cette URL de rappel, puis copiez ici son ID client et un secret client.",
+  "Passwords kept by awxnext. Superusers keep theirs even when local accounts are off for others.": "Mots de passe gardés par awxnext. Les superutilisateurs gardent le leur même quand les comptes locaux sont désactivés pour les autres.",
+  "Saved in AWX's category": "Enregistré dans la catégorie d’AWX",
+  "Set up": "Configurer",
+  "Shown once a provider URL and a client ID are saved: the server's external URL, AWXNEXT_BASE_URL, followed by /sso/complete/oidc/.": "Affichée une fois une URL de fournisseur et un ID client enregistrés : l’URL externe du serveur, AWXNEXT_BASE_URL, suivie de /sso/complete/oidc/.",
+  "Superusers only": "Superutilisateurs seulement",
+  "The team's numeric ID, from GET /orgs/<org>/teams/<team>": "L’ID numérique de l’équipe, d’après GET /orgs/<org>/teams/<team>",
+  "Turn off {method}?": "Désactiver {method} ?",
+  "Turn off…": "Désactiver…",
+  "Where identity providers send people back, for one that asks for it rather than the metadata.": "Où les fournisseurs d’identité renvoient les gens, pour celui qui la demande plutôt que les métadonnées.",
+  "Who may sign in": "Qui peut se connecter",
+  "any account": "tout compte",
+  "github.com, or your own GitHub Enterprise Server.": "github.com, ou votre propre GitHub Enterprise Server.",
+  "members of team {id}": "membres de l’équipe {id}",
+  "members of {org}": "membres de {org}",
+  "provider tokens accepted in API calls": "jetons du fournisseur acceptés dans les appels d’API",
+  "{method} turned off": "{method} désactivée",
+  "{n} identity providers": {
+    "one": "{n} fournisseur d’identité",
+    "other": "{n} fournisseurs d’identité"
+  },
+  "{n} mapping rules": {
+    "one": "{n} règle de correspondance",
+    "other": "{n} règles de correspondance"
+  },
+  "{n} servers of 6, tried in order": {
+    "one": "{n} serveur sur 6",
+    "other": "{n} serveurs sur 6, essayés dans l’ordre"
+  }
 }
