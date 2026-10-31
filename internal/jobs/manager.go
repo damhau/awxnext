@@ -118,7 +118,10 @@ type Manager struct {
 	// after it reached a final status (notifications, workflows).
 	StartedHooks  []func(ctx context.Context, m *Manager, job Row)
 	FinishedHooks []func(ctx context.Context, m *Manager, job Row)
-	leader        bool
+	// Rejoin registers a node again, measured, in its groups: a node another
+	// one marked lost whose heartbeats resume, or one deleted as lost.
+	Rejoin func(ctx context.Context, node string) error
+	leader bool
 	// deps counts the dependency work of the current dispatcher pass.
 	deps struct {
 		jobs int
@@ -635,7 +638,7 @@ func (m *Manager) heartbeat(ctx context.Context) {
 	t := time.NewTicker(15 * time.Second)
 	defer t.Stop()
 	for {
-		m.DB().Exec(ctx, "UPDATE instances SET last_seen = now(), node_state = 'ready' WHERE hostname = $1", m.Node)
+		m.Beat(ctx, m.Node, m.App.Cfg.AutoDeprovisionInstances)
 		m.publishMetrics(ctx)
 		select {
 		case <-ctx.Done():
@@ -645,9 +648,43 @@ func (m *Manager) heartbeat(ctx context.Context) {
 	}
 }
 
-// processless lists job types without a process (workflows): a restart or a
+// LostError is AWX's error on a node another one found silent.
+const LostError = "Another cluster node has determined this instance to be unresponsive"
+
+// Beat is one heartbeat of node (this node's, every 15 s; tests beat for
+// others). As AWX's cluster_node_heartbeat, a node marked lost rejoins,
+// measured again, and a node deleted as lost registers again when
+// reregister (auto-deprovisioning) is on.
+func (m *Manager) Beat(ctx context.Context, node string, reregister bool) {
+	var lost bool
+	err := m.DB().QueryRow(ctx, "UPDATE instances SET last_seen = now(), node_state = 'ready' WHERE hostname = $1 RETURNING errors = $2",
+		node, LostError).Scan(&lost)
+	switch {
+	case ctx.Err() != nil:
+		return
+	case errors.Is(err, pgx.ErrNoRows) && !reregister:
+		slog.Error("this node is not registered: deprovisioned while running; restart it to register it again", "node", node)
+		return
+	case errors.Is(err, pgx.ErrNoRows):
+		slog.Warn("registering this node again, after it was deprovisioned as lost", "node", node)
+	case err != nil:
+		slog.Error("heartbeat", "node", node, "err", err)
+		return
+	case !lost:
+		return
+	default:
+		slog.Warn("rejoining the cluster after being marked lost", "node", node)
+	}
+	if m.Rejoin != nil {
+		if err := m.Rejoin(ctx, node); err != nil && ctx.Err() == nil {
+			slog.Error("rejoining the cluster", "node", node, "err", err)
+		}
+	}
+}
+
+// Processless lists job types without a process (workflows): a restart or a
 // lost node does not interrupt them, the dispatcher keeps driving them.
-func processless() []string {
+func Processless() []string {
 	specsMu.RLock()
 	defer specsMu.RUnlock()
 	out := []string{}
@@ -662,7 +699,7 @@ func processless() []string {
 // FailOrphans fails jobs this node was running before it restarted.
 func (m *Manager) FailOrphans(ctx context.Context) {
 	rows, err := m.DB().Query(ctx, `SELECT id FROM unified_jobs WHERE controller_node = $1 AND status IN ('waiting', 'running')
-		AND type <> ALL($2)`, m.Node, processless())
+		AND type <> ALL($2)`, m.Node, Processless())
 	if err != nil {
 		return
 	}
@@ -683,7 +720,7 @@ func (m *Manager) FailOrphans(ctx context.Context) {
 // reap fails jobs whose controlling node stopped sending heartbeats.
 func (m *Manager) reap(ctx context.Context) {
 	rows, err := m.DB().Query(ctx, `SELECT j.id FROM unified_jobs j JOIN instances i ON i.hostname = j.controller_node
-		WHERE j.status IN ('waiting', 'running') AND i.last_seen < now() - interval '2 minutes' AND j.type <> ALL($1)`, processless())
+		WHERE j.status IN ('waiting', 'running') AND i.last_seen < now() - interval '2 minutes' AND j.type <> ALL($1)`, Processless())
 	if err != nil {
 		return
 	}

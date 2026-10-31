@@ -47,6 +47,10 @@ type Config struct {
 	ShimImage string
 	// ServiceURL is how job pods reach the control plane (defaults to BaseURL).
 	ServiceURL string
+	// AutoDeprovisionInstances deletes control and hybrid nodes found lost,
+	// and lets a node deleted that way register again (AWX's
+	// AWX_AUTO_DEPROVISION_INSTANCES): on Kubernetes, pod names never come back.
+	AutoDeprovisionInstances bool
 }
 
 func Load() *Config {
@@ -73,6 +77,7 @@ func Load() *Config {
 		LogLevel:         env("AWXNEXT_LOG_LEVEL", "info"),
 		ShimImage:        env("AWXNEXT_SHIM_IMAGE", "ghcr.io/damhau/awxnext:latest"),
 	}
+	c.AutoDeprovisionInstances, _ = strconv.ParseBool(os.Getenv("AWXNEXT_AUTO_DEPROVISION_INSTANCES"))
 	c.ServiceURL = strings.TrimRight(env("AWXNEXT_SERVICE_URL", c.BaseURL), "/")
 	return c
 }

@@ -13,6 +13,11 @@ imagePullSecrets: []
 # API and control plane replicas. Each registers itself as an instance (its
 # pod name) and runs jobs; jobs in container groups run in their own pods.
 replicaCount: 1
+# Each rollout replaces the pods, whose names never come back: an instance
+# whose pod has been silent for 2 minutes is deleted (once its jobs are
+# failed) instead of staying listed as unavailable.
+# AWXNEXT_AUTO_DEPROVISION_INSTANCES.
+autoDeprovisionInstances: true
 
 # Argo CD and Flux render the chart with `helm template`, where the lookup
 # that keeps generated secrets across upgrades finds nothing: each render

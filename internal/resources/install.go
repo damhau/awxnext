@@ -32,6 +32,20 @@ func Install(app *api.App) {
 	app.Handle("OPTIONS", "/api/v2/applications/", applications)
 }
 
+// registerNode registers node as this control node, measured, as AWX's
+// register and local_health_check: ready, with its own capacity, and
+// without the errors of an earlier check or of being found lost.
+func registerNode(ctx context.Context, db api.DBTX, app *api.App, node string) error {
+	cpu, mem, cpuCap, memCap := ControlNodeResources(app)
+	_, err := db.Exec(ctx, `INSERT INTO instances (hostname, node_type, node_state, cpu, memory, cpu_capacity, mem_capacity, capacity, managed, version, last_seen, internal_url)
+		VALUES ($1, 'hybrid', 'ready', $4, $5, $6, $7, greatest($6::int, $7::int), true, $2, now(), $3)
+		ON CONFLICT (hostname) DO UPDATE SET last_seen = now(), node_state = 'ready', errors = '', version = EXCLUDED.version,
+			internal_url = EXCLUDED.internal_url, cpu = EXCLUDED.cpu, memory = EXCLUDED.memory, cpu_capacity = EXCLUDED.cpu_capacity,
+			mem_capacity = EXCLUDED.mem_capacity, capacity = `+capacity.SQL("EXCLUDED.cpu_capacity", "EXCLUDED.mem_capacity"),
+		node, api.ProductVersion, app.Cfg.InternalURL, cpu, mem, cpuCap, memCap)
+	return err
+}
+
 // applications stands in for AWX's OAuth2 applications, which are not
 // supported (personal tokens replace them): always empty and marked
 // deprecated, so awxkit's export and import skip it.
@@ -70,14 +84,7 @@ func Bootstrap(ctx context.Context, app *api.App) error {
 			return err
 		}
 	}
-	cpu, mem, cpuCap, memCap := ControlNodeResources(app)
-	_, err := app.DB.Exec(ctx, `INSERT INTO instances (hostname, node_type, node_state, cpu, memory, cpu_capacity, mem_capacity, capacity, managed, version, last_seen, internal_url)
-		VALUES ($1, 'hybrid', 'ready', $4, $5, $6, $7, greatest($6::int, $7::int), true, $2, now(), $3)
-		ON CONFLICT (hostname) DO UPDATE SET last_seen = now(), version = EXCLUDED.version, internal_url = EXCLUDED.internal_url,
-			cpu = EXCLUDED.cpu, memory = EXCLUDED.memory, cpu_capacity = EXCLUDED.cpu_capacity, mem_capacity = EXCLUDED.mem_capacity,
-			capacity = `+capacity.SQL("EXCLUDED.cpu_capacity", "EXCLUDED.mem_capacity"),
-		app.Cfg.NodeName, api.ProductVersion, app.Cfg.InternalURL, cpu, mem, cpuCap, memCap)
-	if err != nil {
+	if err := registerNode(ctx, app.DB, app, app.Cfg.NodeName); err != nil {
 		return err
 	}
 	if err := SeedInfrastructure(ctx, app); err != nil {

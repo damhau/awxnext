@@ -17,6 +17,7 @@ by a system administrator, as in AWX.
 | `AWXNEXT_BASE_URL` | `http://localhost:8052` | External URL: OIDC and SAML redirects, links in notifications. |
 | `AWXNEXT_NODE_NAME` | the host name | This node's instance name; unique per node. |
 | `AWXNEXT_INTERNAL_URL` |  | How the other control nodes reach this one, to forward a container group pod's or an agent's connection to the node running its job. |
+| `AWXNEXT_AUTO_DEPROVISION_INSTANCES` | `false` | true deletes control and hybrid nodes silent for 2 minutes, instead of marking them unavailable, once the reaper has failed their jobs; a node deleted that way registers again if it comes back. The Helm chart turns it on: each rollout's pods have new names. |
 | `AWXNEXT_SERVICE_URL` | `AWXNEXT_BASE_URL` | How container group job pods reach the control plane. |
 | `AWXNEXT_UI_DIR` |  | Serve the web UI from this directory instead of the embedded build. |
 | `AWXNEXT_METRICS_TOKEN` |  | Bearer token /metrics requires; open when empty. |

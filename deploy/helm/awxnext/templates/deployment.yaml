@@ -45,6 +45,8 @@ spec:
                   fieldPath: status.podIP
             - name: AWXNEXT_INTERNAL_URL
               value: "http://$(POD_IP):8052"
+            - name: AWXNEXT_AUTO_DEPROVISION_INSTANCES
+              value: {{ .Values.autoDeprovisionInstances | quote }}
             - name: AWXNEXT_LISTEN
               value: ":8052"
             - name: AWXNEXT_ADMIN_USER

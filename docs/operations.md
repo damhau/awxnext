@@ -192,6 +192,15 @@ node runs jobs up to its capacity. Instance groups choose where jobs run: AWX's 
 policies, `max_concurrent_jobs` and `max_forks`. `awxnext list-instances` shows the nodes,
 their groups and heartbeats.
 
+A control node sends a heartbeat every 15 seconds. When one has been silent for 2 minutes, the
+dispatching node fails the jobs it was running and marks it lost, as AWX does: **unavailable**,
+with no capacity, so its groups' capacity drops. Its next heartbeat makes it ready again. With
+`AWXNEXT_AUTO_DEPROVISION_INSTANCES=true` a lost node is deleted instead, once its jobs have
+failed, and the group policies apply again. A node deleted that way registers again if it
+comes back. The Helm chart turns this on (`autoDeprovisionInstances`), because each rollout's
+pods have new names. A node provisioned with `awxnext provision-instance` that has not started
+yet is never lost.
+
 Remote execution nodes run `awxnext agent`, which dials back to the control plane: no inbound
 port, any node can take its connection. Container groups run each job in a pod.
 
