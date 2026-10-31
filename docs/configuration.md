@@ -121,43 +121,43 @@ clients and imports keep working.
 | `ACTIVITY_STREAM_ENABLED_FOR_INVENTORY_SYNC` | boolean | `false` | Also record the hosts and groups inventory syncs add and remove. Off by default: a sync can touch thousands of hosts. |
 | `ORG_ADMINS_CAN_SEE_ALL_USERS` | boolean | `true` | On: organization admins see every user and team. Off: only those of their organizations. |
 | `MANAGE_ORGANIZATION_AUTH` | boolean | `true` | Off: only superusers create, change and delete users and teams and change organization and team roles, for example when an identity provider owns membership. |
-| `DEFAULT_EXECUTION_ENVIRONMENT` | field | null |  |
-| `INSTALL_UUID` | string | `""` |  (read-only, readable by every user) |
+| `DEFAULT_EXECUTION_ENVIRONMENT` | field | null | The execution environment of jobs whose template, project and organization set none. Empty: the first managed execution environment. |
+| `INSTALL_UUID` | string | `""` | This installation's identifier, made when it first starts. Shipped logs, backups and job event archives carry it. (read-only, readable by every user) |
 | `CUSTOM_VENV_PATHS` | list | `[]` | *No effect.* custom virtual environments are replaced by execution environments. |
-| `REMOTE_HOST_HEADERS` | list | `["REMOTE_ADDR","REMOTE_HOST"]` |  |
-| `PROXY_IP_ALLOWED_LIST` | list | `[]` |  |
+| `REMOTE_HOST_HEADERS` | list | `["REMOTE_ADDR","REMOTE_HOST"]` | Where a provisioning callback finds the calling host's address or name: REMOTE_ADDR is the connection's address, HTTP_<NAME> a request header, such as HTTP_X_FORWARDED_FOR behind a reverse proxy. |
+| `PROXY_IP_ALLOWED_LIST` | list | `[]` | The IP addresses of the proxies whose HTTP_ headers in REMOTE_HOST_HEADERS are trusted. Empty: any client's headers are trusted. |
 | `SUBSCRIPTIONS_USERNAME` | string | `""` | *No effect.* there are no Red Hat subscriptions to manage. |
 | `AUTOMATION_ANALYTICS_GATHER_INTERVAL` | integer | `14400` | *No effect.* nothing is sent to Red Hat analytics. |
 | `INSIGHTS_TRACKING_STATE` | boolean | `false` | *No effect.* nothing is sent to Red Hat analytics. |
-| `AD_HOC_COMMANDS` | list | `["command","shell","yum","apt","apt_key","apt_repository"...` |  |
-| `ALLOW_JINJA_IN_EXTRA_VARS` | choice | `"template"` |  |
+| `AD_HOC_COMMANDS` | list | `["command","shell","yum","apt","apt_key","apt_repository"...` | The modules ad hoc commands may run. |
+| `ALLOW_JINJA_IN_EXTRA_VARS` | choice | `"template"` | Which extra variables may use Jinja. Only on job template definitions: those saved on the template; variables given at launch, survey answers included, are passed as plain text. Always: all of them. Never: none. Unless Always, an ad hoc command whose module arguments use Jinja is refused. |
 | `ALLOW_ANSIBLE_VARS_AT_LAUNCH` | boolean | `false` | Off: launch-time variables, survey questions and answers, schedule and ad hoc variables named ansible_* are refused, as they control how Ansible connects and runs (for example ansible_ssh_common_args). On: AWX's behaviour. Variables on templates, inventories and hosts are not affected. |
 | `IGNORE_UNPROMPTED_LAUNCH_FIELDS` | boolean | `false` | Off: a launch that sends a field the template does not prompt for (limit, inventory, extra variables…) is refused. On: AWX's behaviour, the field is ignored, the job starts without it and the response lists it in ignored_fields. |
 | `AWX_ISOLATION_BASE_PATH` | string | `"/tmp"` | *No effect.* job directories are under AWXNEXT_JOBS_ROOT. |
 | `AWX_ISOLATION_SHOW_PATHS` | list | `[]` | Host paths mounted into execution environment containers, one per entry: HOST-DIR[:CONTAINER-DIR[:OPTIONS]], options such as ro or z. Jobs on the none runtime see the host's files already. |
-| `AWX_TASK_ENV` | nested object | `{}` |  |
+| `AWX_TASK_ENV` | nested object | `{}` | Environment variables added to jobs, ad hoc commands and inventory syncs. |
 | `AWX_RUNNER_KEEPALIVE_SECONDS` | integer | `0` | Seconds of silence after which a job's worker sends a keepalive, so quiet tasks on remote execution nodes and container groups are not cut off by idle timeouts. 0: never. |
-| `GALAXY_TASK_ENV` | nested object | `{"ANSIBLE_FORCE_COLOR":"false","GIT_SSH_COMMAND":"ssh -o ...` |  |
+| `GALAXY_TASK_ENV` | nested object | `{"ANSIBLE_FORCE_COLOR":"false","GIT_SSH_COMMAND":"ssh -o ...` | Environment variables for ansible-galaxy when it installs a project's roles and collections, for example a proxy that only Galaxy needs. |
 | `PROJECT_UPDATE_VVV` | boolean | `false` | *No effect.* project syncs run git directly, not a playbook. |
-| `AWX_ROLES_ENABLED` | boolean | `true` |  |
-| `AWX_COLLECTIONS_ENABLED` | boolean | `true` |  |
-| `AWX_SHOW_PLAYBOOK_LINKS` | boolean | `false` |  |
+| `AWX_ROLES_ENABLED` | boolean | `true` | When a job starts, install the roles its project's roles/requirements.yml or requirements.yml lists. |
+| `AWX_COLLECTIONS_ENABLED` | boolean | `true` | When a job starts, install the collections its project's collections/requirements.yml or requirements.yml lists. |
+| `AWX_SHOW_PLAYBOOK_LINKS` | boolean | `false` | Follow symbolic links wherever they point when listing a project's playbooks. Off: only links to files inside the project are listed. |
 | `AWX_MOUNT_ISOLATED_PATHS_ON_K8S` | boolean | `false` | Also mount the paths to expose into container group pods, as hostPath volumes of the node the pod runs on. |
-| `GALAXY_IGNORE_CERTS` | boolean | `false` |  |
-| `STDOUT_MAX_BYTES_DISPLAY` | integer | `1048576` |  |
+| `GALAXY_IGNORE_CERTS` | boolean | `false` | Skip the certificate check when installing roles and collections from Galaxy servers. |
+| `STDOUT_MAX_BYTES_DISPLAY` | integer | `1048576` | Output larger than this, in bytes, is only offered as a download by the stdout endpoints. 0: no limit. |
 | `EVENT_STDOUT_MAX_BYTES_DISPLAY` | integer | `1024` | *No effect.* job output shows events in full; MAX_UI_JOB_EVENTS limits how many load at once. |
 | `JOB_EVENT_MAX_RATE` | integer | `1000` | Events one job stores per second. Beyond it, consecutive verbose events (plain output lines) are folded into one, so a very verbose job cannot starve the others; its output stays complete. 0: no limit. |
 | `MAX_WEBSOCKET_EVENT_RATE` | integer | `30` | Job events sent live to each browser per second; the job page fetches the rest from the API. 0: no limit. |
-| `BULK_JOB_MAX_LAUNCH` | integer | `100` |  |
-| `BULK_HOST_MAX_CREATE` | integer | `100` |  |
-| `BULK_HOST_MAX_DELETE` | integer | `250` |  |
+| `BULK_JOB_MAX_LAUNCH` | integer | `100` | The most jobs one bulk job launch may start. |
+| `BULK_HOST_MAX_CREATE` | integer | `100` | The most hosts one bulk host create may add. |
+| `BULK_HOST_MAX_DELETE` | integer | `250` | The most hosts one bulk host delete may remove. |
 | `SCHEDULE_MAX_JOBS` | integer | `10` | A schedule creates no job while this many jobs of its template are waiting to run. |
-| `AWX_ANSIBLE_CALLBACK_PLUGINS` | list | `[]` |  |
-| `DEFAULT_JOB_TIMEOUT` | integer | `0` |  |
-| `DEFAULT_JOB_IDLE_TIMEOUT` | integer | `0` |  |
-| `DEFAULT_INVENTORY_UPDATE_TIMEOUT` | integer | `0` |  |
-| `DEFAULT_PROJECT_UPDATE_TIMEOUT` | integer | `0` |  |
-| `ANSIBLE_FACT_CACHE_TIMEOUT` | integer | `0` |  |
+| `AWX_ANSIBLE_CALLBACK_PLUGINS` | list | `[]` | Directories of more Ansible callback plugins, as the job sees them (in its execution environment). Jobs, ad hoc commands and inventory syncs get them in ANSIBLE_CALLBACK_PLUGINS. |
+| `DEFAULT_JOB_TIMEOUT` | integer | `0` | Seconds after which a job or ad hoc command still running is stopped and fails, unless its template sets its own timeout. 0: no limit. |
+| `DEFAULT_JOB_IDLE_TIMEOUT` | integer | `0` | Seconds without output after which a job or ad hoc command is stopped. 0: no limit. |
+| `DEFAULT_INVENTORY_UPDATE_TIMEOUT` | integer | `0` | Seconds after which an inventory sync still running is stopped and fails, unless its source sets its own timeout. 0: no limit. |
+| `DEFAULT_PROJECT_UPDATE_TIMEOUT` | integer | `0` | Seconds after which a project sync still running is stopped and fails, unless its project sets its own timeout. It also bounds installing a project's requirements when a job starts. 0: no limit. |
+| `ANSIBLE_FACT_CACHE_TIMEOUT` | integer | `0` | For templates that use the fact cache: facts stored longer ago than this, in seconds, are not given to the next job. They stay stored. 0: no limit. |
 | `MAX_FORKS` | integer | `200` | Most forks a template, launch, schedule, workflow node or ad hoc command may ask for. 0: no limit. |
 | `PROJECT_ALLOW_FILE_URLS` | boolean | `false` | Allow git projects to use file:// URLs or local paths on the control plane. Only enable for trusted single-tenant installs. |
 | `JOB_EVENTS_HOT_DAYS` | integer | `14` | Days job events stay in the database before they are served from the compressed archive. |
@@ -182,11 +182,11 @@ clients and imports keep working.
 | `ALLOW_OAUTH2_FOR_EXTERNAL_USERS` | boolean | `false` | *No effect.* OAuth2 applications are not supported; use personal tokens or OIDC. |
 | `LOGIN_REDIRECT_OVERRIDE` | string | `""` | Where the web UI sends users who are not logged in, instead of its login page (for example a single sign-on login URL). Open the UI with ?login=local to reach the local login page anyway. |
 | `SOCIAL_AUTH_OIDC_KEY` | string | `""` | The OIDC key (Client ID) from your IDP. |
-| `SOCIAL_AUTH_OIDC_SECRET` | string | `""` |  (secret) |
+| `SOCIAL_AUTH_OIDC_SECRET` | string | `""` | The OIDC secret (Client Secret) from your IDP. (secret) |
 | `SOCIAL_AUTH_OIDC_OIDC_ENDPOINT` | string | `""` | The URL for your OIDC provider including the path up to /.well-known/openid-configuration |
-| `SOCIAL_AUTH_OIDC_VERIFY_SSL` | boolean | `true` |  |
-| `OIDC_SCOPES` | list | `["openid","profile","email","groups"]` |  |
-| `OIDC_USERNAME_CLAIM` | string | `"preferred_username"` |  |
+| `SOCIAL_AUTH_OIDC_VERIFY_SSL` | boolean | `true` | Check the OIDC provider's TLS certificate. Turn it off only for a test provider with a self-signed certificate. |
+| `OIDC_SCOPES` | list | `["openid","profile","email","groups"]` | The scopes asked of the OIDC provider at login. Most providers send the groups claim only with the groups scope. |
+| `OIDC_USERNAME_CLAIM` | string | `"preferred_username"` | The claim that gives the username. When a token lacks it, preferred_username, upn, email, the client ID and sub are tried in turn. |
 | `OIDC_GROUPS_CLAIM` | string | `"groups"` | Claim holding group names. Dotted paths are supported, e.g. realm_access.roles. |
 | `OIDC_AUDIENCES` | list | `[]` | Accepted audiences for bearer JWTs. Defaults to the client id. |
 | `OIDC_ALLOW_BEARER` | boolean | `true` | Accept access tokens issued by the OIDC provider as API bearer tokens. |
@@ -239,7 +239,7 @@ clients and imports keep working.
 | `SOCIAL_AUTH_GITHUB_ENTERPRISE_TEAM_TEAM_MAP` | nested object | null | Teams users of this login join: {"Web": {"organization": "Default", "users": true}}. |
 | `AUTH_LDAP_SERVER_URI` | string | `""` | URI of the LDAP server, such as "ldap://ldap.example.com:389" or "ldaps://ldap.example.com:636". Several servers, separated by spaces or commas, are tried in order. Empty turns this LDAP login off. |
 | `AUTH_LDAP_BIND_DN` | string | `""` | DN of the account used for every search. Empty binds anonymously. |
-| `AUTH_LDAP_BIND_PASSWORD` | string | `""` |  (secret) |
+| `AUTH_LDAP_BIND_PASSWORD` | string | `""` | The password of the bind DN. (secret) |
 | `AUTH_LDAP_START_TLS` | boolean | `false` | Upgrade ldap:// connections with StartTLS. |
 | `AUTH_LDAP_CONNECTION_OPTIONS` | nested object | `{"OPT_NETWORK_TIMEOUT":30,"OPT_REFERRALS":0}` | python-ldap options. Used: OPT_NETWORK_TIMEOUT (seconds), OPT_X_TLS_REQUIRE_CERT (0 does not verify the certificate) and OPT_X_TLS_CACERTFILE; referrals are never followed, others have no effect. |
 | `AUTH_LDAP_USER_SEARCH` | list | `[]` | How to find a user: ["OU=Users,DC=example,DC=com", "SCOPE_SUBTREE", "(sAMAccountName=%(user)s)"], or a list of such searches, which must find exactly one user between them. |
@@ -255,7 +255,7 @@ clients and imports keep working.
 | `AUTH_LDAP_TEAM_MAP` | nested object | `{}` | Teams a user joins by group: {"Web": {"organization": "Ops", "users": "CN=Web,DC=example,DC=com", "remove": true}}. |
 | `AUTH_LDAP_1_SERVER_URI` | string | `""` | URI of the LDAP server, such as "ldap://ldap.example.com:389" or "ldaps://ldap.example.com:636". Several servers, separated by spaces or commas, are tried in order. Empty turns this LDAP login off. |
 | `AUTH_LDAP_1_BIND_DN` | string | `""` | DN of the account used for every search. Empty binds anonymously. |
-| `AUTH_LDAP_1_BIND_PASSWORD` | string | `""` |  (secret) |
+| `AUTH_LDAP_1_BIND_PASSWORD` | string | `""` | The password of the bind DN. (secret) |
 | `AUTH_LDAP_1_START_TLS` | boolean | `false` | Upgrade ldap:// connections with StartTLS. |
 | `AUTH_LDAP_1_CONNECTION_OPTIONS` | nested object | `{"OPT_NETWORK_TIMEOUT":30,"OPT_REFERRALS":0}` | python-ldap options. Used: OPT_NETWORK_TIMEOUT (seconds), OPT_X_TLS_REQUIRE_CERT (0 does not verify the certificate) and OPT_X_TLS_CACERTFILE; referrals are never followed, others have no effect. |
 | `AUTH_LDAP_1_USER_SEARCH` | list | `[]` | How to find a user: ["OU=Users,DC=example,DC=com", "SCOPE_SUBTREE", "(sAMAccountName=%(user)s)"], or a list of such searches, which must find exactly one user between them. |
@@ -271,7 +271,7 @@ clients and imports keep working.
 | `AUTH_LDAP_1_TEAM_MAP` | nested object | `{}` | Teams a user joins by group: {"Web": {"organization": "Ops", "users": "CN=Web,DC=example,DC=com", "remove": true}}. |
 | `AUTH_LDAP_2_SERVER_URI` | string | `""` | URI of the LDAP server, such as "ldap://ldap.example.com:389" or "ldaps://ldap.example.com:636". Several servers, separated by spaces or commas, are tried in order. Empty turns this LDAP login off. |
 | `AUTH_LDAP_2_BIND_DN` | string | `""` | DN of the account used for every search. Empty binds anonymously. |
-| `AUTH_LDAP_2_BIND_PASSWORD` | string | `""` |  (secret) |
+| `AUTH_LDAP_2_BIND_PASSWORD` | string | `""` | The password of the bind DN. (secret) |
 | `AUTH_LDAP_2_START_TLS` | boolean | `false` | Upgrade ldap:// connections with StartTLS. |
 | `AUTH_LDAP_2_CONNECTION_OPTIONS` | nested object | `{"OPT_NETWORK_TIMEOUT":30,"OPT_REFERRALS":0}` | python-ldap options. Used: OPT_NETWORK_TIMEOUT (seconds), OPT_X_TLS_REQUIRE_CERT (0 does not verify the certificate) and OPT_X_TLS_CACERTFILE; referrals are never followed, others have no effect. |
 | `AUTH_LDAP_2_USER_SEARCH` | list | `[]` | How to find a user: ["OU=Users,DC=example,DC=com", "SCOPE_SUBTREE", "(sAMAccountName=%(user)s)"], or a list of such searches, which must find exactly one user between them. |
@@ -287,7 +287,7 @@ clients and imports keep working.
 | `AUTH_LDAP_2_TEAM_MAP` | nested object | `{}` | Teams a user joins by group: {"Web": {"organization": "Ops", "users": "CN=Web,DC=example,DC=com", "remove": true}}. |
 | `AUTH_LDAP_3_SERVER_URI` | string | `""` | URI of the LDAP server, such as "ldap://ldap.example.com:389" or "ldaps://ldap.example.com:636". Several servers, separated by spaces or commas, are tried in order. Empty turns this LDAP login off. |
 | `AUTH_LDAP_3_BIND_DN` | string | `""` | DN of the account used for every search. Empty binds anonymously. |
-| `AUTH_LDAP_3_BIND_PASSWORD` | string | `""` |  (secret) |
+| `AUTH_LDAP_3_BIND_PASSWORD` | string | `""` | The password of the bind DN. (secret) |
 | `AUTH_LDAP_3_START_TLS` | boolean | `false` | Upgrade ldap:// connections with StartTLS. |
 | `AUTH_LDAP_3_CONNECTION_OPTIONS` | nested object | `{"OPT_NETWORK_TIMEOUT":30,"OPT_REFERRALS":0}` | python-ldap options. Used: OPT_NETWORK_TIMEOUT (seconds), OPT_X_TLS_REQUIRE_CERT (0 does not verify the certificate) and OPT_X_TLS_CACERTFILE; referrals are never followed, others have no effect. |
 | `AUTH_LDAP_3_USER_SEARCH` | list | `[]` | How to find a user: ["OU=Users,DC=example,DC=com", "SCOPE_SUBTREE", "(sAMAccountName=%(user)s)"], or a list of such searches, which must find exactly one user between them. |
@@ -303,7 +303,7 @@ clients and imports keep working.
 | `AUTH_LDAP_3_TEAM_MAP` | nested object | `{}` | Teams a user joins by group: {"Web": {"organization": "Ops", "users": "CN=Web,DC=example,DC=com", "remove": true}}. |
 | `AUTH_LDAP_4_SERVER_URI` | string | `""` | URI of the LDAP server, such as "ldap://ldap.example.com:389" or "ldaps://ldap.example.com:636". Several servers, separated by spaces or commas, are tried in order. Empty turns this LDAP login off. |
 | `AUTH_LDAP_4_BIND_DN` | string | `""` | DN of the account used for every search. Empty binds anonymously. |
-| `AUTH_LDAP_4_BIND_PASSWORD` | string | `""` |  (secret) |
+| `AUTH_LDAP_4_BIND_PASSWORD` | string | `""` | The password of the bind DN. (secret) |
 | `AUTH_LDAP_4_START_TLS` | boolean | `false` | Upgrade ldap:// connections with StartTLS. |
 | `AUTH_LDAP_4_CONNECTION_OPTIONS` | nested object | `{"OPT_NETWORK_TIMEOUT":30,"OPT_REFERRALS":0}` | python-ldap options. Used: OPT_NETWORK_TIMEOUT (seconds), OPT_X_TLS_REQUIRE_CERT (0 does not verify the certificate) and OPT_X_TLS_CACERTFILE; referrals are never followed, others have no effect. |
 | `AUTH_LDAP_4_USER_SEARCH` | list | `[]` | How to find a user: ["OU=Users,DC=example,DC=com", "SCOPE_SUBTREE", "(sAMAccountName=%(user)s)"], or a list of such searches, which must find exactly one user between them. |
@@ -319,7 +319,7 @@ clients and imports keep working.
 | `AUTH_LDAP_4_TEAM_MAP` | nested object | `{}` | Teams a user joins by group: {"Web": {"organization": "Ops", "users": "CN=Web,DC=example,DC=com", "remove": true}}. |
 | `AUTH_LDAP_5_SERVER_URI` | string | `""` | URI of the LDAP server, such as "ldap://ldap.example.com:389" or "ldaps://ldap.example.com:636". Several servers, separated by spaces or commas, are tried in order. Empty turns this LDAP login off. |
 | `AUTH_LDAP_5_BIND_DN` | string | `""` | DN of the account used for every search. Empty binds anonymously. |
-| `AUTH_LDAP_5_BIND_PASSWORD` | string | `""` |  (secret) |
+| `AUTH_LDAP_5_BIND_PASSWORD` | string | `""` | The password of the bind DN. (secret) |
 | `AUTH_LDAP_5_START_TLS` | boolean | `false` | Upgrade ldap:// connections with StartTLS. |
 | `AUTH_LDAP_5_CONNECTION_OPTIONS` | nested object | `{"OPT_NETWORK_TIMEOUT":30,"OPT_REFERRALS":0}` | python-ldap options. Used: OPT_NETWORK_TIMEOUT (seconds), OPT_X_TLS_REQUIRE_CERT (0 does not verify the certificate) and OPT_X_TLS_CACERTFILE; referrals are never followed, others have no effect. |
 | `AUTH_LDAP_5_USER_SEARCH` | list | `[]` | How to find a user: ["OU=Users,DC=example,DC=com", "SCOPE_SUBTREE", "(sAMAccountName=%(user)s)"], or a list of such searches, which must find exactly one user between them. |
@@ -405,11 +405,11 @@ clients and imports keep working.
 | Setting | Type | Default | |
 |---|---|---|---|
 | `SOCIAL_AUTH_OIDC_KEY` | string | `""` | The OIDC key (Client ID) from your IDP. |
-| `SOCIAL_AUTH_OIDC_SECRET` | string | `""` |  (secret) |
+| `SOCIAL_AUTH_OIDC_SECRET` | string | `""` | The OIDC secret (Client Secret) from your IDP. (secret) |
 | `SOCIAL_AUTH_OIDC_OIDC_ENDPOINT` | string | `""` | The URL for your OIDC provider including the path up to /.well-known/openid-configuration |
-| `SOCIAL_AUTH_OIDC_VERIFY_SSL` | boolean | `true` |  |
-| `OIDC_SCOPES` | list | `["openid","profile","email","groups"]` |  |
-| `OIDC_USERNAME_CLAIM` | string | `"preferred_username"` |  |
+| `SOCIAL_AUTH_OIDC_VERIFY_SSL` | boolean | `true` | Check the OIDC provider's TLS certificate. Turn it off only for a test provider with a self-signed certificate. |
+| `OIDC_SCOPES` | list | `["openid","profile","email","groups"]` | The scopes asked of the OIDC provider at login. Most providers send the groups claim only with the groups scope. |
+| `OIDC_USERNAME_CLAIM` | string | `"preferred_username"` | The claim that gives the username. When a token lacks it, preferred_username, upn, email, the client ID and sub are tried in turn. |
 | `OIDC_GROUPS_CLAIM` | string | `"groups"` | Claim holding group names. Dotted paths are supported, e.g. realm_access.roles. |
 | `OIDC_AUDIENCES` | list | `[]` | Accepted audiences for bearer JWTs. Defaults to the client id. |
 | `OIDC_ALLOW_BEARER` | boolean | `true` | Accept access tokens issued by the OIDC provider as API bearer tokens. |
@@ -422,7 +422,7 @@ clients and imports keep working.
 |---|---|---|---|
 | `AUTH_LDAP_SERVER_URI` | string | `""` | URI of the LDAP server, such as "ldap://ldap.example.com:389" or "ldaps://ldap.example.com:636". Several servers, separated by spaces or commas, are tried in order. Empty turns this LDAP login off. |
 | `AUTH_LDAP_BIND_DN` | string | `""` | DN of the account used for every search. Empty binds anonymously. |
-| `AUTH_LDAP_BIND_PASSWORD` | string | `""` |  (secret) |
+| `AUTH_LDAP_BIND_PASSWORD` | string | `""` | The password of the bind DN. (secret) |
 | `AUTH_LDAP_START_TLS` | boolean | `false` | Upgrade ldap:// connections with StartTLS. |
 | `AUTH_LDAP_CONNECTION_OPTIONS` | nested object | `{"OPT_NETWORK_TIMEOUT":30,"OPT_REFERRALS":0}` | python-ldap options. Used: OPT_NETWORK_TIMEOUT (seconds), OPT_X_TLS_REQUIRE_CERT (0 does not verify the certificate) and OPT_X_TLS_CACERTFILE; referrals are never followed, others have no effect. |
 | `AUTH_LDAP_USER_SEARCH` | list | `[]` | How to find a user: ["OU=Users,DC=example,DC=com", "SCOPE_SUBTREE", "(sAMAccountName=%(user)s)"], or a list of such searches, which must find exactly one user between them. |
@@ -438,7 +438,7 @@ clients and imports keep working.
 | `AUTH_LDAP_TEAM_MAP` | nested object | `{}` | Teams a user joins by group: {"Web": {"organization": "Ops", "users": "CN=Web,DC=example,DC=com", "remove": true}}. |
 | `AUTH_LDAP_1_SERVER_URI` | string | `""` | URI of the LDAP server, such as "ldap://ldap.example.com:389" or "ldaps://ldap.example.com:636". Several servers, separated by spaces or commas, are tried in order. Empty turns this LDAP login off. |
 | `AUTH_LDAP_1_BIND_DN` | string | `""` | DN of the account used for every search. Empty binds anonymously. |
-| `AUTH_LDAP_1_BIND_PASSWORD` | string | `""` |  (secret) |
+| `AUTH_LDAP_1_BIND_PASSWORD` | string | `""` | The password of the bind DN. (secret) |
 | `AUTH_LDAP_1_START_TLS` | boolean | `false` | Upgrade ldap:// connections with StartTLS. |
 | `AUTH_LDAP_1_CONNECTION_OPTIONS` | nested object | `{"OPT_NETWORK_TIMEOUT":30,"OPT_REFERRALS":0}` | python-ldap options. Used: OPT_NETWORK_TIMEOUT (seconds), OPT_X_TLS_REQUIRE_CERT (0 does not verify the certificate) and OPT_X_TLS_CACERTFILE; referrals are never followed, others have no effect. |
 | `AUTH_LDAP_1_USER_SEARCH` | list | `[]` | How to find a user: ["OU=Users,DC=example,DC=com", "SCOPE_SUBTREE", "(sAMAccountName=%(user)s)"], or a list of such searches, which must find exactly one user between them. |
@@ -454,7 +454,7 @@ clients and imports keep working.
 | `AUTH_LDAP_1_TEAM_MAP` | nested object | `{}` | Teams a user joins by group: {"Web": {"organization": "Ops", "users": "CN=Web,DC=example,DC=com", "remove": true}}. |
 | `AUTH_LDAP_2_SERVER_URI` | string | `""` | URI of the LDAP server, such as "ldap://ldap.example.com:389" or "ldaps://ldap.example.com:636". Several servers, separated by spaces or commas, are tried in order. Empty turns this LDAP login off. |
 | `AUTH_LDAP_2_BIND_DN` | string | `""` | DN of the account used for every search. Empty binds anonymously. |
-| `AUTH_LDAP_2_BIND_PASSWORD` | string | `""` |  (secret) |
+| `AUTH_LDAP_2_BIND_PASSWORD` | string | `""` | The password of the bind DN. (secret) |
 | `AUTH_LDAP_2_START_TLS` | boolean | `false` | Upgrade ldap:// connections with StartTLS. |
 | `AUTH_LDAP_2_CONNECTION_OPTIONS` | nested object | `{"OPT_NETWORK_TIMEOUT":30,"OPT_REFERRALS":0}` | python-ldap options. Used: OPT_NETWORK_TIMEOUT (seconds), OPT_X_TLS_REQUIRE_CERT (0 does not verify the certificate) and OPT_X_TLS_CACERTFILE; referrals are never followed, others have no effect. |
 | `AUTH_LDAP_2_USER_SEARCH` | list | `[]` | How to find a user: ["OU=Users,DC=example,DC=com", "SCOPE_SUBTREE", "(sAMAccountName=%(user)s)"], or a list of such searches, which must find exactly one user between them. |
@@ -470,7 +470,7 @@ clients and imports keep working.
 | `AUTH_LDAP_2_TEAM_MAP` | nested object | `{}` | Teams a user joins by group: {"Web": {"organization": "Ops", "users": "CN=Web,DC=example,DC=com", "remove": true}}. |
 | `AUTH_LDAP_3_SERVER_URI` | string | `""` | URI of the LDAP server, such as "ldap://ldap.example.com:389" or "ldaps://ldap.example.com:636". Several servers, separated by spaces or commas, are tried in order. Empty turns this LDAP login off. |
 | `AUTH_LDAP_3_BIND_DN` | string | `""` | DN of the account used for every search. Empty binds anonymously. |
-| `AUTH_LDAP_3_BIND_PASSWORD` | string | `""` |  (secret) |
+| `AUTH_LDAP_3_BIND_PASSWORD` | string | `""` | The password of the bind DN. (secret) |
 | `AUTH_LDAP_3_START_TLS` | boolean | `false` | Upgrade ldap:// connections with StartTLS. |
 | `AUTH_LDAP_3_CONNECTION_OPTIONS` | nested object | `{"OPT_NETWORK_TIMEOUT":30,"OPT_REFERRALS":0}` | python-ldap options. Used: OPT_NETWORK_TIMEOUT (seconds), OPT_X_TLS_REQUIRE_CERT (0 does not verify the certificate) and OPT_X_TLS_CACERTFILE; referrals are never followed, others have no effect. |
 | `AUTH_LDAP_3_USER_SEARCH` | list | `[]` | How to find a user: ["OU=Users,DC=example,DC=com", "SCOPE_SUBTREE", "(sAMAccountName=%(user)s)"], or a list of such searches, which must find exactly one user between them. |
@@ -486,7 +486,7 @@ clients and imports keep working.
 | `AUTH_LDAP_3_TEAM_MAP` | nested object | `{}` | Teams a user joins by group: {"Web": {"organization": "Ops", "users": "CN=Web,DC=example,DC=com", "remove": true}}. |
 | `AUTH_LDAP_4_SERVER_URI` | string | `""` | URI of the LDAP server, such as "ldap://ldap.example.com:389" or "ldaps://ldap.example.com:636". Several servers, separated by spaces or commas, are tried in order. Empty turns this LDAP login off. |
 | `AUTH_LDAP_4_BIND_DN` | string | `""` | DN of the account used for every search. Empty binds anonymously. |
-| `AUTH_LDAP_4_BIND_PASSWORD` | string | `""` |  (secret) |
+| `AUTH_LDAP_4_BIND_PASSWORD` | string | `""` | The password of the bind DN. (secret) |
 | `AUTH_LDAP_4_START_TLS` | boolean | `false` | Upgrade ldap:// connections with StartTLS. |
 | `AUTH_LDAP_4_CONNECTION_OPTIONS` | nested object | `{"OPT_NETWORK_TIMEOUT":30,"OPT_REFERRALS":0}` | python-ldap options. Used: OPT_NETWORK_TIMEOUT (seconds), OPT_X_TLS_REQUIRE_CERT (0 does not verify the certificate) and OPT_X_TLS_CACERTFILE; referrals are never followed, others have no effect. |
 | `AUTH_LDAP_4_USER_SEARCH` | list | `[]` | How to find a user: ["OU=Users,DC=example,DC=com", "SCOPE_SUBTREE", "(sAMAccountName=%(user)s)"], or a list of such searches, which must find exactly one user between them. |
@@ -502,7 +502,7 @@ clients and imports keep working.
 | `AUTH_LDAP_4_TEAM_MAP` | nested object | `{}` | Teams a user joins by group: {"Web": {"organization": "Ops", "users": "CN=Web,DC=example,DC=com", "remove": true}}. |
 | `AUTH_LDAP_5_SERVER_URI` | string | `""` | URI of the LDAP server, such as "ldap://ldap.example.com:389" or "ldaps://ldap.example.com:636". Several servers, separated by spaces or commas, are tried in order. Empty turns this LDAP login off. |
 | `AUTH_LDAP_5_BIND_DN` | string | `""` | DN of the account used for every search. Empty binds anonymously. |
-| `AUTH_LDAP_5_BIND_PASSWORD` | string | `""` |  (secret) |
+| `AUTH_LDAP_5_BIND_PASSWORD` | string | `""` | The password of the bind DN. (secret) |
 | `AUTH_LDAP_5_START_TLS` | boolean | `false` | Upgrade ldap:// connections with StartTLS. |
 | `AUTH_LDAP_5_CONNECTION_OPTIONS` | nested object | `{"OPT_NETWORK_TIMEOUT":30,"OPT_REFERRALS":0}` | python-ldap options. Used: OPT_NETWORK_TIMEOUT (seconds), OPT_X_TLS_REQUIRE_CERT (0 does not verify the certificate) and OPT_X_TLS_CACERTFILE; referrals are never followed, others have no effect. |
 | `AUTH_LDAP_5_USER_SEARCH` | list | `[]` | How to find a user: ["OU=Users,DC=example,DC=com", "SCOPE_SUBTREE", "(sAMAccountName=%(user)s)"], or a list of such searches, which must find exactly one user between them. |
@@ -635,35 +635,35 @@ clients and imports keep working.
 
 | Setting | Type | Default | |
 |---|---|---|---|
-| `AD_HOC_COMMANDS` | list | `["command","shell","yum","apt","apt_key","apt_repository"...` |  |
-| `ALLOW_JINJA_IN_EXTRA_VARS` | choice | `"template"` |  |
+| `AD_HOC_COMMANDS` | list | `["command","shell","yum","apt","apt_key","apt_repository"...` | The modules ad hoc commands may run. |
+| `ALLOW_JINJA_IN_EXTRA_VARS` | choice | `"template"` | Which extra variables may use Jinja. Only on job template definitions: those saved on the template; variables given at launch, survey answers included, are passed as plain text. Always: all of them. Never: none. Unless Always, an ad hoc command whose module arguments use Jinja is refused. |
 | `ALLOW_ANSIBLE_VARS_AT_LAUNCH` | boolean | `false` | Off: launch-time variables, survey questions and answers, schedule and ad hoc variables named ansible_* are refused, as they control how Ansible connects and runs (for example ansible_ssh_common_args). On: AWX's behaviour. Variables on templates, inventories and hosts are not affected. |
 | `IGNORE_UNPROMPTED_LAUNCH_FIELDS` | boolean | `false` | Off: a launch that sends a field the template does not prompt for (limit, inventory, extra variables…) is refused. On: AWX's behaviour, the field is ignored, the job starts without it and the response lists it in ignored_fields. |
 | `AWX_ISOLATION_BASE_PATH` | string | `"/tmp"` | *No effect.* job directories are under AWXNEXT_JOBS_ROOT. |
 | `AWX_ISOLATION_SHOW_PATHS` | list | `[]` | Host paths mounted into execution environment containers, one per entry: HOST-DIR[:CONTAINER-DIR[:OPTIONS]], options such as ro or z. Jobs on the none runtime see the host's files already. |
-| `AWX_TASK_ENV` | nested object | `{}` |  |
+| `AWX_TASK_ENV` | nested object | `{}` | Environment variables added to jobs, ad hoc commands and inventory syncs. |
 | `AWX_RUNNER_KEEPALIVE_SECONDS` | integer | `0` | Seconds of silence after which a job's worker sends a keepalive, so quiet tasks on remote execution nodes and container groups are not cut off by idle timeouts. 0: never. |
-| `GALAXY_TASK_ENV` | nested object | `{"ANSIBLE_FORCE_COLOR":"false","GIT_SSH_COMMAND":"ssh -o ...` |  |
+| `GALAXY_TASK_ENV` | nested object | `{"ANSIBLE_FORCE_COLOR":"false","GIT_SSH_COMMAND":"ssh -o ...` | Environment variables for ansible-galaxy when it installs a project's roles and collections, for example a proxy that only Galaxy needs. |
 | `PROJECT_UPDATE_VVV` | boolean | `false` | *No effect.* project syncs run git directly, not a playbook. |
-| `AWX_ROLES_ENABLED` | boolean | `true` |  |
-| `AWX_COLLECTIONS_ENABLED` | boolean | `true` |  |
-| `AWX_SHOW_PLAYBOOK_LINKS` | boolean | `false` |  |
+| `AWX_ROLES_ENABLED` | boolean | `true` | When a job starts, install the roles its project's roles/requirements.yml or requirements.yml lists. |
+| `AWX_COLLECTIONS_ENABLED` | boolean | `true` | When a job starts, install the collections its project's collections/requirements.yml or requirements.yml lists. |
+| `AWX_SHOW_PLAYBOOK_LINKS` | boolean | `false` | Follow symbolic links wherever they point when listing a project's playbooks. Off: only links to files inside the project are listed. |
 | `AWX_MOUNT_ISOLATED_PATHS_ON_K8S` | boolean | `false` | Also mount the paths to expose into container group pods, as hostPath volumes of the node the pod runs on. |
-| `GALAXY_IGNORE_CERTS` | boolean | `false` |  |
-| `STDOUT_MAX_BYTES_DISPLAY` | integer | `1048576` |  |
+| `GALAXY_IGNORE_CERTS` | boolean | `false` | Skip the certificate check when installing roles and collections from Galaxy servers. |
+| `STDOUT_MAX_BYTES_DISPLAY` | integer | `1048576` | Output larger than this, in bytes, is only offered as a download by the stdout endpoints. 0: no limit. |
 | `EVENT_STDOUT_MAX_BYTES_DISPLAY` | integer | `1024` | *No effect.* job output shows events in full; MAX_UI_JOB_EVENTS limits how many load at once. |
 | `JOB_EVENT_MAX_RATE` | integer | `1000` | Events one job stores per second. Beyond it, consecutive verbose events (plain output lines) are folded into one, so a very verbose job cannot starve the others; its output stays complete. 0: no limit. |
 | `MAX_WEBSOCKET_EVENT_RATE` | integer | `30` | Job events sent live to each browser per second; the job page fetches the rest from the API. 0: no limit. |
-| `BULK_JOB_MAX_LAUNCH` | integer | `100` |  |
-| `BULK_HOST_MAX_CREATE` | integer | `100` |  |
-| `BULK_HOST_MAX_DELETE` | integer | `250` |  |
+| `BULK_JOB_MAX_LAUNCH` | integer | `100` | The most jobs one bulk job launch may start. |
+| `BULK_HOST_MAX_CREATE` | integer | `100` | The most hosts one bulk host create may add. |
+| `BULK_HOST_MAX_DELETE` | integer | `250` | The most hosts one bulk host delete may remove. |
 | `SCHEDULE_MAX_JOBS` | integer | `10` | A schedule creates no job while this many jobs of its template are waiting to run. |
-| `AWX_ANSIBLE_CALLBACK_PLUGINS` | list | `[]` |  |
-| `DEFAULT_JOB_TIMEOUT` | integer | `0` |  |
-| `DEFAULT_JOB_IDLE_TIMEOUT` | integer | `0` |  |
-| `DEFAULT_INVENTORY_UPDATE_TIMEOUT` | integer | `0` |  |
-| `DEFAULT_PROJECT_UPDATE_TIMEOUT` | integer | `0` |  |
-| `ANSIBLE_FACT_CACHE_TIMEOUT` | integer | `0` |  |
+| `AWX_ANSIBLE_CALLBACK_PLUGINS` | list | `[]` | Directories of more Ansible callback plugins, as the job sees them (in its execution environment). Jobs, ad hoc commands and inventory syncs get them in ANSIBLE_CALLBACK_PLUGINS. |
+| `DEFAULT_JOB_TIMEOUT` | integer | `0` | Seconds after which a job or ad hoc command still running is stopped and fails, unless its template sets its own timeout. 0: no limit. |
+| `DEFAULT_JOB_IDLE_TIMEOUT` | integer | `0` | Seconds without output after which a job or ad hoc command is stopped. 0: no limit. |
+| `DEFAULT_INVENTORY_UPDATE_TIMEOUT` | integer | `0` | Seconds after which an inventory sync still running is stopped and fails, unless its source sets its own timeout. 0: no limit. |
+| `DEFAULT_PROJECT_UPDATE_TIMEOUT` | integer | `0` | Seconds after which a project sync still running is stopped and fails, unless its project sets its own timeout. It also bounds installing a project's requirements when a job starts. 0: no limit. |
+| `ANSIBLE_FACT_CACHE_TIMEOUT` | integer | `0` | For templates that use the fact cache: facts stored longer ago than this, in seconds, are not given to the next job. They stay stored. 0: no limit. |
 | `MAX_FORKS` | integer | `200` | Most forks a template, launch, schedule, workflow node or ad hoc command may ask for. 0: no limit. |
 | `PROJECT_ALLOW_FILE_URLS` | boolean | `false` | Allow git projects to use file:// URLs or local paths on the control plane. Only enable for trusted single-tenant installs. |
 | `JOB_EVENTS_HOT_DAYS` | integer | `14` | Days job events stay in the database before they are served from the compressed archive. |
@@ -684,11 +684,11 @@ clients and imports keep working.
 | `ACTIVITY_STREAM_ENABLED_FOR_INVENTORY_SYNC` | boolean | `false` | Also record the hosts and groups inventory syncs add and remove. Off by default: a sync can touch thousands of hosts. |
 | `ORG_ADMINS_CAN_SEE_ALL_USERS` | boolean | `true` | On: organization admins see every user and team. Off: only those of their organizations. |
 | `MANAGE_ORGANIZATION_AUTH` | boolean | `true` | Off: only superusers create, change and delete users and teams and change organization and team roles, for example when an identity provider owns membership. |
-| `DEFAULT_EXECUTION_ENVIRONMENT` | field | null |  |
-| `INSTALL_UUID` | string | `""` |  (read-only, readable by every user) |
+| `DEFAULT_EXECUTION_ENVIRONMENT` | field | null | The execution environment of jobs whose template, project and organization set none. Empty: the first managed execution environment. |
+| `INSTALL_UUID` | string | `""` | This installation's identifier, made when it first starts. Shipped logs, backups and job event archives carry it. (read-only, readable by every user) |
 | `CUSTOM_VENV_PATHS` | list | `[]` | *No effect.* custom virtual environments are replaced by execution environments. |
-| `REMOTE_HOST_HEADERS` | list | `["REMOTE_ADDR","REMOTE_HOST"]` |  |
-| `PROXY_IP_ALLOWED_LIST` | list | `[]` |  |
+| `REMOTE_HOST_HEADERS` | list | `["REMOTE_ADDR","REMOTE_HOST"]` | Where a provisioning callback finds the calling host's address or name: REMOTE_ADDR is the connection's address, HTTP_<NAME> a request header, such as HTTP_X_FORWARDED_FOR behind a reverse proxy. |
+| `PROXY_IP_ALLOWED_LIST` | list | `[]` | The IP addresses of the proxies whose HTTP_ headers in REMOTE_HOST_HEADERS are trusted. Empty: any client's headers are trusted. |
 | `SUBSCRIPTIONS_USERNAME` | string | `""` | *No effect.* there are no Red Hat subscriptions to manage. |
 | `AUTOMATION_ANALYTICS_GATHER_INTERVAL` | integer | `14400` | *No effect.* nothing is sent to Red Hat analytics. |
 | `INSIGHTS_TRACKING_STATE` | boolean | `false` | *No effect.* nothing is sent to Red Hat analytics. |

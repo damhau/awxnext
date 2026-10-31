@@ -182,7 +182,7 @@ func runJob(ctx context.Context, rc *jobs.RunContext) jobs.Result {
 	if err != nil {
 		return fail("Extra vars: " + err.Error())
 	}
-	if err := writeExtraVars(run, extra, unsafeVars(ctx, app, sa)); err != nil {
+	if err := writeExtraVars(run, extra, unsafeVars(ctx, app, sa, extra)); err != nil {
 		return jobs.Result{Status: "error", Explanation: err.Error()}
 	}
 
@@ -464,10 +464,18 @@ func awxVars(ctx context.Context, app *api.App, row jobs.Row) map[string]any {
 	return out
 }
 
-func unsafeVars(ctx context.Context, app *api.App, sa resources.StartArgs) map[string]bool {
+// unsafeVars lists the extra variables of ev whose Jinja is not rendered,
+// as AWX's ALLOW_JINJA_IN_EXTRA_VARS: none (always), those given at launch
+// (template), or all of them (never).
+func unsafeVars(ctx context.Context, app *api.App, sa resources.StartArgs, ev map[string]any) map[string]bool {
 	out := map[string]bool{}
 	switch app.Settings.String(ctx, "ALLOW_JINJA_IN_EXTRA_VARS") {
 	case "always":
+		return out
+	case "never":
+		for k := range ev {
+			out[k] = true
+		}
 		return out
 	}
 	for _, k := range sa.LaunchVars {

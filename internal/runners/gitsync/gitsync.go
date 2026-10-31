@@ -17,6 +17,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/damhau/awxnext/internal/api"
@@ -203,6 +204,12 @@ func run(ctx context.Context, dir string, env []string, logf func(string), args 
 	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Dir = dir
 	cmd.Env = env
+	// A timeout or a cancel stops git and its helpers (git-remote-http does
+	// the transfer): its own process group is killed, and its output pipe
+	// is closed after a while even if something still holds it.
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
+	cmd.WaitDelay = 5 * time.Second
 	pr, pw := io.Pipe()
 	cmd.Stdout = pw
 	cmd.Stderr = pw
@@ -286,9 +293,14 @@ func gitEnv(ctx context.Context, app *api.App, credID int64) ([]string, func(), 
 func runProjectUpdate(ctx context.Context, rc *jobs.RunContext) jobs.Result {
 	row := rc.Job
 	app := rc.M.App
-	if t := row.Int("timeout"); t > 0 {
+	// The project's timeout, else DEFAULT_PROJECT_UPDATE_TIMEOUT, as in AWX.
+	timeout := time.Duration(row.Int("timeout")) * time.Second
+	if timeout == 0 {
+		timeout = time.Duration(app.Settings.Int(ctx, "DEFAULT_PROJECT_UPDATE_TIMEOUT")) * time.Second
+	}
+	if timeout > 0 {
 		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, time.Duration(t)*time.Second)
+		ctx, cancel = context.WithTimeout(ctx, timeout)
 		defer cancel()
 	}
 	scmType := row.Str("scm_type")

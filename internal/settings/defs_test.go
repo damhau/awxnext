@@ -70,3 +70,13 @@ func TestEverySettingHasAnEffect(t *testing.T) {
 		}
 	}
 }
+
+// Every setting says what it does: its help is the help_text OPTIONS gives
+// every client, and the settings page shows it.
+func TestEverySettingHasHelp(t *testing.T) {
+	for _, d := range InCategory("all") {
+		if strings.TrimSpace(d.Help) == "" {
+			t.Errorf("%s has no help: say what it does", d.Key)
+		}
+	}
+}

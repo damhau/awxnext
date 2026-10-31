@@ -32,7 +32,7 @@ func init() {
 			{Key: p + "SERVER_URI", Type: "string", Default: "", Label: "LDAP Server URI",
 				Help: `URI of the LDAP server, such as "ldap://ldap.example.com:389" or "ldaps://ldap.example.com:636". Several servers, separated by spaces or commas, are tried in order. Empty turns this LDAP login off.`},
 			{Key: p + "BIND_DN", Type: "string", Default: "", Label: "LDAP Bind DN", Help: "DN of the account used for every search. Empty binds anonymously."},
-			{Key: p + "BIND_PASSWORD", Type: "string", Default: "", Secret: true, Label: "LDAP Bind Password"},
+			{Key: p + "BIND_PASSWORD", Type: "string", Default: "", Secret: true, Label: "LDAP Bind Password", Help: "The password of the bind DN."},
 			{Key: p + "START_TLS", Type: "boolean", Default: false, Label: "LDAP Start TLS", Help: "Upgrade ldap:// connections with StartTLS."},
 			{Key: p + "CONNECTION_OPTIONS", Type: "nested object", Default: map[string]any{"OPT_REFERRALS": 0, "OPT_NETWORK_TIMEOUT": 30}, Label: "LDAP Connection Options",
 				Help: "python-ldap options. Used: OPT_NETWORK_TIMEOUT (seconds), OPT_X_TLS_REQUIRE_CERT (0 does not verify the certificate) and OPT_X_TLS_CACERTFILE; referrals are never followed, others have no effect."},

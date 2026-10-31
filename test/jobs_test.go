@@ -310,6 +310,29 @@ func TestJobSurveyAndUnsafeVars(t *testing.T) {
 	}
 }
 
+// ALLOW_JINJA_IN_EXTRA_VARS, as in AWX: Jinja in the template's own extra
+// variables is rendered unless Never; in those given at launch, only with
+// Always.
+func TestJinjaInExtraVars(t *testing.T) {
+	f := newJobFixture(t)
+	a := f.a
+	jt := f.template(t, "site.yml", map[string]any{"extra_vars": "raw: '{{ 6 * 7 }}'", "ask_variables_on_launch": true})
+	t.Cleanup(func() { a.patch("settings/jobs/", map[string]any{"ALLOW_JINJA_IN_EXTRA_VARS": "template"}) })
+	run := func(setting string, launch map[string]any, want string) {
+		t.Helper()
+		must(t, a.patch("settings/jobs/", map[string]any{"ALLOW_JINJA_IN_EXTRA_VARS": setting}), 200)
+		job := f.launch(t, a, jt, launch)
+		mustStatus(t, f, job, "successful")
+		if out := f.stdout(t, job.id()); !strings.Contains(out, want) {
+			t.Errorf("%s: want %q in:\n%s", setting, want, out)
+		}
+	}
+	run("template", nil, "raw=42")
+	run("never", nil, "raw={{ 6 * 7 }}")
+	run("template", map[string]any{"extra_vars": map[string]any{"raw": "{{ 7 * 6 }}"}}, "raw={{ 7 * 6 }}")
+	run("always", map[string]any{"extra_vars": map[string]any{"raw": "{{ 7 * 6 }}"}}, "raw=42")
+}
+
 func TestJobVaultAndCustomCredentials(t *testing.T) {
 	f := newJobFixture(t)
 	a := f.a

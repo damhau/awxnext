@@ -386,6 +386,16 @@ func TestSettings(t *testing.T) {
 	if r.Body["OIDC_GROUPS_CLAIM"] != "groups" {
 		t.Fatalf("reset failed: %s", r.Raw)
 	}
+	// Every setting's OPTIONS says what it does, for every client.
+	all := must(t, a.do("OPTIONS", "settings/all/", nil), 200).Body["actions"].(map[string]any)["GET"].(map[string]any)
+	for k, m := range all {
+		if h, _ := m.(map[string]any)["help_text"].(string); strings.TrimSpace(h) == "" {
+			t.Errorf("%s: no help_text in OPTIONS", k)
+		}
+	}
+	if len(all) < 250 {
+		t.Errorf("OPTIONS settings/all/ lists %d settings", len(all))
+	}
 }
 
 // Null for a text or choice field reads as an empty string and for a boolean

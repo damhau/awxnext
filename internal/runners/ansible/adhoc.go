@@ -60,7 +60,7 @@ func runAdHoc(ctx context.Context, rc *jobs.RunContext) jobs.Result {
 	for k, v := range inj.ExtraVars {
 		ev[k] = v
 	}
-	if err := writeExtraVars(run, ev, unsafeVars(ctx, app, sa)); err != nil {
+	if err := writeExtraVars(run, ev, unsafeVars(ctx, app, sa, ev)); err != nil {
 		return jobs.Result{Status: "error", Explanation: err.Error()}
 	}
 

@@ -2,6 +2,8 @@ package test
 
 import (
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -368,5 +370,33 @@ func TestProjectSyncScmClean(t *testing.T) {
 	sync()
 	if !pristine() {
 		t.Fatal("scm_clean did not discard the local changes")
+	}
+}
+
+// A project without a timeout of its own gets DEFAULT_PROJECT_UPDATE_TIMEOUT,
+// as in AWX: a sync from a git server that never answers is stopped.
+func TestProjectSyncDefaultTimeout(t *testing.T) {
+	slow(t)
+	a := adminClient(t)
+	org := newOrg(t, a)
+	release := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-release:
+		case <-r.Context().Done():
+		}
+	}))
+	t.Cleanup(srv.Close)
+	t.Cleanup(func() { close(release) })
+	must(t, a.patch("settings/jobs/", map[string]any{"DEFAULT_PROJECT_UPDATE_TIMEOUT": 2}), 200)
+	t.Cleanup(func() { a.patch("settings/jobs/", map[string]any{"DEFAULT_PROJECT_UPDATE_TIMEOUT": 0}) })
+	pid := must(t, a.post("projects/", map[string]any{"name": uniq("p"), "organization": org, "scm_type": "git", "scm_url": srv.URL + "/repo.git"}), 201).id()
+	start := time.Now()
+	pu := latestUpdate(t, a, pid)
+	if pu.Body["status"] != "failed" || pu.Body["job_explanation"] != "Job terminated due to timeout" {
+		t.Fatalf("sync: %v %v", pu.Body["status"], pu.Body["job_explanation"])
+	}
+	if d := time.Since(start); d > 20*time.Second {
+		t.Errorf("stopped after %v", d)
 	}
 }
