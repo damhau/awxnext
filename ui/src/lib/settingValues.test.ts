@@ -62,21 +62,25 @@ const structured: Record<string, [string, unknown]> = {
 }
 // The API's read-only settings: OPTIONS has them under GET, not PUT.
 const readOnly = (k: string) => /^(INSTALL_UUID|NAMED_URL_.*|.*_CALLBACK_URL|SOCIAL_AUTH_SAML_METADATA_URL)$/.test(k)
-// Still JSON: the organization and team maps, which M8-03 (#96) edits with
-// its own editor, and three free-form settings that have no effect.
+// The organization and team maps and their kin, edited with their own
+// editors (awxMaps.ts); three free-form settings that have no effect stay JSON.
 const maps = /(ORGANIZATION_MAP|TEAM_MAP|USER_FLAGS_BY_GROUP|USER_FLAGS_BY_ATTR|ORGANIZATION_ATTR|TEAM_ATTR)$/
 const freeForm = new Set(['OAUTH2_PROVIDER', 'SOCIAL_AUTH_SAML_SP_EXTRA', 'SOCIAL_AUTH_SAML_EXTRA_DATA'])
 
 const kindOf = (k: string, type: string, value?: unknown) => controlKind(k, type, layoutRow(k) ?? {}, !readOnly(k), value)
 
 describe('the control of each setting', () => {
-  it('edits no setting as JSON, but the maps and the free-form ones', () => {
+  it('edits no setting as JSON, but the free-form ones', () => {
     expect(Object.keys(structured)).toHaveLength(95)
     const json = Object.entries(structured)
       .filter(([k, [type, value]]) => kindOf(k, type, value) === 'json')
       .map(([k]) => k)
-    expect(json.filter((k) => !maps.test(k) && !freeForm.has(k))).toEqual([])
-    expect(json.filter((k) => maps.test(k))).toHaveLength(41)
+    expect(json.filter((k) => !freeForm.has(k))).toEqual([])
+    const mapKinds = Object.keys(structured)
+      .filter((k) => maps.test(k))
+      .map((k) => kindOf(k, 'nested object'))
+    expect(mapKinds).toHaveLength(41)
+    expect(new Set(mapKinds)).toEqual(new Set(['awx-maps', 'ldap-flags', 'saml-org-attr', 'saml-team-attr', 'saml-flags']))
     expect(kindOf('NAMED_URL_FORMATS', 'nested object')).toBe('readonly')
   })
 

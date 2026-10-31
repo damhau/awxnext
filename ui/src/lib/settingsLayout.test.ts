@@ -176,7 +176,7 @@ describe('the settings layout', () => {
     const page = settingsPage('github')!
     for (const v of githubVariants) {
       const form = githubForm(v)
-      const keys = [...form.where, ...(form.who ? [form.who] : []), ...form.app, ...form.maps].flatMap((r) => r.keys)
+      const keys = [...form.where, ...(form.who ? [form.who] : []), ...form.app, form.maps].flatMap((r) => r.keys)
       const section = page.sections.find((s) => s.id === v.category)!
       expect(keys.sort()).toEqual(section.rows.flatMap((r) => r.keys).sort())
       expect(keys.every((k) => k.startsWith(v.prefix) && githubVariantOf(k) === v)).toBe(true)

@@ -348,9 +348,17 @@ Each kind of value has its control, and is saved in AWX's format:
 - **The logo** is an image file (GIF, PNG or JPEG), stored as a data URL. Callback URLs, the
   metadata URL and the installation's ID are read-only, with a copy button.
 
-The organization and team maps and the user flags are still JSON. So are three settings with no
-effect whose shape is free-form: `OAUTH2_PROVIDER`, `SOCIAL_AUTH_SAML_SP_EXTRA` and
-`SOCIAL_AUTH_SAML_EXTRA_DATA`.
+**Organization and team maps** are rows: what people join, who, as what, and what happens when
+they no longer match. Add an organization or a team, then choose who gets each role: everyone
+who signs in, these people (usernames, emails, or names matching a pattern such as
+`/^ops-/i`), no one, or no change. In LDAP's maps, people are members of groups, given by
+distinguished name, and organizations also have auditors. An organization map and its team map
+are saved in AWX's format, without the options left at their default, so AWX's clients read
+them unchanged. LDAP's superusers and auditors by group, and SAML's organizations, teams and
+flags from attributes, are forms too.
+
+Only three settings with no effect, whose shape is free-form, are still JSON:
+`OAUTH2_PROVIDER`, `SOCIAL_AUTH_SAML_SP_EXTRA` and `SOCIAL_AUTH_SAML_EXTRA_DATA`.
 
 ## Observe
 

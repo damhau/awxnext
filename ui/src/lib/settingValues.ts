@@ -27,6 +27,12 @@ export type Kind =
   | 'json'
   | 'oidc-mapping'
   | 'archive-credential'
+  // Organization and team maps, and their kin (awxMaps.ts).
+  | 'awx-maps'
+  | 'ldap-flags'
+  | 'saml-org-attr'
+  | 'saml-team-attr'
+  | 'saml-flags'
 
 /** What the layout says of a row's control: see Row in settingsLayout.ts. */
 export interface ControlHints {
@@ -130,9 +136,10 @@ export function pairsValue(pairs: Pair[], coerce = false): Record<string, unknow
 }
 
 /** Items typed into a list, one per line or separated by commas, added to it once each. */
-export function addItems(list: string[], text: string): string[] {
+export function addItems(list: string[], text: string, lines = false): string[] {
   const out = [...list]
-  for (const s of text.split(/[\n,]/)) {
+  // Distinguished names and patterns have commas: they are one per line.
+  for (const s of text.split(lines ? /\n/ : /[\n,]/)) {
     const t = s.trim()
     if (t && !out.includes(t)) out.push(t)
   }

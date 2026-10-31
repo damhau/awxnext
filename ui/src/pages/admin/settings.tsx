@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
-import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { Fragment, useEffect, useId, useMemo, useState, type ReactNode } from 'react'
 import { Link, Navigate, useLocation, useParams } from 'react-router'
-import { api, ApiError } from '../../api/client'
+import { api, ApiError, getAll } from '../../api/client'
 import { useInvalidate, useObject } from '../../api/hooks'
 import type { FieldMeta, OptionsMeta, Ref } from '../../api/types'
 import { useSession } from '../../app/context'
@@ -11,6 +11,39 @@ import { useConfirm, useToast } from '../../components/overlay'
 import { Empty, ErrorNote, Loading, PageHead, Panel } from '../../components/ui'
 import { humanize } from './common'
 import { grantReason, grantTarget, testerClaims, type MappedGrant } from '../../lib/mapping'
+import {
+  asPattern,
+  describeExpr,
+  formatFlags,
+  formatMaps,
+  formatSamlFlags,
+  formatSamlOrgAttr,
+  formatSamlTeamAttr,
+  grantRows,
+  isPattern,
+  mapProblems,
+  newOrg,
+  newTeam,
+  orgRoles,
+  parseFlags,
+  parseMaps,
+  parseSamlFlags,
+  parseSamlOrgAttr,
+  parseSamlTeamAttr,
+  problemText,
+  roleLabel,
+  whoKind,
+  whoKinds,
+  withKind,
+  type Expr,
+  type MapEntry,
+  type Role,
+  type SamlFlag,
+  type SamlFlags,
+  type SamlOrgAttr,
+  type SamlTeam,
+  type SamlTeamAttr,
+} from '../../lib/awxMaps'
 import { aggregatorTarget, testOutcome } from '../../lib/logging'
 import { archiveCredentialParams } from '../../lib/jobSettings'
 import {
@@ -575,7 +608,8 @@ function GitHubForm({ v, ctx, choose }: { v: GitHubVariant; ctx: Ctx; choose: (v
       <section className="s-section" id="maps">
         <h2>{tr('Organizations and teams')}</h2>
         <p className="s-intro">{tr('Applied at each login. GitHub uses only these maps, not the default ones: without them, people join no organization.')}</p>
-        <div className="s-rows">{rows(form.maps)}</div>
+        {/* The section says what the maps do: the row only names them. */}
+        <div className="s-rows">{rows([{ ...form.maps, label: tr('Organization and team maps'), help: undefined }])}</div>
       </section>
     </>
   )
@@ -613,7 +647,7 @@ function SettingRow({ row, ctx }: { row: Row; ctx: Ctx }) {
         </div>
       </div>
       <div className="s-control">
-        {single ? <SettingControl k={k0} row={row} ctx={ctx} /> : <Parts row={row} ctx={ctx} />}
+        {single ? <SettingControl k={k0} row={row} ctx={ctx} /> : row.control === 'awx-maps' ? <MapsControl row={row} ctx={ctx} /> : <Parts row={row} ctx={ctx} />}
         {row.consequence && <span className="s-consequence">{row.consequence}</span>}
         {errs.map((e, i) => (
           <span key={i} className="err">
@@ -731,6 +765,14 @@ function SettingControl({ k, row, ctx }: { k: string; row: Row; ctx: Ctx }) {
       return <PairsControl id={id} value={value} onChange={onChange} disabled={disabled} columns={row.columns ?? [tr('Name'), tr('Value')]} coerce={row.coerce} add={row.add} />
     case 'fields':
       return <FieldsControl id={id} value={value} fields={row.fields ?? []} onChange={onChange} disabled={disabled} />
+    case 'ldap-flags':
+      return <LdapFlagsControl id={id} value={value} onChange={onChange} disabled={disabled} />
+    case 'saml-org-attr':
+      return <SamlOrgAttrControl id={id} value={value} onChange={onChange} disabled={disabled} />
+    case 'saml-team-attr':
+      return <SamlTeamAttrControl id={id} value={value} onChange={onChange} disabled={disabled} />
+    case 'saml-flags':
+      return <SamlFlagsControl id={id} value={value} onChange={onChange} disabled={disabled} />
     case 'records':
       return <RecordsControl id={id} value={value} fields={row.fields ?? []} name={row.name ?? tr('Name')} add={row.add ?? tr('Add')} onChange={onChange} disabled={disabled} />
     case 'paths':
@@ -934,18 +976,37 @@ function useDraft<T>(value: unknown, parse: (v: unknown) => T[], format: (rows: 
 }
 
 /** A list of words or paths, as chips. */
-function ChipsControl({ id, value, onChange, disabled }: { id: string; value: unknown; onChange: (v: unknown) => void; disabled: boolean }) {
+function ChipsControl({
+  id,
+  value,
+  onChange,
+  disabled,
+  lines,
+  placeholder,
+  as,
+}: {
+  id: string
+  value: unknown
+  onChange: (v: unknown) => void
+  disabled: boolean
+  /** One item per line: distinguished names and patterns have commas. */
+  lines?: boolean
+  placeholder?: string
+  /** How an item typed is stored (a pattern between slashes). */
+  as?: (s: string) => string
+}) {
   const list = Array.isArray(value) ? value.map(String) : []
+  const add = (t: string) => [...new Set(addItems(list, t, lines).map(as ?? ((x) => x)))]
   const [text, setText] = useState('')
   const [all, setAll] = useState(false)
   const shown = all ? list : list.slice(0, 12)
   const commit = () => {
     if (!text.trim()) return
-    onChange(addItems(list, text))
+    onChange(add(text))
     setText('')
   }
   return (
-    <div className="chips">
+    <div className={`chips${lines ? ' lines' : ''}`}>
       {shown.map((x) => (
         <span key={x} className="chip">
           {x}
@@ -967,20 +1028,20 @@ function ChipsControl({ id, value, onChange, disabled }: { id: string; value: un
           id={id}
           className="input chip-input"
           value={text}
-          placeholder={tr('Add…')}
+          placeholder={placeholder ?? tr('Add…')}
           onChange={(e) => setText(e.target.value)}
           onBlur={commit}
           onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ',') {
+            if (e.key === 'Enter' || (e.key === ',' && !lines)) {
               e.preventDefault()
               commit()
             }
           }}
           onPaste={(e) => {
             const t = e.clipboardData.getData('text')
-            if (!/[\n,]/.test(t)) return
+            if (!(lines ? /\n/ : /[\n,]/).test(t)) return
             e.preventDefault()
-            onChange(addItems(list, text + t))
+            onChange(add(text + t))
             setText('')
           }}
         />
@@ -1165,6 +1226,413 @@ function PathsControl({ id, value, onChange, disabled }: { id: string; value: un
           + {tr('Add a path')}
         </button>
       )}
+    </div>
+  )
+}
+
+/** Removed or stays, when someone no longer matches what gave them a role. */
+function RemoveChoice({ remove, onChange, disabled, label }: { remove: boolean; onChange: (v: boolean) => void; disabled: boolean; label?: string }) {
+  const name = useId()
+  const l = label ?? tr('When no longer matched')
+  return (
+    <div className="map-remove">
+      <span>{l}</span>
+      <div className="segmented" role="radiogroup" aria-label={l}>
+        {([
+          [true, tr('Removed')],
+          [false, tr('Stays')],
+        ] as [boolean, string][]).map(([v, t]) => (
+          <label key={t} className={remove === v ? 'on' : ''}>
+            <input type="radio" name={name} checked={remove === v} disabled={disabled} onChange={() => onChange(v)} />
+            {t}
+          </label>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+/** An organization map and its team map as rows: who joins what, as what
+ * (lib/awxMaps.ts). Saved in AWX's format, each map in its own setting. */
+function MapsControl({ row, ctx }: { row: Row; ctx: Ctx }) {
+  const [orgKey, teamKey] = row.keys
+  const ldap = orgKey.startsWith('AUTH_LDAP_')
+  const disabled = !ctx.editable || !row.keys.every((k) => ctx.data.writable.has(k))
+  const orgV = ctx.values[orgKey]
+  const teamV = ctx.values[teamKey]
+  const [entries, setEntries] = useState<MapEntry[]>(() => parseMaps(orgV, teamV))
+  const [open, setOpen] = useState<number | null>(null)
+  // Values changed elsewhere (discarded, reset): shown again. Entries not
+  // saved yet (no name) stay while the maps are the same.
+  useEffect(() => {
+    if (!same(formatMaps(entries, ldap), formatMaps(parseMaps(orgV, teamV), ldap))) {
+      setEntries(parseMaps(orgV, teamV))
+      setOpen(null)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orgV, teamV])
+  // An emptied map is stored as its default: null for the social maps, {} for LDAP's.
+  const stored = (k: string, m: Record<string, unknown>) => (Object.keys(m).length ? m : (ctx.data.meta[k]?.default ?? {}))
+  const update = (next: MapEntry[]) => {
+    const [o, t] = formatMaps(next, ldap)
+    const [po, pt] = formatMaps(entries, ldap)
+    setEntries(next)
+    if (!same(o, po)) ctx.set(orgKey, stored(orgKey, o))
+    if (!same(t, pt)) ctx.set(teamKey, stored(teamKey, t))
+  }
+  const add = (e: MapEntry) => {
+    update([...entries, e])
+    setOpen(entries.length)
+  }
+  const problems = mapProblems(entries)
+  const grants = grantRows(entries, ldap)
+  return (
+    <div className="map-wrap">
+      {grants.length ? (
+        <table className="maps">
+          <thead>
+            <tr>
+              <th>{tr('Joins')}</th>
+              <th>{tr('Who')}</th>
+              <th>{tr('As')}</th>
+              <th>{tr('When no longer matched')}</th>
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            {grants.map((g, i) => {
+              const e = entries[g.entry]
+              const first = i === 0 || grants[i - 1].entry !== g.entry
+              const last = i === grants.length - 1 || grants[i + 1].entry !== g.entry
+              const expr = g.role === null ? null : e.kind === 'team' ? e.users : e.exprs[g.role]
+              const remove = g.role === null ? true : e.kind === 'team' ? e.remove : e.remove[g.role]
+              const who = describeExpr(expr, ldap)
+              const name = e.kind === 'organization' && e.alias ? e.alias : e.name
+              return (
+                <Fragment key={`${g.entry}-${g.role}`}>
+                  <tr className={first ? '' : 'cont'}>
+                    <td>
+                      {first && (
+                        <>
+                          <b>{name || '—'}</b>
+                          <span className="sub">
+                            {e.kind === 'team'
+                              ? tr('team in {org}', { org: e.organization || '?' })
+                              : e.alias
+                                ? tr('organization, entry {name}', { name: e.name })
+                                : tr('organization')}
+                          </span>
+                          {problems[g.entry] && <span className="sub err">{problemText(problems[g.entry])}</span>}
+                        </>
+                      )}
+                    </td>
+                    <td className="who">
+                      {who.text ?? (
+                        <>
+                          {who.lead && <>{who.lead} </>}
+                          {who.items.map((x) => (
+                            <Fragment key={x}>
+                              <code>{x}</code>{' '}
+                            </Fragment>
+                          ))}
+                        </>
+                      )}
+                    </td>
+                    <td>{g.role === null ? '—' : roleLabel[g.role]}</td>
+                    <td>{expr === null || expr === true ? '—' : remove ? tr('Removed') : tr('Stays')}</td>
+                    <td>
+                      {first && !disabled && (
+                        <button
+                          type="button"
+                          className="icon-x"
+                          aria-label={tr('Edit {name}', { name: name || (e.kind === 'team' ? tr('the new team') : tr('the new organization')) })}
+                          aria-expanded={open === g.entry}
+                          onClick={() => setOpen(open === g.entry ? null : g.entry)}
+                        >
+                          …
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                  {last && open === g.entry && (
+                    <tr className="map-edit">
+                      <td colSpan={5}>
+                        <MapEntryEditor
+                          entry={e}
+                          ldap={ldap}
+                          onChange={(x) => update(entries.map((y, j) => (j === g.entry ? x : y)))}
+                          onRemove={() => {
+                            update(entries.filter((_, j) => j !== g.entry))
+                            setOpen(null)
+                          }}
+                          onDone={() => setOpen(null)}
+                        />
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              )
+            })}
+          </tbody>
+        </table>
+      ) : (
+        <p className="note">{ldap ? tr('None yet: LDAP users join no organization, and see nothing until someone grants them access.') : tr('None yet: people join no organization, and see nothing until someone grants them access.')}</p>
+      )}
+      {!disabled && (
+        <div className="map-actions">
+          <button type="button" className="btn sm" onClick={() => add(newOrg())}>
+            {tr('Add an organization')}
+          </button>
+          <button type="button" className="btn sm" onClick={() => add(newTeam())}>
+            {tr('Add a team')}
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** Names known, offered while typing an organization or a team. */
+function useNames(path: string) {
+  return useQuery({ queryKey: ['settings/names', path], queryFn: () => getAll<{ name: string }>(path, {}, 2).then((l) => [...new Set(l.map((x) => x.name))]), staleTime: 60_000 }).data ?? []
+}
+
+/** One organization or team of a map: its name, then each role's people. */
+function MapEntryEditor({ entry, ldap, onChange, onRemove, onDone }: {
+  entry: MapEntry
+  ldap: boolean
+  onChange: (e: MapEntry) => void
+  onRemove: () => void
+  onDone: () => void
+}) {
+  const id = useId()
+  const orgs = useNames('organizations/')
+  const teams = useNames('teams/')
+  const team = entry.kind === 'team'
+  return (
+    <div className="map-entry">
+      <div className="s-fields">
+        <label className="s-field">
+          <span>{team ? tr('Team') : tr('Organization')}</span>
+          <input
+            className="input"
+            autoFocus={!entry.name}
+            autoComplete="off"
+            list={`${id}-${team ? 'teams' : 'orgs'}`}
+            value={entry.name}
+            onChange={(e) => onChange({ ...entry, name: e.target.value })}
+          />
+        </label>
+        {entry.kind === 'team' && (
+          <label className="s-field">
+            <span>{tr('In the organization')}</span>
+            <input className="input" autoComplete="off" list={`${id}-orgs`} value={entry.organization} onChange={(e) => onChange({ ...entry, organization: e.target.value })} />
+          </label>
+        )}
+        {entry.kind === 'organization' && entry.alias && (
+          <label className="s-field">
+            <span>{tr('Joins the organization')}</span>
+            <input className="input" autoComplete="off" list={`${id}-orgs`} value={entry.alias} onChange={(e) => onChange({ ...entry, alias: e.target.value })} />
+          </label>
+        )}
+        <datalist id={`${id}-orgs`}>
+          {orgs.map((n) => (
+            <option key={n} value={n} />
+          ))}
+        </datalist>
+        <datalist id={`${id}-teams`}>
+          {teams.map((n) => (
+            <option key={n} value={n} />
+          ))}
+        </datalist>
+      </div>
+      <p className="note">{tr('An organization or team that does not exist yet is created at the first login it applies to.')}</p>
+      {entry.kind === 'team' ? (
+        <WhoEditor label={tr('Members')} expr={entry.users} remove={entry.remove} ldap={ldap} onChange={(users, remove) => onChange({ ...entry, users, remove })} />
+      ) : (
+        orgRoles(ldap).map((r) => (
+          <WhoEditor
+            key={r}
+            label={{ users: tr('Members'), admins: tr('Admins'), auditors: tr('Auditors') }[r]}
+            expr={entry.exprs[r]}
+            remove={entry.remove[r]}
+            ldap={ldap}
+            onChange={(x, remove) => onChange({ ...entry, exprs: { ...entry.exprs, [r]: x }, remove: { ...entry.remove, [r]: remove } })}
+          />
+        ))
+      )}
+      <div className="map-actions">
+        <button type="button" className="btn sm" onClick={onDone}>
+          {tr('Done')}
+        </button>
+        <button type="button" className="btn sm ghost" onClick={onRemove}>
+          {team ? tr('Remove this team') : tr('Remove this organization')}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+/** Who gets a role: everyone, these people or groups, no one, or left as it is. */
+function WhoEditor({ label, expr, remove, ldap, onChange }: { label: string; expr: Expr; remove: boolean; ldap: boolean; onChange: (e: Expr, remove: boolean) => void }) {
+  const id = useId()
+  const kind = whoKind(expr)
+  const list = Array.isArray(expr) ? expr : []
+  const people = list.filter((x) => !isPattern(x))
+  const patterns = list.filter(isPattern)
+  return (
+    <fieldset className="map-role">
+      <legend>{label}</legend>
+      <div className="choice row" role="radiogroup" aria-label={label}>
+        {whoKinds(ldap).map(([k, l]) => (
+          <label key={k}>
+            <input type="radio" name={id} checked={kind === k} onChange={() => onChange(withKind(expr, k), remove)} />
+            <span>{l}</span>
+          </label>
+        ))}
+      </div>
+      {kind === 'list' &&
+        (ldap ? (
+          <div className="amount-l">
+            <span>{tr('Groups, by distinguished name')}</span>
+            <ChipsControl id={`${id}-dn`} lines value={list} onChange={(v) => onChange(v as string[], remove)} disabled={false} placeholder={asIs('cn=ops,ou=groups,dc=example,dc=com')} />
+          </div>
+        ) : (
+          <>
+            <div className="amount-l">
+              <span>{tr('Usernames or emails')}</span>
+              <ChipsControl id={`${id}-users`} value={people} onChange={(v) => onChange([...(v as string[]), ...patterns], remove)} disabled={false} />
+            </div>
+            <div className="amount-l">
+              <span>{tr('Usernames or emails matching')}</span>
+              <ChipsControl id={`${id}-re`} lines as={asPattern} value={patterns} onChange={(v) => onChange([...people, ...(v as string[])], remove)} disabled={false} placeholder={asIs('/^ops-.*@example\\.com$/i')} />
+            </div>
+          </>
+        ))}
+      {kind !== 'keep' && kind !== 'all' && <RemoveChoice remove={remove} onChange={(v) => onChange(expr, v)} disabled={false} />}
+    </fieldset>
+  )
+}
+
+/** LDAP's superusers and auditors: members of these groups. */
+function LdapFlagsControl({ id, value, onChange, disabled }: { id: string; value: unknown; onChange: (v: unknown) => void; disabled: boolean }) {
+  const f = parseFlags(value)
+  return (
+    <div className="s-parts">
+      {([
+        ['superusers', tr('Superusers: members of')],
+        ['auditors', tr('System auditors: members of')],
+      ] as const).map(([k, l]) => (
+        <div key={k} className="amount-l">
+          <label htmlFor={`${id}-${k}`}>{l}</label>
+          <ChipsControl id={`${id}-${k}`} lines value={f[k]} onChange={(v) => onChange(formatFlags({ ...f, [k]: v as string[] }))} disabled={disabled} placeholder={asIs('cn=admins,ou=groups,dc=example,dc=com')} />
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/** SAML's organizations from attributes: the attribute naming each role's organizations. */
+function SamlOrgAttrControl({ id, value, onChange, disabled }: { id: string; value: unknown; onChange: (v: unknown) => void; disabled: boolean }) {
+  const [[a], update] = useDraft(value, (v) => [parseSamlOrgAttr(v)], (r) => formatSamlOrgAttr(r[0]), onChange)
+  const set = (next: Partial<SamlOrgAttr>) => update([{ ...a, ...next }])
+  return (
+    <div className="s-parts">
+      {([
+        ['users', tr('Member of the organizations in')],
+        ['admins', tr('Admin of the organizations in')],
+        ['auditors', tr('Auditor of the organizations in')],
+      ] as [Role, string][]).map(([r, l]) => (
+        <div key={r} className="amount-l">
+          <label htmlFor={`${id}-${r}`}>{l}</label>
+          <input
+            id={`${id}-${r}`}
+            className="input mono"
+            autoComplete="off"
+            placeholder={tr('No attribute')}
+            disabled={disabled}
+            value={a.attrs[r]}
+            onChange={(e) => set({ attrs: { ...a.attrs, [r]: e.target.value } })}
+          />
+          {a.attrs[r].trim() && <RemoveChoice label={tr('When no longer named')} remove={a.remove[r]} disabled={disabled} onChange={(v) => set({ remove: { ...a.remove, [r]: v } })} />}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/** SAML's teams from an attribute: which of its values are which team. */
+function SamlTeamAttrControl({ id, value, onChange, disabled }: { id: string; value: unknown; onChange: (v: unknown) => void; disabled: boolean }) {
+  const [[a], update] = useDraft(value, (v) => [parseSamlTeamAttr(v)], (r) => formatSamlTeamAttr(r[0]), onChange)
+  const set = (next: Partial<SamlTeamAttr>) => update([{ ...a, ...next }])
+  const edit = (i: number, t: Partial<SamlTeam>) => set({ teams: a.teams.map((x, j) => (j === i ? { ...x, ...t } : x)) })
+  return (
+    <div className="s-list">
+      <div className="amount-l">
+        <label htmlFor={id}>{tr('Attribute')}</label>
+        <input id={id} className="input mono" autoComplete="off" placeholder={asIs('memberOf')} disabled={disabled} value={a.attr} onChange={(e) => set({ attr: e.target.value })} />
+      </div>
+      {a.teams.length ? (
+        <div className="kv kv-teams">
+          <span className="head">{tr('Value')}</span>
+          <span className="head">{tr('Team')}</span>
+          <span className="head">{tr('Organization')}</span>
+          <span />
+          {a.teams.map((t, i) => (
+            <Fragment key={i}>
+              <input className="input" aria-label={tr('Value')} disabled={disabled} value={t.team} onChange={(e) => edit(i, { team: e.target.value })} />
+              <input className="input" aria-label={tr('Team')} placeholder={t.team || tr('Same as the value')} disabled={disabled} value={t.alias} onChange={(e) => edit(i, { alias: e.target.value })} />
+              <input className="input" aria-label={tr('Organization')} disabled={disabled} value={t.organization} onChange={(e) => edit(i, { organization: e.target.value })} />
+              <button type="button" className="icon-x" aria-label={tr('Remove')} disabled={disabled} onClick={() => set({ teams: a.teams.filter((_, j) => j !== i) })}>
+                ×
+              </button>
+            </Fragment>
+          ))}
+        </div>
+      ) : (
+        <span className="note">{tr('No team yet.')}</span>
+      )}
+      {!disabled && (
+        <button type="button" className="btn sm ghost" onClick={() => set({ teams: [...a.teams, { team: '', alias: '', organization: '' }] })}>
+          + {tr('Add a team')}
+        </button>
+      )}
+      <RemoveChoice label={tr('When no longer in a team listed')} remove={a.remove} disabled={disabled} onChange={(remove) => set({ remove })} />
+    </div>
+  )
+}
+
+/** SAML's superusers and auditors: by role, or by an attribute's value. */
+function SamlFlagsControl({ id, value, onChange, disabled }: { id: string; value: unknown; onChange: (v: unknown) => void; disabled: boolean }) {
+  const [[f], update] = useDraft(value, (v) => [parseSamlFlags(v)], (r) => formatSamlFlags(r[0]), onChange)
+  const set = (k: keyof SamlFlags, x: Partial<SamlFlag>) => update([{ ...f, [k]: { ...f[k], ...x } }])
+  return (
+    <div className="s-list">
+      {([
+        ['superuser', tr('Superusers')],
+        ['auditor', tr('System auditors')],
+      ] as [keyof SamlFlags, string][]).map(([k, l]) => (
+        <fieldset key={k} className="record">
+          <legend>{l}</legend>
+          <div className="amount-l">
+            <span>{tr('With one of these roles')}</span>
+            <ChipsControl id={`${id}-${k}-role`} value={f[k].roles} onChange={(v) => set(k, { roles: v as string[] })} disabled={disabled} />
+          </div>
+          <div className="s-fields">
+            <label className="s-field">
+              <span>{tr('Or with the attribute')}</span>
+              <input className="input mono" autoComplete="off" disabled={disabled} value={f[k].attr} onChange={(e) => set(k, { attr: e.target.value })} />
+            </label>
+            {f[k].attr.trim() && (
+              <div className="s-field full">
+                <span>{tr('Set to one of')}</span>
+                <ChipsControl id={`${id}-${k}-value`} lines value={f[k].values} onChange={(v) => set(k, { values: v as string[] })} disabled={disabled} placeholder={tr('Any value')} />
+              </div>
+            )}
+          </div>
+          <RemoveChoice label={tr('Otherwise')} remove={f[k].remove} disabled={disabled} onChange={(remove) => set(k, { remove })} />
+        </fieldset>
+      ))}
     </div>
   )
 }

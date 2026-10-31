@@ -175,3 +175,20 @@
 .settings details.s-value summary { cursor: pointer; color: var(--muted); }
 .settings details.s-value pre { max-height: 320px; overflow: auto; margin: 6px 0 0; }
 .settings .amount .check { font-size: 13px; color: var(--ink); }
+/* The map editor (M8-03): an entry opens under its rows. */
+.settings .maps tr.cont td { border-top-color: transparent; padding-top: 0; }
+.settings .maps td .sub.err { color: var(--fail-ink); }
+.settings .maps tr.map-edit > td { background: var(--surface-2); padding: 12px; }
+.settings .maps .who code { overflow-wrap: anywhere; }
+.settings .map-wrap > .note { margin: 0 8px; }
+.settings .map-entry { display: flex; flex-direction: column; gap: 12px; }
+.settings .map-entry .s-fields { max-width: 560px; }
+.settings .map-entry .map-actions { padding: 0; }
+.settings .map-role { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); margin: 0; padding: 8px 12px 12px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.settings .map-role legend, .settings .record legend { font-weight: 600; font-size: 12.5px; padding: 0 4px; }
+.settings .choice.row { flex-direction: row; flex-wrap: wrap; gap: 6px 18px; }
+.settings .map-remove { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+.settings .map-remove .segmented label { padding: 3px 10px; font-size: 12.5px; }
+.settings .chips.lines { max-width: 560px; }
+.settings .chips.lines .chip-input { width: 100%; max-width: 420px; }
+.settings .kv.kv-teams { grid-template-columns: repeat(3, minmax(0, 1fr)) auto; max-width: 560px; }

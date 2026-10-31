@@ -83,6 +83,9 @@ export interface SettingsPage {
 
 const row = (key: string, more: Partial<Row> = {}): Row => ({ keys: [key], ...more })
 const filled = (v: unknown) => typeof v === 'string' && v.trim() !== ''
+/** An organization map and its team map, edited together as entries (awxMaps.ts). */
+const mapsRow = (org: string, team: string, help?: string): Row => ({ keys: [org, team], label: tr('Organizations and teams'), parts: [tr('Organization map'), tr('Team map')], control: 'awx-maps', wide: true, ...(help ? { help } : {}) })
+const socialMapsHelp = tr('Applied at each login: people join an organization or a team when they match, by username or email.')
 const envVars: Partial<Row> = { control: 'pairs', columns: [tr('Variable'), tr('Value')], add: tr('Add a variable') }
 
 // AWX's six LDAP servers: AUTH_LDAP_* is the default one, AUTH_LDAP_1_* to
@@ -127,6 +130,7 @@ const ldapLabels: Record<string, string> = {
 }
 
 const ldapControls: Record<string, Partial<Row>> = {
+  USER_FLAGS_BY_GROUP: { control: 'ldap-flags', help: tr('Set at each login: members of one of the groups get the flag, the others lose it.') },
   USER_SEARCH: {
     control: 'ldap-search',
     multiple: true,
@@ -156,7 +160,13 @@ const ldapSections: Section[] = ['', '1_', '2_', '3_', '4_', '5_'].map((p, n) =>
   id: n ? `server-${n}` : 'default-server',
   title: n ? tr('Server {n}', { n }) : tr('Default server'),
   on: n ? (v) => filled(v[`AUTH_LDAP_${p}SERVER_URI`]) : undefined,
-  rows: ldapFields.map((f) => row(`AUTH_LDAP_${p}${f}`, { label: ldapLabels[f], ...ldapControls[f] })),
+  rows: ldapFields
+    .filter((f) => f !== 'TEAM_MAP')
+    .map((f) =>
+      f === 'ORGANIZATION_MAP'
+        ? mapsRow(`AUTH_LDAP_${p}ORGANIZATION_MAP`, `AUTH_LDAP_${p}TEAM_MAP`, tr('Applied at each login: people join an organization or a team when they are members of its groups.'))
+        : row(`AUTH_LDAP_${p}${f}`, { label: ldapLabels[f], ...ldapControls[f] }),
+    ),
 }))
 
 // GitHub's six AWX categories: github.com or GitHub Enterprise, then any
@@ -183,6 +193,7 @@ const oauthLabels: Record<string, string> = {
   TEAM_MAP: tr('Team map'),
 }
 const oauthRow = (p: string, f: string, more: Partial<Row> = {}) => row(`SOCIAL_AUTH_${p}${f}`, { label: oauthLabels[f], ...more })
+const oauthMaps = (p: string) => mapsRow(`SOCIAL_AUTH_${p}ORGANIZATION_MAP`, `SOCIAL_AUTH_${p}TEAM_MAP`, socialMapsHelp)
 
 const githubSections: Section[] = githubVariants.map(([slug, p, title, extra]) => {
   const where = extra.filter((f) => f.endsWith('URL'))
@@ -190,20 +201,20 @@ const githubSections: Section[] = githubVariants.map(([slug, p, title, extra]) =
   return {
     id: slug,
     title,
-    rows: ['CALLBACK_URL', ...where, 'KEY', 'SECRET', ...who, 'ORGANIZATION_MAP', 'TEAM_MAP'].map((f) => oauthRow(p, f)),
+    rows: [...['CALLBACK_URL', ...where, 'KEY', 'SECRET', ...who].map((f) => oauthRow(p, f)), oauthMaps(p)],
   }
 })
 
 /** The rows of the GitHub form for one of its six variants: where the
  * Enterprise server is, the organization or team people must be in, the
  * OAuth app, then the maps. */
-export function githubForm(v: GitHubVariant): { where: Row[]; who?: Row; app: Row[]; maps: Row[] } {
+export function githubForm(v: GitHubVariant): { where: Row[]; who?: Row; app: Row[]; maps: Row } {
   const p = v.prefix.replace(/^SOCIAL_AUTH_/, '')
   return {
     where: v.host === 'enterprise' ? [oauthRow(p, 'URL'), oauthRow(p, 'API_URL')] : [],
     who: v.who === 'org' ? oauthRow(p, 'NAME') : v.who === 'team' ? oauthRow(p, 'ID') : undefined,
     app: [oauthRow(p, 'CALLBACK_URL', { label: tr('Authorization callback URL'), help: tr('Made from the service URL, on the System page.') }), oauthRow(p, 'KEY'), oauthRow(p, 'SECRET')],
-    maps: [oauthRow(p, 'ORGANIZATION_MAP'), oauthRow(p, 'TEAM_MAP')],
+    maps: oauthMaps(p),
   }
 }
 
@@ -214,7 +225,7 @@ const oauth = (p: string, extra: Row[] = []): Section[] => [
     // Google and Microsoft call the callback URL the redirect URI.
     rows: [oauthRow(p, 'CALLBACK_URL', { label: tr('Redirect URI') }), oauthRow(p, 'KEY'), oauthRow(p, 'SECRET'), ...extra],
   },
-  { id: 'maps', title: tr('Organizations and teams'), rows: ['ORGANIZATION_MAP', 'TEAM_MAP'].map((f) => oauthRow(p, f)) },
+  { id: 'maps', title: tr('Organizations and teams'), rows: [oauthMaps(p)] },
 ]
 
 export const settingsPages: SettingsPage[] = [
@@ -291,7 +302,7 @@ export const settingsPages: SettingsPage[] = [
         id: 'default-maps',
         title: tr('Default organization and team maps'),
         intro: tr('Where OpenID Connect logins place people, by username or email, besides its group mapping. GitHub, Google, Microsoft Entra ID and SAML use maps of their own, and LDAP too.'),
-        rows: [row('SOCIAL_AUTH_ORGANIZATION_MAP', { label: tr('Organization map') }), row('SOCIAL_AUTH_TEAM_MAP', { label: tr('Team map') })],
+        rows: [mapsRow('SOCIAL_AUTH_ORGANIZATION_MAP', 'SOCIAL_AUTH_TEAM_MAP', socialMapsHelp)],
       },
     ],
   },
@@ -445,11 +456,23 @@ export const settingsPages: SettingsPage[] = [
         id: 'maps',
         title: tr('Organizations, teams and flags'),
         rows: [
-          row('SOCIAL_AUTH_SAML_ORGANIZATION_MAP', { label: tr('Organization map') }),
-          row('SOCIAL_AUTH_SAML_TEAM_MAP', { label: tr('Team map') }),
-          row('SOCIAL_AUTH_SAML_ORGANIZATION_ATTR', { label: tr('Organizations from attributes') }),
-          row('SOCIAL_AUTH_SAML_TEAM_ATTR', { label: tr('Teams from an attribute') }),
-          row('SOCIAL_AUTH_SAML_USER_FLAGS_BY_ATTR', { label: tr('Superusers and auditors by attribute') }),
+          mapsRow('SOCIAL_AUTH_SAML_ORGANIZATION_MAP', 'SOCIAL_AUTH_SAML_TEAM_MAP', socialMapsHelp),
+          row('SOCIAL_AUTH_SAML_ORGANIZATION_ATTR', {
+            label: tr('Organizations from attributes'),
+            control: 'saml-org-attr',
+            help: tr('The identity provider names the organizations: each value of the attribute is an organization the user joins.'),
+          }),
+          row('SOCIAL_AUTH_SAML_TEAM_ATTR', {
+            label: tr('Teams from an attribute'),
+            control: 'saml-team-attr',
+            wide: true,
+            help: tr('The identity provider names the teams: each value of the attribute listed below makes the user a member of that team.'),
+          }),
+          row('SOCIAL_AUTH_SAML_USER_FLAGS_BY_ATTR', {
+            label: tr('Superusers and auditors by attribute'),
+            control: 'saml-flags',
+            help: tr('Set at each login, from a role the user has or an attribute\'s value.'),
+          }),
         ],
       },
     ],
