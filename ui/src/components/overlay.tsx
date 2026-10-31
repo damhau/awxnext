@@ -1,7 +1,8 @@
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { Icon } from './icons'
 import { tr } from '../lib/i18n'
+import { placeMenu } from '../lib/menuPosition'
 
 /** Modal dialog: focus moves inside, Escape and backdrop clicks close it. */
 export function Dialog({
@@ -145,13 +146,26 @@ export function Menu({
   className?: string
 }) {
   const [open, setOpen] = useState(false)
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null)
   const ref = useRef<HTMLDivElement>(null)
+  const button = useRef<HTMLButtonElement>(null)
+  const list = useRef<HTMLDivElement>(null)
+  // Closing from the menu gives the focus back to its button.
+  const close = () => {
+    setOpen(false)
+    button.current?.focus()
+  }
   useEffect(() => {
     if (!open) return
     const on = (e: MouseEvent) => {
-      if (!ref.current?.contains(e.target as Node)) setOpen(false)
+      const t = e.target as Node
+      if (!ref.current?.contains(t) && !list.current?.contains(t)) setOpen(false)
     }
-    const key = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false)
+    const key = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      setOpen(false)
+      button.current?.focus()
+    }
     document.addEventListener('mousedown', on)
     window.addEventListener('keydown', key)
     return () => {
@@ -159,17 +173,63 @@ export function Menu({
       window.removeEventListener('keydown', key)
     }
   }, [open])
-  const close = () => setOpen(false)
+  // The list is drawn on the body, so that a scrolling container (a table)
+  // cannot clip it. It is placed on its button in a layout effect, so the
+  // first paint already has it there (and it stays focusable: not hidden).
+  useLayoutEffect(() => {
+    if (!open) return
+    const place = () => {
+      const b = button.current?.getBoundingClientRect()
+      const l = list.current
+      if (b && l) setPos(placeMenu(b, { width: l.offsetWidth, height: l.offsetHeight }, { width: window.innerWidth, height: window.innerHeight }, align))
+    }
+    place()
+    window.addEventListener('resize', place)
+    window.addEventListener('scroll', place, true)
+    return () => {
+      window.removeEventListener('resize', place)
+      window.removeEventListener('scroll', place, true)
+    }
+  }, [open, align])
+  // Opening moves the focus to the first item: the list is not after its
+  // button in the tab order.
+  useEffect(() => {
+    if (open) list.current?.querySelector<HTMLElement>(MENU_ITEMS)?.focus({ preventScroll: true })
+  }, [open])
+  const onKey = (e: ReactKeyboardEvent) => {
+    if (e.key === 'Tab') {
+      // Back to the button, from which Tab goes on to what follows it.
+      close()
+    } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault()
+      const items = Array.from(list.current?.querySelectorAll<HTMLElement>(MENU_ITEMS) ?? [])
+      const at = items.indexOf(document.activeElement as HTMLElement)
+      const next = e.key === 'ArrowDown' ? at + 1 : at - 1
+      items[(next + items.length) % items.length]?.focus()
+    }
+  }
   return (
     <div className="menu" ref={ref}>
-      <button type="button" className={className} aria-haspopup="menu" aria-expanded={open} aria-label={label} onClick={() => setOpen((o) => !o)}>
+      <button ref={button} type="button" className={className} aria-haspopup="menu" aria-expanded={open} aria-label={label} onClick={() => setOpen((o) => !o)}>
         {trigger ?? <Icon name="more" />}
       </button>
-      {open && (
-        <div className={`menu-list ${align === 'left' ? 'left' : ''}`} role="menu" onClick={(e) => (e.target as HTMLElement).closest('button,a') && close()}>
-          {typeof children === 'function' ? children(close) : children}
-        </div>
-      )}
+      {open &&
+        createPortal(
+          <div
+            ref={list}
+            className="menu-list"
+            role="menu"
+            aria-label={label}
+            style={{ top: pos?.top ?? 0, left: pos?.left ?? 0 }}
+            onKeyDown={onKey}
+            onClick={(e) => (e.target as HTMLElement).closest('button,a') && close()}
+          >
+            {typeof children === 'function' ? children(close) : children}
+          </div>,
+          document.body,
+        )}
     </div>
   )
 }
+
+const MENU_ITEMS = 'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
