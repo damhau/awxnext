@@ -31,7 +31,7 @@ be matched.
 | [M5 Authentication](#m5-authentication) | Every login method AWX has, except RADIUS and TACACS+ | 6 |
 | [M6 Operations and scale](#m6-operations-and-scale) | Run awxnext in production: policies, logging, Helm, backup, job isolation | 13 |
 | [M7 UI completeness](#m7-ui-completeness) | Every API feature reachable from the UI; the remaining UI goals | 17 |
-| [M8 Settings that make sense](#m8-settings-that-make-sense) | Settings laid out by task, without JSON or AWX's jargon; the settings API unchanged | 9 |
+| [M8 Settings that make sense](#m8-settings-that-make-sense) | Settings laid out by task, without JSON or AWX's jargon; the settings API unchanged | 10 |
 
 ---
 
@@ -1144,6 +1144,20 @@ checked to be current.
 
 **Done when:** adding a setting without placing it in the layout fails CI.
 
+### M8-10 Mark lost nodes, and deprovision lost pods
+**Labels:** bug, instances, deploy · **Size:** S · [#103](https://github.com/damhau/awxnext/issues/103)
+
+Found on the permanent instance: each rollout leaves the old pod's instance
+**Ready** for good, and group capacity counts it. Dispatch already skips
+nodes silent for 2 minutes, but nothing marks them lost. As AWX does, the
+dispatcher leader marks control and hybrid nodes silent for 2 minutes
+`unavailable` with capacity 0, and `AWXNEXT_AUTO_DEPROVISION_INSTANCES` (on
+in the chart) deletes them.
+
+**Done when:** a test sees a silent node marked unavailable, its groups'
+capacity drop, the node back when its heartbeats resume, and deleted with
+auto-deprovisioning on.
+
 ---
 
 ## Proposed out of scope
@@ -1194,5 +1208,5 @@ Created on 2026-10-27 on `damhau/awxnext`: the type, area and size labels,
 one milestone per section, and one issue per task (#1 to #80), each with a
 **Done when** checklist (one box per lookup for M4-07). M2-14 to M2-26
 (#81 to #93) were added on 2026-10-28 from the compatibility harness's first
-runs. M8 (#94 to #102) was added on 2026-10-31. This file stays the index;
+runs. M8 (#94 to #102) was added on 2026-10-31, and M8-10 (#103) the same day, from the permanent instance. This file stays the index;
 when a task changes, change its issue too.
