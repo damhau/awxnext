@@ -14,6 +14,12 @@ imagePullSecrets: []
 # pod name) and runs jobs; jobs in container groups run in their own pods.
 replicaCount: 1
 
+# Argo CD and Flux render the chart with `helm template`, where the lookup
+# that keeps generated secrets across upgrades finds nothing: each render
+# would generate new ones. With them, set admin.existingSecret and
+# secretKey.existingSecret (and use an external PostgreSQL), and turn off
+# migrations below.
+
 admin:
   # The superuser created and kept at each start, with the password in an
   # existing secret (key "password") or generated (shown by the NOTES).
@@ -34,10 +40,12 @@ postgresql:
   image: postgres:16
   storage: 8Gi
   storageClass: ""
-  # External: a secret holding the connection URL under "url"
-  # (postgres://user:password@host:5432/awxnext?sslmode=require).
+  # External: a secret holding the connection URL
+  # (postgres://user:password@host:5432/awxnext?sslmode=require), under
+  # "key". For a CloudNativePG cluster, its <cluster>-app secret, key "uri".
   external:
     existingSecret: ""
+    key: url
 
 # How jobs run on the control plane replicas: none (ansible-runner in the
 # image), podman or docker. Container groups run jobs in pods instead.
@@ -80,7 +88,10 @@ agent:
   tokenSecret: ""
   runtime: none
 
-# Run the migrations as a Job before an upgrade rolls the replicas.
+# Run the migrations as a Job before an upgrade rolls the replicas. Off under
+# Argo CD: it runs the hook before every sync, the first one included, when
+# the database does not exist yet. The replicas migrate as they start instead,
+# one at a time under a lock.
 migrations:
   enabled: true
 

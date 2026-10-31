@@ -64,7 +64,8 @@ the admin password and, with the bundled PostgreSQL, its password, in the secret
 `awxnext-secrets`, kept across upgrades and when the release is uninstalled. For production:
 
 - an external PostgreSQL: `--set postgresql.bundled=false --set postgresql.external.existingSecret=db`,
-  the secret holding the URL under `url`;
+  the secret holding the URL under `url` (or `postgresql.external.key`: `uri` for the
+  `<cluster>-app` secret of a CloudNativePG cluster);
 - your own master key: `--set secretKey.existingSecret=awxnext-master-key` (key `secret-key`), or
   a KMS (Vault Transit, Azure Key Vault) through `env`;
 - `replicaCount: 2` or more (see [High availability](#high-availability));
@@ -73,6 +74,35 @@ the admin password and, with the bundled PostgreSQL, its password, in the secret
   Jobs that run on the replicas themselves (runtime `none`) run as the server's user there:
   the chart's `emptyDir` is writable by others, so job users are refused (README, "Job
   isolation").
+
+#### With Argo CD or Flux
+
+They render the chart with `helm template`, where the lookup that keeps the generated secrets
+finds nothing, so each sync would generate a new master key. Give the chart its secrets
+instead (from External Secrets, Sealed Secrets...), with an external PostgreSQL, and turn off
+the migration Job: Argo CD runs Helm's pre-upgrade hook before every sync, the first one
+included, when the database does not exist yet. The replicas apply the migrations as they
+start.
+
+```yaml
+admin:
+  existingSecret: awxnext-secrets     # key "password"
+secretKey:
+  existingSecret: awxnext-secrets     # key "secret-key"
+postgresql:
+  bundled: false
+  external:
+    existingSecret: awxnext-db-app    # a CloudNativePG cluster's secret
+    key: uri
+migrations:
+  enabled: false
+```
+
+The images of `main` are published as `ghcr.io/damhau/awxnext-all-in-one:main-<commit time>-<commit>`
+(UTC, `YYYYMMDDHHMMSS`), so they sort by date: Argo CD Image Updater can follow them with the
+`alphabetical` strategy and `allowTags: regexp:^main-[0-9]{14}-[0-9a-f]{7}$`. When it, or
+kustomize, changes the image, `AWXNEXT_SHIM_IMAGE` keeps the chart's: copy the image into it
+with a kustomize replacement, so container group job pods get the server's own version.
 
 ### From the binary
 

@@ -73,3 +73,45 @@ jobs:
         run: npx vitest run
       - name: build
         run: npm run build
+
+  # On main, once the tests pass: the all-in-one image, tagged
+  # main-<commit time, UTC, YYYYMMDDHHMMSS>-<commit>, which sorts by date, and
+  # main. Argo CD Image Updater follows the dated tags into the GitOps repo
+  # (docs/operations.md, "With Argo CD or Flux").
+  image:
+    needs: [go, ui]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: tag
+        id: tag
+        run: |
+          echo "tag=main-$(TZ=UTC git log -1 --format=%cd --date=format-local:%Y%m%d%H%M%S)-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          echo "built=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: all-in-one
+          push: true
+          build-args: |
+            VERSION=${{ steps.tag.outputs.tag }}
+            COMMIT=${{ github.sha }}
+            BUILT=${{ steps.tag.outputs.built }}
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/awxnext-all-in-one:${{ steps.tag.outputs.tag }}
+            ghcr.io/${{ github.repository_owner }}/awxnext-all-in-one:main
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

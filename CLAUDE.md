@@ -20,24 +20,40 @@ provider) must keep working against it.
 
 ## Tests
 
-The tests run in tiers.
+Run the tests of what you changed, and nothing else: CI runs the rest on push.
 
-- **For each change:**
-  - `make test`: vet and `go test -short ./...`, about 30 s.
-  - The full tests of the area you changed: `go test ./test/ -run 'TestArea'`, without `-short`.
-  - For UI changes: `cd ui && npx tsc --noEmit -p . && npx vitest run`.
+- **Go code:** `make test` (vet and `go test -short ./...`, about 30 s), then the full tests
+  of the area you changed: `go test ./test/ -run 'TestArea'`, without `-short`.
+- **UI (`ui/`):** `cd ui && npx tsc --noEmit -p . && npx vitest run`, then check the page in
+  the browser (below).
+- **The Helm chart:** `helm lint deploy/helm/awxnext`, and `helm template` with the values you
+  changed. `deploy.yml` installs it in kind on push.
+- **Workflows, Compose, docs:** check that the file parses; there is nothing to run locally.
+  A workflow is tested by its first run. A new setting or environment variable is Go code:
+  `make test` checks `docs/configuration.md` and `config.Vars`.
 - **Before a milestone closes:** `gh workflow run full.yml`. It also runs nightly. It runs every
   Go test with the race detector, the chart and image tests, and the compat suites.
   `make test-full` is the local Go part of it.
+
+Writing and running Go tests:
+
 - **Slow tests:** mark a test that takes seconds with `slow(t)`. A test that runs jobs with
   ansible-runner calls `requireAnsible(t)`, which also counts as slow. Both keep the test out of
   the short suite. CI's short job has no ansible-runner, so an unmarked job test fails there.
+- **PostgreSQL:** the tests use `AWXNEXT_TEST_DATABASE_URL`, as CI does, or else start a
+  throwaway PostgreSQL 16. The first run downloads its binaries from Maven Central
+  (repo1.maven.org) into `~/.cache/awxnext/embedded-postgres`; later runs need no network.
 - **Running everything locally:** job tests need `ansible-runner` on the PATH; the object
   storage tests need `AWXNEXT_TEST_S3_*` and `AWXNEXT_TEST_AZURITE_BLOB_ENDPOINT` (see
   `test/archive_storage_test.go`).
+
+CI and the browser:
+
 - **CI on push:**
   - `ci.yml` runs on every push that changes more than docs, `.gitignore` or `LICENSE`: the
-    short suite and the UI.
+    short suite and the UI. On main, it then publishes the all-in-one image as
+    `main-<commit time>-<commit>`. Argo CD Image Updater deploys that image to the permanent
+    instance (the `awxnext` app in damhau/k8s-argocd), so a green push to main goes live.
   - `deploy.yml` runs when the Dockerfile, `deploy/`, the job helper or the agent change.
 - **Checking the UI in a browser:** use the compat stack at http://localhost:8053
   (`admin` / `compat`), started with the UI override:

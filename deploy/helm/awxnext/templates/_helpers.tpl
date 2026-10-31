@@ -50,7 +50,7 @@ http://{{ include "awxnext.fullname" . }}.{{ .Release.Namespace }}.svc:{{ .Value
       key: database-url
       {{- else }}
       name: {{ required "postgresql.external.existingSecret is required without the bundled PostgreSQL" .Values.postgresql.external.existingSecret }}
-      key: url
+      key: {{ .Values.postgresql.external.key | default "url" }}
       {{- end }}
 - name: AWXNEXT_SECRET_KEY
   valueFrom:
