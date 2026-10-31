@@ -112,6 +112,7 @@ function useNav(): { label: string; items: NavItem[] }[] {
       items: [
         { to: '/instances', label: tr('Instances'), icon: 'server' },
         { to: '/credential-types', label: tr('Credential types'), icon: 'shield' },
+        { to: '/roles', label: tr('Roles'), icon: 'key' },
         { to: '/host-metrics', label: tr('Host metrics'), icon: 'host', superuser: true },
         { to: '/notifications', label: tr('Notifications'), icon: 'bell' },
         { to: '/gitops', label: tr('GitOps'), icon: 'git' },

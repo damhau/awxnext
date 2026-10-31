@@ -345,6 +345,63 @@ func stripCT(s string) string {
 	return s
 }
 
+// allowedPerms is what a role definition of a content type may grant, as
+// role_metadata/ lists it: the permissions of the managed roles of that type
+// (an organization's or folder's include those of the objects inside them).
+func allowedPerms(ct string) map[string]bool {
+	out := map[string]bool{}
+	for _, m := range rbac.Managed {
+		if m.ContentType == ct {
+			for _, p := range m.Permissions {
+				out[p] = true
+			}
+		}
+	}
+	return out
+}
+
+// permModel is the model a permission is about: view_jobtemplate -> jobtemplate.
+func permModel(p string) string {
+	if i := strings.IndexByte(p, '_'); i >= 0 {
+		return p[i+1:]
+	}
+	return p
+}
+
+// checkRolePerms applies django-ansible-base's rules to a custom role
+// definition: its permissions are allowed for its content type, and it can
+// view every kind of object it grants anything else on (adding excepted).
+func checkRolePerms(ct string, perms []string) error {
+	if ct != "" {
+		allowed := allowedPerms(ct)
+		for _, p := range perms {
+			if !allowed[p] {
+				return api.FieldError("permissions", fmt.Sprintf("Permission %q is not valid for content type %q.", dabPerm(p), str(dabCT(ct))))
+			}
+		}
+	}
+	has := map[string]bool{}
+	for _, p := range perms {
+		has[p] = true
+	}
+	var missing []string
+	seen := map[string]bool{}
+	for _, p := range perms {
+		m := permModel(p)
+		if strings.HasPrefix(p, "add_") || seen[m] {
+			continue
+		}
+		seen[m] = true
+		if !has["view_"+m] {
+			missing = append(missing, dabPerm("view_"+m))
+		}
+	}
+	if len(missing) > 0 {
+		return api.FieldError("permissions", fmt.Sprintf("Permissions also need %s: a role that grants something on an object must let it be seen.", strings.Join(missing, ", ")))
+	}
+	return nil
+}
+
 func validPerm(p string) bool {
 	for _, m := range rbac.Managed {
 		for _, x := range m.Permissions {
@@ -404,6 +461,26 @@ func registerDAB() {
 					perms = append(perms, s)
 				}
 				data["permissions"] = perms
+			}
+			// The rules apply to the definition as it will be saved.
+			ct := str(old["content_type"])
+			if v, ok := data["content_type"]; ok {
+				ct = str(v)
+			}
+			perms, _ := data["permissions"].([]string)
+			if perms == nil {
+				if _, given := data["permissions"]; !given && old != nil {
+					if l, ok := old["permissions"].([]any); ok {
+						for _, p := range l {
+							perms = append(perms, stripCT(str(p)))
+						}
+					}
+				}
+			}
+			if _, ctGiven := data["content_type"]; ctGiven || data["permissions"] != nil {
+				if err := checkRolePerms(ct, perms); err != nil {
+					return err
+				}
 			}
 			return nil
 		},

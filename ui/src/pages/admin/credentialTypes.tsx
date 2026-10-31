@@ -172,7 +172,7 @@ function CredentialTypeDialog({ type, onClose }: { type?: CredType; onClose: () 
       setBusy(false)
     }
   }
-  const title = !type ? tr('New credential type') : editable ? `Edit ${type.name}` : type.name
+  const title = !type ? tr('New credential type') : editable ? tr('Edit {name}', { name: type.name }) : type.name
   return (
     <Dialog
       title={title}

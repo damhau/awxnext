@@ -9,6 +9,8 @@ const m_activity = lazyModule(() => import('./activity'))
 const Activity = m_activity('Activity')
 const m_credentialTypes = lazyModule(() => import('./credentialTypes'))
 const CredentialTypeList = m_credentialTypes('CredentialTypeList')
+const m_roles = lazyModule(() => import('./roles'))
+const RoleDefinitionList = m_roles('RoleDefinitionList')
 const m_folders = lazyModule(() => import('./folders'))
 const FolderDetail = m_folders('FolderDetail')
 const FolderList = m_folders('FolderList')
@@ -60,6 +62,7 @@ export function adminRoutes() {
       <Route path="users/new" element={<UserNew />} />
       <Route path="users/:id/*" element={<UserDetail />} />
       <Route path="credential-types" element={<CredentialTypeList />} />
+      <Route path="roles" element={<RoleDefinitionList />} />
       <Route path="host-metrics" element={<HostMetrics />} />
       <Route path="instances" element={<InstanceList />} />
       <Route path="instances/:id" element={<InstanceDetail />} />

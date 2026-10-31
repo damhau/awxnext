@@ -117,6 +117,7 @@ export function SelectField({
   help,
   optional,
   full,
+  disabled,
 }: {
   label: ReactNode
   value: string | number | null | undefined
@@ -126,11 +127,12 @@ export function SelectField({
   help?: ReactNode
   optional?: boolean
   full?: boolean
+  disabled?: boolean
 }) {
   const id = useId()
   return (
     <Field label={label} help={help} error={error} optional={optional} full={full} htmlFor={id}>
-      <select id={id} className="select" value={value ?? ''} onChange={(e) => onChange(e.target.value)} aria-invalid={!!error}>
+      <select id={id} className="select" value={value ?? ''} onChange={(e) => onChange(e.target.value)} aria-invalid={!!error} disabled={disabled}>
         {options.map(([v, l]) => (
           <option key={String(v)} value={v}>
             {l}
