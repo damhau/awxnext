@@ -518,7 +518,7 @@ export const settingsPages: SettingsPage[] = [
   {
     slug: 'jobs',
     title: tr('Jobs'),
-    blurb: tr('What launchers may change, limits and timeouts, and where jobs get their content and keep their output.'),
+    blurb: tr('What launchers may change, what secret lookups may reach, limits and timeouts, and where jobs get their content and keep their output.'),
     categories: ['jobs'],
     sections: [
       {
@@ -566,6 +566,23 @@ export const settingsPages: SettingsPage[] = [
             states: [tr('Inside the project only'), tr('Followed anywhere, as in AWX')],
             segmented: true,
             consequence: tr('Followed anywhere lets a project link to files elsewhere on the server and have them listed.'),
+          }),
+        ],
+      },
+      {
+        id: 'secret-lookups',
+        title: tr('Secret lookups'),
+        intro: tr('Credentials of an external type, such as HashiCorp Vault or Azure Key Vault, fetch secrets from the address the credential gives, when a job starts and when someone tests them. Anyone who may create a credential chooses that address.'),
+        rows: [
+          row('CREDENTIAL_LOOKUP_SERVER_IDENTITY_HOSTS', {
+            label: tr('Hosts that may receive awxnext\'s own identity'),
+            help: tr('Vault\'s Kubernetes login sends awxnext\'s service account token; Azure Key Vault without a client secret, its workload or managed identity. One host per entry: vault.example.com:8200, *.vault.azure.net, or http://vault.vault.svc:8200 for plain HTTP. Empty: never.'),
+            consequence: tr('Anyone who may create a credential can then read, on these hosts, whatever awxnext\'s identity can read there.'),
+          }),
+          row('CREDENTIAL_LOOKUP_ALLOWED_LOCAL_ADDRESSES', {
+            label: tr('Local addresses lookups may reach'),
+            help: tr('Loopback and link-local addresses and cloud metadata services are refused: they are awxnext\'s own host. One per entry: an address, a network, or an address and port, such as 127.0.0.1:8200 for a Vault agent beside awxnext.'),
+            consequence: tr('Anyone who may create a credential can then make awxnext send requests to these addresses.'),
           }),
         ],
       },

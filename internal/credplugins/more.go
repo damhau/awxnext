@@ -35,8 +35,8 @@ var (
 
 // httpClient verifies the server with cacert (system CAs when empty) unless
 // verify is false, presents a client certificate when given, and does not
-// follow redirects, as AWX's plugins.
-func httpClient(cacert, clientCert, clientKey string, verify bool) (*http.Client, error) {
+// follow redirects, as AWX's plugins. Its connections are guarded by p.
+func httpClient(p Policy, cacert, clientCert, clientKey string, verify bool) (*http.Client, error) {
 	cfg := &tls.Config{InsecureSkipVerify: !verify} //nolint:gosec // the credential's Verify SSL input
 	if cacert != "" {
 		pool := x509.NewCertPool()
@@ -53,7 +53,7 @@ func httpClient(cacert, clientCert, clientKey string, verify bool) (*http.Client
 		cfg.Certificates = []tls.Certificate{pair}
 	}
 	return &http.Client{
-		Transport:     &http.Transport{TLSClientConfig: cfg, Proxy: http.ProxyFromEnvironment},
+		Transport:     p.transport("", nil)(&http.Transport{TLSClientConfig: cfg, Proxy: http.ProxyFromEnvironment}),
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 	}, nil
 }
@@ -113,8 +113,8 @@ func orDefault(v, def string) string {
 }
 
 // cyberArkCCP is AWX's aim plugin: GET <url>/<webservice>/api/Accounts.
-func cyberArkCCP(ctx context.Context, inputs, metadata map[string]any) (string, error) {
-	c, err := httpClient("", s(inputs, "client_cert"), s(inputs, "client_key"), boolInput(inputs, "verify", true))
+func cyberArkCCP(ctx context.Context, p Policy, inputs, metadata map[string]any) (string, error) {
+	c, err := httpClient(p, "", s(inputs, "client_cert"), s(inputs, "client_key"), boolInput(inputs, "verify", true))
 	if err != nil {
 		return "", err
 	}
@@ -157,8 +157,8 @@ func cyberArkCCP(ctx context.Context, inputs, metadata map[string]any) (string, 
 
 // conjur is AWX's conjur plugin: authenticate with the API key, then read
 // the variable, at /authn and /secrets or, for Conjur Cloud, under /api.
-func conjur(ctx context.Context, inputs, metadata map[string]any) (string, error) {
-	c, err := httpClient(s(inputs, "cacert"), "", "", true)
+func conjur(ctx context.Context, p Policy, inputs, metadata map[string]any) (string, error) {
+	c, err := httpClient(p, s(inputs, "cacert"), "", "", true)
 	if err != nil {
 		return "", err
 	}
@@ -206,8 +206,8 @@ func conjur(ctx context.Context, inputs, metadata map[string]any) (string, error
 
 // centrify is AWX's centrify_vault plugin: an OAuth2 client credentials
 // token, the account's id from a Redrock query, then a password checkout.
-func centrify(ctx context.Context, inputs, metadata map[string]any) (string, error) {
-	c, err := httpClient("", "", "", true)
+func centrify(ctx context.Context, p Policy, inputs, metadata map[string]any) (string, error) {
+	c, err := httpClient(p, "", "", "", true)
 	if err != nil {
 		return "", err
 	}
@@ -280,8 +280,8 @@ func centrify(ctx context.Context, inputs, metadata map[string]any) (string, err
 
 // thycoticDSV is AWX's dsv plugin (python-dsv-sdk): a client credentials
 // token, then the secret's data field, base64-decoded when asked.
-func thycoticDSV(ctx context.Context, inputs, metadata map[string]any) (string, error) {
-	c, err := httpClient("", "", "", true)
+func thycoticDSV(ctx context.Context, p Policy, inputs, metadata map[string]any) (string, error) {
+	c, err := httpClient(p, "", "", "", true)
 	if err != nil {
 		return "", err
 	}
@@ -327,8 +327,8 @@ func thycoticDSV(ctx context.Context, inputs, metadata map[string]any) (string, 
 // thycoticTSS is AWX's tss plugin (python-tss-sdk 1.2): a password grant
 // token (with the domain when set), then the secret's field by slug, a file
 // field's content fetched separately.
-func thycoticTSS(ctx context.Context, inputs, metadata map[string]any) (string, error) {
-	c, err := httpClient("", "", "", true)
+func thycoticTSS(ctx context.Context, p Policy, inputs, metadata map[string]any) (string, error) {
+	c, err := httpClient(p, "", "", "", true)
 	if err != nil {
 		return "", err
 	}
@@ -387,7 +387,7 @@ func thycoticTSS(ctx context.Context, inputs, metadata map[string]any) (string, 
 
 // awsSecret is AWX's aws_secretsmanager plugin: GetSecretValue with the
 // credential's keys, returning the string or binary secret.
-func awsSecret(ctx context.Context, inputs, metadata map[string]any) (string, error) {
+func awsSecret(ctx context.Context, p Policy, inputs, metadata map[string]any) (string, error) {
 	opts := secretsmanager.Options{
 		Region: s(metadata, "region_name"),
 		Credentials: aws.NewCredentialsCache(aws.CredentialsProviderFunc(func(context.Context) (aws.Credentials, error) {
@@ -397,6 +397,8 @@ func awsSecret(ctx context.Context, inputs, metadata map[string]any) (string, er
 	if AWSEndpoint != "" {
 		opts.BaseEndpoint = aws.String(AWSEndpoint)
 	}
+	t := http.DefaultTransport.(*http.Transport).Clone()
+	opts.HTTPClient = &http.Client{Transport: p.transport("", nil)(t)}
 	out, err := secretsmanager.New(opts).GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{SecretId: aws.String(s(metadata, "secret_name"))})
 	if err != nil {
 		return "", err

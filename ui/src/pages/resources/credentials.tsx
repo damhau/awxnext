@@ -4,7 +4,7 @@ import { Link, Outlet, useNavigate, useOutletContext, useParams } from 'react-ro
 import { api, getAll } from '../../api/client'
 import { useInvalidate, useList, useObject } from '../../api/hooks'
 import type { Base, Ref } from '../../api/types'
-import { useOrg, usePreselectOrg } from '../../app/context'
+import { useMe, useOrg, usePreselectOrg } from '../../app/context'
 import { AccessTab } from '../../components/access/Access'
 import { useCopy } from '../../components/CopyDialog'
 import { BulkBar, BulkDelete, useSelection } from '../../components/BulkBar'
@@ -602,6 +602,7 @@ function LinkDialog({ field, current, onClose, onSave }: { field: InputField; cu
 
 /** Test panel for secret lookup credentials: try a path before saving. */
 function TestLookup({ type, cred, inputs }: { type: CredType; cred?: Credential; inputs: Record<string, unknown> }) {
+  const me = useMe()
   const [meta, setMeta] = useState<Record<string, unknown>>({})
   const [result, setResult] = useState<{ ok: boolean; msg: string } | null>(null)
   const [busy, setBusy] = useState(false)
@@ -620,6 +621,17 @@ function TestLookup({ type, cred, inputs }: { type: CredType; cred?: Credential;
     }
   }
   if (!md.length) return null
+  // A credential not saved yet is tried through its type, which only
+  // superusers may do, as in AWX.
+  if (!cred && !me.is_superuser)
+    return (
+      <div className="form-section">
+        <h2>{tr('Try a lookup')}</h2>
+        <p className="muted small" style={{ margin: 0 }}>
+          {tr('Save the credential first: only superusers may try values not saved yet.')}
+        </p>
+      </div>
+    )
   return (
     <div className="form-section">
       <h2>{tr('Try a lookup')}</h2>

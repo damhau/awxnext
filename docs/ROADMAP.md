@@ -1252,11 +1252,11 @@ posts the workload identity's federated token to the `authority_host`
 input. Any signed-in user can run a lookup with their own inputs through
 `credential_types/N/test/`, which checks no permission. The server's own
 identity is used only when an administrator allows it, towards the hosts
-they list; testing a type needs the right to create a credential of it; and
+they list; testing a type is for superusers, as in AWX (Decision 13); and
 lookups refuse loopback and link-local addresses unless allowed.
 
 **Done when:** no lookup sends awxnext's token to a host an administrator
-has not listed, the type test refuses a user who cannot create credentials,
+has not listed, the type test refuses a user who is not a superuser,
 CodeQL's alerts 15 to 17 are closed, and CI is green.
 
 ---
@@ -1325,6 +1325,17 @@ Taken on 2026-11-01:
     library or in Debian reaches the next image without a PR, and the
     all-in-one image is not reproducible anyway, since it upgrades its
     Debian packages as it builds. Dependabot proposes the next lines.
+13. Credential lookups use awxnext's own identity (Vault's Kubernetes login,
+    Azure workload or managed identity) only towards the hosts listed in
+    `CREDENTIAL_LOOKUP_SERVER_IDENTITY_HOSTS`, empty by default, and reach
+    loopback, link-local and cloud metadata addresses only when listed in
+    `CREDENTIAL_LOOKUP_ALLOWED_LOCAL_ADDRESSES` (M9-06). Key Vault domains
+    are not allowed implicitly: listing `*.vault.azure.net`, or only the
+    vaults meant for lookups, is the administrator's choice.
+    `credential_types/N/test/` is for superusers, as in AWX, whose view
+    checks the right to add a credential type: any signed-in user may create
+    a personal credential, so "the right to create a credential" would have
+    refused no one. Others test a saved credential at `credentials/N/test/`.
 
 ## On GitHub
 

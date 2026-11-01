@@ -9,6 +9,9 @@ import (
 	"testing"
 )
 
+// local lets the lookups reach the fake stores, which listen on loopback.
+var local = NewPolicy(nil, []string{"127.0.0.1", "::1"})
+
 func TestAzureKeyVaultLookup(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
@@ -23,11 +26,11 @@ func TestAzureKeyVaultLookup(t *testing.T) {
 	}))
 	defer srv.Close()
 	inputs := map[string]any{"url": srv.URL, "client": "c", "secret": "s", "tenant": "t", "authority_host": srv.URL}
-	v, err := Lookup(context.Background(), "azure_kv", inputs, map[string]any{"secret_field": "db-password", "secret_version": "v7"})
+	v, err := Lookup(context.Background(), local, "azure_kv", inputs, map[string]any{"secret_field": "db-password", "secret_version": "v7"})
 	if err != nil || v != "from-azure" {
 		t.Fatalf("lookup: %q %v", v, err)
 	}
-	if _, err := Lookup(context.Background(), "azure_kv", inputs, map[string]any{"secret_field": "nope"}); err == nil || !strings.Contains(err.Error(), "SecretNotFound") {
+	if _, err := Lookup(context.Background(), local, "azure_kv", inputs, map[string]any{"secret_field": "nope"}); err == nil || !strings.Contains(err.Error(), "SecretNotFound") {
 		t.Fatalf("expected not found, got %v", err)
 	}
 }
@@ -43,7 +46,7 @@ func TestVaultSSHSign(t *testing.T) {
 		json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{"signed_key": "ssh-ed25519-cert-v01@openssh.com AAAA..."}})
 	}))
 	defer srv.Close()
-	v, err := Lookup(context.Background(), "hashivault_ssh", map[string]any{"url": srv.URL, "token": "t"},
+	v, err := Lookup(context.Background(), local, "hashivault_ssh", map[string]any{"url": srv.URL, "token": "t"},
 		map[string]any{"public_key": "ssh-ed25519 AAAA", "secret_path": "/ssh-client/", "role": "deployers", "valid_principals": "deploy"})
 	if err != nil || !strings.HasPrefix(v, "ssh-ed25519-cert") {
 		t.Fatalf("sign: %q %v", v, err)
@@ -59,7 +62,7 @@ func TestVaultKVPathSplitting(t *testing.T) {
 	if b != "secret" || p != "apps/x" {
 		t.Fatalf("explicit backend: %q %q", b, p)
 	}
-	if _, err := Lookup(context.Background(), "hashivault_kv", map[string]any{"url": "http://x"}, map[string]any{"secret_path": "kv/a", "secret_key": "k"}); err == nil {
+	if _, err := Lookup(context.Background(), local, "hashivault_kv", map[string]any{"url": "http://x"}, map[string]any{"secret_path": "kv/a", "secret_key": "k"}); err == nil {
 		t.Fatal("expected auth configuration error")
 	}
 }

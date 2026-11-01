@@ -171,6 +171,9 @@ already there are kept, and organizations of the same name merged.
    - sync the projects (Projects, **Sync**);
    - register execution nodes again (Instances, **Add node**, then the agent);
    - for container groups, check their credential or the service account;
+   - for secret lookups that log in as the server itself (Vault's `kubernetes_role`, Azure Key
+     Vault without a client secret), list their hosts in
+     `CREDENTIAL_LOOKUP_SERVER_IDENTITY_HOSTS` ([Secret lookups](#secret-lookups));
    - point users, webhooks and callbacks at awxnext's URL.
 
 The `awx` CLI, the `awx.awx` collection and the Terraform provider work against awxnext
@@ -233,6 +236,40 @@ awxnext keys import keys.json          # wrap them with the master key configure
   variables and the old one with the `AWXNEXT_OLD_` prefix (`AWXNEXT_OLD_SECRET_KEY`,
   `AWXNEXT_OLD_KMS`...), then run `awxnext keys rewrap`, then start the nodes with the new key
   only.
+
+## Secret lookups
+
+Credentials of an external type (HashiCorp Vault, Azure Key Vault, CyberArk, Conjur, Centrify,
+Thycotic, AWS Secrets Manager) fetch secrets from the address the credential gives, when a job
+starts and when someone tests them. Anyone who may create a credential chooses that address, so
+two things are refused unless a superuser allows them, on the Jobs settings page under "Secret
+lookups" (roadmap M9-06):
+
+- **awxnext's own identity.** Vault's Kubernetes login sends the pod's service account token,
+  and Azure Key Vault without a client secret uses the server's workload identity
+  (`AZURE_FEDERATED_TOKEN_FILE`) or managed identity. AWX sends them to any URL; awxnext only to
+  the hosts in `CREDENTIAL_LOOKUP_SERVER_IDENTITY_HOSTS`, one per entry: `vault.example.com`,
+  `vault.example.com:8200`, `*.vault.azure.net`, or `http://vault.vault.svc:8200` for plain
+  HTTP (an entry without a scheme matches https only, one without a port any port). The workload
+  identity's token goes to the cloud's own authority, or to an `authority_host` that is listed.
+  Once a host is listed, anyone who may create a credential can read there whatever that
+  identity can read: list only the vaults meant for it, and give the identity only what lookups
+  need.
+- **The server's own network.** Lookups refuse loopback, link-local and unspecified addresses
+  and cloud metadata services, checked on the address they connect to.
+  `CREDENTIAL_LOOKUP_ALLOWED_LOCAL_ADDRESSES` allows an address (`127.0.0.1`), a network
+  (`127.0.0.0/8`) or an address and port (`127.0.0.1:8200`, for example a Vault agent beside
+  awxnext, or a proxy on loopback). The metadata endpoint Azure's managed identity uses needs no
+  entry. Through a proxy (`HTTPS_PROXY`), awxnext connects to the proxy, so only addresses
+  written in a URL are checked: the proxy should refuse the same ones.
+
+A refused lookup sends nothing, and says which setting would allow it. Lookups with a secret of
+the credential's own (a Vault token, username and password, AppRole or certificate, an Azure
+client secret) need no listing. The master key's Vault or Key Vault (`AWXNEXT_KMS_*`), which the
+operator configures, is not affected.
+
+Testing a credential type with values not saved yet (`POST /api/v2/credential_types/N/test/`) is
+for superusers, as in AWX; anyone who may use a credential tests it at `credentials/N/test/`.
 
 ## Backup and restore
 
@@ -338,7 +375,7 @@ once the service provider's certificate is set.
 | `oidc`, `ldap`, `saml` | Sign-in: OpenID Connect, LDAP, SAML |
 | `github`, `github-org`, `github-team`, `github-enterprise`, `github-enterprise-org`, `github-enterprise-team` | Sign-in: GitHub, a section each |
 | `google-oauth2`, `azuread-oauth2` | Sign-in: Google, Microsoft Entra ID |
-| `jobs` | Jobs: launch safety, limits and timeouts, content, execution, output and events |
+| `jobs` | Jobs: launch safety, secret lookups, limits and timeouts, content, execution, output and events |
 | `logging` | Logging |
 | `ui` | Login page and UI |
 

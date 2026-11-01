@@ -89,6 +89,16 @@ type ResolvedCredential struct {
 	Schema    *credtypes.Schema
 }
 
+// LookupPolicy is what the settings allow external credential lookups beyond
+// their inputs: the hosts that may receive awxnext's own identity, and the
+// loopback and link-local addresses they may reach.
+func LookupPolicy(ctx context.Context, app *api.App) credplugins.Policy {
+	var hosts, addrs []string
+	app.Settings.Decode(ctx, credplugins.IdentityHostsSetting, &hosts)
+	app.Settings.Decode(ctx, credplugins.LocalAddressesSetting, &addrs)
+	return credplugins.NewPolicy(hosts, addrs)
+}
+
 // ResolveCredential decrypts a credential's inputs and fills fields linked to
 // external secret stores. Values still set to "ASK" must be provided at launch.
 func ResolveCredential(ctx context.Context, app *api.App, id int64) (*ResolvedCredential, error) {
@@ -142,7 +152,7 @@ func ResolveCredential(ctx context.Context, app *api.App, id int64) (*ResolvedCr
 		if err != nil {
 			return nil, err
 		}
-		v, err := credplugins.Lookup(ctx, source.Namespace, source.Inputs, s.md)
+		v, err := credplugins.Lookup(ctx, LookupPolicy(ctx, app), source.Namespace, source.Inputs, s.md)
 		if err != nil {
 			return nil, fmt.Errorf("credential %q: lookup of %s from %q failed: %w", rc.Name, s.field, source.Name, err)
 		}
@@ -230,6 +240,13 @@ func registerCredentials() {
 	})
 	ctypes.SubLists = []*SubList{readOnlyChildSub("credentials", "credentials", "credential_type_id")}
 	ctypes.Actions = []*api.Action{{Name: "test", Methods: []string{"POST"}, Handler: func(c *Ctx, w http.ResponseWriter, r *http.Request, obj Obj) {
+		// The lookup runs with any inputs the request gives. As in AWX, where
+		// the view checks the right to add a credential type, only superusers
+		// may; others test a credential they may use (credentials/N/test/).
+		if !c.User.Superuser {
+			api.WriteError(w, api.ErrForbidden)
+			return
+		}
 		data, err := api.ReadBody(r)
 		if err != nil {
 			api.WriteError(w, err)
@@ -573,7 +590,7 @@ func testLookup(c *Ctx, w http.ResponseWriter, namespace string, inputs, metadat
 	if metadata == nil {
 		metadata = map[string]any{}
 	}
-	if _, err := credplugins.Lookup(c, namespace, inputs, metadata); err != nil {
+	if _, err := credplugins.Lookup(c, LookupPolicy(c, c.App), namespace, inputs, metadata); err != nil {
 		msg := err.Error()
 		msg = strings.TrimPrefix(msg, "vault: ")
 		api.WriteJSON(w, 400, Obj{"inputs": msg})

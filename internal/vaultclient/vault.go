@@ -45,6 +45,10 @@ type Config struct {
 	CACert        string
 	TLSSkipVerify bool
 	Timeout       time.Duration
+	// Transport, when set, adapts the client's transport and returns the
+	// round tripper to use: credential lookups guard their connections with
+	// it (the master-key provider, which the operator configures, does not).
+	Transport func(*http.Transport) http.RoundTripper
 }
 
 type Client struct {
@@ -77,10 +81,15 @@ func New(cfg Config) (*Client, error) {
 	if timeout == 0 {
 		timeout = 30 * time.Second
 	}
+	t := &http.Transport{TLSClientConfig: tlsCfg, Proxy: http.ProxyFromEnvironment}
+	var rt http.RoundTripper = t
+	if cfg.Transport != nil {
+		rt = cfg.Transport(t)
+	}
 	return &Client{
 		cfg:   cfg,
 		token: cfg.Token,
-		http:  &http.Client{Timeout: timeout, Transport: &http.Transport{TLSClientConfig: tlsCfg, Proxy: http.ProxyFromEnvironment}},
+		http:  &http.Client{Timeout: timeout, Transport: rt},
 	}, nil
 }
 

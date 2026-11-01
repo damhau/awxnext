@@ -22,6 +22,7 @@ import (
 	"github.com/damhau/awxnext/internal/api"
 	"github.com/damhau/awxnext/internal/auth"
 	"github.com/damhau/awxnext/internal/config"
+	"github.com/damhau/awxnext/internal/credplugins"
 	"github.com/damhau/awxnext/internal/jobs"
 	"github.com/damhau/awxnext/internal/pgtest"
 	"github.com/damhau/awxnext/internal/server"
@@ -65,6 +66,10 @@ func run(m *testing.M) int {
 	cfg.NodeName = "test-node"
 	app, err = server.Setup(ctx, cfg)
 	if err != nil {
+		panic(err)
+	}
+	// The fake secret stores of the lookup tests listen on loopback.
+	if err := app.Settings.Set(ctx, credplugins.LocalAddressesSetting, []any{"127.0.0.1", "::1"}); err != nil {
 		panic(err)
 	}
 	hash, _ := auth.HashPassword("admin")

@@ -149,9 +149,10 @@ describe('the settings layout', () => {
   })
 
   it('puts every jobs setting in a section named for its purpose', () => {
-    // The API's 39 jobs settings; the last four have no effect in awxnext.
+    // The API's 41 jobs settings; the last four have no effect in awxnext.
     const jobs = [
       ...['AD_HOC_COMMANDS', 'ALLOW_ANSIBLE_VARS_AT_LAUNCH', 'ALLOW_JINJA_IN_EXTRA_VARS', 'ANSIBLE_FACT_CACHE_TIMEOUT', 'AWX_ANSIBLE_CALLBACK_PLUGINS', 'AWX_COLLECTIONS_ENABLED'],
+      ...['CREDENTIAL_LOOKUP_ALLOWED_LOCAL_ADDRESSES', 'CREDENTIAL_LOOKUP_SERVER_IDENTITY_HOSTS'],
       ...['AWX_ISOLATION_SHOW_PATHS', 'AWX_MOUNT_ISOLATED_PATHS_ON_K8S', 'AWX_ROLES_ENABLED', 'AWX_RUNNER_KEEPALIVE_SECONDS', 'AWX_SHOW_PLAYBOOK_LINKS', 'AWX_TASK_ENV'],
       ...['BULK_HOST_MAX_CREATE', 'BULK_HOST_MAX_DELETE', 'BULK_JOB_MAX_LAUNCH', 'DEFAULT_INVENTORY_UPDATE_TIMEOUT', 'DEFAULT_JOB_IDLE_TIMEOUT', 'DEFAULT_JOB_TIMEOUT'],
       ...['DEFAULT_PROJECT_UPDATE_TIMEOUT', 'GALAXY_IGNORE_CERTS', 'GALAXY_TASK_ENV', 'IGNORE_UNPROMPTED_LAUNCH_FIELDS', 'JOB_EVENTS_ARCHIVE_BUCKET', 'JOB_EVENTS_ARCHIVE_CREDENTIAL'],
@@ -160,15 +161,17 @@ describe('the settings layout', () => {
     ]
     const noEffect = ['AWX_COLLECTIONS_ENABLED_ON_PROJECT_SYNC', 'AWX_ISOLATION_BASE_PATH', 'EVENT_STDOUT_MAX_BYTES_DISPLAY', 'PROJECT_UPDATE_VVV']
     const categories = Object.fromEntries([...jobs, ...noEffect].map((k) => [k, 'jobs']))
-    expect(Object.keys(categories)).toHaveLength(39)
+    expect(Object.keys(categories)).toHaveLength(41)
     const sections = pageSections(settingsPage('jobs')!, categories, (k) => noEffect.includes(k))
-    expect(sections.map((s) => s.id)).toEqual(['launch-safety', 'limits', 'content', 'execution', 'output', 'no-effect'])
+    expect(sections.map((s) => s.id)).toEqual(['launch-safety', 'secret-lookups', 'limits', 'content', 'execution', 'output', 'no-effect'])
     expect(sections.flatMap((s) => s.rows.flatMap((r) => r.keys)).sort()).toEqual(Object.keys(categories).sort())
   })
 
   it('says what each launch safety choice lets someone do', () => {
     const safety = settingsPage('jobs')!.sections.find((s) => s.id === 'launch-safety')!
     expect(safety.rows.filter((r) => !r.consequence).map((r) => r.keys[0])).toEqual(['AD_HOC_COMMANDS'])
+    const lookups = settingsPage('jobs')!.sections.find((s) => s.id === 'secret-lookups')!
+    expect(lookups.rows.every((r) => r.consequence)).toBe(true)
     // Jinja's choices in plain words, the default first.
     expect(safety.rows.find((r) => r.keys[0] === 'ALLOW_JINJA_IN_EXTRA_VARS')?.options?.map(([v]) => v)).toEqual(['template', 'never', 'always'])
   })

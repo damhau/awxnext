@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+
+	"github.com/damhau/awxnext/internal/netguard"
 )
 
 func init() {
@@ -60,6 +62,10 @@ func init() {
 		{Key: "ANSIBLE_FACT_CACHE_TIMEOUT", Category: "jobs", Type: "integer", Default: 0, Help: "For templates that use the fact cache: facts stored longer ago than this, in seconds, are not given to the next job. They stay stored. 0: no limit."},
 		{Key: "MAX_FORKS", Category: "jobs", Type: "integer", Default: 200, Label: "Maximum number of forks per job", Help: "Most forks a template, launch, schedule, workflow node or ad hoc command may ask for. 0: no limit."},
 		{Key: "PROJECT_ALLOW_FILE_URLS", Category: "jobs", Type: "boolean", Default: false, Help: "Allow git projects to use file:// URLs or local paths on the control plane. Only enable for trusted single-tenant installs."},
+		{Key: "CREDENTIAL_LOOKUP_SERVER_IDENTITY_HOSTS", Category: "jobs", Type: "list", Default: []any{}, Validate: identityHosts, Label: "Hosts credential lookups may authenticate to as awxnext",
+			Help: "The hosts to which an external credential lookup may send awxnext's own identity: HashiCorp Vault's Kubernetes login (the pod's service account token), and Azure Key Vault without a client secret (awxnext's workload or managed identity). One per entry: vault.example.com, vault.example.com:8200, *.vault.azure.net, or http://vault.vault.svc:8200 for plain HTTP; without a scheme, https only. An Azure authority_host other than the cloud's must be listed too. Empty: lookups never use awxnext's identity. Once a host is listed, anyone who may create a credential can read there what awxnext's identity can read."},
+		{Key: "CREDENTIAL_LOOKUP_ALLOWED_LOCAL_ADDRESSES", Category: "jobs", Type: "list", Default: []any{}, Validate: localAddresses, Label: "Local addresses credential lookups may reach",
+			Help: "External credential lookups refuse loopback (127.0.0.0/8, ::1), link-local (169.254.0.0/16, fe80::/10) and unspecified addresses, and cloud metadata services: they are awxnext's own host. Allow some here, one per entry: an address (127.0.0.1), a network (127.0.0.0/8), or an address and port (127.0.0.1:8200), for example a Vault agent beside awxnext. Azure's managed identity endpoint, which awxnext calls itself, needs no entry."},
 		{Key: "JOB_EVENTS_HOT_DAYS", Category: "jobs", Type: "integer", Default: 14, Help: "Days job events stay in the database before they are served from the compressed archive."},
 		{Key: "JOB_EVENTS_ARCHIVE_STORAGE", Category: "jobs", Type: "choice", Default: "database", Label: "Job Event Archive Storage",
 			Choices: [][]any{{"database", "Database"}, {"s3", "Amazon S3 or S3-compatible"}, {"azure_blob", "Azure Blob Storage"}},
@@ -120,6 +126,27 @@ func init() {
 	} {
 		Register(d)
 	}
+}
+
+// identityHosts and localAddresses check the entries of the credential
+// lookup settings, which netguard parses.
+func identityHosts(v any) error {
+	_, err := netguard.ParseHosts(stringList(v))
+	return err
+}
+
+func localAddresses(v any) error {
+	_, err := netguard.ParseAllowed(stringList(v))
+	return err
+}
+
+func stringList(v any) []string {
+	var out []string
+	l, _ := v.([]any)
+	for _, x := range l {
+		out = append(out, fmt.Sprint(x))
+	}
+	return out
 }
 
 func atLeastZero(v any) error {

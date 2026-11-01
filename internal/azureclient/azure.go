@@ -35,11 +35,19 @@ type Config struct {
 	AuthorityHost string
 	// IMDSEndpoint overrides the managed identity endpoint (tests).
 	IMDSEndpoint string
+	// Transport, when set, adapts the transport of the requests to the
+	// authority and the vault, and returns the round tripper to use:
+	// credential lookups guard their connections with it. The managed
+	// identity endpoint is not given to it.
+	Transport func(*http.Transport) http.RoundTripper
 }
 
 type Client struct {
-	cfg    Config
-	http   *http.Client
+	cfg  Config
+	http *http.Client
+	// imds reaches the managed identity endpoint, a link-local address
+	// that Transport may refuse to user URLs.
+	imds   *http.Client
 	mu     sync.Mutex
 	token  string
 	expiry time.Time
@@ -52,7 +60,16 @@ func New(cfg Config) *Client {
 	if cfg.FederatedTokenFile == "" && cfg.ClientSecret == "" {
 		cfg.FederatedTokenFile = os.Getenv("AZURE_FEDERATED_TOKEN_FILE")
 	}
-	return &Client{cfg: cfg, http: &http.Client{Timeout: 30 * time.Second, Transport: &http.Transport{Proxy: http.ProxyFromEnvironment}}}
+	t := &http.Transport{Proxy: http.ProxyFromEnvironment}
+	var rt http.RoundTripper = t
+	if cfg.Transport != nil {
+		rt = cfg.Transport(t)
+	}
+	return &Client{
+		cfg:  cfg,
+		http: &http.Client{Timeout: 30 * time.Second, Transport: rt},
+		imds: &http.Client{Timeout: 30 * time.Second, Transport: &http.Transport{Proxy: http.ProxyFromEnvironment}},
+	}
 }
 
 // Error is an Azure API error.
@@ -74,6 +91,7 @@ func (c *Client) accessToken(ctx context.Context) (string, error) {
 	}
 	var req *http.Request
 	var err error
+	client := c.http
 	switch {
 	case c.cfg.ClientSecret != "" || c.cfg.FederatedTokenFile != "":
 		if c.cfg.TenantID == "" || c.cfg.ClientID == "" {
@@ -113,10 +131,11 @@ func (c *Client) accessToken(ctx context.Context) (string, error) {
 			return "", err
 		}
 		req.Header.Set("Metadata", "true")
+		client = c.imds
 	default:
 		return "", errors.New("azure: no authentication method configured")
 	}
-	res, err := c.http.Do(req)
+	res, err := client.Do(req)
 	if err != nil {
 		return "", err
 	}

@@ -30,9 +30,9 @@ func lookupValue(t *testing.T, a *client, org int64, ns string, inputs, metadata
 }
 
 // typeTest calls a credential type's test button.
-func typeTest(t *testing.T, a *client, ns string, inputs, metadata map[string]any, status int) {
+func typeTest(t *testing.T, a *client, ns string, inputs, metadata map[string]any, status int) resp {
 	t.Helper()
-	must(t, a.post(fmt.Sprintf("credential_types/%d/test/", credType(t, a, ns)), map[string]any{"inputs": inputs, "metadata": metadata}), status)
+	return must(t, a.post(fmt.Sprintf("credential_types/%d/test/", credType(t, a, ns)), map[string]any{"inputs": inputs, "metadata": metadata}), status)
 }
 
 func jsonReply(w http.ResponseWriter, status int, v any) {

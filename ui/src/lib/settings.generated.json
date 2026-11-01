@@ -119,6 +119,8 @@
     "BULK_HOST_MAX_CREATE": {"category": "jobs"},
     "BULK_HOST_MAX_DELETE": {"category": "jobs"},
     "BULK_JOB_MAX_LAUNCH": {"category": "jobs"},
+    "CREDENTIAL_LOOKUP_ALLOWED_LOCAL_ADDRESSES": {"category": "jobs"},
+    "CREDENTIAL_LOOKUP_SERVER_IDENTITY_HOSTS": {"category": "jobs"},
     "CUSTOM_LOGIN_INFO": {"category": "ui"},
     "CUSTOM_LOGO": {"category": "ui"},
     "CUSTOM_VENV_PATHS": {"category": "system", "no_effect": true},

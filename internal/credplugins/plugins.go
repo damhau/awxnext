@@ -13,34 +13,43 @@ import (
 	"time"
 
 	"github.com/damhau/awxnext/internal/azureclient"
+	"github.com/damhau/awxnext/internal/netguard"
 	"github.com/damhau/awxnext/internal/vaultclient"
+)
+
+// Test hooks: where the Kubernetes service account token is read (empty:
+// the pod's) and the managed identity endpoint (empty: Azure's).
+var (
+	KubernetesTokenPath = ""
+	AzureIMDSEndpoint   = ""
 )
 
 // Lookup fetches one value from the external store described by a credential
 // of an external type (namespace), using its decrypted inputs and the
-// input source metadata.
-func Lookup(ctx context.Context, namespace string, inputs, metadata map[string]any) (string, error) {
+// input source metadata. The policy says what an administrator allows it
+// beyond the inputs: a lookup that would go further makes no request.
+func Lookup(ctx context.Context, p Policy, namespace string, inputs, metadata map[string]any) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	switch namespace {
 	case "hashivault_kv":
-		return vaultKV(ctx, inputs, metadata)
+		return vaultKV(ctx, p, inputs, metadata)
 	case "hashivault_ssh":
-		return vaultSSH(ctx, inputs, metadata)
+		return vaultSSH(ctx, p, inputs, metadata)
 	case "azure_kv":
-		return azureKV(ctx, inputs, metadata)
+		return azureKV(ctx, p, inputs, metadata)
 	case "aim":
-		return cyberArkCCP(ctx, inputs, metadata)
+		return cyberArkCCP(ctx, p, inputs, metadata)
 	case "conjur":
-		return conjur(ctx, inputs, metadata)
+		return conjur(ctx, p, inputs, metadata)
 	case "centrify_vault_kv":
-		return centrify(ctx, inputs, metadata)
+		return centrify(ctx, p, inputs, metadata)
 	case "thycotic_dsv":
-		return thycoticDSV(ctx, inputs, metadata)
+		return thycoticDSV(ctx, p, inputs, metadata)
 	case "thycotic_tss":
-		return thycoticTSS(ctx, inputs, metadata)
+		return thycoticTSS(ctx, p, inputs, metadata)
 	case "aws_secretsmanager_credential":
-		return awsSecret(ctx, inputs, metadata)
+		return awsSecret(ctx, p, inputs, metadata)
 	}
 	return "", fmt.Errorf("unsupported credential plugin %q", namespace)
 }
@@ -50,7 +59,7 @@ func s(m map[string]any, k string) string {
 	return strings.TrimSpace(v)
 }
 
-func vaultClient(inputs, metadata map[string]any) (*vaultclient.Client, error) {
+func vaultClient(p Policy, inputs, metadata map[string]any) (*vaultclient.Client, error) {
 	authPath := s(metadata, "auth_path")
 	if authPath == "" {
 		authPath = s(inputs, "default_auth_path")
@@ -91,6 +100,20 @@ func vaultClient(inputs, metadata map[string]any) (*vaultclient.Client, error) {
 	if cert != "" && key != "" {
 		cfg.ClientCert, cfg.ClientKey = cert, key
 	}
+	// Kubernetes auth logs in with the pod's own service account token: unlike
+	// AWX, only to a Vault an administrator lists.
+	identity := ""
+	if cfg.K8sRole != "" {
+		identity = "Kubernetes authentication sends awxnext's own service account token"
+		cfg.JWTPath = KubernetesTokenPath
+	}
+	if cfg.Addr == "" {
+		return nil, errors.New("vault address is required")
+	}
+	if err := p.checkURL(cfg.Addr, identity); err != nil {
+		return nil, err
+	}
+	cfg.Transport = p.transport(identity, nil)
 	return vaultclient.New(cfg)
 }
 
@@ -112,8 +135,8 @@ func splitBackend(metadata map[string]any) (string, string, error) {
 	return backend, path, nil
 }
 
-func vaultKV(ctx context.Context, inputs, metadata map[string]any) (string, error) {
-	c, err := vaultClient(inputs, metadata)
+func vaultKV(ctx context.Context, p Policy, inputs, metadata map[string]any) (string, error) {
+	c, err := vaultClient(p, inputs, metadata)
 	if err != nil {
 		return "", err
 	}
@@ -154,8 +177,8 @@ func vaultKV(ctx context.Context, inputs, metadata map[string]any) (string, erro
 	return fmt.Sprint(v), nil
 }
 
-func vaultSSH(ctx context.Context, inputs, metadata map[string]any) (string, error) {
-	c, err := vaultClient(inputs, metadata)
+func vaultSSH(ctx context.Context, p Policy, inputs, metadata map[string]any) (string, error) {
+	c, err := vaultClient(p, inputs, metadata)
 	if err != nil {
 		return "", err
 	}
@@ -184,7 +207,7 @@ var azureAuthorities = map[string]string{
 	"AzureUSGovernment": "https://login.microsoftonline.us",
 }
 
-func azureKV(ctx context.Context, inputs, metadata map[string]any) (string, error) {
+func azureKV(ctx context.Context, p Policy, inputs, metadata map[string]any) (string, error) {
 	vaultURL := s(inputs, "url")
 	if vaultURL == "" {
 		return "", errors.New("vault URL is required")
@@ -192,10 +215,11 @@ func azureKV(ctx context.Context, inputs, metadata map[string]any) (string, erro
 	if !strings.HasPrefix(vaultURL, "https://") && !strings.HasPrefix(vaultURL, "http://") {
 		vaultURL = "https://" + vaultURL
 	}
-	authority, ok := azureAuthorities[s(inputs, "cloud_name")]
+	cloud, ok := azureAuthorities[s(inputs, "cloud_name")]
 	if !ok {
 		return "", fmt.Errorf("unknown cloud environment %q", s(inputs, "cloud_name"))
 	}
+	authority := cloud
 	if a := s(inputs, "authority_host"); a != "" {
 		authority = a
 	}
@@ -205,10 +229,27 @@ func azureKV(ctx context.Context, inputs, metadata map[string]any) (string, erro
 		ClientSecret:  s(inputs, "secret"),
 		AuthorityHost: authority,
 	}
+	identity := ""
+	var also netguard.Hosts
 	if cfg.ClientSecret == "" {
-		// No secret: workload identity federation when configured, else managed identity.
+		// No secret: awxnext's own identity, workload identity federation when
+		// configured, else managed identity. Unlike AWX, its token goes only to
+		// a vault an administrator lists, and its federated token only to the
+		// cloud's authority or one listed.
+		identity = "Without a client secret, the lookup authenticates with awxnext's own Azure identity"
 		cfg.ManagedIdentity = true
+		cfg.IMDSEndpoint = AzureIMDSEndpoint
+		also, _ = netguard.ParseHosts([]string{cloud})
+		if strings.TrimRight(strings.ToLower(authority), "/") != cloud {
+			if err := p.checkURL(authority, identity); err != nil {
+				return "", err
+			}
+		}
 	}
+	if err := p.checkURL(vaultURL, identity); err != nil {
+		return "", err
+	}
+	cfg.Transport = p.transport(identity, also)
 	c := azureclient.New(cfg)
 	return c.GetSecret(ctx, vaultURL, s(metadata, "secret_field"), s(metadata, "secret_version"))
 }
