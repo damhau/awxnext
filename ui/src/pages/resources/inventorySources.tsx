@@ -13,7 +13,7 @@ import { Ago, Empty, ErrorNote, Loading, RunBars, Status } from '../../component
 import { SchedulesTab } from '../automation/SchedulesTab'
 import { applyErrors, refOf } from './common'
 import { useSubList, type Inventory } from './inventories'
-import { enabledDefault, enabledHelp, isImportedFile, sourceChoices } from '../../lib/sourceDefaults'
+import { enabledDefault, enabledHelp, isImportedFile, isReadByAwxnext, sourceChoices } from '../../lib/sourceDefaults'
 import { asIs, tr } from '../../lib/i18n'
 
 export interface Source extends Base {
@@ -56,6 +56,12 @@ export const sourceInfo: Record<string, { label: string; credential?: string; cr
   insights: { label: tr('Red Hat Insights'), credential: asIs('Insights'), credentialKind: 'insights' },
   terraform: { label: tr('Terraform state'), credential: tr('Terraform backend configuration'), credentialKind: 'cloud' },
   constructed: { label: tr('Constructed') },
+  rvav: {
+    label: asIs('rvav'),
+    credential: asIs('rvav'),
+    credentialKind: 'cloud',
+    hint: tr('The VMs rvav manages, which awxnext reads from rvav\'s API: no project or plugin needed.'),
+  },
 }
 
 export function InventorySourcesTab({ inv }: { inv: Inventory }) {
@@ -313,7 +319,7 @@ function SourceDialog({ inv, source, onClose }: { inv: Inventory; source?: Sourc
       scm_branch: v.source === 'scm' ? v.scm_branch : '',
       credential: v.credential?.id ?? null,
       execution_environment: v.execution_environment?.id ?? null,
-      source_vars: v.source_vars,
+      source_vars: isReadByAwxnext(v.source) ? '' : v.source_vars,
       update_on_launch: v.update_on_launch,
       update_cache_timeout: Number(v.update_cache_timeout) || 0,
       overwrite: v.overwrite,
@@ -321,7 +327,7 @@ function SourceDialog({ inv, source, onClose }: { inv: Inventory; source?: Sourc
       enabled_var: v.enabled_var,
       enabled_value: v.enabled_value,
       host_filter: v.host_filter,
-      limit: v.limit,
+      limit: isReadByAwxnext(v.source) ? '' : v.limit,
       verbosity: Number(v.verbosity),
       timeout: Number(v.timeout) || 0,
     }
@@ -348,7 +354,7 @@ function SourceDialog({ inv, source, onClose }: { inv: Inventory; source?: Sourc
             {readOnly ? tr('Close') : tr('Cancel')}
           </button>
           {!readOnly && (
-            <button className="btn primary" disabled={busy || !v.name || (v.source === 'scm' && !v.source_project) || !!varsError(v.source_vars)} onClick={() => submit()}>
+            <button className="btn primary" disabled={busy || !v.name || (v.source === 'scm' && !v.source_project) || (!isReadByAwxnext(v.source) && !!varsError(v.source_vars))} onClick={() => submit()}>
               {busy ? tr('Saving…') : source ? tr('Save') : tr('Create source')}
             </button>
           )}
@@ -405,23 +411,25 @@ function SourceDialog({ inv, source, onClose }: { inv: Inventory; source?: Sourc
               />
             </div>
           )}
-          <VarsEditor
-            label={v.source === 'scm' ? tr('Source variables') : tr('Plugin options')}
-            value={v.source_vars}
-            onChange={(x) => f.set('source_vars', x)}
-            error={f.errors.source_vars}
-            help={
-              v.source === 'scm' ? (
-                <>
-                  {tr('Set as environment variables for the inventory script or plugin, e.g.')} <code>REGION: eu-west-1</code>.
-                </>
-              ) : (
-                <>
-                  {tr('Options of the inventory plugin, e.g.')} <code>regions: [eu-west-1]</code> {tr('or')} <code>keyed_groups</code>.
-                </>
-              )
-            }
-          />
+          {!isReadByAwxnext(v.source) && (
+            <VarsEditor
+              label={v.source === 'scm' ? tr('Source variables') : tr('Plugin options')}
+              value={v.source_vars}
+              onChange={(x) => f.set('source_vars', x)}
+              error={f.errors.source_vars}
+              help={
+                v.source === 'scm' ? (
+                  <>
+                    {tr('Set as environment variables for the inventory script or plugin, e.g.')} <code>REGION: eu-west-1</code>.
+                  </>
+                ) : (
+                  <>
+                    {tr('Options of the inventory plugin, e.g.')} <code>regions: [eu-west-1]</code> {tr('or')} <code>keyed_groups</code>.
+                  </>
+                )
+              }
+            />
+          )}
           <div className="row wrap" style={{ gap: 20 }}>
             <Check label={tr('Overwrite hosts and groups')} checked={v.overwrite} onChange={(x) => f.set('overwrite', x)} help={tr('Remove what the source no longer reports.')} />
             <Check label={tr('Overwrite variables')} checked={v.overwrite_vars} onChange={(x) => f.set('overwrite_vars', x)} help={tr('Replace variables instead of merging.')} />
@@ -444,10 +452,14 @@ function SourceDialog({ inv, source, onClose }: { inv: Inventory; source?: Sourc
           {advanced && (
             <div className="form-grid">
               <TextInput label={tr('Host filter')} optional mono value={v.host_filter} onChange={(x) => f.set('host_filter', x)} error={f.errors.host_filter} help={tr('Regular expression; only matching host names are imported.')} />
-              <TextInput label={tr('Limit')} optional mono value={v.limit} onChange={(x) => f.set('limit', x)} help={tr('Host pattern applied by ansible-inventory.')} />
+              {!isReadByAwxnext(v.source) && (
+                <TextInput label={tr('Limit')} optional mono value={v.limit} onChange={(x) => f.set('limit', x)} help={tr('Host pattern applied by ansible-inventory.')} />
+              )}
               <TextInput label={tr('Enabled variable')} optional mono value={v.enabled_var} onChange={(x) => f.set('enabled_var', x)} placeholder={enabledDefault(v.source)?.variable} help={enabledHelp(v.source)} />
               <TextInput label={tr('Enabled value')} optional mono value={v.enabled_value} onChange={(x) => f.set('enabled_value', x)} placeholder={v.enabled_var ? undefined : enabledDefault(v.source)?.value} help={tr('Value of that variable meaning enabled.')} />
-              <Lookup label={tr('Execution environment')} optional resource="execution_environments/" value={v.execution_environment} onChange={(x) => f.set('execution_environment', x)} />
+              {!isReadByAwxnext(v.source) && (
+                <Lookup label={tr('Execution environment')} optional resource="execution_environments/" value={v.execution_environment} onChange={(x) => f.set('execution_environment', x)} />
+              )}
               <SelectField label={tr('Verbosity')} value={v.verbosity} onChange={(x) => f.set('verbosity', Number(x))} options={[[0, '0 (warning)'], [1, '1 (info)'], [2, '2 (debug)']]} />
               <TextInput label={tr('Timeout (seconds)')} type="number" value={v.timeout} onChange={(x) => f.set('timeout', Number(x))} help={tr('0 means no timeout.')} />
             </div>

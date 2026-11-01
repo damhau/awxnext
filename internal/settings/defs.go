@@ -66,6 +66,8 @@ func init() {
 			Help: "The hosts to which an external credential lookup may send awxnext's own identity: HashiCorp Vault's Kubernetes login (the pod's service account token), and Azure Key Vault without a client secret (awxnext's workload or managed identity). One per entry: vault.example.com, vault.example.com:8200, *.vault.azure.net, or http://vault.vault.svc:8200 for plain HTTP; without a scheme, https only. An Azure authority_host other than the cloud's must be listed too. Empty: lookups never use awxnext's identity. Once a host is listed, anyone who may create a credential can read there what awxnext's identity can read."},
 		{Key: "CREDENTIAL_LOOKUP_ALLOWED_LOCAL_ADDRESSES", Category: "jobs", Type: "list", Default: []any{}, Validate: localAddresses, Label: "Local addresses credential lookups may reach",
 			Help: "External credential lookups refuse loopback (127.0.0.0/8, ::1), link-local (169.254.0.0/16, fe80::/10) and unspecified addresses, and cloud metadata services: they are awxnext's own host. Allow some here, one per entry: an address (127.0.0.1), a network (127.0.0.0/8), or an address and port (127.0.0.1:8200), for example a Vault agent beside awxnext. Azure's managed identity endpoint, which awxnext calls itself, needs no entry."},
+		{Key: "INVENTORY_SOURCE_ALLOWED_LOCAL_ADDRESSES", Category: "jobs", Type: "list", Default: []any{}, Validate: localAddresses, Label: "Local addresses rvav sources may reach",
+			Help: "awxnext reads rvav inventory sources itself, from the address their credential gives, and refuses loopback (127.0.0.0/8, ::1), link-local (169.254.0.0/16, fe80::/10) and unspecified addresses, and cloud metadata services: they are awxnext's own host. Allow some here, one per entry: an address (127.0.0.1), a network (127.0.0.0/8), or an address and port (127.0.0.1:8080), for example an rvav on the same host."},
 		{Key: "JOB_EVENTS_HOT_DAYS", Category: "jobs", Type: "integer", Default: 14, Help: "Days job events stay in the database before they are served from the compressed archive."},
 		{Key: "JOB_EVENTS_ARCHIVE_STORAGE", Category: "jobs", Type: "choice", Default: "database", Label: "Job Event Archive Storage",
 			Choices: [][]any{{"database", "Database"}, {"s3", "Amazon S3 or S3-compatible"}, {"azure_blob", "Azure Blob Storage"}},
@@ -129,7 +131,7 @@ func init() {
 }
 
 // identityHosts and localAddresses check the entries of the credential
-// lookup settings, which netguard parses.
+// lookup and rvav source settings, which netguard parses.
 func identityHosts(v any) error {
 	_, err := netguard.ParseHosts(stringList(v))
 	return err

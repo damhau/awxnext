@@ -242,6 +242,15 @@ var Managed = []Def{
 		"env":  map[string]any{"TF_BACKEND_CONFIG_FILE": "{{tower.filename.backend}}", "GOOGLE_BACKEND_CREDENTIALS": "{{tower.filename.gce_credentials}}"},
 	}},
 
+	// awxnext's own: rvav's API, which rvav inventory sources read (in code,
+	// with no execution environment). Not in AWX.
+	{Namespace: "rvav", Name: "rvav", Kind: "cloud", Description: "rvav's API, for rvav inventory sources.", Inputs: inputs([]field{
+		str("url", "rvav URL", "help_text", "The address awxnext reaches rvav at, such as https://rvav.example.com."),
+		str("token", "Inventory token", "secret", true, "help_text", "A token of inventory scope, from rvav's Administration, AWX, Inventory token."),
+		boolean("verify_ssl", "Verify SSL", "default", true),
+		str("ssl_ca_cert", "Certificate Authority data", "multiline", true, "help_text", "The CA that signed rvav's certificate, in PEM, when the system's CAs don't include it."),
+	}, []string{"url", "token"})},
+
 	// External secret lookups (v1 scope: HashiCorp Vault and Azure Key Vault).
 	{Namespace: "hashivault_kv", Name: "HashiCorp Vault Secret Lookup", Kind: "external", Inputs: inputs(append(vaultInputs(),
 		str("api_version", "API Version", "choices", []any{"v1", "v2"}, "default", "v1", "help_text", "API v1 is for static key/value lookups.  API v2 is for versioned key/value lookups."),

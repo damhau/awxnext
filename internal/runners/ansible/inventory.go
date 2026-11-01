@@ -121,6 +121,9 @@ func inventorySourceDependencies(ctx context.Context, m *jobs.Manager, inv int64
 }
 
 func runInventoryUpdate(ctx context.Context, rc *jobs.RunContext) jobs.Result {
+	if rc.Job.Str("source") == resources.RvavSource {
+		return runRvavSource(ctx, rc)
+	}
 	row, app := rc.Job, rc.M.App
 	id := row.ID()
 	run, err := NewRunFor(ctx, app, fmt.Sprint(id), row)
@@ -296,8 +299,15 @@ func runInventoryUpdate(ctx context.Context, rc *jobs.RunContext) jobs.Result {
 	if err != nil {
 		return jobs.Result{Status: "error", Explanation: "Invalid ansible-inventory output: " + err.Error(), Update: update}
 	}
+	return importUpdate(ctx, rc, invID, data, update)
+}
+
+// importUpdate imports what an inventory update read into its inventory,
+// with its source's options, and records the changes.
+func importUpdate(ctx context.Context, rc *jobs.RunContext, invID int64, data *InventoryData, update map[string]any) jobs.Result {
+	row, app := rc.Job, rc.M.App
 	start := time.Now()
-	def := resources.SourceImportDefaults[source]
+	def := resources.SourceImportDefaults[row.Str("source")]
 	opts := ImportOptions{
 		Overwrite:          row.Bool("overwrite"),
 		OverwriteVars:      row.Bool("overwrite_vars"),

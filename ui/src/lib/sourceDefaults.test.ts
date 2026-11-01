@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { enabledDefault, enabledHelp, isImportedFile, sourceChoices } from './sourceDefaults'
+import { enabledDefault, enabledHelp, isImportedFile, isReadByAwxnext, sourceChoices } from './sourceDefaults'
 
 describe('enabled variable defaults', () => {
   it('gives AWX defaults for cloud sources', () => {
@@ -25,5 +25,12 @@ describe('file sources', () => {
   it('stay selectable when editing one', () => {
     expect(sourceChoices(choices, 'file').map(([k]) => k)).toEqual(['file', 'scm'])
     expect(isImportedFile('file')).toBe(true)
+  })
+})
+
+describe('rvav sources', () => {
+  it('are read by awxnext, unlike plugin and project sources', () => {
+    expect(isReadByAwxnext('rvav')).toBe(true)
+    expect(['scm', 'vmware', 'constructed'].some(isReadByAwxnext)).toBe(false)
   })
 })

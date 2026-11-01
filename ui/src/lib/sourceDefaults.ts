@@ -36,3 +36,11 @@ export function isImportedFile(source: string): boolean {
 export function sourceChoices(choices: [string, string][], current?: string): [string, string][] {
   return choices.filter(([k]) => !isImportedFile(k) || k === current)
 }
+
+/**
+ * rvav sources are read by awxnext itself, from rvav's API: no execution
+ * environment, plugin options or limit (the API refuses the last two).
+ */
+export function isReadByAwxnext(source: string): boolean {
+  return source === 'rvav'
+}

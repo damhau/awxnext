@@ -587,6 +587,18 @@ export const settingsPages: SettingsPage[] = [
         ],
       },
       {
+        id: 'rvav-sources',
+        title: tr('rvav sources'),
+        intro: tr('awxnext reads rvav inventory sources itself, from the address their credential gives. Anyone who may create a credential chooses that address.'),
+        rows: [
+          row('INVENTORY_SOURCE_ALLOWED_LOCAL_ADDRESSES', {
+            label: tr('Local addresses rvav sources may reach'),
+            help: tr('Loopback and link-local addresses and cloud metadata services are refused: they are awxnext\'s own host. One per entry: an address, a network, or an address and port, such as 127.0.0.1:8080 for an rvav beside awxnext.'),
+            consequence: tr('Anyone who may create a credential can then make awxnext send requests to these addresses.'),
+          }),
+        ],
+      },
+      {
         id: 'limits',
         title: tr('Limits and timeouts'),
         rows: [

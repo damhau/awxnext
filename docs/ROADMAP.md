@@ -27,7 +27,7 @@ be matched.
 | [M1 Nothing misleading](#m1-nothing-misleading) | What awxnext shows or accepts does what it says | 17 |
 | [M2 AWX clients work unchanged](#m2-awx-clients-work-unchanged) | Collection, awxkit and Terraform run against awxnext, proven in CI | 26 |
 | [M3 Jobs, workflows and notifications](#m3-jobs-workflows-and-notifications) | Email notifications, the rest of AWX's run-time features, typed node outputs | 4 |
-| [M4 Inventories, credentials and projects](#m4-inventories-credentials-and-projects) | Every inventory source, credential type, lookup and project type (except Subversion) | 9 |
+| [M4 Inventories, credentials and projects](#m4-inventories-credentials-and-projects) | Every inventory source, credential type, lookup and project type (except Subversion), and a source for rvav | 10 |
 | [M5 Authentication](#m5-authentication) | Every login method AWX has, except RADIUS and TACACS+ | 6 |
 | [M6 Operations and scale](#m6-operations-and-scale) | Run awxnext in production: policies, logging, Helm, backup, job isolation | 13 |
 | [M7 UI completeness](#m7-ui-completeness) | Every API feature reachable from the UI; the remaining UI goals | 17 |
@@ -656,6 +656,22 @@ Projects from a URL to a tar or zip archive, with optional credentials. The
 revision is the archive's checksum.
 
 **Done when:** sync, update on launch and a changed archive are tested.
+
+### M4-11 A native rvav inventory source
+**Labels:** feature, inventory, credentials · **Size:** M · [#122](https://github.com/damhau/awxnext/issues/122)
+
+awxnext's own source type, not in AWX. [rvav](https://github.com/damhau/rvav)
+lists the VMs it manages at `/api/v1/ansible/inventory`, in the format of
+`ansible-inventory --list`; on AWX its `rvav.platform` collection reads it
+from a project, in an execution environment. An `rvav` source has awxnext
+read it itself and import it, with a managed `rvav` credential type (address
+and token) and no project, collection or execution environment. The request
+refuses awxnext's own addresses, as secret lookups do (M9-06), unless
+`INVENTORY_SOURCE_ALLOWED_LOCAL_ADDRESSES` lists them.
+
+**Done when:** a sync against a fake rvav imports its hosts and groups; a
+missing credential, a refused token and a refused address fail with a message
+that says what to do; the form offers the source without plugin options.
 
 ---
 
@@ -1354,5 +1370,5 @@ one milestone per section, and one issue per task (#1 to #80), each with a
 (#81 to #93) were added on 2026-10-28 from the compatibility harness's first
 runs. M8 (#94 to #102) was added on 2026-10-31, and M8-10 (#103) the same day, from the permanent instance. M9 (#104) was added on
 2026-11-01, M9-02 to M9-05 (#105 to #108) the same day, and M9-06 (#120)
-from CodeQL's first analysis. This file stays the index;
+from CodeQL's first analysis. M4-11 (#122) was added the same day, for rvav. This file stays the index;
 when a task changes, change its issue too.

@@ -136,6 +136,7 @@
     "IGNORE_UNPROMPTED_LAUNCH_FIELDS": {"category": "jobs"},
     "INSIGHTS_TRACKING_STATE": {"category": "system", "no_effect": true},
     "INSTALL_UUID": {"category": "system"},
+    "INVENTORY_SOURCE_ALLOWED_LOCAL_ADDRESSES": {"category": "jobs"},
     "JOB_EVENTS_ARCHIVE_BUCKET": {"category": "jobs"},
     "JOB_EVENTS_ARCHIVE_CREDENTIAL": {"category": "jobs"},
     "JOB_EVENTS_ARCHIVE_ENDPOINT": {"category": "jobs"},

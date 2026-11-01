@@ -8,6 +8,7 @@ import (
 
 	"github.com/damhau/awxnext/internal/api"
 	"github.com/damhau/awxnext/internal/jobs"
+	"github.com/damhau/awxnext/internal/vars"
 )
 
 // InventoryPlugins maps AWX source names to the inventory plugin and the file
@@ -52,7 +53,37 @@ var InventoryPlugins = map[string]struct{ Plugin, File, CredNamespace string }{
 var inventorySourceChoices = labelled("file", "File, Directory or Script", "scm", "Sourced from a Project", "constructed", "Template additional groups and hostvars at runtime",
 	"ec2", "Amazon EC2", "gce", "Google Compute Engine", "azure_rm", "Microsoft Azure Resource Manager", "vmware", "VMware vCenter",
 	"satellite6", "Red Hat Satellite 6", "openstack", "OpenStack", "rhv", "Red Hat Virtualization", "controller", "Red Hat Ansible Automation Platform",
-	"insights", "Red Hat Insights", "terraform", "Terraform State", "openshift_virtualization", "OpenShift Virtualization")
+	"insights", "Red Hat Insights", "terraform", "Terraform State", "openshift_virtualization", "OpenShift Virtualization",
+	"rvav", "rvav")
+
+// RvavSource is the source type awxnext reads itself, from rvav's API, and
+// RvavNamespace the namespace of the only credential type it takes.
+const (
+	RvavSource    = "rvav"
+	RvavNamespace = "rvav"
+)
+
+// checkRvavSource checks what an rvav source is given. awxnext reads rvav's
+// inventory itself, so the source takes no plugin options and no limit, and
+// its credential is an rvav one. It may be saved without a credential: rvav
+// sets one when it makes the source's token (Administration, AWX, Inventory
+// token); a sync without one fails and says so.
+func checkRvavSource(c *Ctx, merged Obj) error {
+	if sv, err := vars.Parse(str(merged["source_vars"])); err == nil && len(sv) > 0 {
+		return api.FieldError("source_vars", "rvav sources take no source variables: their credential gives rvav's address and token.")
+	}
+	if strings.TrimSpace(str(merged["limit"])) != "" {
+		return api.FieldError("limit", "rvav sources import every host rvav lists, and take no limit.")
+	}
+	if cid, ok := api.ID(merged["credential"]); ok {
+		var ns string
+		c.DB().QueryRow(c, "SELECT coalesce(ct.namespace, '') FROM credentials cr JOIN credential_types ct ON ct.id = cr.credential_type_id WHERE cr.id = $1", cid).Scan(&ns)
+		if ns != RvavNamespace {
+			return api.FieldError("credential", "rvav sources need an rvav credential.")
+		}
+	}
+	return nil
+}
 
 // LaunchInventoryUpdate creates an inventory update job for a source.
 func LaunchInventoryUpdate(c *Ctx, src Obj, launchType string) (int64, error) {
@@ -202,6 +233,11 @@ func registerInventorySources() {
 				}
 				if _, ok := api.ID(merged["source_project"]); ok {
 					return api.FieldError("source_project", "Cannot set source_project if not SCM type.")
+				}
+			}
+			if source == RvavSource {
+				if err := checkRvavSource(c, merged); err != nil {
+					return err
 				}
 			}
 			if cid, ok := api.ID(merged["credential"]); ok {

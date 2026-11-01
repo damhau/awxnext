@@ -271,6 +271,35 @@ operator configures, is not affected.
 Testing a credential type with values not saved yet (`POST /api/v2/credential_types/N/test/`) is
 for superusers, as in AWX; anyone who may use a credential tests it at `credentials/N/test/`.
 
+## rvav sources
+
+[rvav](https://github.com/damhau/rvav), a self-service VM portal, lists the VMs it manages for
+AWX. On AWX, a source from a project runs rvav's inventory plugin (the `rvav.platform`
+collection) in an execution environment. awxnext has a source type of its own, `rvav`, and
+reads them itself (roadmap M4-11):
+
+1. In the inventory, add a source of the type rvav. It takes no source variables or limit;
+   overwrite, the host filter, the enabled variable, update on launch and schedules work as for
+   other sources.
+2. Give it a credential of the type rvav: rvav's address as awxnext reaches it
+   (`https://rvav.example.com`, or `http://rvav-api.rvav.svc:8080` in the same cluster) and a
+   token of inventory scope. Verify SSL is on by default, against the system's CAs and the
+   credential's Certificate Authority data.
+
+rvav can do the second step: put the source's ID in its Administration, AWX, Inventory source,
+and click Inventory token. rvav makes the token, sets it in the source's credential (making one in
+the inventory's organization when the source has none) and syncs the source. Its `awx-bootstrap`
+command makes an rvav source when the AWX it talks to offers the type, and a project source
+otherwise.
+
+A sync is one `GET <url>/api/v1/ansible/inventory` with the token, from awxnext's own server
+rather than an execution node, and imports the answer (`ansible-inventory --list`'s format, at
+most 64 MiB). It follows no redirects. Like secret lookups, it refuses loopback, link-local and
+unspecified addresses and cloud metadata services, unless listed in
+`INVENTORY_SOURCE_ALLOWED_LOCAL_ADDRESSES` (Jobs settings, "rvav sources"): for example
+`127.0.0.1:8080` for an rvav on the same host. A failed sync gives the HTTP status, not rvav's
+answer, and says what to do when the source has no credential or rvav refuses the token.
+
 ## Backup and restore
 
 ```sh
