@@ -32,13 +32,13 @@ updates:
         applies-to: version-updates
         patterns: ["*"]
         update-types: [minor, patch]
+    # No new major versions for the UI (vite 8, react-router 8, TypeScript
+    # 7...): each is a roadmap task, taken when the owner chooses, with the
+    # UI checked in the browser. vitest 5 also needs Node 22.12 to run the
+    # tests locally, and @types/node follows the Node that builds the UI (22).
+    # npm audit in security.yml still reports their vulnerabilities daily.
     ignore:
-      # vitest 5 needs Node 22.12 or later to run the tests locally.
-      - dependency-name: vitest
-        update-types: [version-update:semver-major]
-      # The types of the Node that builds the UI (22, as in the Dockerfile
-      # and the workflows' node-version), not of a later one.
-      - dependency-name: "@types/node"
+      - dependency-name: "*"
         update-types: [version-update:semver-major]
 
   # The workflows' actions, pinned to commits: the PRs move the commit and

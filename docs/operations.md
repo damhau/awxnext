@@ -473,10 +473,13 @@ Dockerfile's base images ([dependabot.yml](../.github/dependabot.yml)):
   raised.
 - **Version updates,** weekly: the minor and patch releases of each ecosystem in one PR, each
   new major version in a PR of its own. A release is proposed once it is 7 days old, as
-  malicious releases are usually found and pulled sooner. Three majors are left out, and
-  moved by hand: vitest (version 5 needs Node 22.12 to run the tests locally), and Node's
-  types and image (Node 22 builds the UI, in the Dockerfile and in the workflows'
-  `node-version`).
+  malicious releases are usually found and pulled sooner.
+- **No major versions for the UI** (vite 8, react-router 8, TypeScript 7,
+  `@vitejs/plugin-react` 6...): a UI major upgrade becomes a roadmap task when the owner
+  chooses, with the UI checked in the browser, not a Dependabot PR. vitest 5 also needs Node
+  22.12 to run the tests locally. The `node` base image's major is left out too: Node 22 builds
+  the UI, in the Dockerfile and in the workflows' `node-version`, and they move together, by
+  hand. `npm audit` still reports the UI's vulnerabilities daily.
 
 CI runs on each PR, and the owner reviews and merges them. The PRs carry the `dependencies`
 label.
