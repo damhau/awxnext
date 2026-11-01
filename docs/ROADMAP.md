@@ -1303,6 +1303,11 @@ Taken on 2026-11-01:
     autofix runs for 3 to 4 weeks, and each run is recorded (trigger, PR or
     issue, merged as is, edited or closed, cost) to decide whether to keep
     it.
+12. The Dockerfile's base images keep floating tags, not digests (M9-02):
+    each build takes their latest patch release, so a fix in Go's standard
+    library or in Debian reaches the next image without a PR, and the
+    all-in-one image is not reproducible anyway, since it upgrades its
+    Debian packages as it builds. Dependabot proposes the next lines.
 
 ## On GitHub
 

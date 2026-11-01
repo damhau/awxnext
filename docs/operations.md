@@ -461,3 +461,57 @@ the `awxnext-trivy-cache` volume). When one fails:
 - **Accept** an image finding that cannot be fixed or does not apply by adding its ID to
   [.trivyignore](../.trivyignore), with the reason and an expiry date (`CVE-2026-12345
   exp:2027-01-31`), after which it fails the scan again.
+
+### Dependabot
+
+Dependabot watches the Go modules, the UI's npm packages, the workflows' actions and the
+Dockerfile's base images ([dependabot.yml](../.github/dependabot.yml)):
+
+- **Alerts** (Security, Dependabot) when a vulnerability is published in a Go module, an npm
+  package or an action awxnext uses. Base images are not covered: Trivy scans them.
+- **Security updates:** a PR for each alert that has a fix, opened as soon as the alert is
+  raised.
+- **Version updates,** weekly: the minor and patch releases of each ecosystem in one PR, each
+  new major version in a PR of its own. A release is proposed once it is 7 days old, as
+  malicious releases are usually found and pulled sooner. Three majors are left out, and
+  moved by hand: vitest (version 5 needs Node 22.12 to run the tests locally), and Node's
+  types and image (Node 22 builds the UI, in the Dockerfile and in the workflows'
+  `node-version`).
+
+CI runs on each PR, and the owner reviews and merges them. The PRs carry the `dependencies`
+label.
+
+The Dockerfile's base images keep floating tags (`golang:1.26`, `node:22`,
+`python:3.12-slim-bookworm`, distroless's `static-debian12:nonroot`), not digests. Each build
+takes their latest patch release, so a fix in Go's standard library, which is compiled into the
+binaries, or in Debian reaches the next image without waiting for a PR. Digests would make
+builds reproducible, but the all-in-one image already upgrades its Debian packages and
+installs the latest PostgreSQL client as it builds, so it would not be reproducible anyway.
+The daily image scan catches a tag that brings a vulnerability. Dependabot proposes the next
+lines (Go 1.27, Python 3.13...); uv is pinned to a release (`ghcr.io/astral-sh/uv:0.13.5`).
+
+### CodeQL
+
+CodeQL's default setup (a repository setting, with no workflow file) analyzes the Go code, the
+UI's TypeScript, the Python scripts and the workflows on each push to main, on each PR and
+weekly. Its findings are under Security, Code scanning. Each one is fixed, filed as an issue
+(labelled `security` when it gives access or rights a user should not have, `bug`
+otherwise), or dismissed with the reason (a false positive, or code used only in tests).
+
+### Pinned actions
+
+Every action in the workflows is pinned to a commit, with its version in a comment:
+`uses: actions/checkout@<commit> # v4.4.0`. Whoever controls an action can move its tags to
+other code, but a commit always names the same code. Dependabot's PRs move the commit and the
+comment together. To add an action,
+look up the commit of its release, `gh api repos/<owner>/<action>/commits/<version> --jq
+.sha`, or pin it with [pinact](https://github.com/suzuki-shunsuke/pinact). CI fails on an
+action used by tag (`make pinned-actions`).
+
+### Reporting a vulnerability
+
+Report a vulnerability in awxnext privately, through **Report a vulnerability** on the
+repository's Security tab, not in an issue. [SECURITY.md](../SECURITY.md) says what is
+supported (the latest image from `main`) and what to include, and promises an acknowledgement
+within 7 days. The report becomes a draft security advisory, where the fix is discussed and
+from which it is published.

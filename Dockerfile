@@ -1,3 +1,7 @@
+# The base images keep floating tags, not digests: each build takes their
+# latest patch release, so a fix in Go's standard library (compiled into the
+# binaries) or in Debian reaches the next image without waiting for a PR.
+# Dependabot proposes the next lines (docs/operations.md, "Security scanning").
 FROM node:22 AS ui
 WORKDIR /ui
 COPY ui/package.json ui/package-lock.json ./

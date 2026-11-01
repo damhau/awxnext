@@ -1,4 +1,4 @@
-.PHONY: build ui ui-dev test test-full vet dev-db run images vuln vuln-go vuln-web vuln-images sbom
+.PHONY: build ui ui-dev test test-full vet dev-db run images vuln vuln-go vuln-web vuln-images sbom pinned-actions
 
 # Vulnerability scanners, each pinned (Trivy's image by digest).
 GOVULNCHECK := golang.org/x/vuln/cmd/govulncheck@v1.9.0
@@ -81,3 +81,16 @@ sbom: images
 	docker run --rm $(TRIVY_ENV) -v $(CURDIR)/ui/package.json:/ui/package.json:ro \
 		-v $(CURDIR)/ui/package-lock.json:/ui/package-lock.json:ro \
 		$(TRIVY) fs --quiet --format cyclonedx /ui > sbom/awxnext-ui-npm.cdx.json
+
+# Every action the workflows use is pinned to a commit, with its version in a
+# comment (`uses: actions/checkout@<commit> # v4.4.0`), since whoever controls
+# an action can move its tags; Dependabot keeps the pins current. Local
+# workflows (./.github/workflows/...) are part of this repository. ci.yml runs
+# this check.
+pinned-actions:
+	@unpinned=$$(grep -rnE '^[[:space:]]*(-[[:space:]]+)?uses:' .github/workflows \
+		| grep -vE 'uses:[[:space:]]+(\./|[^@[:space:]]+@[0-9a-f]{40}([[:space:]]|$$))'); \
+	if [ -n "$$unpinned" ]; then \
+		echo "Pin these actions to a commit, with the version in a comment:"; \
+		echo "$$unpinned"; exit 1; \
+	fi

@@ -1,0 +1,78 @@
+# Dependabot (docs/operations.md, "Security scanning"). Version updates come
+# weekly, with the minor and patch updates of each ecosystem in one PR and a
+# PR of its own for each new major version. A release is proposed once it is
+# 7 days old, as malicious releases are usually found and pulled sooner.
+# Security updates (a repository setting) are not grouped or delayed: one PR
+# for each vulnerable dependency, as soon as its alert is raised. The owner
+# reviews and merges them all.
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    labels: [dependencies]
+    groups:
+      go:
+        applies-to: version-updates
+        patterns: ["*"]
+        update-types: [minor, patch]
+
+  - package-ecosystem: npm
+    directory: /ui
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    labels: [dependencies]
+    groups:
+      npm:
+        applies-to: version-updates
+        patterns: ["*"]
+        update-types: [minor, patch]
+    ignore:
+      # vitest 5 needs Node 22.12 or later to run the tests locally.
+      - dependency-name: vitest
+        update-types: [version-update:semver-major]
+      # The types of the Node that builds the UI (22, as in the Dockerfile
+      # and the workflows' node-version), not of a later one.
+      - dependency-name: "@types/node"
+        update-types: [version-update:semver-major]
+
+  # The workflows' actions, pinned to commits: the PRs move the commit and
+  # the version in the comment after it.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    labels: [dependencies]
+    groups:
+      actions:
+        applies-to: version-updates
+        patterns: ["*"]
+        update-types: [minor, patch]
+
+  # The Dockerfile's base images keep floating tags (golang:1.26, node:22,
+  # python:3.12-slim-bookworm): each build takes the latest patch release.
+  # Dependabot proposes the next lines (Go 1.27, Python 3.13...).
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    labels: [dependencies]
+    groups:
+      docker:
+        applies-to: version-updates
+        patterns: ["*"]
+        update-types: [minor, patch]
+    ignore:
+      # Node builds only the UI. Its major version moves by hand, with the
+      # workflows' node-version.
+      - dependency-name: node
+        update-types: [version-update:semver-major]
