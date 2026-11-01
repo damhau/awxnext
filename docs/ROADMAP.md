@@ -1179,12 +1179,13 @@ auto-deprovisioning on.
 
 ## M9 Security
 
-**Exit:** CI checks awxnext's Go code, the UI's npm dependencies and both
-images for known vulnerabilities on every push and daily, and none that has
-a fix is left open. GitHub's security features are on, the bots' changes
-come as PRs that CI checks and the owner reviews and merges, and Claude
-proposes a fix for what the daily scan finds. `main` has no branch
-protection (M9-03 dropped on 2026-11-01, see Proposed out of scope).
+**Exit:** secubot scans awxnext daily (Trivy, govulncheck, gosec,
+Semgrep), Claude triages what it finds and proposes fixes as draft PRs, or
+issues for a human, and none that has a fix is left open. GitHub's security
+features are on: Dependabot proposes the plain upgrades and CodeQL analyzes
+each push. The owner reviews and merges every PR. `make vuln` scans both
+images by hand. `main` has no branch protection (M9-03 dropped on
+2026-11-01, see Proposed out of scope).
 
 ### M9-01 Scan for known vulnerabilities
 **Labels:** chore, deploy · **Size:** M · [#104](https://github.com/damhau/awxnext/issues/104)
@@ -1202,6 +1203,9 @@ or accepted with its reason.
 **Done when:** `security.yml` is green on main, on a push and on a manual
 run that includes the image job, and the SBOMs are uploaded as an artifact.
 
+`security.yml` was removed on 2026-11-01: secubot scans instead (M9-04,
+Decision 15). The Makefile targets stay, for scanning by hand.
+
 ### M9-02 GitHub security features, Dependabot and pinned actions
 **Labels:** chore, deploy · **Size:** M · [#105](https://github.com/damhau/awxnext/issues/105)
 
@@ -1217,33 +1221,56 @@ reason.
 **Done when:** the four settings are on, Dependabot's first runs succeed,
 CodeQL's first analysis is triaged, every `uses:` is a SHA, and CI is green.
 
-### M9-04 Claude proposes fixes for what the scans find
+### M9-04 Onboard secubot, in place of security.yml
 **Labels:** chore, deploy · **Size:** M · [#107](https://github.com/damhau/awxnext/issues/107)
 
-When a daily or manual `security.yml` run fails, an `autofix` job gives the
-failed log to Claude (`anthropics/claude-code-action`, the owner's
-subscription token). Claude classifies the failure and applies the smallest
-fix. It reruns `make test` and the scanner, then opens a draft PR labelled
-`security-fix`, or an issue when it cannot fix it. It never edits
-`.trivyignore`, `.github/` or `SECURITY.md`, never merges and never
-suppresses a finding. A guard check run from `pull_request_target` enforces
-the protected paths, and is required. Needs the Claude GitHub App on
-`awxnext` and the `CLAUDE_CODE_OAUTH_TOKEN` secret, from the owner.
+Rewritten on 2026-11-01 (Decision 15). secubot (`damhau/secubot`, release
+v1.0.0) is the owner's reusable workflow:
+- scanners: Trivy on the files and on the image, govulncheck, gosec and
+  Semgrep, with their results in Code Scanning;
+- Claude triages each finding, read-only, in two independent sessions;
+- Claude fixes it with narrow tools, then the build, the tests and a rescan
+  run;
+- a step with no model opens **draft** PRs on `secfix/<id>` branches, or
+  issues for what needs a human, and never merges.
 
-**Done when:** `security.yml` stays green with autofix skipped when the
-scans pass, and the guard reports on PRs and is required.
+`security.yml` (M9-01) is removed. The Makefile's `vuln-*` and `sbom`
+targets and `.trivyignore` stay, for scanning by hand: they are the only
+scan of the all-in-one image, since secubot builds only the Dockerfile's
+default target. The caller, `secfix.yml`, is pinned to v1.0.0's commit,
+runs by hand, as a dry run, with egress audited, on the `ANTHROPIC_API_KEY`
+secret. `.secfix.yml` sets the setup, build and test commands, skips tests,
+docs, `compat/` and the built UI, protects `.trivyignore` and
+`SECURITY.md`, scans the image, and starts slowly (one PR and three
+triaged findings a run). A dry run's summary is read and the configuration
+tuned. The docs say how scanning works now.
 
-### M9-05 Test the autofix loop end to end
+**Done when:** `security.yml` is gone, a secubot dry run on awxnext is
+green and its summary has been reviewed, the docs say how scanning works
+now, and CI is green.
+
+### M9-05 Run secubot live on awxnext, daily
 **Labels:** chore, deploy · **Size:** S · [#108](https://github.com/damhau/awxnext/issues/108)
 
-On a test branch, a Go module is downgraded to a version with a reachable
-vulnerability. The scan fails, autofix opens a draft PR from the App, CI
-and the guard run on it, and a second run skips. A negative test asks for a
-`.trivyignore` entry and the guard fails it. Then the test branch and PRs
-are deleted.
+Rewritten on 2026-11-01. secubot goes live after M9-04's dry run:
+`dry-run` is removed and a run checked: each handled finding ends as a
+draft PR, an issue or a suppression, nothing is merged, and a second run
+skips what is in flight. If a run on a branch opens its PR against that
+branch, a dependency with a known reachable vulnerability is added on a
+test branch to check that secubot proposes the fix; otherwise this is
+skipped, since a vulnerable dependency on main would deploy. CI is run on a
+secubot PR by reopening it. The schedule is turned on, daily, at a time of
+its own. After a few runs, harden-runner's log of outbound connections is
+read and the egress policy switched to `block`. awxnext needs hosts secubot
+does not list: repo1.maven.org for the tests' PostgreSQL, registry.npmjs.org
+for the UI, and Docker Hub and gcr.io for the image build. If the caller
+cannot add them, the policy stays `audit` and the reason is recorded. Each
+run is recorded (trigger, PR or issue, cost), and the weeks that follow
+decide whether to keep it.
 
-**Done when:** each step above holds, the negative test is red, and nothing
-from the test is left on GitHub.
+**Done when:** a live run has finished green, with its results reviewed;
+the daily schedule is on; the egress policy is `block`, or the reason it is
+not is recorded.
 
 ### M9-06 Keep credential lookups from sending awxnext's own identity
 **Labels:** security, credentials · **Size:** M · [#120](https://github.com/damhau/awxnext/issues/120)
@@ -1319,12 +1346,13 @@ Taken on 2026-11-01:
     - code owner review on `.github/`, `.trivyignore` and `SECURITY.md`
       (withdrawn, Decision 14);
     - a Claude autofix job on the owner's subscription token, with a CI
-      guard on the paths it must not touch.
+      guard on the paths it must not touch (replaced by secubot, Decision
+      15).
 
     `SECURITY.md` promises an acknowledgement within 7 days. After M9-05,
-    autofix runs for 3 to 4 weeks, and each run is recorded (trigger, PR or
-    issue, merged as is, edited or closed, cost) to decide whether to keep
-    it.
+    autofix (secubot since Decision 15) runs for 3 to 4 weeks, and each run
+    is recorded (trigger, PR or issue, merged as is, edited or closed, cost)
+    to decide whether to keep it.
 12. The Dockerfile's base images keep floating tags, not digests (M9-02):
     each build takes their latest patch release, so a fix in Go's standard
     library or in Debian reaches the next image without a PR, and the
@@ -1350,6 +1378,15 @@ Taken on 2026-11-01:
     straight to `main`; Dependabot's PRs are reviewed and merged by the
     owner. `ci.yml` still runs on every PR, whatever it changes, docs
     included.
+15. secubot replaces `security.yml` (M9-04, M9-05). It is the owner's
+    reusable workflow (`damhau/secubot`): pinned scanners, then Claude
+    triages each finding and proposes a verified fix as a draft PR, or an
+    issue. It leaves the plain upgrades to Dependabot, which stays, as does
+    CodeQL. Its credential is the `ANTHROPIC_API_KEY` secret; no GitHub App,
+    so its PRs, opened with `GITHUB_TOKEN`, start no CI until reopened. No
+    scan fails CI any more. The Makefile's `vuln-*` and `sbom` targets stay
+    for scanning by hand, and are the only scan of the all-in-one image,
+    since secubot builds only the Dockerfile's default target.
 
 ## On GitHub
 
@@ -1359,5 +1396,6 @@ one milestone per section, and one issue per task (#1 to #80), each with a
 (#81 to #93) were added on 2026-10-28 from the compatibility harness's first
 runs. M8 (#94 to #102) was added on 2026-10-31, and M8-10 (#103) the same day, from the permanent instance. M9 (#104) was added on
 2026-11-01, M9-02 to M9-05 (#105 to #108) the same day, and M9-06 (#120)
-from CodeQL's first analysis. M4-11 (#122) was added the same day, for rvav. This file stays the index;
+from CodeQL's first analysis. M4-11 (#122) was added the same day, for rvav. M9-04 and M9-05
+(#107, #108) were rewritten the same day for secubot (Decision 15). This file stays the index;
 when a task changes, change its issue too.

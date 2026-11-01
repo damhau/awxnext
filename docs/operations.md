@@ -495,8 +495,90 @@ Only three settings with no effect, whose shape is free-form, are still JSON:
 
 ## Security scanning
 
-CI checks awxnext for known vulnerabilities ([security.yml](../.github/workflows/security.yml)),
-with the scanners pinned in the [Makefile](../Makefile):
+Four things look for vulnerabilities in awxnext. None merges anything: the owner reviews and
+merges every PR.
+
+- **secubot** ([secfix.yml](../.github/workflows/secfix.yml)) scans the code, its dependencies
+  and the default image, has Claude triage each finding, and proposes fixes as draft PRs.
+- **Dependabot** raises alerts and proposes upgrades of the dependencies.
+- **CodeQL** analyzes the code and the workflows on each push.
+- **`make vuln`** runs scanners by hand, and is the only scan of the all-in-one image.
+
+No scan fails CI: a vulnerability becomes an alert, an issue or a PR.
+
+### secubot
+
+[secubot](https://github.com/damhau/secubot) is the owner's reusable workflow. awxnext calls it
+from [secfix.yml](../.github/workflows/secfix.yml), pinned to a release's commit, and
+configures it in [.secfix.yml](../.secfix.yml) ([its reference](https://github.com/damhau/secubot/blob/main/docs/configuration.md)).
+A run has five steps:
+
+1. **Scan**, with pinned scanners:
+   - Trivy on the files: the Go modules, the UI's npm packages, the Helm chart and Compose
+     files, secrets and licences;
+   - Trivy on the image the Dockerfile builds by default;
+   - govulncheck, which reports only what the code reaches;
+   - gosec and Semgrep on the code.
+
+   Each scanner's results go to Security, Code scanning, under `secubot/<tool>`. Trivy skips
+   the IDs listed in [.trivyignore](../.trivyignore).
+2. **Select.** secubot drops some findings:
+   - those under `paths.skip`: tests and their data, the docs, the compatibility harness and
+     the built UI;
+   - those suppressed or already handled (a `secfix/<id>` branch, a PR or an issue);
+   - dependency upgrades with a minor or patch fix, which are left to Dependabot.
+
+   It ranks the rest and keeps the first `policy.max_triage`.
+3. **Triage.** Claude reads the code, without running anything, in two sessions: an analysis,
+   then a review that tries to refute it. What happens next depends on the verdict:
+   - a false positive is suppressed for 30 days, unless it is critical: then it becomes an issue,
+     for a human to confirm;
+   - a real finding goes to a fix;
+   - a doubtful one, a hard-coded secret or a suspected prompt injection becomes an issue.
+4. **Fix.** Claude edits the code. Besides reading and editing, it may run only `.secfix.yml`'s
+   `build` and `test` commands, the rescan, and `go get` and `go mod tidy` for a Go module.
+   secubot then runs `build` (`make fmt-check build`) and `test` (`make test test-ui`) itself,
+   and scans again. It allows up to 3 attempts.
+
+   A fix never touches `.github/`, `.trivyignore`, `SECURITY.md` or `CLAUDE.md`, and changes
+   authentication or cryptography code only when the finding is there.
+5. **Publish.** A step with no model checks each patch again, then opens it as a **draft** PR
+   labelled `security` on a `secfix/<id>` branch, or opens a `[secfix:<id>]` issue.
+
+The run's summary lists each finding handled, its verdict and what became of it, with the
+reasoning. It also lists the findings left alone, and why. Claude runs on the
+`ANTHROPIC_API_KEY` secret, within `.secfix.yml`'s budgets: $1.50 per triage session (two for
+each finding) and $5 per fix.
+
+**Today it runs by hand, as a dry run** (M9-04, #107): `gh workflow run secfix.yml`, or
+Actions, secfix, Run workflow. A dry run scans, triages and fixes, but publishes nothing; its
+patches are in the run's `secubot-fix-<id>` artifacts. M9-05 (#108) turns publishing on,
+runs it daily and blocks the jobs' outbound connections except to the hosts secubot lists.
+Until then, harden-runner only records them.
+
+How to handle what it publishes:
+
+- **A PR.** secubot opens PRs with the workflow's `GITHUB_TOKEN`, and GitHub starts no
+  workflow on that token's events, so CI does not run on them by itself. Close and reopen the
+  PR to run CI. Then merge it, or close it: secubot then leaves the finding alone for 90 days.
+- **An issue.** Close an issue as **Not planned**, with a comment saying why, to dismiss the
+  finding for 180 days.
+- **A finding that goes away** (a merged Dependabot PR, a fix by hand): the next run closes
+  its secubot issue or PR, except the issues of hard-coded secrets.
+- **Noise.** Add a pattern to `paths.skip`, or an entry to `suppressions`, with its reason and
+  an expiry date. Both are reviewed like code. The suppressions triage decides are kept on
+  the `secfix-state` branch.
+
+secubot cannot build a stage other than the default. The image it scans is therefore
+`awxnext` (the binary only), not the all-in-one image, which `main` publishes and the
+permanent instance runs. Only `make vuln-images` scans the all-in-one image.
+
+To turn secubot off, delete `secfix.yml`. The `secfix/*` branches and `secfix-state` can be
+deleted at any time.
+
+### Scanning by hand
+
+The [Makefile](../Makefile) pins its own scanners:
 
 - **Go code** (`make vuln-go`): govulncheck, which reports only the vulnerabilities the code
   reaches, in its modules and in the standard library of the Go that builds it (the
@@ -511,14 +593,9 @@ with the scanners pinned in the [Makefile](../Makefile):
   the image SBOMs see; the UI's SBOM lists the packages built into it (its `dependencies`,
   not the build and test tools).
 
-The Go and UI checks run on each push to main that changes the Go code or the UI's
-dependencies, and daily; building both images takes minutes, so they and the SBOMs run daily
-and by hand: Actions, Security, Run workflow, or `gh workflow run security.yml`. The daily run
-catches a vulnerability published since the last push. Each image run uploads the SBOMs as its
-`sbom` artifact (`gh run download <run id> -n sbom`).
-
-`make vuln` runs the three scans locally (the images need Docker; Trivy keeps its database in
-the `awxnext-trivy-cache` volume). When one fails:
+`make vuln` runs the three scans (the images need Docker; Trivy keeps its database in the
+`awxnext-trivy-cache` volume). Until 2026-11-01, a `security.yml` workflow ran them in CI;
+secubot replaced it (M9-04). When one fails:
 
 - **Upgrade** what has the fix: the Go module (`go get`), the npm package, Go itself (the
   `toolchain` line of `go.mod`; the Dockerfile's `golang:1.26` takes the latest patch release),
@@ -526,7 +603,7 @@ the `awxnext-trivy-cache` volume). When one fails:
   fixes reach the next build.
 - **Accept** an image finding that cannot be fixed or does not apply by adding its ID to
   [.trivyignore](../.trivyignore), with the reason and an expiry date (`CVE-2026-12345
-  exp:2027-01-31`), after which it fails the scan again.
+  exp:2027-01-31`), after which it fails the scan again. secubot's Trivy reads the same file.
 
 ### Dependabot
 
@@ -534,7 +611,8 @@ Dependabot watches the Go modules, the UI's npm packages, the workflows' actions
 Dockerfile's base images ([dependabot.yml](../.github/dependabot.yml)):
 
 - **Alerts** (Security, Dependabot) when a vulnerability is published in a Go module, an npm
-  package or an action awxnext uses. Base images are not covered: Trivy scans them.
+  package or an action awxnext uses. Base images are not covered: secubot's Trivy scans the
+  default image, and `make vuln-images` both.
 - **Security updates:** a PR for each alert that has a fix, opened as soon as the alert is
   raised.
 - **Version updates,** weekly: the minor and patch releases of each ecosystem in one PR, each
@@ -545,7 +623,8 @@ Dockerfile's base images ([dependabot.yml](../.github/dependabot.yml)):
   chooses, with the UI checked in the browser, not a Dependabot PR. vitest 5 also needs Node
   22.12 to run the tests locally. The `node` base image's major is left out too: Node 22 builds
   the UI, in the Dockerfile and in the workflows' `node-version`, and they move together, by
-  hand. `npm audit` still reports the UI's vulnerabilities daily.
+  hand. Dependabot's alerts still report the UI's vulnerabilities. When the only fix is a
+  major version, secubot may propose it as a draft PR, and the owner decides.
 
 CI runs on each PR, whatever it changes, and the owner reviews and merges them. `main` has no
 branch protection: the owner's pushes go straight to it, and nothing but the owner's review
@@ -557,7 +636,8 @@ takes their latest patch release, so a fix in Go's standard library, which is co
 binaries, or in Debian reaches the next image without waiting for a PR. Digests would make
 builds reproducible, but the all-in-one image already upgrades its Debian packages and
 installs the latest PostgreSQL client as it builds, so it would not be reproducible anyway.
-The daily image scan catches a tag that brings a vulnerability. Dependabot proposes the next
+secubot's image scan catches a tag that brings a vulnerability into the default image, and
+`make vuln-images` into the all-in-one image. Dependabot proposes the next
 lines (Go 1.27, Python 3.13...); uv is pinned to a release (`ghcr.io/astral-sh/uv:0.13.5`).
 
 ### CodeQL

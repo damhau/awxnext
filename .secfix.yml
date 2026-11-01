@@ -1,0 +1,65 @@
+# secubot's configuration (docs/operations.md, "Security scanning"), read by
+# .github/workflows/secfix.yml. The reference is secubot's
+# docs/configuration.md; check this file with `secubot config-check --repo .`.
+version: 1
+
+paths:
+  # Findings here are dropped. This list replaces secubot's defaults, so the
+  # first lines repeat them. Tests and their data are not shipped, so their
+  # sample keys and passwords are not findings; docs, the compatibility
+  # harness (AWX's own suites, run against a throwaway stack) and the built UI
+  # are not awxnext's code.
+  skip:
+    - .git/
+    - vendor/
+    - node_modules/
+    - third_party/
+    - .venv/
+    - venv/
+    - "**/testdata/"
+    - "**/*_test.go"
+    - "**/*.test.ts"
+    - "**/*.test.tsx"
+    - docs/
+    - compat/
+    - ui/dist/
+  # secubot never edits the workflows or the agent configuration; CodeQL
+  # already reports the workflows' findings in Code Scanning.
+  ignore_protected: true
+
+# Run by secubot on the fix job's runner, with no token in the environment.
+# The fix agent may run build and test, verbatim only, so they are make
+# targets rather than shell lines.
+commands:
+  # The Go modules, the PostgreSQL the tests start (a run of no test still
+  # runs the harness's TestMain, which downloads it from repo1.maven.org, and
+  # builds the test package), and the UI's packages.
+  setup: go mod download && go test -short -count=1 -run '^$' ./test/ && cd ui && npm ci
+  # gofmt, as ci.yml checks it, then the server.
+  build: make fmt-check build
+  # What CLAUDE.md asks of a Go change and of a UI change.
+  test: make test test-ui
+  timeout_minutes: 20
+
+scanners:
+  # Builds and scans the Dockerfile's default target, the awxnext image (the
+  # binary only). The all-in-one image, which main deploys, is scanned by hand:
+  # make vuln-images.
+  trivy_image:
+    enabled: true
+
+# A slow start: M9-04 (#107) is a dry run, M9-05 (#108) goes live.
+policy:
+  max_triage: 3
+  max_prs: 1
+
+fix:
+  # Added to secubot's own list (.github/, .secfix.yml, CLAUDE.md, .claude/...):
+  # a fix never accepts a finding or changes the security policy.
+  protected_paths:
+    - .trivyignore
+    - SECURITY.md
+
+models:
+  triage_budget_usd: 1.5
+  fix_budget_usd: 5

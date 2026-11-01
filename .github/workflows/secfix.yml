@@ -1,0 +1,39 @@
+name: secfix
+
+# secubot (docs/operations.md, "Security scanning"): Trivy, govulncheck, gosec
+# and Semgrep scan awxnext; Claude triages each finding, read-only, and
+# proposes a fix verified by the build, the tests and a rescan; a step with no
+# model opens it as a draft PR on a secfix/<id> branch, or an issue for what
+# needs a human. Nothing is merged. .secfix.yml configures it.
+#
+# By hand for now (gh workflow run secfix.yml), as a dry run that publishes
+# nothing. M9-05 (#108) goes live, schedules it daily and blocks egress.
+on:
+  workflow_dispatch:
+
+# Nothing at the top: the job below gets what secubot's README asks for, and
+# each of secubot's jobs narrows it further.
+permissions: {}
+
+concurrency:
+  group: secfix
+  cancel-in-progress: false
+
+jobs:
+  secfix:
+    # Pinned to the v1.0.0 release's commit; Dependabot moves the pin. The
+    # secubot code it checks out (its secubot-ref input) defaults to the tag
+    # the release stamped into that commit, v1.0.0, so code and workflow
+    # match and move together.
+    uses: damhau/secubot/.github/workflows/secfix.yml@e4f8a62db93c9512ee2a26c0eb7608263bdf8b84 # v1.0.0
+    permissions:
+      contents: write # publish: secfix/* branches and the secfix-state branch
+      pull-requests: write # publish: draft PRs
+      issues: write # publish: issues for a human
+      security-events: write # scan: SARIF to Code Scanning
+      actions: read # scan: SARIF upload
+    with:
+      dry-run: true # removed by M9-05 (#108)
+      egress-policy: audit # switched to block by M9-05 (#108)
+    secrets:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}

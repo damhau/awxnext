@@ -1,4 +1,4 @@
-.PHONY: build ui ui-dev test test-full vet dev-db run images vuln vuln-go vuln-web vuln-images sbom pinned-actions
+.PHONY: build ui ui-dev test test-ui test-full vet fmt-check dev-db run images vuln vuln-go vuln-web vuln-images sbom pinned-actions
 
 # Vulnerability scanners, each pinned (Trivy's image by digest).
 GOVULNCHECK := golang.org/x/vuln/cmd/govulncheck@v1.9.0
@@ -26,10 +26,21 @@ ui-dev:
 vet:
 	go vet ./...
 
+# Lists the Go files gofmt would change, and fails if there are any (ci.yml
+# checks the same).
+fmt-check:
+	@unformatted=$$(gofmt -l .); if [ -n "$$unformatted" ]; then \
+		echo "Format these files with gofmt -w:"; echo "$$unformatted"; exit 1; \
+	fi
+
 # The short suite, for each change (about 30 s): slow tests (jobs run with
 # ansible-runner and a few others) are left to test-full.
 test: vet
 	go test -short ./...
+
+# The UI's typecheck and unit tests, after `npm ci` in ui/.
+test-ui:
+	cd ui && npx tsc --noEmit -p . && npx vitest run
 
 # Everything, with the race detector (what full.yml runs nightly and before a
 # milestone closes).
@@ -42,9 +53,9 @@ dev-db:
 run: build
 	AWXNEXT_DEV=1 ./bin/awxnext serve
 
-# Known vulnerabilities (security.yml; docs/operations.md, "Security scanning"):
-# the Go code and the UI's dependencies on the pushes to main that change them
-# and daily, the images and SBOMs daily and by hand.
+# Known vulnerabilities, by hand (docs/operations.md, "Security scanning").
+# In CI, secubot scans (secfix.yml), but it builds only the default image:
+# vuln-images is the only scan of the all-in-one image.
 vuln: vuln-go vuln-web vuln-images
 
 # What the Go code reaches, with the Go that builds it: GOTOOLCHAIN keeps

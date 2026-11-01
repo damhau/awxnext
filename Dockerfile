@@ -31,7 +31,7 @@ RUN pkg=github.com/damhau/awxnext/internal/version \
 FROM python:3.12-slim-bookworm AS all-in-one
 COPY --from=ghcr.io/astral-sh/uv:0.13.5 /uv /usr/local/bin/uv
 # Debian's security fixes as soon as they are published, not when the base
-# image is next rebuilt (security.yml scans the image daily). PostgreSQL 16's
+# image is next rebuilt (make vuln-images scans the image). PostgreSQL 16's
 # client tools (pg_dump, pg_restore) for awxnext backup and restore, from the
 # PostgreSQL project's repository: Debian's are version 15.
 RUN apt-get update \
