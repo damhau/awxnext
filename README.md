@@ -224,10 +224,11 @@ CI runs in tiers:
 
 | Workflow | When | What |
 |---|---|---|
-| `ci.yml` | every push | gofmt, vet, the short suite, the UI's typecheck, unit tests and build; on `main`, then publishes the all-in-one image as `main-<commit time>-<commit>` |
-| `helm.yml` | pushes that change the chart, the Dockerfile or the agent | the Helm chart in kind: a job in a container group, upgrade, backup and restore |
-| `compose.yml` | pushes that change Compose, the Dockerfile or the job helper | the all-in-one image with Compose: jobs as job users |
+| `ci.yml` | each push to `main` and each PR | gofmt, vet, the short suite, the UI's typecheck, unit tests and build, every action pinned to a commit; on `main`, then publishes the all-in-one image as `main-<commit time>-<commit>` |
+| `helm.yml` | pushes to `main` and PRs that change the chart, the Dockerfile or the agent | the Helm chart in kind: a job in a container group, upgrade, backup and restore |
+| `compose.yml` | pushes to `main` and PRs that change Compose, the Dockerfile or the job helper | the all-in-one image with Compose: jobs as job users |
 | `full.yml` | nightly, and by hand before a milestone closes (`gh workflow run full.yml`) | every Go test with the race detector, MinIO and Azurite; `helm.yml` and `compose.yml`; the compatibility suites (`compat.yml`), a job each |
+| `security.yml` | pushes to `main` that change the Go code or the UI's dependencies, and daily; the images daily and by hand | known vulnerabilities: govulncheck, `npm audit`, Trivy on both images, and their SBOMs ([Security scanning](docs/operations.md#security-scanning)) |
 | `bench.yml` | by hand | the [benchmarks against AWX](docs/benchmarks.md) |
 
 Licensed under the Apache License 2.0.

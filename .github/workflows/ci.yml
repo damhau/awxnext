@@ -1,10 +1,13 @@
 name: CI
 
-# Not for pushes that change only documentation, .gitignore or LICENSE:
-# nothing builds or tests them, except docs/configuration.md, which a test
-# compares with the settings it is generated from.
+# On pushes to main and on PRs (Dependabot's among them: a PR runs it once,
+# not again for the push to its branch). Not for changes to documentation,
+# .gitignore or LICENSE only: nothing builds or tests them, except
+# docs/configuration.md, which a test compares with the settings it is
+# generated from.
 on:
   push:
+    branches: [main]
     paths:
       - '**'
       - '!**.md'

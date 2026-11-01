@@ -1,11 +1,21 @@
 name: Compose
 
 # The all-in-one image with Compose (deploy/compose): jobs run as job users of
-# their own (internal/jobexec), tested by test/isolation. On pushes that change
-# the image, the Compose file or the job helper, and from full.yml. helm.yml
-# tests the chart.
+# their own (internal/jobexec), tested by test/isolation. On pushes to main and
+# PRs that change the image, the Compose file or the job helper, and from
+# full.yml. helm.yml tests the chart.
 on:
   push:
+    branches: [main]
+    paths:
+      - Dockerfile
+      - deploy/docker-entrypoint.sh
+      - deploy/compose/**
+      - internal/jobexec/**
+      - cmd/awxnext-jobexec/**
+      - test/isolation/**
+      - .github/workflows/compose.yml
+  pull_request:
     paths:
       - Dockerfile
       - deploy/docker-entrypoint.sh

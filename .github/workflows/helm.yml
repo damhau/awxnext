@@ -1,11 +1,21 @@
 name: Helm
 
 # The Helm chart in kind: install, a job in a container group, upgrade to two
-# replicas, backup and restore into a new release. On pushes that change the
-# chart, the image or what container group pods run (internal/agent), and
-# from full.yml. compose.yml tests the image with Compose.
+# replicas, backup and restore into a new release. On pushes to main and PRs
+# that change the chart, the image or what container group pods run
+# (internal/agent), and from full.yml. compose.yml tests the image with
+# Compose.
 on:
   push:
+    branches: [main]
+    paths:
+      - Dockerfile
+      - deploy/docker-entrypoint.sh
+      - deploy/helm/**
+      - internal/agent/**
+      - test/kind/**
+      - .github/workflows/helm.yml
+  pull_request:
     paths:
       - Dockerfile
       - deploy/docker-entrypoint.sh
