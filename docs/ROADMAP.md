@@ -32,7 +32,7 @@ be matched.
 | [M6 Operations and scale](#m6-operations-and-scale) | Run awxnext in production: policies, logging, Helm, backup, job isolation | 13 |
 | [M7 UI completeness](#m7-ui-completeness) | Every API feature reachable from the UI; the remaining UI goals | 17 |
 | [M8 Settings that make sense](#m8-settings-that-make-sense) | Settings laid out by task, without JSON or AWX's jargon; the settings API unchanged | 10 |
-| [M9 Security](#m9-security) | Known vulnerabilities in the code, the UI's dependencies and the images, found by CI | 1 |
+| [M9 Security](#m9-security) | Known vulnerabilities found by CI and fixed through reviewed PRs; `main` protected | 5 |
 
 ---
 
@@ -1165,7 +1165,9 @@ auto-deprovisioning on.
 
 **Exit:** CI checks awxnext's Go code, the UI's npm dependencies and both
 images for known vulnerabilities on every push and daily, and none that has
-a fix is left open.
+a fix is left open. GitHub's security features are on, the bots' changes
+reach `main` only through PRs that CI checks and the owner reviews, and
+Claude proposes a fix for what the daily scan finds.
 
 ### M9-01 Scan for known vulnerabilities
 **Labels:** chore, deploy · **Size:** M · [#104](https://github.com/damhau/awxnext/issues/104)
@@ -1182,6 +1184,63 @@ or accepted with its reason.
 
 **Done when:** `security.yml` is green on main, on a push and on a manual
 run that includes the image job, and the SBOMs are uploaded as an artifact.
+
+### M9-02 GitHub security features, Dependabot and pinned actions
+**Labels:** chore, deploy · **Size:** M · [#105](https://github.com/damhau/awxnext/issues/105)
+
+Dependabot alerts and security updates, private vulnerability reporting and
+CodeQL's default setup are turned on. `SECURITY.md` says what is supported
+(the latest `main` image), how to report (GitHub's **Report a
+vulnerability**, not an issue) and promises an acknowledgement within 7
+days. `dependabot.yml` updates Go modules, npm, actions and base images
+weekly, grouped by ecosystem. Every action in the workflows is pinned to a
+commit SHA. CodeQL's first findings are fixed, filed or dismissed with a
+reason.
+
+**Done when:** the four settings are on, Dependabot's first runs succeed,
+CodeQL's first analysis is triaged, every `uses:` is a SHA, and CI is green.
+
+### M9-03 Protect main: rulesets and code owners
+**Labels:** chore, deploy · **Size:** S · [#106](https://github.com/damhau/awxnext/issues/106)
+
+Two rulesets on `main`. One blocks force pushes and deletion for everyone.
+The other requires a PR, CI's checks and code owner review, with a bypass
+for the repository admin only. The owner, and Claude Code on the owner's
+machine, keep pushing to `main`; the Claude App and Dependabot go through
+PRs. CODEOWNERS gives the owner `.trivyignore`, `.github/` and
+`SECURITY.md`. A required check reports on every PR, docs-only ones
+included.
+
+**Done when:** the API lists the rules, the owner's push goes through on the
+bypass, and a Dependabot PR waits for the required checks.
+
+### M9-04 Claude proposes fixes for what the scans find
+**Labels:** chore, deploy · **Size:** M · [#107](https://github.com/damhau/awxnext/issues/107)
+
+When a daily or manual `security.yml` run fails, an `autofix` job gives the
+failed log to Claude (`anthropics/claude-code-action`, the owner's
+subscription token). Claude classifies the failure and applies the smallest
+fix. It reruns `make test` and the scanner, then opens a draft PR labelled
+`security-fix`, or an issue when it cannot fix it. It never edits
+`.trivyignore`, `.github/` or `SECURITY.md`, never merges and never
+suppresses a finding. A guard check run from `pull_request_target` enforces
+the protected paths, and is required. Needs the Claude GitHub App on
+`awxnext` and the `CLAUDE_CODE_OAUTH_TOKEN` secret, from the owner.
+
+**Done when:** `security.yml` stays green with autofix skipped when the
+scans pass, and the guard reports on PRs and is required.
+
+### M9-05 Test the autofix loop end to end
+**Labels:** chore, deploy · **Size:** S · [#108](https://github.com/damhau/awxnext/issues/108)
+
+On a test branch, a Go module is downgraded to a version with a reachable
+vulnerability. The scan fails, autofix opens a draft PR from the App, CI
+and the guard run on it, and a second run skips. A negative test asks for a
+`.trivyignore` entry and the guard fails it. Then the test branch and PRs
+are deleted.
+
+**Done when:** each step above holds, the negative test is red, and nothing
+from the test is left on GitHub.
 
 ---
 
@@ -1231,6 +1290,19 @@ Taken on 2026-11-01:
 
 10. M9 Security is added, starting with vulnerability scanning in CI on the
     model of rvav's `security.yml`.
+11. M9 grows into a hardening plan (M9-02 to M9-05):
+    - GitHub's security features and SHA-pinned actions;
+    - rulesets on `main` with a bypass for the repository admin only, so
+      the owner and local Claude Code keep pushing to `main` while the
+      Claude App and Dependabot go through PRs;
+    - code owner review on `.github/`, `.trivyignore` and `SECURITY.md`;
+    - a Claude autofix job on the owner's subscription token, with a CI
+      guard on the paths it must not touch.
+
+    `SECURITY.md` promises an acknowledgement within 7 days. After M9-05,
+    autofix runs for 3 to 4 weeks, and each run is recorded (trigger, PR or
+    issue, merged as is, edited or closed, cost) to decide whether to keep
+    it.
 
 ## On GitHub
 
@@ -1239,5 +1311,5 @@ one milestone per section, and one issue per task (#1 to #80), each with a
 **Done when** checklist (one box per lookup for M4-07). M2-14 to M2-26
 (#81 to #93) were added on 2026-10-28 from the compatibility harness's first
 runs. M8 (#94 to #102) was added on 2026-10-31, and M8-10 (#103) the same day, from the permanent instance. M9 (#104) was added on
-2026-11-01. This file stays the index;
+2026-11-01, and M9-02 to M9-05 (#105 to #108) the same day. This file stays the index;
 when a task changes, change its issue too.
