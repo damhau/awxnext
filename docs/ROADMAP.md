@@ -32,6 +32,7 @@ be matched.
 | [M6 Operations and scale](#m6-operations-and-scale) | Run awxnext in production: policies, logging, Helm, backup, job isolation | 13 |
 | [M7 UI completeness](#m7-ui-completeness) | Every API feature reachable from the UI; the remaining UI goals | 17 |
 | [M8 Settings that make sense](#m8-settings-that-make-sense) | Settings laid out by task, without JSON or AWX's jargon; the settings API unchanged | 10 |
+| [M9 Security](#m9-security) | Known vulnerabilities in the code, the UI's dependencies and the images, found by CI | 1 |
 
 ---
 
@@ -1160,6 +1161,30 @@ auto-deprovisioning on.
 
 ---
 
+## M9 Security
+
+**Exit:** CI checks awxnext's Go code, the UI's npm dependencies and both
+images for known vulnerabilities on every push and daily, and none that has
+a fix is left open.
+
+### M9-01 Scan for known vulnerabilities
+**Labels:** chore, deploy · **Size:** M · [#104](https://github.com/damhau/awxnext/issues/104)
+
+Nothing checks awxnext for known vulnerabilities. As in rvav, the Makefile
+gets `vuln-go` (govulncheck, which reports only what the code reaches),
+`vuln-web` (`npm audit` in `ui/`), `vuln-images` (Trivy on `awxnext` and
+`awxnext-all-in-one`: no HIGH or CRITICAL vulnerability that has a fix) and
+`sbom` (CycloneDX SBOMs of both images and of the UI's npm dependencies),
+each tool pinned. A `security.yml` workflow runs the Go and UI checks on
+every push to main and daily, and the images and SBOMs daily and by hand,
+since building both images takes minutes. What the first runs find is fixed,
+or accepted with its reason.
+
+**Done when:** `security.yml` is green on main, on a push and on a manual
+run that includes the image job, and the SBOMs are uploaded as an artifact.
+
+---
+
 ## Proposed out of scope
 
 These stay out unless you want any of them back:
@@ -1202,11 +1227,17 @@ Taken on 2026-10-31:
    settings out by task; the settings API keeps AWX's categories, keys and
    labels, so its clients are unaffected.
 
+Taken on 2026-11-01:
+
+10. M9 Security is added, starting with vulnerability scanning in CI on the
+    model of rvav's `security.yml`.
+
 ## On GitHub
 
 Created on 2026-10-27 on `damhau/awxnext`: the type, area and size labels,
 one milestone per section, and one issue per task (#1 to #80), each with a
 **Done when** checklist (one box per lookup for M4-07). M2-14 to M2-26
 (#81 to #93) were added on 2026-10-28 from the compatibility harness's first
-runs. M8 (#94 to #102) was added on 2026-10-31, and M8-10 (#103) the same day, from the permanent instance. This file stays the index;
+runs. M8 (#94 to #102) was added on 2026-10-31, and M8-10 (#103) the same day, from the permanent instance. M9 (#104) was added on
+2026-11-01. This file stays the index;
 when a task changes, change its issue too.
