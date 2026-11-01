@@ -26,9 +26,12 @@ RUN pkg=github.com/damhau/awxnext/internal/version \
 # installs and for trying awxnext out.
 FROM python:3.12-slim-bookworm AS all-in-one
 COPY --from=ghcr.io/astral-sh/uv:0.13.5 /uv /usr/local/bin/uv
-# PostgreSQL 16's client tools (pg_dump, pg_restore) for awxnext backup and
-# restore, from the PostgreSQL project's repository: Debian's are version 15.
+# Debian's security fixes as soon as they are published, not when the base
+# image is next rebuilt (security.yml scans the image daily). PostgreSQL 16's
+# client tools (pg_dump, pg_restore) for awxnext backup and restore, from the
+# PostgreSQL project's repository: Debian's are version 15.
 RUN apt-get update \
+	&& apt-get upgrade -y \
 	&& apt-get install -y --no-install-recommends git openssh-client sshpass ca-certificates curl gnupg libcap2-bin \
 	&& curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmor -o /usr/share/keyrings/pgdg.gpg \
 	&& echo "deb [signed-by=/usr/share/keyrings/pgdg.gpg] http://apt.postgresql.org/pub/repos/apt bookworm-pgdg main" > /etc/apt/sources.list.d/pgdg.list \

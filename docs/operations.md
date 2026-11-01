@@ -426,3 +426,38 @@ Only three settings with no effect, whose shape is free-form, are still JSON:
   logstash, Splunk, Loggly, Sumo Logic or any HTTPS, TCP or UDP receiver (Settings, Logging).
 - **Instance health:** the Instances page, `awxnext list-instances`, and
   `/api/v2/instances/N/health_check/`.
+
+## Security scanning
+
+CI checks awxnext for known vulnerabilities ([security.yml](../.github/workflows/security.yml)),
+with the scanners pinned in the [Makefile](../Makefile):
+
+- **Go code** (`make vuln-go`): govulncheck, which reports only the vulnerabilities the code
+  reaches, in its modules and in the standard library of the Go that builds it (the
+  `toolchain` line of `go.mod`).
+- **UI dependencies** (`make vuln-web`): `npm audit` in `ui/`, build and test tools included.
+- **Images** (`make vuln-images`): both images built, then scanned with Trivy: Debian packages,
+  the all-in-one image's Python packages (ansible-core, ansible-runner and theirs), and the Go
+  modules and standard library of the binaries. Any HIGH or CRITICAL vulnerability that has a
+  fix fails the scan.
+- **SBOMs** (`make sbom`): CycloneDX SBOMs in `sbom/`, one for each image and one for the UI's
+  npm dependencies. The images hold the UI as built files, which neither the image scan nor
+  the image SBOMs see; the UI's SBOM lists the packages built into it (its `dependencies`,
+  not the build and test tools).
+
+The Go and UI checks run on each push to main that changes the Go code or the UI's
+dependencies, and daily; building both images takes minutes, so they and the SBOMs run daily
+and by hand: Actions, Security, Run workflow, or `gh workflow run security.yml`. The daily run
+catches a vulnerability published since the last push. Each image run uploads the SBOMs as its
+`sbom` artifact (`gh run download <run id> -n sbom`).
+
+`make vuln` runs the three scans locally (the images need Docker; Trivy keeps its database in
+the `awxnext-trivy-cache` volume). When one fails:
+
+- **Upgrade** what has the fix: the Go module (`go get`), the npm package, Go itself (the
+  `toolchain` line of `go.mod`; the Dockerfile's `golang:1.26` takes the latest patch release),
+  or a base image. The all-in-one image upgrades its Debian packages as it builds, so Debian's
+  fixes reach the next build.
+- **Accept** an image finding that cannot be fixed or does not apply by adding its ID to
+  [.trivyignore](../.trivyignore), with the reason and an expiry date (`CVE-2026-12345
+  exp:2027-01-31`), after which it fails the scan again.

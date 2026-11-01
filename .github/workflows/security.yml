@@ -1,0 +1,62 @@
+name: Security
+
+# Known vulnerabilities (docs/operations.md, "Security scanning"): the Go code
+# and the UI's npm dependencies on every push to main that changes them, and
+# daily; both images, with their SBOMs, daily and by hand (Run workflow, or
+# gh workflow run security.yml before a milestone closes). The daily run
+# catches a vulnerability published since the last push.
+on:
+  push:
+    branches: [main]
+    paths:
+      - '**.go'
+      - 'go.mod'
+      - 'go.sum'
+      - 'ui/package.json'
+      - 'ui/package-lock.json'
+      - 'Makefile'
+      - '.github/workflows/security.yml'
+  schedule:
+    - cron: "17 5 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  go:
+    name: Go code (govulncheck)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: make vuln-go
+
+  ui:
+    name: UI dependencies (npm audit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: make vuln-web
+
+  # Building both images takes minutes: daily and by hand, not on each push.
+  # The SBOMs are uploaded before the scan, so a failing scan still has them.
+  images:
+    name: Images (Trivy) and SBOMs
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: make images
+      - run: make sbom
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: sbom/
+          if-no-files-found: error
+      - run: make vuln-images

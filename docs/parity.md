@@ -223,3 +223,4 @@ The gaps fall in four groups:
 - Push-based execution for remote nodes and container groups; job event archive.
 - OIDC bearer JWTs, regex group rules and mapping dry-run; a dry run of every login's organization and team maps, LDAP's and SAML's included; connection tests of LDAP, OIDC and SAML with unsaved settings.
 - Generic webhooks with JSONPath mapping; OpenAPI document; OpenTelemetry traces.
+- Known vulnerabilities checked in CI: govulncheck on the Go code and `npm audit` on the UI's dependencies on each push that changes them and daily, Trivy on both images daily (no HIGH or CRITICAL with a fix), with CycloneDX SBOMs of both images and of the UI's npm dependencies ([Security scanning](operations.md#security-scanning)).

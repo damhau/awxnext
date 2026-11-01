@@ -3,6 +3,7 @@ node_modules/
 ui/dist/
 *.local
 compat-report/
+/sbom/
 
 # Local tooling, not part of the project: the agent's settings and browser
 # snapshots, and the empty read-only dotfiles its sandbox places at the root.

@@ -31,9 +31,11 @@ Run the tests of what you changed, and nothing else: CI runs the rest on push.
 - **Workflows, Compose, docs:** check that the file parses; there is nothing to run locally.
   A workflow is tested by its first run. A new setting or environment variable is Go code:
   `make test` checks `docs/configuration.md` and `config.Vars`.
-- **Before a milestone closes:** `gh workflow run full.yml`. It also runs nightly. It runs every
-  Go test with the race detector, the chart and image tests, and the compat suites.
-  `make test-full` is the local Go part of it.
+- **Before a milestone closes:** `gh workflow run full.yml` and `gh workflow run security.yml`.
+  Both also run nightly. full.yml runs every Go test with the race detector, the chart and
+  image tests, and the compat suites; `make test-full` is the local Go part of it. A manual
+  security.yml run also builds and scans both images and uploads their SBOMs (the image job
+  does not run on push); `make vuln` is its local equivalent.
 
 Writing and running Go tests:
 
@@ -56,6 +58,9 @@ CI and the browser:
     instance (the `awxnext` app in damhau/k8s-argocd), so a green push to main goes live.
   - `helm.yml` (the chart in kind) runs when the chart, the Dockerfile or the agent change;
     `compose.yml` (the image with Compose) when Compose, the Dockerfile or the job helper do.
+  - `security.yml` (known vulnerabilities: govulncheck, `npm audit`) runs on a push to main
+    that changes Go code, `go.mod`, `go.sum` or the UI's package files. A vulnerability with a
+    fix fails it: upgrade the dependency (docs/operations.md, "Security scanning").
 - **Checking the UI in a browser:** use the compat stack at http://localhost:8053
   (`admin` / `compat`), started with the UI override:
 

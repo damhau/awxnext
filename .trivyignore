@@ -1,0 +1,3 @@
+# Vulnerabilities accepted in the images (make vuln-images, security.yml):
+# one ID per line, each with the reason it is accepted and when to look again
+# (Trivy's `exp:YYYY-MM-DD` after the ID ends the exception on that date).
