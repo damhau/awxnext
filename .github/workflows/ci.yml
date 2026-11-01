@@ -7,11 +7,8 @@ name: CI
 # not run it: nothing builds or tests them, except docs/configuration.md,
 # which a test compares with the settings it is generated from.
 #
-# Every PR runs it, whatever it changes. The go, ui and "Actions pinned to
-# commits" jobs are required checks of main's "main: pull requests" ruleset
-# (docs/operations.md, "Protecting main"), and a required check that never
-# reports leaves the PR waiting for ever. Renaming one of these jobs means
-# updating the ruleset.
+# Every PR runs it, whatever it changes, docs included: the owner merges a PR
+# on its result, so each one gets one.
 on:
   push:
     branches: [main]

@@ -53,9 +53,7 @@ CI and the browser:
 
 - **CI on push:**
   - `ci.yml` runs on every push that changes more than docs, `.gitignore` or `LICENSE`, and on
-    every PR: the short suite and the UI. Its `go`, `ui` and `Actions pinned to commits` jobs
-    are the PRs' required checks; renaming one means updating the ruleset. On main, it then
-    publishes the all-in-one image as
+    every PR: the short suite and the UI. On main, it then publishes the all-in-one image as
     `main-<commit time>-<commit>`. Argo CD Image Updater deploys that image to the permanent
     instance (the `awxnext` app in damhau/k8s-argocd), so a green push to main goes live.
   - `helm.yml` (the chart in kind) runs when the chart, the Dockerfile or the agent change;
@@ -92,11 +90,8 @@ CI and the browser:
 ## Git
 
 - Commit on `main`, with no Claude or co-author trailers.
-- `main` is protected by two rulesets (docs/operations.md, "Protecting main"). Nobody can
-  force-push or delete it: undo with a new commit. Changes otherwise go through a PR with CI's
-  checks and code owner review, except the owner's pushes, which go through the repository
-  admin's bypass, and so do Claude Code's on the owner's machine (`git push` lists the rules
-  bypassed). The Claude GitHub App and Dependabot go through PRs, which the owner merges.
+- `main` has no branch protection: pushes, the owner's and Claude Code's, go straight to it,
+  and each green push deploys. Dependabot opens PRs, which the owner merges.
 - Stage explicit paths, never `git add -A`. The dotfiles at the root (`.bashrc`, `.claude/`,
   `.idea`, `.mcp.json`, `.playwright-mcp/`...) are not part of the project; `.gitignore` lists
   them.

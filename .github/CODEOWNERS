@@ -1,8 +1,0 @@
-# Code owners (docs/operations.md, "Protecting main"). A PR that changes one
-# of these paths needs the owner's approval before it can merge: the
-# workflows, Dependabot's settings and this file, the image scan's accepted
-# findings, and the security policy. Neither Dependabot nor the Claude App can
-# change them on their own.
-/.github/     @damhau
-/.trivyignore @damhau
-/SECURITY.md  @damhau

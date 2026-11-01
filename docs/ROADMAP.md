@@ -32,7 +32,7 @@ be matched.
 | [M6 Operations and scale](#m6-operations-and-scale) | Run awxnext in production: policies, logging, Helm, backup, job isolation | 13 |
 | [M7 UI completeness](#m7-ui-completeness) | Every API feature reachable from the UI; the remaining UI goals | 17 |
 | [M8 Settings that make sense](#m8-settings-that-make-sense) | Settings laid out by task, without JSON or AWX's jargon; the settings API unchanged | 10 |
-| [M9 Security](#m9-security) | Known vulnerabilities found by CI and fixed through reviewed PRs; `main` protected | 6 |
+| [M9 Security](#m9-security) | Known vulnerabilities found by CI and fixed through reviewed PRs | 5 |
 
 ---
 
@@ -1182,8 +1182,9 @@ auto-deprovisioning on.
 **Exit:** CI checks awxnext's Go code, the UI's npm dependencies and both
 images for known vulnerabilities on every push and daily, and none that has
 a fix is left open. GitHub's security features are on, the bots' changes
-reach `main` only through PRs that CI checks and the owner reviews, and
-Claude proposes a fix for what the daily scan finds.
+come as PRs that CI checks and the owner reviews and merges, and Claude
+proposes a fix for what the daily scan finds. `main` has no branch
+protection (M9-03 dropped on 2026-11-01, see Proposed out of scope).
 
 ### M9-01 Scan for known vulnerabilities
 **Labels:** chore, deploy · **Size:** M · [#104](https://github.com/damhau/awxnext/issues/104)
@@ -1215,20 +1216,6 @@ reason.
 
 **Done when:** the four settings are on, Dependabot's first runs succeed,
 CodeQL's first analysis is triaged, every `uses:` is a SHA, and CI is green.
-
-### M9-03 Protect main: rulesets and code owners
-**Labels:** chore, deploy · **Size:** S · [#106](https://github.com/damhau/awxnext/issues/106)
-
-Two rulesets on `main`. One blocks force pushes and deletion for everyone.
-The other requires a PR, CI's checks and code owner review, with a bypass
-for the repository admin only. The owner, and Claude Code on the owner's
-machine, keep pushing to `main`; the Claude App and Dependabot go through
-PRs. CODEOWNERS gives the owner `.trivyignore`, `.github/` and
-`SECURITY.md`. A required check reports on every PR, docs-only ones
-included.
-
-**Done when:** the API lists the rules, the owner's push goes through on the
-bypass, and a Dependabot PR waits for the required checks.
 
 ### M9-04 Claude proposes fixes for what the scans find
 **Labels:** chore, deploy · **Size:** M · [#107](https://github.com/damhau/awxnext/issues/107)
@@ -1294,6 +1281,7 @@ These stay out unless you want any of them back:
 | Slack, PagerDuty, Twilio, Grafana, IRC, Mattermost, Rocket.Chat and AWS SNS notifications | Email and webhook cover the need. Left out by decision on 2026-10-27. |
 | Browser tests in CI | UI logic is covered by Vitest. Left out by decision on 2026-10-27. |
 | Subversion projects (was M4-09, #40) | Not needed. Left out by decision on 2026-10-29. |
+| Rulesets and code owners on `main` (was M9-03, #106) | awxnext is personal code, and secubot's PRs, opened with `GITHUB_TOKEN`, start no CI, so required checks would wait for ever. Left out by decision on 2026-11-01. |
 
 ## Decisions
 
@@ -1327,8 +1315,9 @@ Taken on 2026-11-01:
     - GitHub's security features and SHA-pinned actions;
     - rulesets on `main` with a bypass for the repository admin only, so
       the owner and local Claude Code keep pushing to `main` while the
-      Claude App and Dependabot go through PRs;
-    - code owner review on `.github/`, `.trivyignore` and `SECURITY.md`;
+      Claude App and Dependabot go through PRs (withdrawn, Decision 14);
+    - code owner review on `.github/`, `.trivyignore` and `SECURITY.md`
+      (withdrawn, Decision 14);
     - a Claude autofix job on the owner's subscription token, with a CI
       guard on the paths it must not touch.
 
@@ -1352,15 +1341,15 @@ Taken on 2026-11-01:
     checks the right to add a credential type: any signed-in user may create
     a personal credential, so "the right to create a credential" would have
     refused no one. Others test a saved credential at `credentials/N/test/`.
-14. `ci.yml` runs on every PR, whatever it changes, and its `go`, `ui` and
-    `Actions pinned to commits` jobs are `main`'s required checks (M9-03).
-    A paths filter would leave a docs-only PR waiting for ever on a check
-    that never reports; an always-running gate job that skips the others
-    would save a few minutes on PRs that are few and come from bots, at the
-    cost of logic that, if wrong, passes a PR it should have checked. A push
-    to `main` that changes only docs still skips CI. A new push to a PR
-    dismisses the code owner's approval; the PR need not be up to date with
-    `main`, which the owner's direct pushes move often.
+14. `main` has no branch protection: M9-03 (#106) is dropped. Its two
+    rulesets were created, then removed by the owner the same day, along
+    with CODEOWNERS, which nothing enforces without them. awxnext is
+    personal code, and secubot's PRs, opened with the workflow's
+    `GITHUB_TOKEN`, start no CI (GitHub runs no workflow on that token's
+    events), so they would wait for ever on required checks. Pushes go
+    straight to `main`; Dependabot's PRs are reviewed and merged by the
+    owner. `ci.yml` still runs on every PR, whatever it changes, docs
+    included.
 
 ## On GitHub
 

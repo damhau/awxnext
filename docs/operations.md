@@ -547,9 +547,9 @@ Dockerfile's base images ([dependabot.yml](../.github/dependabot.yml)):
   the UI, in the Dockerfile and in the workflows' `node-version`, and they move together, by
   hand. `npm audit` still reports the UI's vulnerabilities daily.
 
-CI runs on each PR, and the owner reviews and merges them once its checks pass, approving
-those that change `.github/` ([Protecting main](#protecting-main)). The PRs carry the
-`dependencies` label.
+CI runs on each PR, whatever it changes, and the owner reviews and merges them. `main` has no
+branch protection: the owner's pushes go straight to it, and nothing but the owner's review
+stands between a PR and `main`. The PRs carry the `dependencies` label.
 
 The Dockerfile's base images keep floating tags (`golang:1.26`, `node:22`,
 `python:3.12-slim-bookworm`, distroless's `static-debian12:nonroot`), not digests. Each build
@@ -579,42 +579,6 @@ comment together. To add an action,
 look up the commit of its release, `gh api repos/<owner>/<action>/commits/<version> --jq
 .sha`, or pin it with [pinact](https://github.com/suzuki-shunsuke/pinact). CI fails on an
 action used by tag (`make pinned-actions`).
-
-### Protecting main
-
-Each green push to `main` builds the image that goes live, so two rulesets protect it
-(Settings, Rules, Rulesets):
-
-- **"main: history":** no force push and no deletion of `main`, for anyone, the owner
-  included. There is no bypass; a mistake is undone by a new commit.
-- **"main: pull requests":** a change reaches `main` through a pull request, and merges once
-  CI's required checks pass (`go`, `ui` and `Actions pinned to commits`, the jobs of
-  [ci.yml](../.github/workflows/ci.yml)) and, when it changes a path that has a code owner, the
-  code owner has approved it. No other approval is required, as the owner is the only
-  maintainer. A new push to the PR dismisses an approval given before it. The PR need not be
-  up to date with `main`.
-
-Only the repository admin role bypasses the second ruleset, always: the owner pushes straight
-to `main`, and so does Claude Code on the owner's machine, which pushes with the owner's
-credentials. `git push` then lists the rules it bypassed. Apps have no bypass: Dependabot, and
-the Claude GitHub App, go through PRs. The admin can still merge a PR whose checks have not
-passed; GitHub asks first.
-
-[CODEOWNERS](../.github/CODEOWNERS) gives the owner `.github/` (the workflows, Dependabot's
-settings and CODEOWNERS itself), [.trivyignore](../.trivyignore) and
-[SECURITY.md](../SECURITY.md): what decides how changes are checked, which scan findings are
-accepted, and how vulnerabilities are reported. A PR that changes them waits for the owner's
-approval.
-
-Every PR runs CI, whatever it changes, docs included: a required check that never reports
-would leave the PR waiting for ever. A push to `main` that changes only documentation still
-skips it. The required checks are named by job, so renaming one of those jobs means updating
-the ruleset. To read the rules that apply to `main`:
-
-```sh
-gh api repos/damhau/awxnext/rules/branches/main
-gh api repos/damhau/awxnext/rulesets
-```
 
 ### Reporting a vulnerability
 
