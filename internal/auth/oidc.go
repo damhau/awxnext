@@ -187,7 +187,8 @@ func (o *OIDC) complete(c *api.Ctx, w http.ResponseWriter, r *http.Request) {
 		o.fail(w, r, "Login session expired, please try again.", err)
 		return
 	}
-	http.SetCookie(w, &http.Cookie{Name: stateCookie, Value: "", Path: "/sso/", MaxAge: -1})
+	http.SetCookie(w, &http.Cookie{Name: stateCookie, Value: "", Path: "/sso/", HttpOnly: true,
+		Secure: r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https", SameSite: http.SameSiteLaxMode, MaxAge: -1})
 	raw, _ := url.QueryUnescape(ck.Value)
 	plain, err := o.app.Crypto.Decrypt(raw)
 	var st loginState

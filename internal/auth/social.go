@@ -419,7 +419,8 @@ func (s *Social) complete(c *api.Ctx, w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, name, "Login session expired, please try again.", err)
 		return
 	}
-	http.SetCookie(w, &http.Cookie{Name: socialStateCookie, Value: "", Path: "/sso/", MaxAge: -1})
+	http.SetCookie(w, &http.Cookie{Name: socialStateCookie, Value: "", Path: "/sso/", HttpOnly: true,
+		Secure: r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https", SameSite: http.SameSiteLaxMode, MaxAge: -1})
 	raw, _ := url.QueryUnescape(ck.Value)
 	plain, err := s.auth.app.Crypto.Decrypt(raw)
 	var st socialState

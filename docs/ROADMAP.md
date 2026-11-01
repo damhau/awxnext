@@ -32,7 +32,7 @@ be matched.
 | [M6 Operations and scale](#m6-operations-and-scale) | Run awxnext in production: policies, logging, Helm, backup, job isolation | 13 |
 | [M7 UI completeness](#m7-ui-completeness) | Every API feature reachable from the UI; the remaining UI goals | 17 |
 | [M8 Settings that make sense](#m8-settings-that-make-sense) | Settings laid out by task, without JSON or AWX's jargon; the settings API unchanged | 10 |
-| [M9 Security](#m9-security) | Known vulnerabilities found by CI and fixed through reviewed PRs; `main` protected | 5 |
+| [M9 Security](#m9-security) | Known vulnerabilities found by CI and fixed through reviewed PRs; `main` protected | 6 |
 
 ---
 
@@ -1242,6 +1242,23 @@ are deleted.
 **Done when:** each step above holds, the negative test is red, and nothing
 from the test is left on GitHub.
 
+### M9-06 Keep credential lookups from sending awxnext's own identity
+**Labels:** security, credentials · **Size:** M · [#120](https://github.com/damhau/awxnext/issues/120)
+
+Found by CodeQL's first analysis (M9-02). A HashiCorp Vault lookup with
+`kubernetes_role` posts the pod's service account token to the Vault URL in
+the credential's inputs, and an Azure Key Vault lookup without a secret
+posts the workload identity's federated token to the `authority_host`
+input. Any signed-in user can run a lookup with their own inputs through
+`credential_types/N/test/`, which checks no permission. The server's own
+identity is used only when an administrator allows it, towards the hosts
+they list; testing a type needs the right to create a credential of it; and
+lookups refuse loopback and link-local addresses unless allowed.
+
+**Done when:** no lookup sends awxnext's token to a host an administrator
+has not listed, the type test refuses a user who cannot create credentials,
+CodeQL's alerts 15 to 17 are closed, and CI is green.
+
 ---
 
 ## Proposed out of scope
@@ -1316,5 +1333,6 @@ one milestone per section, and one issue per task (#1 to #80), each with a
 **Done when** checklist (one box per lookup for M4-07). M2-14 to M2-26
 (#81 to #93) were added on 2026-10-28 from the compatibility harness's first
 runs. M8 (#94 to #102) was added on 2026-10-31, and M8-10 (#103) the same day, from the permanent instance. M9 (#104) was added on
-2026-11-01, and M9-02 to M9-05 (#105 to #108) the same day. This file stays the index;
+2026-11-01, M9-02 to M9-05 (#105 to #108) the same day, and M9-06 (#120)
+from CodeQL's first analysis. This file stays the index;
 when a task changes, change its issue too.

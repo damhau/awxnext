@@ -496,7 +496,9 @@ CodeQL's default setup (a repository setting, with no workflow file) analyzes th
 UI's TypeScript, the Python scripts and the workflows on each push to main, on each PR and
 weekly. Its findings are under Security, Code scanning. Each one is fixed, filed as an issue
 (labelled `security` when it gives access or rights a user should not have, `bug`
-otherwise), or dismissed with the reason (a false positive, or code used only in tests).
+otherwise), or dismissed with the reason: a false positive, or behaviour that is meant, such
+as a notification's `disable_ssl_verification`. An alert that an issue tracks stays open until
+the fix closes it.
 
 ### Pinned actions
 

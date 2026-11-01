@@ -24,6 +24,10 @@ on:
       - '!LICENSE'
       - 'docs/configuration.md'
 
+# The GITHUB_TOKEN reads the repository, nothing more, unless a job asks.
+permissions:
+  contents: read
+
 jobs:
   # The short suite (go test -short, no race detector): what each change
   # needs. full.yml runs everything nightly and before a milestone closes.

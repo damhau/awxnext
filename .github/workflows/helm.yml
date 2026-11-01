@@ -26,6 +26,10 @@ on:
   workflow_call:
   workflow_dispatch:
 
+# The GITHUB_TOKEN reads the repository, nothing more, unless a job asks.
+permissions:
+  contents: read
+
 jobs:
   # The Helm chart in kind: install, a job in a container group, upgrade
   # (to two replicas, through the migration job), the job again.

@@ -135,7 +135,8 @@ type Action struct {
 	Name    string
 	Methods []string
 	Handler func(c *Ctx, w http.ResponseWriter, r *http.Request, obj Obj)
-	// Perm required on the object, defaults to "view" for GET and "change" otherwise.
+	// Perm, when set, is required on the object. Without it the router only
+	// checks that the user can see the object: the handler checks the rest.
 	Perm string
 }
 

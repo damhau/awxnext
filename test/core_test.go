@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -361,6 +362,33 @@ func TestSessionLoginCSRF(t *testing.T) {
 		t.Fatalf("expected 201 with CSRF, got %d", res.StatusCode)
 	}
 	res.Body.Close()
+}
+
+// The form login sends the browser to next only when it is a path on this
+// server: "/\host" and "/<tab>/host" are read as "//host" by browsers.
+func TestSessionLoginNext(t *testing.T) {
+	setup(t)
+	c := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	for next, want := range map[string]string{
+		"/#/templates":       "/#/templates",
+		"/api/v2/me/":        "/api/v2/me/",
+		"":                   "/api/",
+		"https://evil.test/": "/api/",
+		"//evil.test/":       "/api/",
+		`/\evil.test/`:       "/api/",
+		"/\t/evil.test/":     "/api/",
+		"/\n/evil.test/":     "/api/",
+	} {
+		form := url.Values{"username": {"admin"}, "password": {"admin"}, "next": {next}}
+		res, err := c.PostForm(srv.URL+"/api/login/", form)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res.Body.Close()
+		if res.StatusCode != http.StatusFound || res.Header.Get("Location") != want {
+			t.Errorf("next %q: %d to %q, want %q", next, res.StatusCode, res.Header.Get("Location"), want)
+		}
+	}
 }
 
 func TestSettings(t *testing.T) {

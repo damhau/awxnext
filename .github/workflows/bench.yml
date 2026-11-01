@@ -18,6 +18,10 @@ on:
         description: small jobs launched
         default: "50"
 
+# The GITHUB_TOKEN reads the repository, nothing more, unless a job asks.
+permissions:
+  contents: read
+
 jobs:
   bench:
     runs-on: ubuntu-latest

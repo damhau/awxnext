@@ -397,13 +397,28 @@ func (a *Auth) login(c *api.Ctx, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if isForm {
-		if next == "" || !strings.HasPrefix(next, "/") || strings.HasPrefix(next, "//") {
+		if !localPath(next) {
 			next = "/api/"
 		}
 		http.Redirect(w, r, next, http.StatusFound)
 		return
 	}
 	api.WriteJSON(w, 200, api.Obj{})
+}
+
+// localPath reports whether a browser sent to next after login stays on this
+// server: a path, not "//host" or "/\host" (which browsers read as "//host"),
+// and no control characters, which browsers drop ("/\t/host").
+func localPath(next string) bool {
+	if next == "" || next[0] != '/' || len(next) > 1 && (next[1] == '/' || next[1] == '\\') {
+		return false
+	}
+	for _, c := range next {
+		if c < 0x20 || c == 0x7f {
+			return false
+		}
+	}
+	return true
 }
 
 func (a *Auth) logout(c *api.Ctx, w http.ResponseWriter, r *http.Request) {

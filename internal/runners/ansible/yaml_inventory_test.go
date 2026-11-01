@@ -58,16 +58,33 @@ all:
 
 func TestExpandHostPattern(t *testing.T) {
 	cases := map[string]string{
-		"plain":          "[plain]",
-		"web[1:3]":       "[web1 web2 web3]",
-		"web[01:03].lan": "[web01.lan web02.lan web03.lan]",
-		"n[0:6:3]":       "[n0 n3 n6]",
-		"r[a:b]-[1:2]":   "[ra-1 ra-2 rb-1 rb-2]",
+		"plain":                      "[plain]",
+		"web[1:3]":                   "[web1 web2 web3]",
+		"web[01:03].lan":             "[web01.lan web02.lan web03.lan]",
+		"n[0:6:3]":                   "[n0 n3 n6]",
+		"r[a:b]-[1:2]":               "[ra-1 ra-2 rb-1 rb-2]",
+		"c[a:z:20]":                  "[ca cu]",
+		"c[x:z:300]":                 "[cx]",
+		"c[a:z:9223372036854775807]": "[ca]",
 	}
 	for in, want := range cases {
 		got, err := expandHostPattern(in)
 		if err != nil || fmt.Sprint(got) != want {
 			t.Errorf("%s: %v %v", in, got, err)
 		}
+	}
+	// Too many hosts fail before they are made, in one range or in ranges
+	// that multiply, and bounds near the largest int neither overflow nor
+	// loop.
+	for _, in := range []string{"web[0:999999999999]", "web[0:100000]", "a[0:999]-b[0:999]", "web[0:9223372036854775807]"} {
+		if got, err := expandHostPattern(in); err == nil {
+			t.Errorf("%s: %d hosts, no error", in, len(got))
+		}
+	}
+	if got, err := expandHostPattern("w[9223372036854775806:9223372036854775807:9223372036854775807]"); err != nil || fmt.Sprint(got) != "[w9223372036854775806]" {
+		t.Errorf("largest bounds: %v %v", got, err)
+	}
+	if got, err := expandHostPattern("web[1:100000]"); err != nil || len(got) != maxRangeHosts {
+		t.Errorf("web[1:100000]: %d hosts, %v", len(got), err)
 	}
 }

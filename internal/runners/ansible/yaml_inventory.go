@@ -134,6 +134,9 @@ func contains(list []string, s string) bool {
 
 var hostRange = regexp.MustCompile(`\[([0-9a-zA-Z]+):([0-9a-zA-Z]+)(?::([0-9]+))?\]`)
 
+// maxRangeHosts bounds the hosts a pattern expands to.
+const maxRangeHosts = 100000
+
 // expandHostPattern expands Ansible host ranges such as web[01:10] or db-[a:c].
 func expandHostPattern(p string) ([]string, error) {
 	loc := hostRange.FindStringSubmatchIndex(p)
@@ -159,25 +162,31 @@ func expandHostPattern(p string) ([]string, error) {
 		if err2 != nil || b < a {
 			return nil, fmt.Errorf("host range %q: invalid bounds", p)
 		}
+		// Counted before expanding, so that web[0:999999999999] fails rather
+		// than filling the memory, and a+k*step stays within b.
+		if (b-a)/step >= maxRangeHosts {
+			return nil, fmt.Errorf("host range %q expands to too many hosts", p)
+		}
+		n := (b-a)/step + 1
 		width := 0
 		if strings.HasPrefix(from, "0") && len(from) > 1 {
 			width = len(from)
 		}
-		for i := a; i <= b; i += step {
-			items = append(items, fmt.Sprintf("%0*d", width, i))
+		for k := 0; k < n; k++ {
+			items = append(items, fmt.Sprintf("%0*d", width, a+k*step))
 		}
 	} else {
 		if len(from) != 1 || len(to) != 1 || from[0] > to[0] {
 			return nil, fmt.Errorf("host range %q: invalid bounds", p)
 		}
-		for c := from[0]; c <= to[0]; c += byte(step) {
-			items = append(items, string(c))
-			if int(c)+step > 255 {
-				break
+		// Letters and digits only (hostRange), so c+1 cannot wrap.
+		for c, i := from[0], 0; c <= to[0]; c, i = c+1, i+1 {
+			if i%step == 0 {
+				items = append(items, string(c))
 			}
 		}
 	}
-	if len(items)*len(rest) > 100000 {
+	if len(items)*len(rest) > maxRangeHosts {
 		return nil, fmt.Errorf("host range %q expands to too many hosts", p)
 	}
 	out := make([]string, 0, len(items)*len(rest))

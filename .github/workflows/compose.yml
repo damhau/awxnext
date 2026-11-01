@@ -27,6 +27,10 @@ on:
   workflow_call:
   workflow_dispatch:
 
+# The GITHUB_TOKEN reads the repository, nothing more, unless a job asks.
+permissions:
+  contents: read
+
 jobs:
   compose:
     runs-on: ubuntu-latest
