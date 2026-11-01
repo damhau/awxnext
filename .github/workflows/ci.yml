@@ -1,10 +1,17 @@
 name: CI
 
 # On pushes to main and on PRs (Dependabot's among them: a PR runs it once,
-# not again for the push to its branch). Not for changes to documentation,
-# .gitignore or LICENSE only: nothing builds or tests them, except
-# docs/configuration.md, which a test compares with the settings it is
-# generated from.
+# not again for the push to its branch).
+#
+# A push to main that changes only documentation, .gitignore or LICENSE does
+# not run it: nothing builds or tests them, except docs/configuration.md,
+# which a test compares with the settings it is generated from.
+#
+# Every PR runs it, whatever it changes. The go, ui and "Actions pinned to
+# commits" jobs are required checks of main's "main: pull requests" ruleset
+# (docs/operations.md, "Protecting main"), and a required check that never
+# reports leaves the PR waiting for ever. Renaming one of these jobs means
+# updating the ruleset.
 on:
   push:
     branches: [main]
@@ -16,13 +23,6 @@ on:
       - '!LICENSE'
       - 'docs/configuration.md'
   pull_request:
-    paths:
-      - '**'
-      - '!**.md'
-      - '!docs/**'
-      - '!.gitignore'
-      - '!LICENSE'
-      - 'docs/configuration.md'
 
 # The GITHUB_TOKEN reads the repository, nothing more, unless a job asks.
 permissions:

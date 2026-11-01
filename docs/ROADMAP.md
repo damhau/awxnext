@@ -1336,6 +1336,15 @@ Taken on 2026-11-01:
     checks the right to add a credential type: any signed-in user may create
     a personal credential, so "the right to create a credential" would have
     refused no one. Others test a saved credential at `credentials/N/test/`.
+14. `ci.yml` runs on every PR, whatever it changes, and its `go`, `ui` and
+    `Actions pinned to commits` jobs are `main`'s required checks (M9-03).
+    A paths filter would leave a docs-only PR waiting for ever on a check
+    that never reports; an always-running gate job that skips the others
+    would save a few minutes on PRs that are few and come from bots, at the
+    cost of logic that, if wrong, passes a PR it should have checked. A push
+    to `main` that changes only docs still skips CI. A new push to a PR
+    dismisses the code owner's approval; the PR need not be up to date with
+    `main`, which the owner's direct pushes move often.
 
 ## On GitHub
 
