@@ -523,12 +523,14 @@ A run has five steps:
    Each scanner's results go to Security, Code scanning, under `secubot/<tool>`. Trivy skips
    the IDs listed in [.trivyignore](../.trivyignore).
 2. **Select.** secubot drops some findings:
+   - those below high severity (`policy.min_severity`);
    - those under `paths.skip`: tests and their data, the docs, the compatibility harness and
      the built UI;
    - those suppressed or already handled (a `secfix/<id>` branch, a PR or an issue);
    - dependency upgrades with a minor or patch fix, which are left to Dependabot.
 
-   It ranks the rest and keeps the first `policy.max_triage`.
+   It ranks the rest and keeps the first `policy.max_triage` (10). At most `policy.max_prs`
+   (3) become fixes in a run; the others wait for the next one.
 3. **Triage.** Claude reads the code, without running anything, in two sessions: an analysis,
    then a review that tries to refute it. What happens next depends on the verdict:
    - a false positive is suppressed for 30 days, unless it is critical: then it becomes an issue,

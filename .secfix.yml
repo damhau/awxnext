@@ -48,10 +48,12 @@ scanners:
   trivy_image:
     enabled: true
 
-# A slow start: M9-04 (#107) is a dry run, M9-05 (#108) goes live.
+# High and critical findings only. Each run triages up to 10 clusters (two
+# sessions each) and opens up to 3 draft PRs; the rest waits for the next run.
 policy:
-  max_triage: 3
-  max_prs: 1
+  min_severity: high   # default: medium
+  max_triage: 10
+  max_prs: 3
 
 fix:
   # Added to secubot's own list (.github/, .secfix.yml, CLAUDE.md, .claude/...):
