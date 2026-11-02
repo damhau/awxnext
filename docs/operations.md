@@ -550,9 +550,10 @@ reasoning. It also lists the findings left alone, and why. Claude runs on the
 `ANTHROPIC_API_KEY` secret, within `.secfix.yml`'s budgets: $1.50 per triage session (two for
 each finding) and $5 per fix.
 
-**Today it runs by hand, as a dry run** (M9-04, #107): `gh workflow run secfix.yml`, or
-Actions, secfix, Run workflow. A dry run scans, triages and fixes, but publishes nothing; its
-patches are in the run's `secubot-fix-<id>` artifacts. M9-05 (#108) turns publishing on,
+**Today it runs by hand, and publishes** (since 2026-11-02): `gh workflow run secfix.yml`,
+or Actions, secfix, Run workflow. Each fix's patch is also kept in the run's
+`secubot-fix-<id>` artifacts. To try it without publishing, put `dry-run: true` back under
+`with:` in `secfix.yml`: a dry run scans, triages and fixes, but opens nothing. M9-05 (#108)
 runs it daily and blocks the jobs' outbound connections except to the hosts secubot lists.
 Until then, harden-runner only records them.
 

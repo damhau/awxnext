@@ -6,8 +6,8 @@ name: secfix
 # model opens it as a draft PR on a secfix/<id> branch, or an issue for what
 # needs a human. Nothing is merged. .secfix.yml configures it.
 #
-# By hand for now (gh workflow run secfix.yml), as a dry run that publishes
-# nothing. M9-05 (#108) goes live, schedules it daily and blocks egress.
+# Live since 2026-11-02: it publishes. By hand for now (gh workflow run
+# secfix.yml); M9-05 (#108) schedules it daily and blocks egress.
 on:
   workflow_dispatch:
 
@@ -33,7 +33,6 @@ jobs:
       security-events: write # scan: SARIF to Code Scanning
       actions: read # scan: SARIF upload
     with:
-      dry-run: true # removed by M9-05 (#108)
       egress-policy: audit # switched to block by M9-05 (#108)
     secrets:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}

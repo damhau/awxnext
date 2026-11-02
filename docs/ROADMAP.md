@@ -1254,7 +1254,8 @@ now, and CI is green.
 **Labels:** chore, deploy · **Size:** S · [#108](https://github.com/damhau/awxnext/issues/108)
 
 Rewritten on 2026-11-01. secubot goes live after M9-04's dry run:
-`dry-run` is removed and a run checked: each handled finding ends as a
+`dry-run` is removed and a run checked (the owner removed it on 2026-11-02,
+before any dry run, so the first live run stands for both): each handled finding ends as a
 draft PR, an issue or a suppression, nothing is merged, and a second run
 skips what is in flight. If a run on a branch opens its PR against that
 branch, a dependency with a known reachable vulnerability is added on a
