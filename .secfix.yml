@@ -48,12 +48,13 @@ scanners:
   trivy_image:
     enabled: true
 
-# High and critical findings only. Each run triages up to 10 clusters (two
-# sessions each) and opens up to 3 draft PRs; the rest waits for the next run.
+# High and critical findings only. Each run triages up to 10 clusters, in one
+# session each, and opens up to 3 draft PRs; the rest waits for the next run.
 policy:
   min_severity: high   # default: medium
   max_triage: 10
   max_prs: 3
+  challenge: false   # skip the second (adversarial) triage session in secfix
 
 fix:
   # Added to secubot's own list (.github/, .secfix.yml, CLAUDE.md, .claude/...):

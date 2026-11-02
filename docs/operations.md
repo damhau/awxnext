@@ -531,10 +531,12 @@ A run has five steps:
 
    It ranks the rest and keeps the first `policy.max_triage` (10). At most `policy.max_prs`
    (3) become fixes in a run; the others wait for the next one.
-3. **Triage.** Claude reads the code, without running anything, in two sessions: an analysis,
-   then a review that tries to refute it. What happens next depends on the verdict:
-   - a false positive is suppressed for 30 days, unless it is critical: then it becomes an issue,
-     for a human to confirm;
+3. **Triage.** Claude reads the code, without running anything, in one session: an analysis.
+   secubot can add a second session, a review that tries to refute it, but `.secfix.yml` turns
+   it off (`policy.challenge: false`) to halve the cost. What happens next depends on the
+   verdict:
+   - a false positive is suppressed for 30 days if Claude is highly confident and the finding
+     is not critical; otherwise it becomes an issue, for a human to confirm;
    - a real finding goes to a fix;
    - a doubtful one, a hard-coded secret or a suspected prompt injection becomes an issue.
 4. **Fix.** Claude edits the code. Besides reading and editing, it may run only `.secfix.yml`'s
@@ -549,7 +551,7 @@ A run has five steps:
 
 The run's summary lists each finding handled, its verdict and what became of it, with the
 reasoning. It also lists the findings left alone, and why. Claude runs on the
-`ANTHROPIC_API_KEY` secret, within `.secfix.yml`'s budgets: $1.50 per triage session (two for
+`ANTHROPIC_API_KEY` secret, within `.secfix.yml`'s budgets: $1.50 per triage (one session for
 each finding) and $5 per fix.
 
 **Today it runs by hand, and publishes** (since 2026-11-02): `gh workflow run secfix.yml`,
