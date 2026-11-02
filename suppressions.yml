@@ -1,0 +1,108 @@
+# Managed by secubot (false positives agreed by triage + adversarial review).
+# Entries expire and are then re-triaged. Delete an entry to force re-triage now.
+suppressions:
+- id: 18a5d40a3ec0
+  reason: 'secubot triage: false positive (high confidence, single pass). The code
+    is reachable in production. `providerFor` (internal/auth/oidc.go:100-116) is called
+    from the public SSO handlers `/sso/login/oidc/` and `/sso/complete/oidc/`, and
+    from bearer-JWT authentication (oidc.go:120-121, 165, 213, 279). The scanners
+    flagged two separate problems, and neither is exploitable as written.
+
+
+    (1) G402 InsecureSkipVerify: certificate checks are not turned off in the code.'
+  expires: '2026-12-02'
+  created: '2026-11-02'
+  source: triage
+- id: 1cda2046b33f
+  reason: 'secubot triage: false positive (high confidence, single pass). The flagged
+    goroutine is reachable: it runs on the agent side whenever the control plane sends
+    a "work" message over the authenticated control WebSocket (`RunAgent` → `session`
+    → line 173–179). The `ctx` it could have used is not an HTTP request context,
+    though. It is the context of one control-connection session (`internal/agent/client.go:122`),
+    and that context is cancelled whenever the control '
+  expires: '2026-12-02'
+  created: '2026-11-02'
+  source: triage
+- id: 3e40e66e268a
+  reason: 'secubot triage: false positive (high confidence, single pass). The flagged
+    code is in `table()` in cmd/awxbench/main.go. It is a local benchmarking CLI that
+    an operator runs by hand, e.g. `awxbench table awx=awx.json awxnext=awxnext.json`.
+    The path passed to os.ReadFile (line 90) is taken from the operator''s own command-line
+    argument (line 86), which they split as NAME=FILE. No network service, HTTP handler
+    or other untrusted party supplies this input. The pe'
+  expires: '2026-12-02'
+  created: '2026-11-02'
+  source: triage
+- id: 50d302a1084d
+  reason: 'secubot triage: false positive (high confidence, single pass). The flagged
+    line runs in production: Broker.StartPod (internal/agent/k8s.go:267-268) calls
+    newKubeClient for container-group jobs, and exec.go:69-85 builds that request
+    when a job runs on a container group. But InsecureSkipVerify is only set when
+    the container group''s Kubernetes credential has verify_ssl explicitly set to
+    false (k8s.go:74-75). The credential type defaults verify_ssl to true (manag'
+  expires: '2026-12-02'
+  created: '2026-11-02'
+  source: triage
+- id: 6b88f7aa0c55
+  reason: 'secubot triage: false positive (high confidence, single pass). The flagged
+    line runs in production: RunShim (the job-pod shim, started as `awxnext shim --url
+    ...` from internal/agent/k8s.go:179) and RunAgent both reach runUnit. But this
+    is not command injection. The command is fixed: runnercmd.Command builds `ansible-runner
+    worker --private-data-dir=...` (internal/runnercmd/runnercmd.go:61-81) and runs
+    it with exec.Command, which takes an argv list and does n'
+  expires: '2026-12-02'
+  created: '2026-11-02'
+  source: triage
+- id: 8ff533137a10
+  reason: 'secubot triage: false positive (high confidence, single pass). Production
+    code does reach the flagged line. `awxnext agent` (cmd/awxnext/main.go:293-308)
+    calls RunAgent, then session, then runUnit. `awxnext shim` (main.go:311-322) calls
+    RunShim, then runUnit. runUnit runs `exec.Command(args[0], args[1:]...)` at internal/agent/client.go:258.
+
+
+    An attacker cannot inject a command, though:
+
+    - **No shell.** exec.Command is called with a separate argument vector, so'
+  expires: '2026-12-02'
+  created: '2026-11-02'
+  source: triage
+- id: 95b036beb145
+  reason: 'secubot triage: false positive (high confidence, single pass). gosec G402
+    flags any InsecureSkipVerify field that isn''t a constant false. Here it is set
+    from `s.opts.skipVerify` (internal/auth/ldap.go:446). The LDAP dial path runs
+    during LDAP login, so the code is reachable in production. The flag defaults to
+    false, so certificates are verified by default. parseLDAPOptions starts from a
+    zero-value struct (ldap.go:264) and only sets skipVerify to true when the'
+  expires: '2026-12-02'
+  created: '2026-11-02'
+  source: triage
+- id: 9ea3c6ced6ef
+  reason: 'secubot triage: false positive (high confidence, single pass). This is
+    a false positive. Certificate checking can only be turned off by a deliberate,
+    documented setting, and it is on by default. The flagged line builds the HTTP
+    client that oidcCheck uses for the OIDC connection test. That test is served by
+    POST /api/v2/settings/connections/test/ (`connectionTest`, conntest.go:112-169),
+    so it is reachable in production. Several things keep it from being exploi'
+  expires: '2026-12-02'
+  created: '2026-11-02'
+  source: triage
+- id: b215eadd5f3e
+  reason: 'secubot triage: false positive (high confidence, single pass). The flagged
+    line (internal/agent/client.go:53) does not hardcode InsecureSkipVerify=true.
+    It copies the operator-controlled field cfg.InsecureSkipVerify, which is documented
+    as "testing only" (client.go:47-48). The code is reached in production through
+    `awxnext agent` (cmd/awxnext/main.go:293-308 → agent.RunAgent → httpClient at
+    client.go:91) and `awxnext shim` (main.go:311-322 → RunShim → httpCli'
+  expires: '2026-12-02'
+  created: '2026-11-02'
+  source: triage
+- id: bcbba6170477
+  reason: 'secubot triage: false positive (high confidence, single pass). The flagged
+    call is `os.ReadFile(args[1])` at cmd/awxnext/main.go:250. It sits in the `keys
+    import FILE` subcommand of the awxnext CLI. That subcommand is dispatched from
+    `os.Args[2:]` at main.go:87. The only taint source is the command-line argument
+    given by whoever runs the binary, an operator who already has local shell access
+    and the process''s filesystem permissions. Reading a file whose path '
+  expires: '2026-12-02'
+  created: '2026-11-02'
+  source: triage
