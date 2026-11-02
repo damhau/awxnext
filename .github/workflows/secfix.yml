@@ -37,3 +37,5 @@ jobs:
       egress-policy: audit # switched to block by M9-05 (#108)
     secrets:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      SECUBOT_APP_ID: ${{ secrets.SECUBOT_APP_ID }}
+      SECUBOT_APP_PRIVATE_KEY: ${{ secrets.SECUBOT_APP_PRIVATE_KEY }}
