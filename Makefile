@@ -43,9 +43,10 @@ test-ui:
 	cd ui && npx tsc --noEmit -p . && npx vitest run
 
 # Everything, with the race detector (what full.yml runs nightly and before a
-# milestone closes).
+# milestone closes). With -race, ./test/ alone takes 7 to 10 minutes, past go
+# test's default -timeout of 10m.
 test-full: vet
-	go test -race ./...
+	go test -race -timeout 30m ./...
 
 dev-db:
 	./scripts/dev-db.sh

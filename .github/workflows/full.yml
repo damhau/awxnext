@@ -62,7 +62,9 @@ jobs:
             azurite-blob --blobHost 0.0.0.0 --skipApiVersionCheck --loose
           for i in $(seq 1 60); do curl -sf http://127.0.0.1:9000/minio/health/live && break; sleep 1; done
       - name: test
-        run: go test -race -count=1 ./...
+        # ./test/ takes 7 to 10 minutes with -race: past go test's default
+        # -timeout of 10m (the nightly run of 2026-11-02 stopped at 601 s).
+        run: go test -race -count=1 -timeout 30m ./...
 
   helm:
     uses: ./.github/workflows/helm.yml
