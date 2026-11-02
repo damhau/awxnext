@@ -33,6 +33,7 @@ be matched.
 | [M7 UI completeness](#m7-ui-completeness) | Every API feature reachable from the UI; the remaining UI goals | 17 |
 | [M8 Settings that make sense](#m8-settings-that-make-sense) | Settings laid out by task, without JSON or AWX's jargon; the settings API unchanged | 10 |
 | [M9 Security](#m9-security) | Known vulnerabilities found by CI and fixed through reviewed PRs | 5 |
+| [M10 Small fixes](#m10-small-fixes) | The importer tested on a real AWX, parity.md matching the code, the deployed image scanned | 3 |
 
 ---
 
@@ -1291,6 +1292,67 @@ CodeQL's alerts 15 to 17 are closed, and CI is green.
 
 ---
 
+## M10 Small fixes
+
+Small fixes found after M9: the AWX importer has never run against a real
+AWX, parity.md disagrees with the code in places, and secubot doesn't scan
+the image `main` deploys. **Exit:** an import from a real AWX 24.6.1 is
+tested end to end, parity.md agrees with the code and the closed issues,
+and the all-in-one image is scanned automatically.
+
+### M10-01 Test the AWX importer against a real AWX 24.6.1
+**Labels:** chore, deploy · **Size:** M · [#124](https://github.com/damhau/awxnext/issues/124)
+
+`awxnext import-awx` reads AWX's database directly, and its only test
+(`test/importer_test.go`) builds a hand-written copy of the AWX 24 tables it
+reads. Schema drift, the data AWX itself writes (managed credential types,
+implicit roles, encrypted survey answers, SSO settings) and size are
+untested.
+
+A workflow reuses `bench.yml`'s install of AWX 24.6.1 in kind. It fills AWX
+through its API, runs `import-awx --dry-run`, then the import, compares the
+two through `/api/v2` and launches an imported template. It runs by hand,
+and from `full.yml` if its run time allows. What it finds is fixed, or
+documented.
+
+**Done when:** the workflow passes, the imported objects and roles match
+AWX's, an imported credential works in a job, and every gap found is fixed
+or documented.
+
+### M10-02 Bring parity.md in line with the code
+**Labels:** chore · **Size:** S · [#125](https://github.com/damhau/awxnext/issues/125)
+
+Some rows contradict the code and the closed issues:
+
+- password policy settings, Missing (M5-06);
+- session and login settings, Partial (M1-02);
+- the second secret lookups row, Later (M4-07);
+- email, Later (M3-01);
+- the UI row with no credential types page (M7-01);
+- `host_metric_summary_monthly` missing (M2-04);
+- priority item 14, the refspec on branch overrides (M1-12).
+
+Each is checked against the code and its tests, then corrected or removed,
+and "Where it stands" follows.
+
+**Done when:** no row says Missing, Later or Partial for something that is
+done, and no finished priority item is left unstruck.
+
+### M10-03 Scan the all-in-one image automatically
+**Labels:** chore, deploy · **Size:** S · [#126](https://github.com/damhau/awxnext/issues/126)
+
+secubot's `trivy_image` builds the Dockerfile's default stage, the
+distroless `awxnext` image, and has no `target` option. So since M9-04 the
+all-in-one image `main` deploys is scanned only by `make vuln-images`, by
+hand. secubot (the owner's repository) gets a `target` option. Then awxnext
+pins that release and sets `trivy_image.target: all-in-one`, which covers
+the binary too.
+
+**Done when:** a secubot run on awxnext scans the all-in-one image, and the
+docs say so.
+
+---
+
 ## Proposed out of scope
 
 These stay out unless you want any of them back:
@@ -1397,5 +1459,6 @@ one milestone per section, and one issue per task (#1 to #80), each with a
 runs. M8 (#94 to #102) was added on 2026-10-31, and M8-10 (#103) the same day, from the permanent instance. M9 (#104) was added on
 2026-11-01, M9-02 to M9-05 (#105 to #108) the same day, and M9-06 (#120)
 from CodeQL's first analysis. M4-11 (#122) was added the same day, for rvav. M9-04 and M9-05
-(#107, #108) were rewritten the same day for secubot (Decision 15). This file stays the index;
+(#107, #108) were rewritten the same day for secubot (Decision 15). M10 (#124 to #126) was added on 2026-11-02 for the small fixes found
+after M9. This file stays the index;
 when a task changes, change its issue too.
