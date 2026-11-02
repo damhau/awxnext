@@ -62,8 +62,8 @@ CI and the browser:
   vulnerability. `secfix.yml` runs secubot: Trivy, govulncheck, gosec and Semgrep, then Claude
   triages each finding and proposes a fix as a draft PR on a `secfix/<id>` branch, or an
   issue. It runs by hand, as a dry run, until M9-05 (#108) runs it daily. `.secfix.yml`
-  configures it. Its PRs start no CI: close and reopen one to run CI. Dependabot proposes the
-  plain upgrades, and CodeQL analyzes each push.
+  configures it. It publishes as the owner's secubot GitHub App, so CI runs on its PRs as on
+  any other. Dependabot proposes the plain upgrades, and CodeQL analyzes each push.
 - **Checking the UI in a browser:** use the compat stack at http://localhost:8053
   (`admin` / `compat`), started with the UI override:
 

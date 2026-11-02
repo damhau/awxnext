@@ -558,9 +558,12 @@ Until then, harden-runner only records them.
 
 How to handle what it publishes:
 
-- **A PR.** secubot opens PRs with the workflow's `GITHUB_TOKEN`, and GitHub starts no
-  workflow on that token's events, so CI does not run on them by itself. Close and reopen the
-  PR to run CI. Then merge it, or close it: secubot then leaves the finding alone for 90 days.
+- **A PR.** secubot opens PRs as the owner's secubot GitHub App, whose ID and key are the
+  `SECUBOT_APP_ID` and `SECUBOT_APP_PRIVATE_KEY` secrets, so CI runs on them as on any PR.
+  Without those secrets it falls back to the workflow's `GITHUB_TOKEN`: GitHub starts no
+  workflow on that token's events, so close and reopen such a PR to run CI, and Actions must
+  be allowed to create PRs (Settings, Actions, General). Then merge the PR, or close it:
+  secubot then leaves the finding alone for 90 days.
 - **An issue.** Close an issue as **Not planned**, with a comment saying why, to dismiss the
   finding for 180 days.
 - **A finding that goes away** (a merged Dependabot PR, a fix by hand): the next run closes

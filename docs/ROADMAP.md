@@ -1259,8 +1259,9 @@ draft PR, an issue or a suppression, nothing is merged, and a second run
 skips what is in flight. If a run on a branch opens its PR against that
 branch, a dependency with a known reachable vulnerability is added on a
 test branch to check that secubot proposes the fix; otherwise this is
-skipped, since a vulnerable dependency on main would deploy. CI is run on a
-secubot PR by reopening it. The schedule is turned on, daily, at a time of
+skipped, since a vulnerable dependency on main would deploy. secubot opens
+its PRs as the owner's App, so CI should start on them by itself; the first
+PR's CI run is checked. The schedule is turned on, daily, at a time of
 its own. After a few runs, harden-runner's log of outbound connections is
 read and the egress policy switched to `block`. awxnext needs hosts secubot
 does not list: repo1.maven.org for the tests' PostgreSQL, registry.npmjs.org
@@ -1370,7 +1371,7 @@ These stay out unless you want any of them back:
 | Slack, PagerDuty, Twilio, Grafana, IRC, Mattermost, Rocket.Chat and AWS SNS notifications | Email and webhook cover the need. Left out by decision on 2026-10-27. |
 | Browser tests in CI | UI logic is covered by Vitest. Left out by decision on 2026-10-27. |
 | Subversion projects (was M4-09, #40) | Not needed. Left out by decision on 2026-10-29. |
-| Rulesets and code owners on `main` (was M9-03, #106) | awxnext is personal code, and secubot's PRs, opened with `GITHUB_TOKEN`, start no CI, so required checks would wait for ever. Left out by decision on 2026-11-01. |
+| Rulesets and code owners on `main` (was M9-03, #106) | awxnext is personal code, and secubot's PRs, then opened with `GITHUB_TOKEN`, started no CI, so required checks would have waited for ever. Left out by decision on 2026-11-01. |
 
 ## Decisions
 
@@ -1434,9 +1435,9 @@ Taken on 2026-11-01:
 14. `main` has no branch protection: M9-03 (#106) is dropped. Its two
     rulesets were created, then removed by the owner the same day, along
     with CODEOWNERS, which nothing enforces without them. awxnext is
-    personal code, and secubot's PRs, opened with the workflow's
-    `GITHUB_TOKEN`, start no CI (GitHub runs no workflow on that token's
-    events), so they would wait for ever on required checks. Pushes go
+    personal code, and secubot's PRs, then opened with the workflow's
+    `GITHUB_TOKEN`, started no CI (GitHub runs no workflow on that token's
+    events), so they would have waited for ever on required checks. Pushes go
     straight to `main`; Dependabot's PRs are reviewed and merged by the
     owner. `ci.yml` still runs on every PR, whatever it changes, docs
     included.
@@ -1444,11 +1445,13 @@ Taken on 2026-11-01:
     reusable workflow (`damhau/secubot`): pinned scanners, then Claude
     triages each finding and proposes a verified fix as a draft PR, or an
     issue. It leaves the plain upgrades to Dependabot, which stays, as does
-    CodeQL. Its credential is the `ANTHROPIC_API_KEY` secret; no GitHub App,
-    so its PRs, opened with `GITHUB_TOKEN`, start no CI until reopened. No
-    scan fails CI any more. The Makefile's `vuln-*` and `sbom` targets stay
-    for scanning by hand, and are the only scan of the all-in-one image,
-    since secubot builds only the Dockerfile's default target.
+    CodeQL. Its credential is the `ANTHROPIC_API_KEY` secret. Since
+    2026-11-02 it also publishes as the owner's secubot GitHub App
+    (`SECUBOT_APP_ID`, `SECUBOT_APP_PRIVATE_KEY`): its PRs start CI, and
+    Actions need no right to create PRs. No scan fails CI any more. The
+    Makefile's `vuln-*` and `sbom` targets stay for scanning by hand, and
+    are the only scan of the all-in-one image, since secubot builds only the
+    Dockerfile's default target.
 
 ## On GitHub
 
