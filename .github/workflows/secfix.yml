@@ -10,6 +10,7 @@ name: secfix
 # secfix.yml); M9-05 (#108) schedules it daily and blocks egress.
 on:
   workflow_dispatch:
+  # schedule: [{ cron: "23 3 * * *" }] 
 
 # Nothing at the top: the job below gets what secubot's README asks for, and
 # each of secubot's jobs narrows it further.
