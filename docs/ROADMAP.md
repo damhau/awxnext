@@ -1275,6 +1275,15 @@ decide whether to keep it.
 the daily schedule is on; the egress policy is `block`, or the reason it is
 not is recorded.
 
+Closed on 2026-11-05 by the owner's decision, with M9 and M9-04, and two
+points left as they are. The two live runs of 2026-11-02 were green; the
+second, on v1.1.0, triaged 10 of 41 high findings, suppressed all 10 as
+false positives, cost $1.01 and published no PR or issue, so CI on a
+secubot PR is still unchecked. The schedule is written in `secfix.yml` but
+commented out, so secubot runs by hand. Egress stays `audit`: secubot
+v1.1.0 lets a caller add no allowed host, and its lists lack repo1.maven.org
+and Docker Hub.
+
 ### M9-06 Keep credential lookups from sending awxnext's own identity
 **Labels:** security, credentials · **Size:** M · [#120](https://github.com/damhau/awxnext/issues/120)
 

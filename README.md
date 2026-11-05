@@ -228,7 +228,7 @@ CI runs in tiers:
 | `helm.yml` | pushes to `main` and PRs that change the chart, the Dockerfile or the agent | the Helm chart in kind: a job in a container group, upgrade, backup and restore |
 | `compose.yml` | pushes to `main` and PRs that change Compose, the Dockerfile or the job helper | the all-in-one image with Compose: jobs as job users |
 | `full.yml` | nightly, and by hand before a milestone closes (`gh workflow run full.yml`) | every Go test with the race detector, MinIO and Azurite; `helm.yml` and `compose.yml`; the compatibility suites (`compat.yml`), a job each |
-| `secfix.yml` | by hand (daily from M9-05) | [secubot](https://github.com/damhau/secubot): Trivy, govulncheck, gosec and Semgrep, then Claude triages each finding and proposes a fix as a draft PR, or an issue ([Security scanning](docs/operations.md#security-scanning)) |
+| `secfix.yml` | by hand (a daily schedule is commented out) | [secubot](https://github.com/damhau/secubot): Trivy, govulncheck, gosec and Semgrep, then Claude triages each finding and proposes a fix as a draft PR, or an issue ([Security scanning](docs/operations.md#security-scanning)) |
 | `bench.yml` | by hand | the [benchmarks against AWX](docs/benchmarks.md) |
 
 Licensed under the Apache License 2.0.

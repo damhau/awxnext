@@ -557,9 +557,11 @@ each finding) and $5 per fix.
 **Today it runs by hand, and publishes** (since 2026-11-02): `gh workflow run secfix.yml`,
 or Actions, secfix, Run workflow. Each fix's patch is also kept in the run's
 `secubot-fix-<id>` artifacts. To try it without publishing, put `dry-run: true` back under
-`with:` in `secfix.yml`: a dry run scans, triages and fixes, but opens nothing. M9-05 (#108)
-runs it daily and blocks the jobs' outbound connections except to the hosts secubot lists.
-Until then, harden-runner only records them.
+`with:` in `secfix.yml`: a dry run scans, triages and fixes, but opens nothing. A daily
+schedule is written in `secfix.yml`, commented out: uncomment it to run secubot daily.
+harden-runner only records the jobs' outbound connections (`egress-policy: audit`). `block`
+would break the run: secubot v1.1.0 lets a caller add no allowed host, and its lists lack
+repo1.maven.org (the tests' PostgreSQL) and Docker Hub (the image's base images).
 
 How to handle what it publishes:
 
