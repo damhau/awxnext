@@ -55,8 +55,8 @@ run: build
 	AWXNEXT_DEV=1 ./bin/awxnext serve
 
 # Known vulnerabilities, by hand (docs/operations.md, "Security scanning").
-# In CI, secubot scans (secfix.yml), but it builds only the default image:
-# vuln-images is the only scan of the all-in-one image.
+# In CI, secubot scans (secfix.yml), but it builds only the all-in-one image:
+# vuln-images is the only scan of the awxnext image.
 vuln: vuln-go vuln-web vuln-images
 
 # What the Go code reaches, with the Go that builds it: GOTOOLCHAIN keeps

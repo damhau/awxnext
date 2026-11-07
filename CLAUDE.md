@@ -34,8 +34,8 @@ Run the tests of what you changed, and nothing else: CI runs the rest on push.
 - **Before a milestone closes:** `gh workflow run full.yml` and `gh workflow run secfix.yml`.
   full.yml also runs nightly: every Go test with the race detector, the chart and image tests,
   and the compat suites; `make test-full` is the local Go part of it. secfix.yml is secubot
-  (below): read its run summary. `make vuln` scans by hand, with Docker, and is the only scan
-  of the all-in-one image, which secubot does not build.
+  (below): read its run summary. `make vuln` scans by hand, with Docker, and covers both images;
+  secubot builds only the all-in-one.
 
 Writing and running Go tests:
 

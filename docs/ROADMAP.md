@@ -1236,9 +1236,9 @@ v1.0.0) is the owner's reusable workflow:
   issues for what needs a human, and never merges.
 
 `security.yml` (M9-01) is removed. The Makefile's `vuln-*` and `sbom`
-targets and `.trivyignore` stay, for scanning by hand: they are the only
-scan of the all-in-one image, since secubot builds only the Dockerfile's
-default target. The caller, `secfix.yml`, is pinned to v1.0.0's commit,
+targets and `.trivyignore` stay, for scanning by hand: until M10-03, they are
+the only scan of the all-in-one image, since secubot builds only the
+Dockerfile's default target. The caller, `secfix.yml`, is pinned to v1.0.0's commit,
 runs by hand, as a dry run, with egress audited, on the `ANTHROPIC_API_KEY`
 secret. `.secfix.yml` sets the setup, build and test commands, skips tests,
 docs, `compat/` and the built UI, protects `.trivyignore` and
@@ -1282,7 +1282,8 @@ false positives, cost $1.01 and published no PR or issue, so CI on a
 secubot PR is still unchecked. The schedule is written in `secfix.yml` but
 commented out, so secubot runs by hand. Egress stays `audit`: secubot
 v1.1.0 lets a caller add no allowed host, and its lists lack repo1.maven.org
-and Docker Hub.
+and Docker Hub. v1.2.0 then added `extra-allowed-endpoints`, so `block` is
+now possible; it has not been switched.
 
 ### M9-06 Keep credential lookups from sending awxnext's own identity
 **Labels:** security, credentials · **Size:** M · [#120](https://github.com/damhau/awxnext/issues/120)
@@ -1459,9 +1460,9 @@ Taken on 2026-11-01:
     2026-11-02 it also publishes as the owner's secubot GitHub App
     (`SECUBOT_APP_ID`, `SECUBOT_APP_PRIVATE_KEY`): its PRs start CI, and
     Actions need no right to create PRs. No scan fails CI any more. The
-    Makefile's `vuln-*` and `sbom` targets stay for scanning by hand, and
-    are the only scan of the all-in-one image, since secubot builds only the
-    Dockerfile's default target.
+    Makefile's `vuln-*` and `sbom` targets stay for scanning by hand. Until
+    M10-03 they were the only scan of the all-in-one image, since secubot
+    built only the Dockerfile's default target.
 
 ## On GitHub
 

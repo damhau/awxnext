@@ -22,11 +22,11 @@ concurrency:
 
 jobs:
   secfix:
-    # Pinned to the v1.1.0 release's commit; Dependabot moves the pin. The
+    # Pinned to the v1.2.0 release's commit; Dependabot moves the pin. The
     # secubot code it checks out (its secubot-ref input) defaults to the tag
-    # the release stamped into that commit, v1.1.0, so code and workflow
+    # the release stamped into that commit, v1.2.0, so code and workflow
     # match and move together.
-    uses: damhau/secubot/.github/workflows/secfix.yml@75497b3d55a9277ebfa7f83c7f3915cbcac47d34 # v1.1.0
+    uses: damhau/secubot/.github/workflows/secfix.yml@f65369c2c8746bb7a0c101d41f6fb886822f4cb7 # v1.2.0
     permissions:
       contents: write # publish: secfix/* branches and the secfix-state branch
       pull-requests: write # publish: draft PRs

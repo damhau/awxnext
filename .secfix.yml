@@ -42,11 +42,10 @@ commands:
   timeout_minutes: 20
 
 scanners:
-  # Builds and scans the Dockerfile's default target, the awxnext image (the
-  # binary only). The all-in-one image, which main deploys, is scanned by hand:
-  # make vuln-images.
+  # Builds and scans the all-in-one stage, the image main deploys.
   trivy_image:
     enabled: true
+    target: all-in-one
 
 # High and critical findings only. Each run triages up to 10 clusters, in one
 # session each, and opens up to 3 draft PRs; the rest waits for the next run.

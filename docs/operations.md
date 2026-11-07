@@ -499,10 +499,10 @@ Four things look for vulnerabilities in awxnext. None merges anything: the owner
 merges every PR.
 
 - **secubot** ([secfix.yml](../.github/workflows/secfix.yml)) scans the code, its dependencies
-  and the default image, has Claude triage each finding, and proposes fixes as draft PRs.
+  and the all-in-one image, has Claude triage each finding, and proposes fixes as draft PRs.
 - **Dependabot** raises alerts and proposes upgrades of the dependencies.
 - **CodeQL** analyzes the code and the workflows on each push.
-- **`make vuln`** runs scanners by hand, and is the only scan of the all-in-one image.
+- **`make vuln`** runs scanners by hand, on both images.
 
 No scan fails CI: a vulnerability becomes an alert, an issue or a PR.
 
@@ -560,8 +560,9 @@ or Actions, secfix, Run workflow. Each fix's patch is also kept in the run's
 `with:` in `secfix.yml`: a dry run scans, triages and fixes, but opens nothing. A daily
 schedule is written in `secfix.yml`, commented out: uncomment it to run secubot daily.
 harden-runner only records the jobs' outbound connections (`egress-policy: audit`). `block`
-would break the run: secubot v1.1.0 lets a caller add no allowed host, and its lists lack
-repo1.maven.org (the tests' PostgreSQL) and Docker Hub (the image's base images).
+alone would break the run: secubot's lists lack repo1.maven.org (the tests' PostgreSQL) and
+Docker Hub (the image's base images). Since v1.2.0, `extra-allowed-endpoints` under `with:`
+can add them; awxnext has not done this.
 
 How to handle what it publishes:
 
@@ -579,9 +580,9 @@ How to handle what it publishes:
   an expiry date. Both are reviewed like code. The suppressions triage decides are kept on
   the `secfix-state` branch.
 
-secubot cannot build a stage other than the default. The image it scans is therefore
-`awxnext` (the binary only), not the all-in-one image, which `main` publishes and the
-permanent instance runs. Only `make vuln-images` scans the all-in-one image.
+secubot builds and scans the stage `.secfix.yml` names (`scanners.trivy_image.target`):
+`all-in-one`, the image `main` publishes and the permanent instance runs. It contains the
+binary. Only `make vuln-images` scans the `awxnext` image's distroless base.
 
 To turn secubot off, delete `secfix.yml`. The `secfix/*` branches and `secfix-state` can be
 deleted at any time.
@@ -622,7 +623,7 @@ Dockerfile's base images ([dependabot.yml](../.github/dependabot.yml)):
 
 - **Alerts** (Security, Dependabot) when a vulnerability is published in a Go module, an npm
   package or an action awxnext uses. Base images are not covered: secubot's Trivy scans the
-  default image, and `make vuln-images` both.
+  all-in-one image, and `make vuln-images` both.
 - **Security updates:** a PR for each alert that has a fix, opened as soon as the alert is
   raised.
 - **Version updates,** weekly: the minor and patch releases of each ecosystem in one PR, each
@@ -646,8 +647,8 @@ takes their latest patch release, so a fix in Go's standard library, which is co
 binaries, or in Debian reaches the next image without waiting for a PR. Digests would make
 builds reproducible, but the all-in-one image already upgrades its Debian packages and
 installs the latest PostgreSQL client as it builds, so it would not be reproducible anyway.
-secubot's image scan catches a tag that brings a vulnerability into the default image, and
-`make vuln-images` into the all-in-one image. Dependabot proposes the next
+secubot's image scan catches a tag that brings a vulnerability into the all-in-one image, and
+`make vuln-images` into either image. Dependabot proposes the next
 lines (Go 1.27, Python 3.13...); uv is pinned to a release (`ghcr.io/astral-sh/uv:0.13.5`).
 
 ### CodeQL
