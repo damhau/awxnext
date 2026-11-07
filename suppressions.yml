@@ -106,3 +106,99 @@ suppressions:
   expires: '2026-12-02'
   created: '2026-11-02'
   source: triage
+- id: 369e366b7f54
+  reason: 'secubot triage: false positive (high confidence, single pass). The flagged
+    code is reached in production, but only from the operator CLI subcommands `awxnext
+    backup` and `awxnext restore` (cmd/awxnext/backup.go:60, :102). Grep found no
+    other callers of backup.Backup or backup.Restore, so no HTTP handler or API path
+    leads here. Every input to the exec call comes from the operator:
+
+    - The binary path comes from the AWXNEXT_PG_DUMP / AWXNEXT_PG_RESTORE environmen'
+  expires: '2026-12-07'
+  created: '2026-11-07'
+  source: triage
+- id: 3bd143e1b98e
+  reason: 'secubot triage: false positive (high confidence, single pass). The flagged
+    line, `internal/credplugins/more.go:40`, is in `httpClient`. That function sets
+    `InsecureSkipVerify: !verify`, so verification is skipped only when a caller passes
+    `verify=false`. The code is reachable in production: `credplugins.Lookup` (`plugins.go:31`)
+    dispatches to all the external-secret plugins, and they all use `httpClient`.
+
+
+    Only one caller passes a value it doesn''t control. `c'
+  expires: '2026-12-07'
+  created: '2026-11-07'
+  source: triage
+- id: 47467d511a7a
+  reason: 'secubot triage: false positive (high confidence, single pass). The flagged
+    call runs once at server startup, when job isolation is set up. A remote attacker
+    controls none of its inputs, so this is a false positive.
+
+
+    Reachability: `serve()` calls `jobexec.Setup` at startup (cmd/awxnext/main.go:138)
+    when the container runtime is none/process. This is the startup self-test of the
+    job-user helper. No HTTP handler or job input reaches it.
+
+
+    Inputs:
+
+    - **The program '
+  expires: '2026-12-07'
+  created: '2026-11-07'
+  source: triage
+- id: 5552a1c455e6
+  reason: 'secubot triage: false positive (high confidence, single pass). The flagged
+    conversion is in production code. The awxnext-jobexec helper (cmd/awxnext-jobexec/main.go:20)
+    calls jobexec.Run, which sets the child process credentials with uint32(u.UID)
+    and uint32(u.GID) (internal/jobexec/helper_linux.go:113). The helper has the setuid,
+    setgid, chown and kill file capabilities, so if a UID or GID of 2^32 or more were
+    truncated, it could become uid/gid 0.
+
+
+    However, '
+  expires: '2026-12-07'
+  created: '2026-11-07'
+  source: triage
+- id: 980205de837e
+  reason: 'secubot triage: false positive (high confidence, single pass). I checked
+    the flagged line, and the concatenated value is properly escaped, so there is
+    no injection here.
+
+
+    At internal/db/db.go:50, the code builds the query "CREATE DATABASE " + pgx.Identifier{name}.Sanitize().
+    pgx''s Identifier.Sanitize() wraps the identifier in double quotes, doubles any
+    embedded double quotes and removes NUL bytes. That is the correct way to put an
+    identifier into a DDL statem'
+  expires: '2026-12-07'
+  created: '2026-11-07'
+  source: triage
+- id: d74dbbb827b9
+  reason: 'secubot triage: false positive (high confidence, single pass). The flagged
+    line is `exec.Command(args[0], args[1:]...)` in jobexec.Run (internal/jobexec/helper_linux.go:109).
+    It runs in production, but running a caller-chosen command is the whole point
+    of this function. It is the core of the awxnext-jobexec privilege-separation helper:
+    `awxnext-jobexec run USER DIR COMMAND [ARG...]` (cmd/awxnext-jobexec/main.go:5,20).
+    Its job is to run the ansible-runner work'
+  expires: '2026-12-07'
+  created: '2026-11-07'
+  source: triage
+- id: f19881b1b7f7
+  reason: 'secubot triage: false positive (high confidence, single pass). This is
+    not a default bypass. Certificate checks are only skipped when an administrator
+    explicitly asks for it. The flagged line (internal/eecontents/eecontents.go:70)
+    runs only when `Registry.Insecure` is true (line 68). Without that flag, go-containerregistry
+    uses its default transport, which verifies certificates. The one production caller,
+    internal/resources/ee_contents.go:94-106, starts with '
+  expires: '2026-12-07'
+  created: '2026-11-07'
+  source: triage
+- id: f3eb073a5683
+  reason: 'secubot triage: false positive (high confidence, single pass). The flagged
+    line is in a benchmark client and does not hard-code `InsecureSkipVerify: true`.
+    It sets `InsecureSkipVerify: t.Insecure` (internal/bench/bench.go:134). The only
+    production caller is the operator CLI `awxbench run` (cmd/awxbench/main.go:67).
+    There, `t.Insecure` comes from the `--insecure` flag, which defaults to false
+    (cmd/awxbench/main.go:48). The only other user of the package is tes'
+  expires: '2026-12-07'
+  created: '2026-11-07'
+  source: triage
