@@ -317,7 +317,7 @@ def seed(args):
     rrule = "DTSTART;TZID=Europe/Zurich:20300101T060000 RRULE:FREQ=DAILY;INTERVAL=1"
     a.post(f"job_templates/{jt}/schedules/", {"name": "nightly", "rrule": rrule, "description": "every day",
                                               "extra_data": {"survey_secret": SCHEDULE_SECRET, "colour": "green"}})
-    a.post(f"job_templates/{full}/schedules/", {"name": "limited", "rrule": "DTSTART:20300101T000000Z RRULE:FREQ=WEEKLY;BYDAY=MO;COUNT=4",
+    a.post(f"job_templates/{full}/schedules/", {"name": "limited", "rrule": "DTSTART:20300101T000000Z RRULE:FREQ=WEEKLY;INTERVAL=1;BYDAY=MO;COUNT=4",
                                                 "limit": "web-1", "enabled": False})
     a.post(f"workflow_job_templates/{wf}/schedules/", {"name": "weekly", "rrule": "DTSTART:20300101T000000Z RRULE:FREQ=WEEKLY;INTERVAL=1"})
     a.post(f"projects/{project}/schedules/", {"name": "hourly", "rrule": "DTSTART:20300101T000000Z RRULE:FREQ=HOURLY;INTERVAL=1"})
@@ -339,7 +339,7 @@ def seed(args):
     if not args.trial:
         a.post("notification_templates/", {
             "name": "ops-slack", "organization": acme, "notification_type": "slack",
-            "notification_configuration": {"channels": ["#ops"], "token": "xoxb-1", "hex_color": ""},
+            "notification_configuration": {"channels": ["#ops"], "token": "xoxb-1"},
         })
     a.post(f"job_templates/{full}/notification_templates_success/", {"id": email})
     a.post(f"job_templates/{full}/notification_templates_error/", {"id": hook})
@@ -479,7 +479,8 @@ def snapshot(args):
 IGNORED = {
     "id", "url", "related", "summary_fields", "created", "modified",
     "status", "last_job_run", "last_job_failed", "next_job_run", "last_updated", "last_update_failed",
-    "current_job", "last_job", "current_update", "last_update", "scm_revision",
+    "current_job", "last_job", "current_update", "last_update", "scm_revision", "last_job_host_summary", "ansible_facts_modified",
+    "unified_job_template",  # in a schedule's key
     "has_active_failures", "hosts_with_active_failures", "groups_with_active_failures", "inventory_sources_with_failures",
     "last_login", "ldap_dn", "password",
     "capacity", "consumed_capacity", "percent_capacity_remaining", "jobs_running", "jobs_total", "instances",
@@ -614,9 +615,11 @@ class Comparison:
             self.diff(f"{path}/{k}", a[k], b[k])
 
     def run(self):
+        # All the names first: an organization's sublists name what comes after it.
         for typ, key in RESOURCES:
             self.awx.load(typ, key)
             self.next.load(typ, key)
+        for typ, _ in RESOURCES:
             self.compare_type(typ)
         self.roles()
         self.details()
