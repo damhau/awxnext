@@ -466,6 +466,14 @@ func (i *imp) credentials() error {
 			i.warn("credential %q skipped: unsupported credential type", r["name"])
 			continue
 		}
+		// AWX's public "Ansible Galaxy" is awxnext's too.
+		if boolv(r["managed"]) {
+			var ours int64
+			if err := i.tx.QueryRow(i.ctx, "SELECT id FROM credentials WHERE managed AND name = $1 AND credential_type_id = $2", r["name"], ct).Scan(&ours); err == nil {
+				i.mapID("credentials", old, ours)
+				continue
+			}
+		}
 		inputs := jsonMap(r["inputs"])
 		for k, v := range inputs {
 			if s, ok := v.(string); ok {

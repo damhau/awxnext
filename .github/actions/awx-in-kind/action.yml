@@ -1,0 +1,43 @@
+# AWX 24.6.1 from its operator, in the kind cluster the job has already created:
+# namespace awx, service awx-service, the admin's password in the secret
+# awx-admin-password.
+name: AWX in kind
+description: Installs AWX 24.6.1 with awx-operator 2.19.1
+
+runs:
+  using: composite
+  steps:
+    - name: AWX 24.6.1 (awx-operator 2.19.1)
+      shell: bash
+      run: |
+        mkdir -p /tmp/awx && cd /tmp/awx
+        cat > kustomization.yaml <<'KUSTOMIZATION'
+        apiVersion: kustomize.config.k8s.io/v1beta1
+        kind: Kustomization
+        resources:
+          - github.com/ansible/awx-operator/config/default?ref=2.19.1
+        images:
+          - name: quay.io/ansible/awx-operator
+            newTag: 2.19.1
+          # gcr.io/kubebuilder no longer serves its images: the same
+          # proxy from its own project.
+          - name: gcr.io/kubebuilder/kube-rbac-proxy
+            newName: quay.io/brancz/kube-rbac-proxy
+            newTag: v0.15.0
+        namespace: awx
+        KUSTOMIZATION
+        kubectl create namespace awx
+        kubectl apply -k .
+        kubectl -n awx rollout status deployment/awx-operator-controller-manager --timeout 10m
+        cat <<'AWX' | kubectl apply -f -
+        apiVersion: awx.ansible.com/v1beta1
+        kind: AWX
+        metadata:
+          name: awx
+          namespace: awx
+        spec:
+          service_type: clusterip
+        AWX
+        for i in $(seq 1 120); do kubectl -n awx get deployment awx-task >/dev/null 2>&1 && break; sleep 10; done
+        kubectl -n awx rollout status deployment/awx-web --timeout 20m
+        kubectl -n awx rollout status deployment/awx-task --timeout 20m

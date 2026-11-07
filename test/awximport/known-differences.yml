@@ -1,0 +1,8 @@
+# What differs on purpose between an AWX and what awxnext imports from it, for
+# test/awximport/awximport.py. Each entry has a reason. A difference or a warning
+# not listed here fails the run, and so does an entry that matches nothing.
+#
+# `match` is a shell-style pattern (fnmatch): on a difference's path, or on the
+# text of a warning.
+differences: []
+warnings: []

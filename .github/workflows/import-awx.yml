@@ -1,0 +1,100 @@
+# `awxnext import-awx` against a real AWX 24.6.1. AWX from its operator and
+# awxnext from the Helm chart, in one kind cluster. test/awximport/awximport.py
+# fills AWX through its API; a job proves that what it wrote works there. Then
+# the dry run, which must write nothing and report what the import does; the
+# import, as docs/operations.md tells an operator to run it; a comparison of the
+# two through /api/v2; and a job on awxnext that needs the imported secrets.
+#
+# The checks after the import run even if an earlier one fails, so one run shows
+# all the gaps. The job summary has the tables, the artifact AWX's schema, the
+# reports and both servers' objects.
+name: import-awx
+
+on:
+  workflow_dispatch:
+    inputs:
+      hosts:
+        description: hosts in the large inventory
+        default: "2000"
+  workflow_call:
+
+# The GITHUB_TOKEN reads the repository, nothing more, unless a job asks.
+permissions:
+  contents: read
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      AWX_URL: http://127.0.0.1:8043
+      AWXNEXT_URL: http://127.0.0.1:8052
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4.3.1
+      - uses: helm/kind-action@1544676c07bb3570fcb70166beaa07c4528fd4aa # v1.15.1
+        with:
+          cluster_name: import
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+      - uses: ./.github/actions/awx-in-kind
+      - name: awxnext (Helm chart)
+        run: |
+          docker build --target all-in-one -t awxnext:import .
+          kind load docker-image awxnext:import --name import
+          helm install awxnext deploy/helm/awxnext --namespace awxnext --create-namespace \
+            --set image.repository=awxnext --set image.tag=import --set image.pullPolicy=Never \
+            --set defaultExecutionEnvironment=quay.io/ansible/awx-ee:24.6.1 --wait --timeout 10m
+      - name: reach both
+        run: |
+          kubectl -n awx port-forward svc/awx-service 8043:80 > /tmp/pf-awx.log 2>&1 &
+          kubectl -n awxnext port-forward svc/awxnext 8052:8052 > /tmp/pf-awxnext.log 2>&1 &
+          sleep 5
+          {
+            echo "AWX_PASSWORD=$(kubectl -n awx get secret awx-admin-password -o jsonpath='{.data.password}' | base64 -d)"
+            echo "AWXNEXT_PASSWORD=$(kubectl -n awxnext get secret awxnext-secrets -o jsonpath='{.data.admin-password}' | base64 -d)"
+            echo "AWX_SOURCE=postgres://awx:$(kubectl -n awx get secret awx-postgres-configuration -o jsonpath='{.data.password}' | base64 -d)@awx-postgres-15.awx.svc:5432/awx"
+            echo "AWX_SECRET_KEY=$(kubectl -n awx get secret awx-secret-key -o jsonpath='{.data.secret_key}' | base64 -d)"
+          } >> "$GITHUB_ENV"
+          mkdir -p import-awx
+      - name: fill AWX
+        run: |
+          test/awximport/awximport.py seed --hosts "${{ inputs.hosts || '2000' }}" \
+            --project-url "https://github.com/${GITHUB_REPOSITORY}" --project-branch "${GITHUB_REF_NAME}"
+      - name: the job passes on AWX
+        run: test/awximport/awximport.py run-job awx
+      - name: AWX's schema
+        if: always()
+        continue-on-error: true
+        run: kubectl -n awx exec awx-postgres-15-0 -- pg_dump -U awx --schema-only awx > import-awx/awx-schema.sql
+      - name: dry run
+        run: |
+          test/awximport/awximport.py snapshot --out import-awx/before.json
+          kubectl -n awxnext exec deploy/awxnext -- awxnext import-awx \
+            --source "$AWX_SOURCE" --secret-key "$AWX_SECRET_KEY" --dry-run > import-awx/dry-run.json
+          test/awximport/awximport.py snapshot --out import-awx/after-dry-run.json
+          cmp import-awx/before.json import-awx/after-dry-run.json
+      - name: import
+        id: import
+        run: |
+          kubectl -n awxnext exec deploy/awxnext -- awxnext import-awx \
+            --source "$AWX_SOURCE" --secret-key "$AWX_SECRET_KEY" > import-awx/report.json
+      - name: the reports
+        if: (success() || failure()) && steps.import.outcome == 'success'
+        run: test/awximport/awximport.py reports import-awx/dry-run.json import-awx/report.json
+      - name: compare
+        if: (success() || failure()) && steps.import.outcome == 'success'
+        run: test/awximport/awximport.py compare --out import-awx
+      - name: the job passes on awxnext
+        if: (success() || failure()) && steps.import.outcome == 'success'
+        run: test/awximport/awximport.py run-job awxnext
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: import-awx
+          path: import-awx/
+      - name: diagnostics
+        if: failure()
+        run: |
+          kubectl get pods -A || true
+          kubectl -n awx logs deployment/awx-task --all-containers --tail 200 || true
+          kubectl -n awxnext logs deployment/awxnext --all-containers --tail 200 || true

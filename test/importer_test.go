@@ -43,6 +43,7 @@ CREATE TABLE main_credentialtype (id int PRIMARY KEY, name text, description tex
   created timestamptz, modified timestamptz, created_by_id int, modified_by_id int, managed bool, namespace text);
 CREATE TABLE main_credential (id int PRIMARY KEY, name text, description text, organization_id int, credential_type_id int, inputs jsonb,
   created timestamptz, modified timestamptz, created_by_id int, modified_by_id int, managed bool);
+CREATE TABLE main_organizationgalaxycredentialmembership (id serial PRIMARY KEY, organization_id int, credential_id int, position int);
 CREATE TABLE main_executionenvironment (id int PRIMARY KEY, name text, description text, image text, managed bool, organization_id int,
   credential_id int, pull text, created timestamptz, modified timestamptz, created_by_id int, modified_by_id int);
 CREATE TABLE main_instancegroup (id int PRIMARY KEY, name text, created timestamptz, modified timestamptz, is_container_group bool,
@@ -115,9 +116,12 @@ INSERT INTO main_organization VALUES (1,'%[2]s','imported',%[1]s,%[1]s,1,1,5,NUL
 INSERT INTO main_team VALUES (1,'Ops','',1,%[1]s,%[1]s,1,1);
 INSERT INTO main_credentialtype VALUES (1,'Machine','','ssh','{}','{}',%[1]s,%[1]s,NULL,NULL,true,'ssh'),
   (2,'AWS Secrets Manager Lookup','','external','{}','{}',%[1]s,%[1]s,NULL,NULL,true,'aws_secretsmanager_credential'),
-  (3,'MyCloud-%[2]s','','cloud','{"fields":[{"id":"token","label":"Token","type":"string","secret":true}]}','{"env":{"MYCLOUD_TOKEN":"{{ token }}"}}',%[1]s,%[1]s,NULL,NULL,false,NULL);
+  (3,'MyCloud-%[2]s','','cloud','{"fields":[{"id":"token","label":"Token","type":"string","secret":true}]}','{"env":{"MYCLOUD_TOKEN":"{{ token }}"}}',%[1]s,%[1]s,NULL,NULL,false,NULL),
+  (4,'Ansible Galaxy/Automation Hub API Token','','galaxy','{}','{}',%[1]s,%[1]s,NULL,NULL,true,'galaxy_api_token');
 INSERT INTO main_credential VALUES (42,'machine','',1,1,'{"username":"root","password":"%[4]s","become_method":"sudo"}',%[1]s,%[1]s,1,1,false),
-  (43,'aws lookup','',1,2,'{}',%[1]s,%[1]s,1,1,false);
+  (43,'aws lookup','',1,2,'{}',%[1]s,%[1]s,1,1,false),
+  (44,'Ansible Galaxy','',NULL,4,'{"url":"https://galaxy.ansible.com/"}',%[1]s,%[1]s,NULL,NULL,true);
+INSERT INTO main_organizationgalaxycredentialmembership (organization_id, credential_id, position) VALUES (1,44,1);
 INSERT INTO main_executionenvironment VALUES (1,'AWX EE (latest)','','quay.io/ansible/awx-ee:latest',true,NULL,NULL,'',%[1]s,%[1]s,NULL,NULL);
 INSERT INTO main_instancegroup VALUES (1,'default',%[1]s,%[1]s,false,NULL,'',100,0,0,0,'[]'),(2,'remote-%[2]s',%[1]s,%[1]s,false,NULL,'',0,0,0,0,'["test-node", "awx-exec-1"]');
 INSERT INTO main_label VALUES (1,'prod',1,%[1]s,%[1]s,1,1);
@@ -229,6 +233,14 @@ func TestImportAWX(t *testing.T) {
 		t.Fatalf("organization: %v", o)
 	}
 	orgID := int64(o[0]["id"].(float64))
+	// AWX has its own "Ansible Galaxy", as awxnext does: the two are one.
+	galaxy := must(t, a.get(fmt.Sprintf("organizations/%d/galaxy_credentials/", orgID)), 200).results()
+	if len(galaxy) != 1 || galaxy[0]["name"] != "Ansible Galaxy" || galaxy[0]["managed"] != true {
+		t.Errorf("galaxy credentials: %v", galaxy)
+	}
+	if n := a.get("credentials/?name=Ansible+Galaxy").count(); n != 1 {
+		t.Errorf("%d credentials named Ansible Galaxy", n)
+	}
 	alice := &client{t: t, user: "alice-" + org, pass: "alicepw"}
 	if r := must(t, alice.get("me/"), 200); r.results()[0]["email"] != "alice@example.com" {
 		t.Fatalf("alice: %v", r.Body)
