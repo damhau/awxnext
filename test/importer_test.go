@@ -69,12 +69,12 @@ CREATE TABLE main_jobtemplate (unifiedjobtemplate_ptr_id int PRIMARY KEY, job_ty
   diff_mode bool, job_slice_count int, scm_branch text, webhook_service text, webhook_credential_id int, webhook_key text,
   prevent_instance_group_fallback bool, ask_variables_on_launch bool, ask_limit_on_launch bool, ask_inventory_on_launch bool);
 CREATE TABLE main_workflowjobtemplate (unifiedjobtemplate_ptr_id int PRIMARY KEY, extra_vars text, survey_enabled bool, survey_spec jsonb,
-  allow_simultaneous bool, inventory_id int, "limit" text, scm_branch text, job_tags text, skip_tags text, webhook_service text,
+  allow_simultaneous bool, inventory_id int, char_prompts jsonb, webhook_service text,
   webhook_credential_id int, webhook_key text, ask_inventory_on_launch bool, ask_variables_on_launch bool);
 CREATE TABLE main_workflowapprovaltemplate (unifiedjobtemplate_ptr_id int PRIMARY KEY, timeout int);
 CREATE TABLE main_workflowjobtemplatenode (id int PRIMARY KEY, created timestamptz, modified timestamptz, workflow_job_template_id int,
   unified_job_template_id int, identifier text, all_parents_must_converge bool, extra_data jsonb, inventory_id int, execution_environment_id int,
-  "limit" text, verbosity int);
+  char_prompts jsonb);
 CREATE TABLE main_workflowjobtemplatenode_success_nodes (id serial PRIMARY KEY, from_workflowjobtemplatenode_id int, to_workflowjobtemplatenode_id int);
 CREATE TABLE main_inventorysource (unifiedjobtemplate_ptr_id int PRIMARY KEY, source text, source_path text, source_vars text, overwrite bool,
   overwrite_vars bool, timeout int, verbosity int, update_on_launch bool, update_cache_timeout int, inventory_id int, source_project_id int,
@@ -83,11 +83,19 @@ CREATE TABLE main_systemjobtemplate (unifiedjobtemplate_ptr_id int PRIMARY KEY, 
 CREATE TABLE main_unifiedjobtemplate_credentials (id serial PRIMARY KEY, unifiedjobtemplate_id int, credential_id int);
 CREATE TABLE main_unifiedjobtemplate_labels (id serial PRIMARY KEY, unifiedjobtemplate_id int, label_id int);
 CREATE TABLE main_schedule (id int PRIMARY KEY, name text, description text, enabled bool, rrule text, extra_data jsonb, unified_job_template_id int,
-  created timestamptz, modified timestamptz, created_by_id int, modified_by_id int, inventory_id int, execution_environment_id int, "limit" text);
+  created timestamptz, modified timestamptz, created_by_id int, modified_by_id int, inventory_id int, execution_environment_id int, char_prompts jsonb);
 CREATE TABLE main_notificationtemplate (id int PRIMARY KEY, name text, description text, organization_id int, notification_type text,
   notification_configuration jsonb, messages jsonb, created timestamptz, modified timestamptz, created_by_id int, modified_by_id int);
-CREATE TABLE main_unifiedjobtemplate_notification_templates_for_success (id serial PRIMARY KEY, unifiedjobtemplate_id int, notificationtemplate_id int);
-CREATE TABLE main_organization_notification_templates_for_error (id serial PRIMARY KEY, organization_id int, notificationtemplate_id int);
+CREATE TABLE main_unifiedjobtemplate_notification_templates_error (id serial PRIMARY KEY, unifiedjobtemplate_id int, notificationtemplate_id int);
+CREATE TABLE main_unifiedjobtemplate_notification_templates_started (id serial PRIMARY KEY, unifiedjobtemplate_id int, notificationtemplate_id int);
+CREATE TABLE main_unifiedjobtemplate_notification_templates_success (id serial PRIMARY KEY, unifiedjobtemplate_id int, notificationtemplate_id int);
+CREATE TABLE main_organization_notification_templates_approvals (id serial PRIMARY KEY, organization_id int, notificationtemplate_id int);
+CREATE TABLE main_organization_notification_templates_error (id serial PRIMARY KEY, organization_id int, notificationtemplate_id int);
+CREATE TABLE main_organization_notification_templates_started (id serial PRIMARY KEY, organization_id int, notificationtemplate_id int);
+CREATE TABLE main_organization_notification_templates_success (id serial PRIMARY KEY, organization_id int, notificationtemplate_id int);
+CREATE TABLE main_workflowjobtemplate_notification_templates_approvals (id serial PRIMARY KEY, workflowjobtemplate_id int, notificationtemplate_id int);
+CREATE TABLE dab_rbac_roledefinition (id int PRIMARY KEY, name text);
+CREATE TABLE dab_rbac_roleuserassignment (id int PRIMARY KEY, role_definition_id int, user_id int);
 
 INSERT INTO django_content_type VALUES (1,'main','organization'),(2,'main','team'),(3,'main','credential'),(4,'main','project'),
   (5,'main','inventory'),(6,'main','jobtemplate'),(7,'main','workflowjobtemplate'),(8,'main','workflowapprovaltemplate'),
@@ -141,25 +149,33 @@ INSERT INTO main_project VALUES (10,'_10__git_proj','git','https://example.com/r
 INSERT INTO main_jobtemplate VALUES (20,'run','site.yml',5,'web*',1,'x: 1','','f','','',true,'cbkey',true,
   '{"name":"s","description":"","spec":[{"variable":"pw","question_name":"PW","type":"password","required":false,"default":"%[5]s"}]}',
   1,10,0,false,false,false,1,'','github',NULL,'hookkey',false,true,false,false);
-INSERT INTO main_workflowjobtemplate VALUES (30,'a: 1',false,'{}',false,NULL,'','','','','',NULL,'',false,false);
+INSERT INTO main_workflowjobtemplate VALUES (30,'a: 1',false,'{}',false,NULL,'{"limit":"web","scm_branch":"dev","job_tags":"t","skip_tags":"s"}','',NULL,'',false,false);
 INSERT INTO main_workflowapprovaltemplate VALUES (31,3600);
-INSERT INTO main_workflowjobtemplatenode VALUES (1,%[1]s,%[1]s,30,20,'first',false,'{}',NULL,NULL,NULL,NULL),(2,%[1]s,%[1]s,30,31,'gate',false,'{}',NULL,NULL,NULL,NULL);
+INSERT INTO main_workflowjobtemplatenode VALUES (1,%[1]s,%[1]s,30,20,'first',false,'{}',NULL,NULL,'{"limit":"web1","verbosity":2,"diff_mode":true}'),(2,%[1]s,%[1]s,30,31,'gate',false,'{}',NULL,NULL,'{}');
 INSERT INTO main_workflowjobtemplatenode_success_nodes (from_workflowjobtemplatenode_id, to_workflowjobtemplatenode_id) VALUES (1,2);
 INSERT INTO main_inventorysource VALUES (40,'scm','hosts.yml','',true,true,0,1,true,0,1,10,'','','','','');
 INSERT INTO main_systemjobtemplate VALUES (50,'cleanup_jobs');
 INSERT INTO main_unifiedjobtemplate_credentials (unifiedjobtemplate_id, credential_id) VALUES (20,42);
 INSERT INTO main_unifiedjobtemplate_labels (unifiedjobtemplate_id, label_id) VALUES (20,1);
-INSERT INTO main_schedule VALUES (1,'nightly','',true,'DTSTART;TZID=UTC:20240101T020000 RRULE:FREQ=DAILY','{}',20,%[1]s,%[1]s,1,1,NULL,NULL,'web1'),
-  (2,'Cleanup Job Schedule','',true,'DTSTART:20240101T000000Z RRULE:FREQ=WEEKLY;BYDAY=SA','{"days":"30"}',50,%[1]s,%[1]s,NULL,NULL,NULL,NULL,NULL),
-  (3,'broken','',true,'garbage','{}',20,%[1]s,%[1]s,1,1,NULL,NULL,NULL);
+INSERT INTO main_schedule VALUES (1,'nightly','',true,'DTSTART;TZID=UTC:20240101T020000 RRULE:FREQ=DAILY','{}',20,%[1]s,%[1]s,1,1,NULL,NULL,'{"limit":"web1"}'),
+  (2,'Cleanup Job Schedule','',true,'DTSTART:20240101T000000Z RRULE:FREQ=WEEKLY;BYDAY=SA','{"days":"30"}',50,%[1]s,%[1]s,NULL,NULL,NULL,NULL,'{}'),
+  (3,'broken','',true,'garbage','{}',20,%[1]s,%[1]s,1,1,NULL,NULL,'{}');
 INSERT INTO main_notificationtemplate VALUES (7,'hook','',1,'webhook','{"url":"https://example.com/hook","username":"u","password":"%[6]s","http_method":"POST","headers":{},"disable_ssl_verification":false}',NULL,%[1]s,%[1]s,1,1),
   (8,'slack','',1,'slack','{"token":"x","channels":["#a"]}',NULL,%[1]s,%[1]s,1,1),
   (9,'mail','',1,'email','{"host":"smtp.example.com","port":587,"username":"","password":"","use_tls":true,"use_ssl":false,"sender":"awx@example.com","recipients":["ops@example.com"],"timeout":30}',NULL,%[1]s,%[1]s,1,1);
-INSERT INTO main_unifiedjobtemplate_notification_templates_for_success (unifiedjobtemplate_id, notificationtemplate_id) VALUES (20,7);
-INSERT INTO main_organization_notification_templates_for_error (organization_id, notificationtemplate_id) VALUES (1,7);
+INSERT INTO main_unifiedjobtemplate_notification_templates_error (unifiedjobtemplate_id, notificationtemplate_id) VALUES (20,9);
+INSERT INTO main_unifiedjobtemplate_notification_templates_started (unifiedjobtemplate_id, notificationtemplate_id) VALUES (20,9);
+INSERT INTO main_unifiedjobtemplate_notification_templates_success (unifiedjobtemplate_id, notificationtemplate_id) VALUES (20,7);
+INSERT INTO main_organization_notification_templates_approvals (organization_id, notificationtemplate_id) VALUES (1,9);
+INSERT INTO main_organization_notification_templates_error (organization_id, notificationtemplate_id) VALUES (1,7);
+INSERT INTO main_organization_notification_templates_started (organization_id, notificationtemplate_id) VALUES (1,9);
+INSERT INTO main_organization_notification_templates_success (organization_id, notificationtemplate_id) VALUES (1,9);
+INSERT INTO main_workflowjobtemplate_notification_templates_approvals (workflowjobtemplate_id, notificationtemplate_id) VALUES (30,9);
 INSERT INTO main_rbac_roles VALUES (100,'admin_role',NULL,'[]',1,1),(101,'member_role',NULL,'[]',1,1),(102,'member_role',NULL,'[101]',2,1),
   (103,'execute_role',NULL,'[100]',6,20),(104,'use_role',NULL,'[100]',3,42),(105,NULL,'system_auditor','[]',NULL,NULL);
 INSERT INTO main_rbac_roles_members (role_id, user_id) VALUES (100,2),(102,3),(105,3);
+INSERT INTO dab_rbac_roledefinition VALUES (1,'Team Member'),(31,'System Auditor');
+INSERT INTO dab_rbac_roleuserassignment VALUES (1,31,4),(2,1,5);
 INSERT INTO main_rbac_roles_parents (from_role_id, to_role_id) VALUES (103,100),(103,102),(104,100),(104,102),(102,101);
 `, ts, org, alicePW, awxCredSecret, awxSurveySecret, awxNotifySecret)
 }
@@ -259,9 +275,15 @@ func TestImportAWX(t *testing.T) {
 	if sam["external_account"] != "enterprise" || fmt.Sprint(sam["auth"]) != "[map[provider:saml uid:okta:sam@example.com]]" {
 		t.Errorf("sam is not a SAML user: %v", sam)
 	}
+	// AWX 24 keeps a new auditor in its dab_rbac tables.
+	if sam["is_system_auditor"] != true {
+		t.Errorf("sam should be an auditor: %v", sam)
+	}
 	if gina := a.get("users/?username=gina-" + org).results()[0]; gina["external_account"] != "social" ||
 		fmt.Sprint(gina["auth"]) != "[map[provider:github-org uid:583231]]" {
 		t.Errorf("gina is not a GitHub user: %v", gina)
+	} else if gina["is_system_auditor"] != false {
+		t.Errorf("gina should not be an auditor: %v", gina)
 	}
 	ldapSettings := must(t, a.get("settings/ldap/"), 200).Body
 	if ldapSettings["AUTH_LDAP_SERVER_URI"] != "ldap://127.0.0.1:1" || ldapSettings["AUTH_LDAP_BIND_PASSWORD"] != "$encrypted$" ||
@@ -347,6 +369,14 @@ func TestImportAWX(t *testing.T) {
 	if len(wf) != 1 {
 		t.Fatalf("workflows: %v", wf)
 	}
+	roles := wf[0]["summary_fields"].(map[string]any)["object_roles"].(map[string]any)
+	if name := roles["approval_role"].(map[string]any)["name"]; name != "Approve" {
+		t.Errorf("approval role's name: %v", name)
+	}
+	// AWX keeps the prompts of workflows, nodes and schedules in char_prompts.
+	if w := wf[0]; w["limit"] != "web" || w["scm_branch"] != "dev" || w["job_tags"] != "t" || w["skip_tags"] != "s" {
+		t.Errorf("workflow prompts: %v", w)
+	}
 	// Imported rows keep their AWX ids only when free, so nodes are found by identifier.
 	nodes := map[string]map[string]any{}
 	for _, n := range a.get(fmt.Sprintf("workflow_job_templates/%d/workflow_nodes/", int64(wf[0]["id"].(float64)))).results() {
@@ -355,6 +385,9 @@ func TestImportAWX(t *testing.T) {
 	if first, gate := nodes["first"], nodes["gate"]; len(nodes) != 2 || first == nil || gate == nil || fmt.Sprint(first["success_nodes"]) != fmt.Sprintf("[%v]", gate["id"]) ||
 		gate["summary_fields"].(map[string]any)["unified_job_template"].(map[string]any)["unified_job_type"] != "workflow_approval" {
 		t.Fatalf("workflow nodes: %v", nodes)
+	}
+	if first := nodes["first"]; first["limit"] != "web1" || first["verbosity"] != float64(2) || first["diff_mode"] != true || nodes["gate"]["limit"] != nil {
+		t.Errorf("node prompts: %v", first)
 	}
 
 	scheds := a.get(fmt.Sprintf("job_templates/%d/schedules/?order_by=name", jtID)).results()
@@ -380,11 +413,20 @@ func TestImportAWX(t *testing.T) {
 	if plain, err := app.Crypto.Decrypt(pw); err != nil || plain != "hook-pass" {
 		t.Fatalf("notification password: %q %v", plain, err)
 	}
-	if r := a.get(fmt.Sprintf("job_templates/%d/notification_templates_success/", jtID)); r.count() != 1 {
-		t.Fatal("job template notification link")
-	}
-	if r := a.get(fmt.Sprintf("organizations/%d/notification_templates_error/", orgID)); r.count() != 1 {
-		t.Fatal("organization notification link")
+	wfID := int64(wf[0]["id"].(float64))
+	for _, path := range []string{
+		fmt.Sprintf("job_templates/%d/notification_templates_error/", jtID),
+		fmt.Sprintf("job_templates/%d/notification_templates_started/", jtID),
+		fmt.Sprintf("job_templates/%d/notification_templates_success/", jtID),
+		fmt.Sprintf("organizations/%d/notification_templates_approvals/", orgID),
+		fmt.Sprintf("organizations/%d/notification_templates_error/", orgID),
+		fmt.Sprintf("organizations/%d/notification_templates_started/", orgID),
+		fmt.Sprintf("organizations/%d/notification_templates_success/", orgID),
+		fmt.Sprintf("workflow_job_templates/%d/notification_templates_approvals/", wfID),
+	} {
+		if r := a.get(path); r.count() != 1 {
+			t.Errorf("notification link %s: %d", path, r.count())
+		}
 	}
 
 	// Roles: alice administers the organization; bob runs the template through team Ops.

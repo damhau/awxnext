@@ -4,5 +4,47 @@
 #
 # `match` is a shell-style pattern (fnmatch): on a difference's path, or on the
 # text of a warning.
-differences: []
-warnings: []
+differences:
+  # What the import keeps of awxnext's own.
+  - match: users/admin/email
+    reason: An account that exists stays as it is, and the install creates admin.
+  - match: execution_environments/None/Control Plane Execution Environment
+    reason: AWX's own, managed execution environment; awxnext runs its control tasks without one.
+  - match: execution_environments/None/AWX EE (latest)/*
+    reason: The install creates this one. A global execution environment of the same name is kept, with a warning.
+  - match: instance_groups/default/is_container_group
+    reason: awxnext's default group is its own, and how it runs jobs is the install's choice.
+  - match: credential_types/cloud/*/injectors
+    reason: AWX builds the injectors of these types in code and shows {}; awxnext keeps them in the type.
+  - match: credential_types/external/Microsoft Azure Key Vault/inputs
+    reason: Client, secret and tenant are optional. Without them the lookup uses awxnext's own Azure identity.
+  # What each server computes for itself.
+  - match: settings/*/*_CALLBACK_URL
+    reason: Computed from the address of the server.
+  - match: settings/*/*_METADATA_URL
+    reason: Computed from the address of the server.
+  - match: projects/*/local_path
+    reason: Named after the project's id, and an id AWX uses that awxnext has taken changes.
+  - match: inventories/Acme/constructed-prod/*_inventory_sources
+    reason: AWX's stored counters, which it hasn't refreshed. awxnext counts the source that was imported.
+  - match: inventories/Default/Demo Inventory/total_hosts
+    reason: AWX's stored counter, which it hasn't refreshed. awxnext counts the host that was imported.
+  # awxnext shows an empty string for what AWX shows as null: neither has a value.
+  - match: inventories/*/host_filter
+    reason: An inventory without a filter has "", not null. Clients treat both as no filter.
+  - match: workflow_job_templates/*/job_tags
+    reason: A prompt without a value is "", not null. A launch treats both as no value.
+  - match: workflow_job_templates/*/skip_tags
+    reason: A prompt without a value is "", not null. A launch treats both as no value.
+  - match: workflow_job_templates/*/scm_branch
+    reason: A prompt without a value is "", not null. A launch treats both as no value.
+  # Not supported.
+  - match: notification_templates/Acme/ops-slack
+    reason: awxnext sends email and webhook notifications only, and the import warns about the others.
+warnings:
+  - match: user "admin" already exists*
+    reason: The install creates admin, and an account that exists stays as it is.
+  - match: execution environment "AWX EE (latest)" already exists *
+    reason: The install creates this one. It keeps its image.
+  - match: notification template "ops-slack" skipped*
+    reason: awxnext sends email and webhook notifications only.

@@ -86,7 +86,10 @@ jobs:
         run: test/awximport/awximport.py reports import-awx/dry-run.json import-awx/report.json
       - name: compare
         if: (success() || failure()) && steps.import.outcome == 'success'
-        run: test/awximport/awximport.py compare --awx-recording import-awx/awx-api.json --out import-awx
+        run: |
+          # A running server reads settings through a cache of 5 seconds.
+          sleep 6
+          test/awximport/awximport.py compare --awx-recording import-awx/awx-api.json --out import-awx
       - name: the job passes on awxnext
         if: (success() || failure()) && steps.import.outcome == 'success'
         run: test/awximport/awximport.py run-job awxnext

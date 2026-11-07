@@ -306,6 +306,16 @@ func (i *imp) users() error {
 			auditors[id(r["user_id"])] = true
 		}
 	}
+	// AWX 24 records a new system auditor here, not in main_rbac_roles_members.
+	if i.has("dab_rbac_roleuserassignment") {
+		ar, err := i.query(`SELECT a.user_id FROM dab_rbac_roleuserassignment a JOIN dab_rbac_roledefinition d ON d.id = a.role_definition_id WHERE d.name = 'System Auditor'`)
+		if err != nil {
+			return err
+		}
+		for _, r := range ar {
+			auditors[id(r["user_id"])] = true
+		}
+	}
 	// LDAP users keep logging in through LDAP: their DN is in AWX's profile.
 	ldapDNs := map[int64]string{}
 	if i.has("main_profile") {
@@ -943,6 +953,21 @@ func (i *imp) jobTemplates() error {
 	return nil
 }
 
+// copyPrompts copies the launch-time values of a workflow node or a schedule,
+// which AWX keeps in a JSON column, into the values to insert.
+func copyPrompts(v map[string]any, r row) {
+	prompt := jsonMap(r["char_prompts"])
+	for _, f := range []string{"scm_branch", "job_type", "job_tags", "skip_tags", "limit", "diff_mode", "verbosity", "forks", "job_slice_count", "timeout"} {
+		switch val := prompt[f].(type) {
+		case nil:
+		case float64:
+			v[f] = int64(val)
+		default:
+			v[f] = val
+		}
+	}
+}
+
 func (i *imp) workflows() error {
 	if i.has("main_workflowapprovaltemplate") {
 		rows, err := i.query(i.ujtBase("main_workflowapprovaltemplate"))
@@ -971,9 +996,10 @@ func (i *imp) workflows() error {
 		if err != nil {
 			return err
 		}
+		prompt := jsonMap(r["char_prompts"])
 		v := merge(i.ujtValues(r, "workflow_job_template"), map[string]any{"extra_vars": str(r["extra_vars"]), "survey_enabled": boolv(r["survey_enabled"]),
 			"survey_spec": survey, "allow_simultaneous": boolv(r["allow_simultaneous"]), "inventory_id": i.ref("inventories", r["inventory_id"]),
-			"limit": str(r["limit"]), "scm_branch": str(r["scm_branch"]), "job_tags": str(r["job_tags"]), "skip_tags": str(r["skip_tags"]),
+			"limit": str(prompt["limit"]), "scm_branch": str(prompt["scm_branch"]), "job_tags": str(prompt["job_tags"]), "skip_tags": str(prompt["skip_tags"]),
 			"webhook_service": str(r["webhook_service"]), "webhook_credential_id": i.ref("credentials", r["webhook_credential_id"]), "webhook_key": key})
 		for _, a := range []string{"ask_inventory_on_launch", "ask_variables_on_launch", "ask_limit_on_launch", "ask_scm_branch_on_launch",
 			"ask_labels_on_launch", "ask_skip_tags_on_launch", "ask_tags_on_launch"} {
@@ -1013,11 +1039,7 @@ func (i *imp) workflows() error {
 			"identifier": identifier, "all_parents_must_converge": boolv(r["all_parents_must_converge"]), "extra_data": string(ed),
 			"inventory_id": i.ref("inventories", r["inventory_id"]), "execution_environment_id": i.ref("execution_environments", r["execution_environment_id"]),
 			"created": r["created"], "modified": r["modified"]}
-		for _, f := range []string{"scm_branch", "job_type", "job_tags", "skip_tags", "limit", "diff_mode", "verbosity", "forks", "job_slice_count", "timeout"} {
-			if val, ok := r[f]; ok {
-				v[f] = val
-			}
-		}
+		copyPrompts(v, r)
 		if _, err := i.insert("workflow_job_template_nodes", "workflow_nodes", id(r["id"]), v); err != nil {
 			return err
 		}
@@ -1158,11 +1180,7 @@ func (i *imp) schedules() error {
 		v := merge(i.audit(r), map[string]any{"name": r["name"], "description": str(r["description"]), "unified_job_template_id": ujt,
 			"enabled": enabled, "rrule": str(r["rrule"]), "dtstart": dtstart, "dtend": dtend, "next_run": next, "extra_data": string(ed),
 			"inventory_id": i.ref("inventories", r["inventory_id"]), "execution_environment_id": i.ref("execution_environments", r["execution_environment_id"])})
-		for _, f := range []string{"scm_branch", "job_type", "job_tags", "skip_tags", "limit", "diff_mode", "verbosity", "forks", "job_slice_count", "timeout"} {
-			if val, ok := r[f]; ok {
-				v[f] = val
-			}
-		}
+		copyPrompts(v, r)
 		if _, err := i.insert("schedules", "schedules", id(r["id"]), v); err != nil {
 			return err
 		}
@@ -1236,6 +1254,7 @@ func (i *imp) notifications() error {
 	}
 	link := func(table, col, ct, mapName, event string, byUJT bool) error {
 		if !i.has(table) {
+			i.warn("no %s table: its notification links were not imported", table)
 			return nil
 		}
 		rs, err := i.query("SELECT " + col + " AS obj, notificationtemplate_id FROM " + table)
@@ -1257,17 +1276,17 @@ func (i *imp) notifications() error {
 		return nil
 	}
 	for _, ev := range []struct{ suffix, event string }{{"error", "error"}, {"success", "success"}, {"started", "started"}} {
-		if err := link("main_unifiedjobtemplate_notification_templates_for_"+ev.suffix, "unifiedjobtemplate_id", "", "ujt", ev.event, true); err != nil {
+		if err := link("main_unifiedjobtemplate_notification_templates_"+ev.suffix, "unifiedjobtemplate_id", "", "ujt", ev.event, true); err != nil {
 			return err
 		}
-		if err := link("main_organization_notification_templates_for_"+ev.suffix, "organization_id", "organization", "organizations", ev.event, false); err != nil {
+		if err := link("main_organization_notification_templates_"+ev.suffix, "organization_id", "organization", "organizations", ev.event, false); err != nil {
 			return err
 		}
 	}
-	if err := link("main_organization_notification_templates_for_approvals", "organization_id", "organization", "organizations", "approvals", false); err != nil {
+	if err := link("main_organization_notification_templates_approvals", "organization_id", "organization", "organizations", "approvals", false); err != nil {
 		return err
 	}
-	return link("main_workflowjobtemplate_notification_templates_for_approvals", "workflowjobtemplate_id", "workflowjobtemplate", "ujt", "approvals", false)
+	return link("main_workflowjobtemplate_notification_templates_approvals", "workflowjobtemplate_id", "workflowjobtemplate", "ujt", "approvals", false)
 }
 
 // --- roles ---
