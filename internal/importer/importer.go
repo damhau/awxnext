@@ -51,6 +51,7 @@ type imp struct {
 	cols map[string]map[string]bool
 	ct   map[int64]string // django content type id -> model
 	ujt  map[int64]string // AWX unified job template id -> model
+	err  error            // the first failure of exec
 }
 
 // Run imports an AWX database into the application database.
@@ -88,7 +89,11 @@ func Run(ctx context.Context, app *api.App, opt Options) (*Report, error) {
 	}
 	for _, s := range steps {
 		opt.Log("importing %s", s.name)
-		if err := s.fn(); err != nil {
+		err := s.fn()
+		if i.err != nil {
+			err = i.err
+		}
+		if err != nil {
 			return i.rep, fmt.Errorf("%s: %w", s.name, err)
 		}
 	}
@@ -104,6 +109,15 @@ func Run(ctx context.Context, app *api.App, opt Options) (*Report, error) {
 	}
 	app.Settings.Invalidate()
 	return i.rep, nil
+}
+
+// exec runs a statement that returns nothing the import needs. The first
+// failure is kept for Run: it aborts the transaction, so the statements after it
+// fail too, and only this one says why.
+func (i *imp) exec(sql string, args ...any) {
+	if i.err == nil {
+		_, i.err = i.tx.Exec(i.ctx, sql, args...)
+	}
 }
 
 func (i *imp) warn(format string, args ...any) {
@@ -518,7 +532,7 @@ func (i *imp) credentials() error {
 		for _, r := range ms {
 			org, cred := i.ref("organizations", r["organization_id"]), i.ref("credentials", r["credential_id"])
 			if org != nil && cred != nil {
-				i.tx.Exec(i.ctx, "INSERT INTO organization_galaxy_credentials (organization_id, credential_id, position) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
+				i.exec("INSERT INTO organization_galaxy_credentials (organization_id, credential_id, position) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
 					org, cred, id(r["position"]))
 			}
 		}
@@ -561,7 +575,7 @@ func (i *imp) executionEnvironments() error {
 		}
 		for _, r := range orgs {
 			if org, ee := i.ref("organizations", r["id"]), i.ref("execution_environments", r["default_environment_id"]); org != nil && ee != nil {
-				i.tx.Exec(i.ctx, "UPDATE organizations SET default_environment_id = $2 WHERE id = $1", org, ee)
+				i.exec("UPDATE organizations SET default_environment_id = $2 WHERE id = $1", org, ee)
 			}
 		}
 	}
@@ -709,7 +723,7 @@ func (i *imp) inventories() error {
 	}
 	for _, r := range gh {
 		if g, h := i.ref("groups", r["group_id"]), i.ref("hosts", r["host_id"]); g != nil && h != nil {
-			i.tx.Exec(i.ctx, "INSERT INTO group_hosts (group_id, host_id) VALUES ($1, $2) ON CONFLICT DO NOTHING", g, h)
+			i.exec("INSERT INTO group_hosts (group_id, host_id) VALUES ($1, $2) ON CONFLICT DO NOTHING", g, h)
 		}
 	}
 	// Django's parents M2M: from_group is the child, to_group the parent.
@@ -719,7 +733,7 @@ func (i *imp) inventories() error {
 	}
 	for _, r := range gp {
 		if child, parent := i.ref("groups", r["from_group_id"]), i.ref("groups", r["to_group_id"]); child != nil && parent != nil {
-			i.tx.Exec(i.ctx, "INSERT INTO group_children (parent_id, child_id) VALUES ($1, $2) ON CONFLICT DO NOTHING", parent, child)
+			i.exec("INSERT INTO group_children (parent_id, child_id) VALUES ($1, $2) ON CONFLICT DO NOTHING", parent, child)
 		}
 	}
 	if i.has("main_inventoryconstructedinventorymembership") {
@@ -729,7 +743,7 @@ func (i *imp) inventories() error {
 		}
 		for _, r := range ms {
 			if ci, in := i.ref("inventories", r["constructed_inventory_id"]), i.ref("inventories", r["input_inventory_id"]); ci != nil && in != nil {
-				i.tx.Exec(i.ctx, "INSERT INTO inventory_input_inventories (inventory_id, input_inventory_id, position) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
+				i.exec("INSERT INTO inventory_input_inventories (inventory_id, input_inventory_id, position) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
 					ci, in, id(r["position"]))
 			}
 		}
@@ -747,7 +761,7 @@ func (i *imp) inventories() error {
 		}
 		for _, r := range ms {
 			if obj, ig := i.ref(l.m, r["obj"]), i.ref("instance_groups", r["instancegroup_id"]); obj != nil && ig != nil {
-				i.tx.Exec(i.ctx, "INSERT INTO instance_group_links (content_type, object_id, instance_group_id, position) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING",
+				i.exec("INSERT INTO instance_group_links (content_type, object_id, instance_group_id, position) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING",
 					l.ct, obj, ig, id(r["position"]))
 			}
 		}
@@ -799,7 +813,7 @@ func (i *imp) projects() error {
 		}
 		i.mapID("ujt", id(r["id"]), nid)
 		if scm != "" {
-			i.tx.Exec(i.ctx, "UPDATE unified_job_templates SET local_path = $2 WHERE id = $1", nid, resources.ProjectLocalPath(nid, str(r["name"])))
+			i.exec("UPDATE unified_job_templates SET local_path = $2 WHERE id = $1", nid, resources.ProjectLocalPath(nid, str(r["name"])))
 		}
 	}
 	return nil
@@ -1014,7 +1028,7 @@ func (i *imp) workflows() error {
 		}
 		for _, e := range edges {
 			if f, t := i.ref("workflow_nodes", e["f"]), i.ref("workflow_nodes", e["t"]); f != nil && t != nil {
-				i.tx.Exec(i.ctx, "INSERT INTO workflow_job_template_node_edges (from_node_id, to_node_id, kind) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING", f, t, kind)
+				i.exec("INSERT INTO workflow_job_template_node_edges (from_node_id, to_node_id, kind) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING", f, t, kind)
 			}
 		}
 	}
@@ -1025,7 +1039,7 @@ func (i *imp) workflows() error {
 		}
 		for _, r := range cs {
 			if n, c := i.ref("workflow_nodes", r["n"]), i.ref("credentials", r["credential_id"]); n != nil && c != nil {
-				i.tx.Exec(i.ctx, "INSERT INTO workflow_job_template_node_credentials (node_id, credential_id) VALUES ($1, $2) ON CONFLICT DO NOTHING", n, c)
+				i.exec("INSERT INTO workflow_job_template_node_credentials (node_id, credential_id) VALUES ($1, $2) ON CONFLICT DO NOTHING", n, c)
 			}
 		}
 	}
@@ -1061,7 +1075,7 @@ func (i *imp) templateRelations() error {
 				continue
 			}
 			if u, c := i.ref("ujt", r["u"]), i.ref("credentials", r["credential_id"]); u != nil && c != nil {
-				i.tx.Exec(i.ctx, "INSERT INTO unified_job_template_credentials (unified_job_template_id, credential_id) VALUES ($1, $2) ON CONFLICT DO NOTHING", u, c)
+				i.exec("INSERT INTO unified_job_template_credentials (unified_job_template_id, credential_id) VALUES ($1, $2) ON CONFLICT DO NOTHING", u, c)
 			}
 		}
 	}
@@ -1072,7 +1086,7 @@ func (i *imp) templateRelations() error {
 		}
 		for _, r := range rows {
 			if u, l := i.ref("ujt", r["u"]), i.ref("labels", r["label_id"]); u != nil && l != nil {
-				i.tx.Exec(i.ctx, "INSERT INTO unified_job_template_labels (unified_job_template_id, label_id) VALUES ($1, $2) ON CONFLICT DO NOTHING", u, l)
+				i.exec("INSERT INTO unified_job_template_labels (unified_job_template_id, label_id) VALUES ($1, $2) ON CONFLICT DO NOTHING", u, l)
 			}
 		}
 	}
@@ -1084,7 +1098,7 @@ func (i *imp) templateRelations() error {
 		for _, r := range rows {
 			ct := map[string]string{"jobtemplate": "jobtemplate", "inventorysource": "inventorysource"}[i.ujt[id(r["u"])]]
 			if u, g := i.ref("ujt", r["u"]), i.ref("instance_groups", r["instancegroup_id"]); u != nil && g != nil && ct != "" {
-				i.tx.Exec(i.ctx, "INSERT INTO instance_group_links (content_type, object_id, instance_group_id, position) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING",
+				i.exec("INSERT INTO instance_group_links (content_type, object_id, instance_group_id, position) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING",
 					ct, u, g, id(r["position"]))
 			}
 		}
@@ -1134,7 +1148,7 @@ func (i *imp) schedules() error {
 		ed, _ := json.Marshal(extra)
 		if i.ujt[id(r["unified_job_template_id"])] == "systemjobtemplate" {
 			// Built-in management jobs keep a single schedule: replace the default one.
-			i.tx.Exec(i.ctx, "DELETE FROM schedules WHERE unified_job_template_id = $1", ujt)
+			i.exec("DELETE FROM schedules WHERE unified_job_template_id = $1", ujt)
 		}
 		v := merge(i.audit(r), map[string]any{"name": r["name"], "description": str(r["description"]), "unified_job_template_id": ujt,
 			"enabled": enabled, "rrule": str(r["rrule"]), "dtstart": dtstart, "dtend": dtend, "next_run": next, "extra_data": string(ed),
@@ -1155,7 +1169,7 @@ func (i *imp) schedules() error {
 		}
 		for _, r := range cs {
 			if s, c := i.ref("schedules", r["schedule_id"]), i.ref("credentials", r["credential_id"]); s != nil && c != nil {
-				i.tx.Exec(i.ctx, "INSERT INTO schedule_credentials (schedule_id, credential_id) VALUES ($1, $2) ON CONFLICT DO NOTHING", s, c)
+				i.exec("INSERT INTO schedule_credentials (schedule_id, credential_id) VALUES ($1, $2) ON CONFLICT DO NOTHING", s, c)
 			}
 		}
 	}
@@ -1231,7 +1245,7 @@ func (i *imp) notifications() error {
 			}
 			obj, nt := i.ref(mapName, r["obj"]), i.ref("notification_templates", r["notificationtemplate_id"])
 			if obj != nil && nt != nil && kind != "" {
-				i.tx.Exec(i.ctx, `INSERT INTO notification_template_links (content_type, object_id, notification_template_id, event)
+				i.exec(`INSERT INTO notification_template_links (content_type, object_id, notification_template_id, event)
 					VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING`, kind, obj, nt, event)
 			}
 		}

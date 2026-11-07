@@ -309,7 +309,8 @@ def seed(args):
     a.post(f"workflow_job_template_nodes/{gate}/success_nodes/", {"id": after})
     a.post(f"workflow_job_template_nodes/{first}/failure_nodes/", {"id": fail})
     a.post(f"workflow_job_template_nodes/{gate}/always_nodes/", {"id": fail})
-    a.post(f"workflow_job_template_nodes/{after}/credentials/", {"id": machine})
+    # Replaces the template's machine credential: AWX refuses the same one.
+    a.post(f"workflow_job_template_nodes/{after}/credentials/", {"id": looked_up})
 
     # Schedules: a template's, with an encrypted survey answer, a disabled
     # workflow's, and AWX's own on the management jobs are already there.
