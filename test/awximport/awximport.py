@@ -12,8 +12,9 @@
   seed       fills an AWX through its API with what an installation holds
   run-job    syncs a project, launches a job template and waits for it
   snapshot   counts each resource, to show that a dry run writes nothing
+  record     saves what AWX answers to the comparison
   reports    checks the importer's reports: warnings, and dry run against import
-  compare    compares the AWX and the awxnext through /api/v2
+  compare    compares that recording and the awxnext through /api/v2
 
 The comparison goes one way: what AWX has must be in awxnext, with the same
 fields, memberships, roles, survey specs and settings. Foreign keys are compared
@@ -23,6 +24,10 @@ the run, and so does an entry that no longer matches anything, so the list stays
 true.
 
 Passwords come from AWX_PASSWORD and AWXNEXT_PASSWORD.
+
+The workflow's artifact holds AWX's database, its secret key and the recording,
+so a change to the importer can be tried with no AWX: load awx.sql into a local
+PostgreSQL, run `awxnext import-awx` on it, then `compare` with that recording.
 """
 
 import argparse
@@ -61,6 +66,7 @@ class API:
         self.conn = Connection(url)
         self.conn.login(user, password)
         self.url = url
+        self.answers = {}
 
     def request(self, method, path, body=None, params=None, ok=(200, 201, 202, 204)):
         path = "/api/v2/" + path.lstrip("/")
@@ -70,7 +76,10 @@ class API:
             res = getattr(self.conn, method)(path, json=body)
         if res.status_code not in ok:
             raise SystemExit(f"{method.upper()} {path} {body if body is not None else ''}: {res.status_code} {res.text[:2000]}")
-        return res.json() if res.content else {}
+        data = res.json() if res.content else {}
+        if method == "get":
+            self.answers[answer_key(path, params)] = data
+        return data
 
     def get(self, path, **params):
         return self.request("get", path, params=params or None)
@@ -106,6 +115,20 @@ class API:
                 return obj
             time.sleep(3)
         raise SystemExit(f"{path}: still {obj['status']} after {timeout} s")
+
+
+def answer_key(path, params):
+    return json.dumps([path, params], sort_keys=True)
+
+
+class Recording(API):
+    """Answers as the recorded server did."""
+
+    def __init__(self, path):
+        self.answers = json.loads(pathlib.Path(path).read_text())
+
+    def request(self, method, path, body=None, params=None, ok=None):
+        return self.answers[answer_key("/api/v2/" + path.lstrip("/"), params)]
 
 
 def awx():
@@ -703,8 +726,17 @@ class Comparison:
             (d / f"{name}.json").write_text(json.dumps(side.objs, indent=1, sort_keys=True, default=str))
 
 
+def record(args):
+    """Every path a comparison reads, by comparing AWX with itself."""
+    a = awx()
+    c = Comparison(a, awx()).run()
+    if c.diffs:
+        raise SystemExit(f"AWX differs from itself: {c.diffs[:5]}")
+    pathlib.Path(args.out).write_text(json.dumps(a.answers))
+
+
 def compare(args):
-    c = Comparison(awx(), awxnext()).run().logins()
+    c = Comparison(Recording(args.awx_recording), awxnext()).run().logins()
     if args.out:
         c.dump(args.out)
     known = known_differences().get("differences") or []
@@ -752,7 +784,11 @@ def main():
     s.add_argument("dry_run")
     s.add_argument("report")
     s.set_defaults(fn=reports)
+    s = sub.add_parser("record")
+    s.add_argument("--out", required=True)
+    s.set_defaults(fn=record)
     s = sub.add_parser("compare")
+    s.add_argument("--awx-recording", required=True)
     s.add_argument("--out")
     s.set_defaults(fn=compare)
     args = p.parse_args()

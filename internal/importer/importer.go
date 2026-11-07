@@ -554,8 +554,13 @@ func (i *imp) executionEnvironments() error {
 	for _, r := range rows {
 		old := id(r["id"])
 		var existing int64
-		if err := i.tx.QueryRow(i.ctx, "SELECT id FROM execution_environments WHERE image = $1 AND name = $2", r["image"], r["name"]).Scan(&existing); err == nil {
+		var image string
+		if err := i.tx.QueryRow(i.ctx, "SELECT id, image FROM execution_environments WHERE name = $1 AND organization_id IS NOT DISTINCT FROM $2",
+			r["name"], i.ref("organizations", r["organization_id"])).Scan(&existing, &image); err == nil {
 			i.mapID("execution_environments", old, existing)
+			if image != str(r["image"]) {
+				i.warn("execution environment %q already exists with the image %s; kept it, not AWX's %s", r["name"], image, str(r["image"]))
+			}
 			continue
 		}
 		if boolv(r["managed"]) && managedEE != 0 {

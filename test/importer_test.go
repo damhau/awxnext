@@ -122,7 +122,8 @@ INSERT INTO main_credential VALUES (42,'machine','',1,1,'{"username":"root","pas
   (43,'aws lookup','',1,2,'{}',%[1]s,%[1]s,1,1,false),
   (44,'Ansible Galaxy','',NULL,4,'{"url":"https://galaxy.ansible.com/"}',%[1]s,%[1]s,NULL,NULL,true);
 INSERT INTO main_organizationgalaxycredentialmembership (organization_id, credential_id, position) VALUES (1,44,1);
-INSERT INTO main_executionenvironment VALUES (1,'AWX EE (latest)','','quay.io/ansible/awx-ee:latest',true,NULL,NULL,'',%[1]s,%[1]s,NULL,NULL);
+INSERT INTO main_executionenvironment VALUES (1,'AWX EE (latest)','','quay.io/ansible/awx-ee:from-awx',false,NULL,NULL,'',%[1]s,%[1]s,NULL,NULL),
+  (2,'Control Plane Execution Environment','','quay.io/ansible/awx-ee:24.6.1',true,NULL,NULL,'',%[1]s,%[1]s,NULL,NULL);
 INSERT INTO main_instancegroup VALUES (1,'default',%[1]s,%[1]s,false,NULL,'',100,0,0,0,'[]'),(2,'remote-%[2]s',%[1]s,%[1]s,false,NULL,'',0,0,0,0,'["test-node", "awx-exec-1"]');
 INSERT INTO main_label VALUES (1,'prod',1,%[1]s,%[1]s,1,1);
 INSERT INTO main_inventory VALUES (1,'inv','',1,'env: prod',%[1]s,%[1]s,1,1,'','',false,false),
@@ -222,6 +223,7 @@ func TestImportAWX(t *testing.T) {
 	}
 	warnings := strings.Join(rep.Warnings, "\n")
 	for _, w := range []string{`user "admin" already exists`, "svn projects are not supported", "slack notifications are not supported",
+		`execution environment "AWX EE (latest)" already exists with the image`,
 		`schedule "broken" imported disabled`, "setting RADIUS_SERVER skipped: not supported", "setting AUTH_LDAP_GROUP_TYPE_PARAMS skipped: Invalid key(s): \"colour\"."} {
 		if !strings.Contains(warnings, w) {
 			t.Errorf("missing warning %q in:\n%s", w, warnings)

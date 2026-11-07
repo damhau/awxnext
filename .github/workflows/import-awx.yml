@@ -6,8 +6,10 @@
 # two through /api/v2; and a job on awxnext that needs the imported secrets.
 #
 # The checks after the import run even if an earlier one fails, so one run shows
-# all the gaps. The job summary has the tables, the artifact AWX's schema, the
-# reports and both servers' objects.
+# all the gaps. The job summary has the tables. The artifact has the reports, both
+# servers' objects, and what it takes to repeat the import with no AWX: its
+# database, secret key and API answers. They are test values from a cluster that
+# ends with the run.
 name: import-awx
 
 on:
@@ -62,10 +64,11 @@ jobs:
             --project-url "https://github.com/${GITHUB_REPOSITORY}" --project-branch "${GITHUB_REF_NAME}"
       - name: the job passes on AWX
         run: test/awximport/awximport.py run-job awx
-      - name: AWX's schema
-        if: always()
-        continue-on-error: true
-        run: kubectl -n awx exec awx-postgres-15-0 -- pg_dump -U awx --schema-only awx > import-awx/awx-schema.sql
+      - name: save AWX
+        run: |
+          kubectl -n awx exec awx-postgres-15-0 -- pg_dump -U awx --no-owner --no-privileges awx > import-awx/awx.sql
+          echo "$AWX_SECRET_KEY" > import-awx/awx-secret-key.txt
+          test/awximport/awximport.py record --out import-awx/awx-api.json
       - name: dry run
         run: |
           test/awximport/awximport.py snapshot --out import-awx/before.json
@@ -83,7 +86,7 @@ jobs:
         run: test/awximport/awximport.py reports import-awx/dry-run.json import-awx/report.json
       - name: compare
         if: (success() || failure()) && steps.import.outcome == 'success'
-        run: test/awximport/awximport.py compare --out import-awx
+        run: test/awximport/awximport.py compare --awx-recording import-awx/awx-api.json --out import-awx
       - name: the job passes on awxnext
         if: (success() || failure()) && steps.import.outcome == 'success'
         run: test/awximport/awximport.py run-job awxnext
