@@ -408,7 +408,9 @@ def run_job(args):
         print(a.conn.get(f"/api/v2/project_updates/{update['project_update']}/stdout/", query_parameters={"format": "txt"}).text)
         raise SystemExit(f"project sync on {args.server}: {done['status']}")
     jt = a.one("job_templates/", name=JOB_TEMPLATE)
-    job = a.post(f"job_templates/{jt['id']}/launch/")
+    # As AWX's UI asks for a password's stored default: AWX refuses a required
+    # question left out, even if it has a default.
+    job = a.post(f"job_templates/{jt['id']}/launch/", {"extra_vars": {"survey_secret": "$encrypted$"}})
     done = a.wait(f"jobs/{job['job']}/")
     print(a.conn.get(f"/api/v2/jobs/{job['job']}/stdout/", query_parameters={"format": "txt"}).text)
     if done["status"] != "successful":
