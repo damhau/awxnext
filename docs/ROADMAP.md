@@ -1324,8 +1324,7 @@ untested.
 A workflow reuses `bench.yml`'s install of AWX 24.6.1 in kind. It fills AWX
 through its API, runs `import-awx --dry-run`, then the import, compares the
 two through `/api/v2` and launches an imported template. It runs by hand,
-and from `full.yml` if its run time allows. What it finds is fixed, or
-documented.
+and from `full.yml`. What it finds is fixed, or documented.
 
 **Done when:** the workflow passes, the imported objects and roles match
 AWX's, an imported credential works in a job, and every gap found is fixed
@@ -1463,6 +1462,15 @@ Taken on 2026-11-01:
     Makefile's `vuln-*` and `sbom` targets stay for scanning by hand. Until
     M10-03 they were the only scan of the all-in-one image, since secubot
     built only the Dockerfile's default target.
+
+Taken on 2026-11-07:
+
+16. The AWX import is compared with a real AWX 24.6.1 (M10-01). What differs
+    on purpose is listed with its reason in
+    `test/awximport/known-differences.yml`, and anything else fails the run.
+    An execution environment of an existing name is kept, with a warning. An
+    empty value that reads `""` where AWX has null stays as it is, since no
+    client treats them differently and null would need a migration.
 
 ## On GitHub
 

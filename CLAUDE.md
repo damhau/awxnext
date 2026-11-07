@@ -13,6 +13,8 @@ provider) must keep working against it.
 - `test/`: Go integration tests against an in-process server and a real PostgreSQL.
   - `test/kind` runs against the Helm chart in kind (CI only).
   - `test/isolation` runs against the Compose image (CI only).
+  - `test/awximport` fills a real AWX 24.6.1 and compares what `import-awx` makes of it (CI only,
+    `import-awx.yml`). What differs on purpose is in its `known-differences.yml`.
 - `ui/`: the web UI. Its logic lives in `ui/src/lib/*.ts`, with a Vitest test next to each file.
 - `compat/`: AWX's own client test suites, run against a throwaway stack (`compat/run.py`).
 - `deploy/`: Compose and the Helm chart. `docs/` holds the operator guide, the configuration
@@ -33,7 +35,7 @@ Run the tests of what you changed, and nothing else: CI runs the rest on push.
   `make test` checks `docs/configuration.md` and `config.Vars`.
 - **Before a milestone closes:** `gh workflow run full.yml` and `gh workflow run secfix.yml`.
   full.yml also runs nightly: every Go test with the race detector, the chart and image tests,
-  and the compat suites; `make test-full` is the local Go part of it. secfix.yml is secubot
+  the import from a real AWX, and the compat suites; `make test-full` is the local Go part of it. secfix.yml is secubot
   (below): read its run summary. `make vuln` scans by hand, with Docker, and covers both images;
   secubot builds only the all-in-one.
 

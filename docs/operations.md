@@ -150,8 +150,9 @@ jobs keep running.
 - role grants;
 - the login settings: LDAP, SAML, OIDC, GitHub, Google and Azure AD.
 
-Job history and instances (nodes) are not imported. Import into a new awxnext: users that exist
-already there are kept, and organizations of the same name merged.
+Job history and instances (nodes) are not imported. Import into a new awxnext: users and execution
+environments that exist already there are kept, with a warning, and organizations of the same
+name merged. AWX's managed credentials and execution environment map onto awxnext's own.
 
 1. **Find AWX's database URL and `SECRET_KEY`.** With awx-operator, they are in the secrets
    `<awx>-postgres-configuration` and `<awx>-secret-key` (key `secret_key`); the bundled database
@@ -166,7 +167,8 @@ already there are kept, and organizations of the same name merged.
    ```
 
 3. **Import.** Run it again without `--dry-run`, on an awxnext connected to its own database.
-   AWX keeps running: the import only reads.
+   AWX keeps running: the import only reads. A running awxnext sees the imported settings within
+   5 seconds.
 4. **After the import:**
    - sync the projects (Projects, **Sync**);
    - register execution nodes again (Instances, **Add node**, then the agent);
@@ -178,6 +180,42 @@ already there are kept, and organizations of the same name merged.
 
 The `awx` CLI, the `awx.awx` collection and the Terraform provider work against awxnext
 unchanged ([parity](parity.md)).
+
+### What differs after an import
+
+Through `/api/v2`, the imported objects match AWX's, with these exceptions:
+
+- **What awxnext's install created stays.** `admin` keeps its account. `AWX EE (latest)` keeps
+  the image of `AWXNEXT_DEFAULT_EE_IMAGE`, and `default` stays awxnext's instance group, however
+  it was set up in AWX.
+- **Notification types.** Only email and webhook templates come along; the report lists the
+  others, and their links are lost.
+- **Computed values.** The callback and metadata URLs of the login settings come from awxnext's
+  URL, and a project's `local_path` from its id, which changes when awxnext already uses it.
+  awxnext counts the hosts and sources of an inventory, where AWX shows a counter it hasn't
+  refreshed.
+- **Empty values.** A workflow's unset `job_tags`, `skip_tags` and `scm_branch`, and an
+  inventory's unset `host_filter`, read `""` where AWX has null.
+- **Managed credential types.** AWS, Azure Resource Manager, Google Compute Engine, OpenStack,
+  Satellite, Terraform and vCenter show their injectors, which AWX builds in code and shows as
+  `{}`. An Azure Key Vault lookup needs no client, secret or tenant: without them, it uses
+  awxnext's own Azure identity.
+
+### How the importer is tested
+
+`.github/workflows/import-awx.yml` runs by hand and every night from `full.yml`. It installs
+AWX 24.6.1 and awxnext in kind, and `test/awximport/awximport.py` fills AWX through its API:
+users, teams and role grants; credentials of several types, one a secret lookup; login settings;
+regular, smart and constructed inventories; a project; job templates with a survey; a workflow
+with an approval node; schedules and notification templates. It then checks that the dry run
+changes nothing, imports, and compares the two servers through `/api/v2`: names, fields,
+memberships, roles, surveys, workflow graphs, settings, and logins with the imported passwords.
+Finally, an imported job template must succeed, with a playbook that checks the secrets it gets
+from its imported credentials.
+
+A difference or a warning fails the run unless `test/awximport/known-differences.yml` lists it
+with its reason, and so does an entry that no longer matches anything. `test/importer_test.go`
+is the fast test: the same importer on a copy of the AWX tables it reads.
 
 ## High availability
 

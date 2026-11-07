@@ -2,7 +2,7 @@ name: Full
 
 # Everything: the whole Go suite with the race detector (job tests, object
 # storage against MinIO and Azurite), the chart (helm.yml), the image with
-# Compose (compose.yml)
+# Compose (compose.yml), the importer against a real AWX (import-awx.yml)
 # and AWX's clients (compat.yml, a job per suite). Nightly, and by hand before
 # a milestone is closed: gh workflow run full.yml
 on:
@@ -71,6 +71,9 @@ jobs:
 
   compose:
     uses: ./.github/workflows/compose.yml
+
+  import-awx:
+    uses: ./.github/workflows/import-awx.yml
 
   compat:
     strategy:

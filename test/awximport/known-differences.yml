@@ -9,7 +9,7 @@ differences:
   - match: users/admin/email
     reason: An account that exists stays as it is, and the install creates admin.
   - match: execution_environments/None/Control Plane Execution Environment
-    reason: AWX's own, managed execution environment; awxnext runs its control tasks without one.
+    reason: AWX's managed execution environment maps onto awxnext's own.
   - match: execution_environments/None/AWX EE (latest)/*
     reason: The install creates this one. A global execution environment of the same name is kept, with a warning.
   - match: instance_groups/default/is_container_group

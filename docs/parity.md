@@ -217,7 +217,7 @@ The gaps fall in four groups:
 - Version history with diffs and one-click revert on every object.
 - Folders inside organizations, with roles inherited by everything below; nested teams.
 - GitOps sources applying YAML declarations atomically, with dry-run plans, pruning and locked managed objects.
-- Importer reading an AWX database and re-encrypting its credentials and login settings.
+- Importer reading an AWX database and re-encrypting its credentials and login settings, tested against a real AWX 24.6.1 (roadmap M10-01). [What differs after an import](operations.md#what-differs-after-an-import): an empty prompt or filter reads `""` where AWX has null, managed cloud credential types show their injectors, and Azure Key Vault lookups don't require a client, a secret and a tenant.
 - Envelope encryption of secrets with local, Vault Transit or Azure Key Vault master keys, rotation and escrow.
 - Workflow `when` conditions, loops and typed node outputs; survey choices from inventories, git refs and the API, conditional questions, answer formats.
 - Operator catalog (`/run`), launch page with "what will happen" and each variable's source, host × task grid, "why it failed" summary, ⌘K palette, query-language filters.
