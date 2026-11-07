@@ -106,7 +106,7 @@ func init() {
 		{Key: "LOGIN_REDIRECT_OVERRIDE", Category: "authentication", Type: "string", Default: "", Label: "Login redirect override URL", Help: "Where the web UI sends users who are not logged in, instead of its login page (for example a single sign-on login URL). Open the UI with ?login=local to reach the local login page anyway."},
 
 		// oidc
-		{Key: "SOCIAL_AUTH_OIDC_KEY", Category: "oidc", Type: "string", Default: "", Label: "OIDC Key", Help: "The OIDC key (Client ID) from your IDP."},
+		{Key: "SOCIAL_AUTH_OIDC_KEY", Category: "oidc", Type: "string", Default: nil, Nullable: true, Label: "OIDC Key", Help: "The OIDC key (Client ID) from your IDP."},
 		{Key: "SOCIAL_AUTH_OIDC_SECRET", Category: "oidc", Type: "string", Default: "", Secret: true, Label: "OIDC Secret", Help: "The OIDC secret (Client Secret) from your IDP."},
 		{Key: "SOCIAL_AUTH_OIDC_OIDC_ENDPOINT", Category: "oidc", Type: "string", Default: "", Label: "OIDC Provider URL", Help: "The URL for your OIDC provider including the path up to /.well-known/openid-configuration"},
 		{Key: "SOCIAL_AUTH_OIDC_VERIFY_SSL", Category: "oidc", Type: "boolean", Default: true, Label: "Verify OIDC Provider Certificate", Help: "Check the OIDC provider's TLS certificate. Turn it off only for a test provider with a self-signed certificate."},

@@ -184,7 +184,7 @@ clients and imports keep working.
 | `SOCIAL_AUTH_TEAM_MAP` | nested object | null | AWX's map of the teams an external user joins, by username or email: {"Web": {"organization": "Ops", "users": "/^web-/", "remove": true}}. A login with its own map uses that one instead, as in AWX. |
 | `ALLOW_OAUTH2_FOR_EXTERNAL_USERS` | boolean | `false` | *No effect.* OAuth2 applications are not supported; use personal tokens or OIDC. |
 | `LOGIN_REDIRECT_OVERRIDE` | string | `""` | Where the web UI sends users who are not logged in, instead of its login page (for example a single sign-on login URL). Open the UI with ?login=local to reach the local login page anyway. |
-| `SOCIAL_AUTH_OIDC_KEY` | string | `""` | The OIDC key (Client ID) from your IDP. |
+| `SOCIAL_AUTH_OIDC_KEY` | string | null | The OIDC key (Client ID) from your IDP. |
 | `SOCIAL_AUTH_OIDC_SECRET` | string | `""` | The OIDC secret (Client Secret) from your IDP. (secret) |
 | `SOCIAL_AUTH_OIDC_OIDC_ENDPOINT` | string | `""` | The URL for your OIDC provider including the path up to /.well-known/openid-configuration |
 | `SOCIAL_AUTH_OIDC_VERIFY_SSL` | boolean | `true` | Check the OIDC provider's TLS certificate. Turn it off only for a test provider with a self-signed certificate. |
@@ -379,9 +379,9 @@ clients and imports keep working.
 | `SOCIAL_AUTH_SAML_EXTRA_DATA` | list | null | *No effect.* it keeps no social auth extra data. |
 | `SOCIAL_AUTH_SAML_ORGANIZATION_MAP` | nested object | null | Organizations a SAML user joins, by username or email: {"Default": {"users": true}}, as SOCIAL_AUTH_ORGANIZATION_MAP, which SAML logins do not use. As in AWX's SAML pipeline, a null expression removes like false. |
 | `SOCIAL_AUTH_SAML_TEAM_MAP` | nested object | null | Teams a SAML user joins, by username or email: {"Web": {"organization": "Ops", "users": true}}. |
-| `SOCIAL_AUTH_SAML_ORGANIZATION_ATTR` | nested object | null | Organizations from SAML attributes: {"saml_attr": "member-of", "saml_admin_attr": "admin-of", "saml_auditor_attr": "auditor-of", "remove": true, "remove_admins": true, "remove_auditors": true}. With remove (the default), a user loses the memberships SAML gave in organizations the attribute no longer names. |
-| `SOCIAL_AUTH_SAML_TEAM_ATTR` | nested object | null | Teams from a SAML attribute: {"saml_attr": "team", "remove": true, "team_org_map": [{"team": "Blue", "team_alias": "Blue Team", "organization": "Default"}]}. |
-| `SOCIAL_AUTH_SAML_USER_FLAGS_BY_ATTR` | nested object | null | Superusers and system auditors from the Role attribute or another attribute: {"is_superuser_role": ["awx_admins"], "is_superuser_attr": "is_superuser", "is_superuser_value": ["IT-Superadmin"], "remove_superusers": true, "is_system_auditor_role": [...], "is_system_auditor_attr": "...", "is_system_auditor_value": [...], "remove_system_auditors": true}. As in AWX, a SAML login without them takes the flags away unless remove_superusers or remove_system_auditors is false. |
+| `SOCIAL_AUTH_SAML_ORGANIZATION_ATTR` | nested object | `{}` | Organizations from SAML attributes: {"saml_attr": "member-of", "saml_admin_attr": "admin-of", "saml_auditor_attr": "auditor-of", "remove": true, "remove_admins": true, "remove_auditors": true}. With remove (the default), a user loses the memberships SAML gave in organizations the attribute no longer names. |
+| `SOCIAL_AUTH_SAML_TEAM_ATTR` | nested object | `{}` | Teams from a SAML attribute: {"saml_attr": "team", "remove": true, "team_org_map": [{"team": "Blue", "team_alias": "Blue Team", "organization": "Default"}]}. |
+| `SOCIAL_AUTH_SAML_USER_FLAGS_BY_ATTR` | nested object | `{}` | Superusers and system auditors from the Role attribute or another attribute: {"is_superuser_role": ["awx_admins"], "is_superuser_attr": "is_superuser", "is_superuser_value": ["IT-Superadmin"], "remove_superusers": true, "is_system_auditor_role": [...], "is_system_auditor_attr": "...", "is_system_auditor_value": [...], "remove_system_auditors": true}. As in AWX, a SAML login without them takes the flags away unless remove_superusers or remove_system_auditors is false. |
 | `NAMED_URL_FORMATS` | nested object | `{"credential_types":"<name>+<kind>","credentials":"<name>...` | Read-only list of key-value pairs that shows the standard format of all available named URLs. (read-only) |
 | `NAMED_URL_GRAPH_NODES` | nested object | `{"credential_types":{"adj_list":[],"fields":["name","kind...` | Read-only list of key-value pairs that exposes named URL graph topology. Use this list to programmatically generate named URLs for resources (read-only) |
 
@@ -407,7 +407,7 @@ clients and imports keep working.
 
 | Setting | Type | Default | |
 |---|---|---|---|
-| `SOCIAL_AUTH_OIDC_KEY` | string | `""` | The OIDC key (Client ID) from your IDP. |
+| `SOCIAL_AUTH_OIDC_KEY` | string | null | The OIDC key (Client ID) from your IDP. |
 | `SOCIAL_AUTH_OIDC_SECRET` | string | `""` | The OIDC secret (Client Secret) from your IDP. (secret) |
 | `SOCIAL_AUTH_OIDC_OIDC_ENDPOINT` | string | `""` | The URL for your OIDC provider including the path up to /.well-known/openid-configuration |
 | `SOCIAL_AUTH_OIDC_VERIFY_SSL` | boolean | `true` | Check the OIDC provider's TLS certificate. Turn it off only for a test provider with a self-signed certificate. |
@@ -538,9 +538,9 @@ clients and imports keep working.
 | `SOCIAL_AUTH_SAML_EXTRA_DATA` | list | null | *No effect.* it keeps no social auth extra data. |
 | `SOCIAL_AUTH_SAML_ORGANIZATION_MAP` | nested object | null | Organizations a SAML user joins, by username or email: {"Default": {"users": true}}, as SOCIAL_AUTH_ORGANIZATION_MAP, which SAML logins do not use. As in AWX's SAML pipeline, a null expression removes like false. |
 | `SOCIAL_AUTH_SAML_TEAM_MAP` | nested object | null | Teams a SAML user joins, by username or email: {"Web": {"organization": "Ops", "users": true}}. |
-| `SOCIAL_AUTH_SAML_ORGANIZATION_ATTR` | nested object | null | Organizations from SAML attributes: {"saml_attr": "member-of", "saml_admin_attr": "admin-of", "saml_auditor_attr": "auditor-of", "remove": true, "remove_admins": true, "remove_auditors": true}. With remove (the default), a user loses the memberships SAML gave in organizations the attribute no longer names. |
-| `SOCIAL_AUTH_SAML_TEAM_ATTR` | nested object | null | Teams from a SAML attribute: {"saml_attr": "team", "remove": true, "team_org_map": [{"team": "Blue", "team_alias": "Blue Team", "organization": "Default"}]}. |
-| `SOCIAL_AUTH_SAML_USER_FLAGS_BY_ATTR` | nested object | null | Superusers and system auditors from the Role attribute or another attribute: {"is_superuser_role": ["awx_admins"], "is_superuser_attr": "is_superuser", "is_superuser_value": ["IT-Superadmin"], "remove_superusers": true, "is_system_auditor_role": [...], "is_system_auditor_attr": "...", "is_system_auditor_value": [...], "remove_system_auditors": true}. As in AWX, a SAML login without them takes the flags away unless remove_superusers or remove_system_auditors is false. |
+| `SOCIAL_AUTH_SAML_ORGANIZATION_ATTR` | nested object | `{}` | Organizations from SAML attributes: {"saml_attr": "member-of", "saml_admin_attr": "admin-of", "saml_auditor_attr": "auditor-of", "remove": true, "remove_admins": true, "remove_auditors": true}. With remove (the default), a user loses the memberships SAML gave in organizations the attribute no longer names. |
+| `SOCIAL_AUTH_SAML_TEAM_ATTR` | nested object | `{}` | Teams from a SAML attribute: {"saml_attr": "team", "remove": true, "team_org_map": [{"team": "Blue", "team_alias": "Blue Team", "organization": "Default"}]}. |
+| `SOCIAL_AUTH_SAML_USER_FLAGS_BY_ATTR` | nested object | `{}` | Superusers and system auditors from the Role attribute or another attribute: {"is_superuser_role": ["awx_admins"], "is_superuser_attr": "is_superuser", "is_superuser_value": ["IT-Superadmin"], "remove_superusers": true, "is_system_auditor_role": [...], "is_system_auditor_attr": "...", "is_system_auditor_value": [...], "remove_system_auditors": true}. As in AWX, a SAML login without them takes the flags away unless remove_superusers or remove_system_auditors is false. |
 
 ### GitHub OAuth2 (`/api/v2/settings/github/`)
 

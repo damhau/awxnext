@@ -421,10 +421,8 @@ func registerCredentials() {
 				var kind string
 				var ns *string
 				c.DB().QueryRow(c, "SELECT kind, namespace FROM credential_types WHERE id = $1", typeID).Scan(&kind, &ns)
-				o["kind"] = kind
-				if ns != nil {
-					o["kind"] = *ns
-				}
+				// As AWX: the type's namespace, which a custom type doesn't have.
+				o["kind"] = ns
 				o["cloud"] = kind == "cloud"
 				o["kubernetes"] = kind == "kubernetes"
 				owners := []Obj{}

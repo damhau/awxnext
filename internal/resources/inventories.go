@@ -273,6 +273,9 @@ func registerInventories() {
 			Filter: func(arg ArgFunc, pid int64) string {
 				return fmt.Sprintf("t.id IN (SELECT input_inventory_id FROM inventory_input_inventories WHERE inventory_id = %s)", arg(pid))
 			},
+			Order: func(pid int64) string {
+				return fmt.Sprintf("(SELECT position FROM inventory_input_inventories WHERE inventory_id = %d AND input_inventory_id = t.id)", pid)
+			},
 			CanAttach: func(c *Ctx, parent Obj, child int64) error {
 				if str(parent["kind"]) != "constructed" {
 					return api.BadRequest("Input inventories can only be set on constructed inventories.")

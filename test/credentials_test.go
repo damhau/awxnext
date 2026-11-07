@@ -70,6 +70,13 @@ func TestAnsibleGalaxyCredential(t *testing.T) {
 	if r := must(t, a.get(fmt.Sprintf("organizations/%d/galaxy_credentials/", org)), 200); r.count() != 1 {
 		t.Fatalf("galaxy credentials: %s", r.Raw)
 	}
+	// In the order they were added, not by name: the first that has a collection serves it.
+	second := must(t, a.post("credentials/", map[string]any{"name": "AAA-" + uniq("galaxy"), "organization": org, "credential_type": credType(t, a, "galaxy_api_token"),
+		"inputs": map[string]any{"url": "https://hub.example.com/"}}), 201).id()
+	must(t, a.post(fmt.Sprintf("organizations/%d/galaxy_credentials/", org), map[string]any{"id": second}), 204)
+	if got := must(t, a.get(fmt.Sprintf("organizations/%d/galaxy_credentials/", org)), 200).results(); len(got) != 2 || got[0]["name"] != "Ansible Galaxy" {
+		t.Fatalf("galaxy credentials' order: %v", got)
+	}
 	bob, _ := newUser(t, a)
 	if r := must(t, bob.get("credentials/?managed=true"), 200); r.count() != 0 {
 		t.Fatalf("visible to a plain user: %s", r.Raw)
@@ -123,6 +130,10 @@ func TestCustomCredentialType(t *testing.T) {
 	org := newOrg(t, a)
 	must(t, a.post("credentials/", map[string]any{"name": "c", "organization": org, "credential_type": ct, "inputs": map[string]any{"region": "mars"}}), 400)
 	cred := must(t, a.post("credentials/", map[string]any{"name": "c", "organization": org, "credential_type": ct, "inputs": map[string]any{"api_token": "t0p", "region": "eu"}}), 201).id()
+	// As AWX: a credential's kind is its type's namespace, which a custom type doesn't have.
+	if r := a.get(fmt.Sprintf("credentials/%d/", cred)); r.Body["kind"] != nil {
+		t.Errorf("custom credential's kind: %v", r.Body["kind"])
+	}
 	// In use: inputs cannot change, type cannot be deleted.
 	must(t, a.patch(fmt.Sprintf("credential_types/%d/", ct), map[string]any{"inputs": map[string]any{"fields": []any{}}}), 403)
 	must(t, a.delete(fmt.Sprintf("credential_types/%d/", ct)), 403)
@@ -162,7 +173,9 @@ func TestCredentialSecrets(t *testing.T) {
 	// Validation: unknown field, bad key, dependency.
 	must(t, a.post("credentials/", map[string]any{"name": uniq("x"), "organization": org, "credential_type": machine, "inputs": map[string]any{"nope": "x"}}), 400)
 	must(t, a.post("credentials/", map[string]any{"name": uniq("x"), "organization": org, "credential_type": machine, "inputs": map[string]any{"ssh_key_data": "not a key"}}), 400)
-	must(t, a.post("credentials/", map[string]any{"name": uniq("x"), "organization": org, "credential_type": machine, "inputs": map[string]any{"ssh_key_unlock": "pw"}}), 400)
+	must(t, a.post("credentials/", map[string]any{"name": uniq("x"), "organization": org, "credential_type": credType(t, a, "net"), "inputs": map[string]any{"username": "u", "authorize_password": "pw"}}), 400)
+	// AWX 24.6 has no dependency on the key: it checks a passphrase only against a key that is there.
+	must(t, a.post("credentials/", map[string]any{"name": uniq("x"), "organization": org, "credential_type": machine, "inputs": map[string]any{"ssh_key_unlock": "pw"}}), 201)
 	// As in AWX: an encrypted key needs its passphrase, and a passphrase an
 	// encrypted key, also when the key is kept with $encrypted$.
 	cr := func(in map[string]any) resp {

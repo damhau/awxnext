@@ -23,6 +23,13 @@ func boolean(id, label string, extra ...any) field {
 	return f
 }
 
+// choice is a string field that AWX defines without a type: a list of choices.
+func choice(id, label string, extra ...any) field {
+	f := str(id, label, extra...)
+	delete(f, "type")
+	return f
+}
+
 // Def is a managed credential type.
 type Def struct {
 	Namespace   string
@@ -45,6 +52,11 @@ func inputs(fields []field, required []string, extra ...any) map[string]any {
 }
 
 var becomeHelp = "Specify a method for \"become\" operations. This is equivalent to specifying the --become-method Ansible parameter."
+
+var (
+	vaultSecretPathHelp = "The path to the secret stored in the secret backend e.g, /some/secret/. It is recommended that you use the secret backend field to identify the storage backend and to use this field for locating a specific secret within that store. However, if you prefer to fully identify both the secret backend and one of its secrets using only this field, join their locations into a single path without any additional separators, e.g, /location/of/backend/some/secret."
+	vaultAuthPathHelp   = "The path where the Authentication method is mounted e.g, approle"
+)
 
 // vaultInputs are the inputs both HashiCorp Vault lookups share, as AWX
 // 24.6's base_inputs: the server, then token, AppRole, TLS certificate,
@@ -78,18 +90,18 @@ var Managed = []Def{
 		str("become_method", "Privilege Escalation Method", "help_text", becomeHelp),
 		str("become_username", "Privilege Escalation Username"),
 		str("become_password", "Privilege Escalation Password", "secret", true, "ask_at_runtime", true),
-	}, nil, "dependencies", map[string]any{"ssh_key_unlock": []any{"ssh_key_data"}})},
+	}, nil)},
 
 	{Namespace: "scm", Name: "Source Control", Kind: "scm", Inputs: inputs([]field{
 		str("username", "Username"),
 		str("password", "Password", "secret", true),
 		str("ssh_key_data", "SCM Private Key", "format", "ssh_private_key", "secret", true, "multiline", true),
 		str("ssh_key_unlock", "Private Key Passphrase", "secret", true),
-	}, nil, "dependencies", map[string]any{"ssh_key_unlock": []any{"ssh_key_data"}})},
+	}, nil)},
 
 	{Namespace: "vault", Name: "Vault", Kind: "vault", Inputs: inputs([]field{
 		str("vault_password", "Vault Password", "secret", true, "ask_at_runtime", true),
-		str("vault_id", "Vault Identifier", "format", "vault_id", "help_text", "Specify an (optional) Vault ID. This is equivalent to specifying the --vault-id Ansible parameter for providing multiple Vault passwords."),
+		str("vault_id", "Vault Identifier", "format", "vault_id", "help_text", "Specify an (optional) Vault ID. This is equivalent to specifying the --vault-id Ansible parameter for providing multiple Vault passwords.  Note: this feature only works in Ansible 2.4+."),
 	}, []string{"vault_password"})},
 
 	{Namespace: "net", Name: "Network", Kind: "net", Inputs: inputs([]field{
@@ -99,7 +111,7 @@ var Managed = []Def{
 		str("ssh_key_unlock", "Private Key Passphrase", "secret", true),
 		boolean("authorize", "Authorize"),
 		str("authorize_password", "Authorize Password", "secret", true),
-	}, []string{"username"}, "dependencies", map[string]any{"authorize_password": []any{"authorize"}, "ssh_key_unlock": []any{"ssh_key_data"}})},
+	}, []string{"username"}, "dependencies", map[string]any{"authorize_password": []any{"authorize"}})},
 
 	{Namespace: "aws", Name: "Amazon Web Services", Kind: "cloud", Inputs: inputs([]field{
 		str("username", "Access Key"),
@@ -112,11 +124,11 @@ var Managed = []Def{
 	{Namespace: "openstack", Name: "OpenStack", Kind: "cloud", Inputs: inputs([]field{
 		str("username", "Username"),
 		str("password", "Password (API Key)", "secret", true),
-		str("host", "Host (Authentication URL)", "help_text", "The host to authenticate with. For example, https://openstack.business.com/v2.0/"),
+		str("host", "Host (Authentication URL)", "help_text", "The host to authenticate with.  For example, https://openstack.business.com/v2.0/"),
 		str("project", "Project (Tenant Name)"),
 		str("project_domain_name", "Project (Domain Name)"),
-		str("domain", "Domain Name"),
-		str("region", "Region Name"),
+		str("domain", "Domain Name", "help_text", "OpenStack domains define administrative boundaries. It is only needed for Keystone v3 authentication URLs. Refer to the documentation for common scenarios."),
+		str("region", "Region Name", "help_text", "For some cloud providers, like OVH, region must be specified"),
 		boolean("verify_ssl", "Verify SSL", "default", true),
 	}, []string{"username", "password", "host", "project"}), Injectors: map[string]any{
 		"file": map[string]any{"template.clouds": "clouds:\n  devstack:\n    auth:\n      auth_url: {{host}}\n      username: {{username}}\n      password: {{password}}\n      project_name: {{project}}\n      project_domain_name: {{project_domain_name}}\n      domain_name: {{domain}}\n    region_name: {{region}}\n    verify: {{verify_ssl}}\n"},
@@ -124,7 +136,7 @@ var Managed = []Def{
 	}},
 
 	{Namespace: "vmware", Name: "VMware vCenter", Kind: "cloud", Inputs: inputs([]field{
-		str("host", "VCenter Host"),
+		str("host", "VCenter Host", "help_text", "Enter the hostname or IP address that corresponds to your VMware vCenter."),
 		str("username", "Username"),
 		str("password", "Password", "secret", true),
 	}, []string{"host", "username", "password"}), Injectors: map[string]any{"env": map[string]any{
@@ -132,7 +144,7 @@ var Managed = []Def{
 	}}},
 
 	{Namespace: "satellite6", Name: "Red Hat Satellite 6", Kind: "cloud", Inputs: inputs([]field{
-		str("host", "Satellite 6 URL"),
+		str("host", "Satellite 6 URL", "help_text", "Enter the URL that corresponds to your Red Hat Satellite 6 server. For example, https://satellite.example.org"),
 		str("username", "Username"),
 		str("password", "Password", "secret", true),
 	}, []string{"host", "username", "password"}), Injectors: map[string]any{"env": map[string]any{
@@ -140,9 +152,9 @@ var Managed = []Def{
 	}}},
 
 	{Namespace: "gce", Name: "Google Compute Engine", Kind: "cloud", Inputs: inputs([]field{
-		str("username", "Service Account Email Address"),
-		str("project", "Project"),
-		str("ssh_key_data", "RSA Private Key", "format", "ssh_private_key", "secret", true, "multiline", true),
+		str("username", "Service Account Email Address", "help_text", "The email address assigned to the Google Compute Engine service account."),
+		str("project", "Project", "help_text", "The Project ID is the GCE assigned identification. It is often constructed as three words or two words followed by a three-digit number. Examples: project-id-000 and another-project-id"),
+		str("ssh_key_data", "RSA Private Key", "format", "ssh_private_key", "secret", true, "multiline", true, "help_text", "Paste the contents of the PEM file associated with the service account email."),
 	}, []string{"username", "ssh_key_data"}), Injectors: map[string]any{
 		"file": map[string]any{"template.gce_creds": "{\"type\": \"service_account\", \"private_key\": {{ssh_key_data|tojson}}, \"client_email\": {{username|tojson}}, \"project_id\": {{project|tojson}}, \"token_uri\": \"https://oauth2.googleapis.com/token\"}"},
 		"env": map[string]any{
@@ -173,7 +185,7 @@ var Managed = []Def{
 	}, []string{"token"})},
 
 	{Namespace: "bitbucket_dc_token", Name: "Bitbucket Data Center HTTP Access Token", Kind: "token", Inputs: inputs([]field{
-		str("token", "Token", "secret", true),
+		str("token", "Token", "secret", true, "help_text", "This token needs to come from your user settings in Bitbucket"),
 	}, []string{"token"})},
 
 	{Namespace: "insights", Name: "Insights", Kind: "insights", Inputs: inputs([]field{
@@ -200,9 +212,9 @@ var Managed = []Def{
 
 	{Namespace: "controller", Name: "Red Hat Ansible Automation Platform", Kind: "cloud", Inputs: inputs([]field{
 		str("host", "Red Hat Ansible Automation Platform", "help_text", "Red Hat Ansible Automation Platform base URL to authenticate with."),
-		str("username", "Username"),
+		str("username", "Username", "help_text", "Red Hat Ansible Automation Platform username id to authenticate as.This should not be set if an OAuth token is being used."),
 		str("password", "Password", "secret", true),
-		str("oauth_token", "OAuth Token", "secret", true),
+		str("oauth_token", "OAuth Token", "secret", true, "help_text", "An OAuth token to use to authenticate with.This should not be set if username/password are being used."),
 		boolean("verify_ssl", "Verify SSL", "secret", false),
 	}, []string{"host"}), Injectors: map[string]any{"env": map[string]any{
 		"CONTROLLER_HOST": "{{host}}", "CONTROLLER_USERNAME": "{{username}}", "CONTROLLER_PASSWORD": "{{password}}",
@@ -236,7 +248,7 @@ var Managed = []Def{
 
 	{Namespace: "terraform", Name: "Terraform backend configuration", Kind: "cloud", Inputs: inputs([]field{
 		str("configuration", "Backend configuration", "secret", true, "multiline", true, "help_text", "Terraform backend config as Hashicorp configuration language."),
-		str("gce_credentials", "Google Cloud Platform account credentials", "secret", true, "multiline", true),
+		str("gce_credentials", "Google Cloud Platform account credentials", "secret", true, "multiline", true, "help_text", "Google Cloud Platform account credentials in JSON format."),
 	}, []string{"configuration"}), Injectors: map[string]any{
 		"file": map[string]any{"template.backend": "{{configuration}}", "template.gce_credentials": "{{gce_credentials}}"},
 		"env":  map[string]any{"TF_BACKEND_CONFIG_FILE": "{{tower.filename.backend}}", "GOOGLE_BACKEND_CREDENTIALS": "{{tower.filename.gce_credentials}}"},
@@ -253,33 +265,35 @@ var Managed = []Def{
 
 	// External secret lookups (v1 scope: HashiCorp Vault and Azure Key Vault).
 	{Namespace: "hashivault_kv", Name: "HashiCorp Vault Secret Lookup", Kind: "external", Inputs: inputs(append(vaultInputs(),
-		str("api_version", "API Version", "choices", []any{"v1", "v2"}, "default", "v1", "help_text", "API v1 is for static key/value lookups.  API v2 is for versioned key/value lookups."),
-	), []string{"url", "api_version"}, "metadata", []any{
+		choice("api_version", "API Version", "choices", []any{"v1", "v2"}, "default", "v1", "help_text", "API v1 is for static key/value lookups.  API v2 is for versioned key/value lookups."),
+	), []string{"url", "secret_path", "api_version", "secret_key"}, "metadata", []any{
 		str("secret_backend", "Name of Secret Backend", "help_text", "The name of the kv secret backend (if left empty, the first segment of the secret path will be used)."),
-		str("secret_path", "Path to Secret", "help_text", "The path to the secret stored in the secret backend e.g, /some/secret/. It is recommended that you use the secret backend field to identify the storage backend and to use this field for locating a specific secret within that store. However, if you prefer to fully identify both the secret backend and one of its secrets using only this field, join their locations into a single path without any additional separators, e.g, /location/of/backend/some/secret."),
-		str("auth_path", "Path to Auth", "help_text", "The path where the Authentication method is mounted e.g, approle"),
+		str("secret_path", "Path to Secret", "help_text", vaultSecretPathHelp),
+		str("auth_path", "Path to Auth", "multiline", false, "help_text", vaultAuthPathHelp),
 		str("secret_key", "Key Name", "help_text", "The name of the key to look up in the secret."),
 		str("secret_version", "Secret Version (v2 only)", "help_text", "Used to specify a specific secret version (if left empty, the latest version will be used)."),
-	}, "metadata_required", []any{"secret_path", "secret_key"})},
+	})},
 
-	{Namespace: "hashivault_ssh", Name: "HashiCorp Vault Signed SSH", Kind: "external", Inputs: inputs(vaultInputs(), []string{"url"}, "metadata", []any{
+	{Namespace: "hashivault_ssh", Name: "HashiCorp Vault Signed SSH", Kind: "external", Inputs: inputs(vaultInputs(), []string{"url", "secret_path", "public_key", "role"}, "metadata", []any{
 		str("public_key", "Unsigned Public Key", "multiline", true),
-		str("secret_path", "Path to Secret", "help_text", "The path to the secret stored in the secret backend e.g, /some/secret/"),
-		str("auth_path", "Path to Auth"),
+		str("secret_path", "Path to Secret", "help_text", vaultSecretPathHelp),
+		str("auth_path", "Path to Auth", "multiline", false, "help_text", vaultAuthPathHelp),
 		str("role", "Role Name", "help_text", "The name of the role used to sign."),
 		str("valid_principals", "Valid Principals", "help_text", "Valid principals (either usernames or hostnames) that the certificate should be signed for."),
-	}, "metadata_required", []any{"public_key", "secret_path", "role"})},
+	})},
 
 	{Namespace: "azure_kv", Name: "Microsoft Azure Key Vault", Kind: "external", Inputs: inputs([]field{
-		str("url", "Vault URL (DNS Name)"),
+		str("url", "Vault URL (DNS Name)", "format", "url"),
 		str("client", "Client ID"),
 		str("secret", "Client Secret", "secret", true),
 		str("tenant", "Tenant ID"),
-		str("cloud_name", "Cloud Environment", "help_text", "Specify which azure cloud environment to use.", "choices", []any{"AzureCloud", "AzureChinaCloud", "AzureUSGovernment"}, "default", "AzureCloud"),
-	}, []string{"url"}, "metadata", []any{
+		choice("cloud_name", "Cloud Environment", "help_text", "Specify which azure cloud environment to use.", "choices", []any{"AzureCloud", "AzureGermanCloud", "AzureChinaCloud", "AzureUSGovernment"}, "default", "AzureCloud"),
+		// Unlike AWX, client, secret and tenant are optional: without them the
+		// lookup uses awxnext's own Azure identity.
+	}, []string{"url", "secret_field"}, "metadata", []any{
 		str("secret_field", "Secret Name", "help_text", "The name of the secret to look up."),
 		str("secret_version", "Secret Version", "help_text", "Used to specify a specific secret version (if left empty, the latest version will be used)."),
-	}, "metadata_required", []any{"secret_field"})},
+	})},
 
 	// The other external lookups of AWX 24.6 (awx/main/credential_plugins),
 	// with their inputs, metadata and required fields as AWX defines them.
@@ -321,7 +335,7 @@ var Managed = []Def{
 
 	{Namespace: "thycotic_dsv", Name: "Thycotic DevOps Secrets Vault", Kind: "external", Inputs: inputs([]field{
 		str("tenant", "Tenant", "help_text", `The tenant e.g. "ex" when the URL is https://ex.secretsvaultcloud.com`),
-		str("tld", "Top-level Domain (TLD)", "help_text", `The TLD of the tenant e.g. "com" when the URL is https://ex.secretsvaultcloud.com`, "choices", []any{"ca", "com", "com.au", "eu"}, "default", "com"),
+		choice("tld", "Top-level Domain (TLD)", "help_text", `The TLD of the tenant e.g. "com" when the URL is https://ex.secretsvaultcloud.com`, "choices", []any{"ca", "com", "com.au", "eu"}, "default", "com"),
 		str("client_id", "Client ID"),
 		str("client_secret", "Client Secret", "secret", true),
 	}, []string{"tenant", "client_id", "client_secret", "path", "secret_field", "secret_decoding"}, "metadata", []any{
@@ -347,20 +361,4 @@ var Managed = []Def{
 		str("region_name", "AWS Secrets Manager Region", "help_text", "Region which the secrets manager is located"),
 		str("secret_name", "AWS Secret Name"),
 	})},
-}
-
-func init() {
-	// AWX lists required metadata fields of external types in "required" too.
-	for _, d := range Managed {
-		mr, ok := d.Inputs["metadata_required"].([]any)
-		if !ok {
-			continue
-		}
-		req, _ := d.Inputs["required"].([]string)
-		for _, r := range mr {
-			req = append(req, r.(string))
-		}
-		d.Inputs["required"] = req
-		delete(d.Inputs, "metadata_required")
-	}
 }

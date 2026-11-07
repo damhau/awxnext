@@ -203,6 +203,7 @@ func vaultSSH(ctx context.Context, p Policy, inputs, metadata map[string]any) (s
 var azureAuthorities = map[string]string{
 	"":                  "https://login.microsoftonline.com",
 	"AzureCloud":        "https://login.microsoftonline.com",
+	"AzureGermanCloud":  "https://login.microsoftonline.de",
 	"AzureChinaCloud":   "https://login.chinacloudapi.cn",
 	"AzureUSGovernment": "https://login.microsoftonline.us",
 }

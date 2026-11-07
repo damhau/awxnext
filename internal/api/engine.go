@@ -577,6 +577,8 @@ func LegacyRoleName(field string) string {
 	switch f {
 	case "adhoc":
 		return "Ad Hoc"
+	case "approval":
+		return "Approve"
 	case "auditor":
 		return "Auditor"
 	}

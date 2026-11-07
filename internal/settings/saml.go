@@ -30,11 +30,11 @@ func init() {
 			Help: `Organizations a SAML user joins, by username or email: {"Default": {"users": true}}, as SOCIAL_AUTH_ORGANIZATION_MAP, which SAML logins do not use. As in AWX's SAML pipeline, a null expression removes like false.`},
 		{Key: "SOCIAL_AUTH_SAML_TEAM_MAP", Type: "nested object", Default: nil, Nullable: true, Label: "SAML Team Map",
 			Help: `Teams a SAML user joins, by username or email: {"Web": {"organization": "Ops", "users": true}}.`},
-		{Key: "SOCIAL_AUTH_SAML_ORGANIZATION_ATTR", Type: "nested object", Default: nil, Nullable: true, Label: "SAML Organization Attribute Mapping",
+		{Key: "SOCIAL_AUTH_SAML_ORGANIZATION_ATTR", Type: "nested object", Default: map[string]any{}, Nullable: true, Label: "SAML Organization Attribute Mapping",
 			Help: `Organizations from SAML attributes: {"saml_attr": "member-of", "saml_admin_attr": "admin-of", "saml_auditor_attr": "auditor-of", "remove": true, "remove_admins": true, "remove_auditors": true}. With remove (the default), a user loses the memberships SAML gave in organizations the attribute no longer names.`},
-		{Key: "SOCIAL_AUTH_SAML_TEAM_ATTR", Type: "nested object", Default: nil, Nullable: true, Label: "SAML Team Attribute Mapping",
+		{Key: "SOCIAL_AUTH_SAML_TEAM_ATTR", Type: "nested object", Default: map[string]any{}, Nullable: true, Label: "SAML Team Attribute Mapping",
 			Help: `Teams from a SAML attribute: {"saml_attr": "team", "remove": true, "team_org_map": [{"team": "Blue", "team_alias": "Blue Team", "organization": "Default"}]}.`},
-		{Key: "SOCIAL_AUTH_SAML_USER_FLAGS_BY_ATTR", Type: "nested object", Default: nil, Nullable: true, Label: "SAML User Flags Attribute Mapping",
+		{Key: "SOCIAL_AUTH_SAML_USER_FLAGS_BY_ATTR", Type: "nested object", Default: map[string]any{}, Nullable: true, Label: "SAML User Flags Attribute Mapping",
 			Help: `Superusers and system auditors from the Role attribute or another attribute: {"is_superuser_role": ["awx_admins"], "is_superuser_attr": "is_superuser", "is_superuser_value": ["IT-Superadmin"], "remove_superusers": true, "is_system_auditor_role": [...], "is_system_auditor_attr": "...", "is_system_auditor_value": [...], "remove_system_auditors": true}. As in AWX, a SAML login without them takes the flags away unless remove_superusers or remove_system_auditors is false.`},
 	} {
 		d.Category = "saml"

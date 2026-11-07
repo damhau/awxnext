@@ -62,6 +62,9 @@ func registerOrganizations() {
 				Filter: func(arg ArgFunc, pid int64) string {
 					return fmt.Sprintf("t.id IN (SELECT credential_id FROM organization_galaxy_credentials WHERE organization_id = %s)", arg(pid))
 				},
+				Order: func(pid int64) string {
+					return fmt.Sprintf("(SELECT position FROM organization_galaxy_credentials WHERE organization_id = %d AND credential_id = t.id)", pid)
+				},
 				NoCreate: true,
 				Associate: func(c *Ctx, pid, cid int64) error {
 					var kind string
