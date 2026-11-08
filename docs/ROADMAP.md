@@ -33,7 +33,8 @@ be matched.
 | [M7 UI completeness](#m7-ui-completeness) | Every API feature reachable from the UI; the remaining UI goals | 17 |
 | [M8 Settings that make sense](#m8-settings-that-make-sense) | Settings laid out by task, without JSON or AWX's jargon; the settings API unchanged | 10 |
 | [M9 Security](#m9-security) | Known vulnerabilities found by CI and fixed through reviewed PRs | 5 |
-| [M10 Small fixes](#m10-small-fixes) | The importer tested on a real AWX, parity.md matching the code, the deployed image scanned | 3 |
+| [M10 Small fixes](#m10-small-fixes) | The importer tested on a real AWX, parity.md matching the code, the deployed image scanned, the AWS lookup tested on moto | 4 |
+| [M11 Notifications](#m11-notifications) | Email tested on a real mail server, Slack as in AWX, a Teams type | 3 |
 
 ---
 
@@ -1307,10 +1308,12 @@ CodeQL's alerts 15 to 17 are closed, and CI is green.
 ## M10 Small fixes
 
 Small fixes found after M9: the AWX importer has never run against a real
-AWX, parity.md disagrees with the code in places, and secubot doesn't scan
-the image `main` deploys. **Exit:** an import from a real AWX 24.6.1 is
+AWX, parity.md disagrees with the code in places, secubot doesn't scan the
+image `main` deploys, and the AWS Secrets Manager lookup has only met a
+fake (added on 2026-11-08). **Exit:** an import from a real AWX 24.6.1 is
 tested end to end, parity.md agrees with the code and the closed issues,
-and the all-in-one image is scanned automatically.
+the all-in-one image is scanned automatically, and the AWS Secrets Manager
+lookup is tested against moto.
 
 ### M10-01 Test the AWX importer against a real AWX 24.6.1
 **Labels:** chore, deploy · **Size:** M · [#124](https://github.com/damhau/awxnext/issues/124)
@@ -1362,6 +1365,69 @@ the binary too.
 **Done when:** a secubot run on awxnext scans the all-in-one image, and the
 docs say so.
 
+### M10-04 Test the AWS Secrets Manager lookup against moto
+**Labels:** chore, credentials · **Size:** S · [#129](https://github.com/damhau/awxnext/issues/129)
+
+The lookup calls AWS through aws-sdk-go-v2, and its only test runs against a
+fake written in the test. `full.yml`'s go job starts moto's server with its
+authentication on, so it checks the access key and the signature. A Go test,
+skipped without `AWXNEXT_TEST_MOTO_ENDPOINT`, looks up a string and a binary
+secret, and checks that an unknown secret, a wrong key and another region
+fail with AWS's error. What it finds is fixed, and the fake corrected.
+
+**Done when:** the test passes in `full.yml` against moto and fails with a
+wrong secret key, and what it found is fixed.
+
+---
+
+## M11 Notifications
+
+Notifications after M10: email is tested only against a fake server, Slack
+was left out, and there is no Teams type (Decision 17). **Exit:** email
+notifications pass against Mailpit in CI, AWX's Slack notifications work and
+import, and Teams notifications post a card.
+
+### M11-01 Test email notifications against a real mail server
+**Labels:** chore, notifications · **Size:** S · [#130](https://github.com/damhau/awxnext/issues/130)
+
+Email (M3-01) is tested against an SMTP server written in the test.
+`full.yml`'s go job starts Mailpit in clear, with STARTTLS and with TLS from
+the start, each requiring a login. A Go test sends a test notification and a
+job's notifications through each, with non-ASCII text and a long line, reads
+them back from Mailpit's API, and checks that a wrong password and an
+untrusted certificate fail.
+
+**Done when:** the test passes in `full.yml` in the three modes, and what it
+found is fixed.
+
+### M11-02 Slack notifications, as AWX has them
+**Labels:** feature, notifications, ui · **Size:** M · [#131](https://github.com/damhau/awxnext/issues/131)
+
+AWX 24.6.1's `slack` type: `token`, `channels` (a thread with
+`#name, <message ts>`) and `hex_color`, its validation, help texts and
+default messages, a `chat.postMessage` per channel, and custom messages as
+for the other types. The importer brings AWX's Slack notifications, so
+`import-awx.yml`'s `ops-slack` compares equal; the UI form has the Slack
+fields. Tested against a fake Slack API in the test.
+
+**Done when:** a Slack notification template works through the API, the UI
+and the collection, posts as AWX does, and an AWX one imports and compares
+equal.
+
+### M11-03 Microsoft Teams notifications
+**Labels:** feature, notifications, ui · **Size:** M · [#132](https://github.com/damhau/awxnext/issues/132)
+
+awxnext's own `teams` type, since AWX has none: the channel's webhook `url`
+(a secret), made with Teams' Workflows template "Post to a channel when a
+webhook request is received". Each event posts an Adaptive Card with the
+message, the job's status, template, launcher and times, and a button to the
+job or approval. The `awx.awx` collection checks the type against its own
+list, so it cannot manage these; the docs say so. Tested against a fake
+receiver in the test.
+
+**Done when:** a Teams notification template works through the API and the
+UI, posts the card for each event, and the docs say how to make its URL.
+
 ---
 
 ## Proposed out of scope
@@ -1378,7 +1444,7 @@ These stay out unless you want any of them back:
 | DRF browsable HTML API | Replaced by interactive OpenAPI docs (M2-13). |
 | Kubelet log tailing for container groups | Push-based execution is what fixes AWX's dropped-log problem. |
 | RADIUS and TACACS+ login | Rarely used. Left out by decision on 2026-10-27. |
-| Slack, PagerDuty, Twilio, Grafana, IRC, Mattermost, Rocket.Chat and AWS SNS notifications | Email and webhook cover the need. Left out by decision on 2026-10-27. |
+| PagerDuty, Twilio, Grafana, IRC, Mattermost, Rocket.Chat and AWS SNS notifications | Email, webhook, Slack and Teams cover the need. Left out by decision on 2026-10-27; Slack was taken back on 2026-11-08 (M11-02). |
 | Browser tests in CI | UI logic is covered by Vitest. Left out by decision on 2026-10-27. |
 | Subversion projects (was M4-09, #40) | Not needed. Left out by decision on 2026-10-29. |
 | Rulesets and code owners on `main` (was M9-03, #106) | awxnext is personal code, and secubot's PRs, then opened with `GITHUB_TOKEN`, started no CI, so required checks would have waited for ever. Left out by decision on 2026-11-01. |
@@ -1472,6 +1538,18 @@ Taken on 2026-11-07:
     empty value that reads `""` where AWX has null stays as it is, since no
     client treats them differently and null would need a migration.
 
+Taken on 2026-11-08:
+
+17. Notifications grow again (M11, amends Decision 6). Slack comes back as
+    AWX's type, so AWX's Slack notifications import and AWX's clients manage
+    them. Teams is added as awxnext's own type, since AWX has none.
+    PagerDuty, Twilio, Grafana, IRC, Mattermost, Rocket.Chat and AWS SNS stay
+    out. Two features tested only against fakes written in their tests are
+    also tested against servers from elsewhere, in `full.yml`: the AWS
+    Secrets Manager lookup against moto (M10-04), chosen over a real AWS
+    account because it needs no account or cost, and email against Mailpit
+    (M11-01).
+
 ## On GitHub
 
 Created on 2026-10-27 on `damhau/awxnext`: the type, area and size labels,
@@ -1482,5 +1560,6 @@ runs. M8 (#94 to #102) was added on 2026-10-31, and M8-10 (#103) the same day, f
 2026-11-01, M9-02 to M9-05 (#105 to #108) the same day, and M9-06 (#120)
 from CodeQL's first analysis. M4-11 (#122) was added the same day, for rvav. M9-04 and M9-05
 (#107, #108) were rewritten the same day for secubot (Decision 15). M10 (#124 to #126) was added on 2026-11-02 for the small fixes found
-after M9. This file stays the index;
+after M9. M10-04 (#129) and M11 (#130 to #132) were added on 2026-11-08
+(Decision 17). This file stays the index;
 when a task changes, change its issue too.

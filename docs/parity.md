@@ -31,7 +31,8 @@ The gaps fall in four groups:
    tested nightly since roadmap M2-01 ([compat/](../compat/README.md)); the
    gaps those suites found are roadmap M2-14 to M2-26.
 3. **Deferred by plan**: RADIUS and TACACS+ login (LDAP, SAML, GitHub, Google and Azure AD are done, roadmap M5-02 to M5-05);
-   notification types other than email and webhook
+   notification types other than email, webhook and Slack (Slack, and a
+   Teams type of awxnext's own, are roadmap M11)
    (backup and restore, and the Helm chart, are done, roadmap M6-09 and M6-10; CyberArk, Thycotic, AWS Secrets Manager and Centrify lookups are done,
    roadmap M4-07; archive projects, roadmap M4-10).
 4. **UI holes over a finished API**: a few, listed below (inventory instance
@@ -166,7 +167,8 @@ The gaps fall in four groups:
 | Schedules: rrule with exclusions, timezones, saved prompts, preview | Yes | Done | Labels and ordered instance groups saved as prompts (`schedules/N/labels/`, `schedules/N/instance_groups/`), by whoever may see and use them, used when the template prompts for them (roadmap M3-03), and credentials (`schedules/N/credentials/`), which replace the template's of the same type. All three editable in the schedule dialog (roadmap M7-06) |
 | Notifications: email and webhook, started/success/error/approval events, custom messages | Yes | Done | Email over SMTP in clear, with STARTTLS or TLS from the start, with a login when a username and password are set, AWX's fields, defaults and messages (roadmap M3-01). The server's certificate is verified against the system's CAs; sender and recipient addresses are checked when saved. Attaching needs change on the notification too, as in AWX; `used_by` (awxnext) lists where one is attached |
 | Email | Yes | Later | Roadmap M3-01 |
-| Slack, PagerDuty, Twilio, Grafana, IRC, Mattermost, Rocket.Chat, AWS SNS | Yes | Out of scope | Dropped on 2026-10-27 |
+| Slack | Yes | Missing | Taken back on 2026-11-08: roadmap M11-02 |
+| PagerDuty, Twilio, Grafana, IRC, Mattermost, Rocket.Chat, AWS SNS | Yes | Out of scope | Dropped on 2026-10-27 |
 | GitHub/GitLab/Bitbucket DC webhooks with status posting | Yes | Done | Plus a generic JSONPath-mapped webhook |
 | Provisioning callbacks | Yes | Done | |
 | Management jobs (cleanups) with schedules | Yes | Done | `host_metric_summary_monthly` missing |
