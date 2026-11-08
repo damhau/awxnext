@@ -202,3 +202,99 @@ suppressions:
   expires: '2026-12-07'
   created: '2026-11-07'
   source: triage
+- id: 1aa7546fd1f6
+  reason: 'secubot triage: false positive (high confidence, single pass). The call
+    at internal/runnercmd/runnercmd.go:147 runs in production. It is reached from
+    runnercmd.Kill, which is called by the agent in internal/agent/client.go:273/291/301
+    and by the local runner in internal/runners/ansible/exec.go:210 when a job is
+    cancelled or killed. It cannot be used for command injection, for three reasons:
+
+    (1) The program name s.Runtime can only be the literal "podman" or "d'
+  expires: '2026-12-08'
+  created: '2026-11-08'
+  source: triage
+- id: 423c8cc7606c
+  reason: 'secubot triage: false positive (high confidence, single pass). The handler
+    is reachable: it is registered as GET /api/v2/dashboard/graphs/jobs/ (dashboard.go:16).
+    The query string, however, contains no attacker-controlled text. Only two request
+    values are read. `period` (dashboard.go:99) goes through a switch with fixed cases,
+    and anything unknown returns a 400 before any SQL is built. `job_type` (dashboard.go:117)
+    is looked up in a fixed map, and the mapped '
+  expires: '2026-12-08'
+  created: '2026-11-08'
+  source: triage
+- id: 582c26587129
+  reason: 'secubot triage: false positive (high confidence, single pass). The flagged
+    line is `go m.leaderLoop(ctx)` at internal/jobs/manager.go:160. It passes the
+    caller''s ctx to the goroutine, not context.Background or context.TODO. That ctx
+    is the process/service lifetime context. It comes from server startup (StartJobs
+    in internal/server/server.go:140-160), not from an HTTP request, so there is no
+    request-scoped context being dropped. leaderLoop (manager.go:239-263)'
+  expires: '2026-12-08'
+  created: '2026-11-08'
+  source: triage
+- id: 64cda27825d2
+  reason: 'secubot triage: false positive (high confidence, single pass). The flagged
+    call, `exec.Command(args[0], args[1:]...)` at internal/runners/ansible/exec.go:275,
+    runs in production. `Run.Execute` (exec.go:296) calls `startWorker` (exec.go:310),
+    and `startWorker` makes this call for every local job run. So the code is reachable.
+    It is not an OS command injection, for two reasons.
+
+
+    First, no shell is involved. The argv is passed straight to execve, so shell metach'
+  expires: '2026-12-08'
+  created: '2026-11-08'
+  source: triage
+- id: 696bf65fafe0
+  reason: 'secubot triage: false positive (high confidence, single pass). The flagged
+    code runs in production. internal/server/server.go:147-149 creates logship.Default
+    and starts Run. Run calls send (logship.go:287), and send calls s.client(c.verify)
+    (logship.go:336). InsecureSkipVerify is not hard-coded, though. It is `!verify`,
+    and verify comes from the LOG_AGGREGATOR_VERIFY_CERT setting (logship.go:131).
+    That setting defaults to true (internal/settings/logging.go:43'
+  expires: '2026-12-08'
+  created: '2026-11-08'
+  source: triage
+- id: 7749af010270
+  reason: 'secubot triage: false positive (high confidence, single pass). The flagged
+    line, `go deliver(context.Background(), m.App, nid)` at notifications.go:687,
+    is reached in production. It runs from notifyJob, which is called by the job-manager
+    hooks JobStartedNotifications and JobFinishedNotifications (lines 692-702). Using
+    a detached context here is deliberate: the notification is sent asynchronously
+    and has to finish after the job hook or request that triggered i'
+  expires: '2026-12-08'
+  created: '2026-11-08'
+  source: triage
+- id: 8f5e207129f7
+  reason: 'secubot triage: false positive (high confidence, single pass). The flagged
+    conversion is at internal/pgtest/pgtest.go:43. It uses `port`, which comes from
+    freePort() (lines 73-80). freePort() returns the port the OS assigned to a localhost
+    TCP listener. That value is always between 0 and 65535, so converting it to uint32
+    cannot overflow, and an attacker has no way to influence it. The package itself
+    is test-only: it starts a throwaway embedded PostgreSQL for '
+  expires: '2026-12-08'
+  created: '2026-11-08'
+  source: triage
+- id: aa5dcfda32b7
+  reason: 'secubot triage: false positive (high confidence, single pass). The goroutine
+    at internal/resources/webhooks.go:461 runs, but nothing an attacker does can turn
+    it into a resource-exhaustion problem.
+
+
+    Where it runs from: webhookStatus is not an HTTP handler, and no request-scoped
+    context exists here. It is reached only through WebhookStatusStarted and WebhookStatusFinished
+    (webhooks.go:482-488). Those are registered as job-manager lifecycle hooks in
+    internal/se'
+  expires: '2026-12-08'
+  created: '2026-11-08'
+  source: triage
+- id: ce52046b7eca
+  reason: 'secubot triage: false positive (high confidence, single pass). The flagged
+    line is in production code: deliver() (notifications.go:377) calls sendWebhook()
+    (notifications.go:391), which reaches line 432. But certificate checks are only
+    skipped when the notification template''s `disable_ssl_verification` setting is
+    true (notifications.go:431). Otherwise the cloned http.DefaultTransport keeps
+    Go''s default certificate checking. The setting is off by default and i'
+  expires: '2026-12-08'
+  created: '2026-11-08'
+  source: triage
