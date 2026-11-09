@@ -298,3 +298,56 @@ suppressions:
   expires: '2026-12-08'
   created: '2026-11-08'
   source: triage
+- id: 0883908b0c2e
+  reason: 'secubot triage: false positive (high confidence, single pass). Line 253
+    of internal/credtypes/managed.go is part of the injector definition for the managed
+    "terraform" credential type. It is a static map from injector file keys to Jinja-style
+    template placeholders: "template.backend": "{{configuration}}" and "template.gce_credentials":
+    "{{gce_credentials}}". gosec G101 fires because a key contains the word "credentials".
+    The value is a placeholder that gets r'
+  expires: '2026-12-09'
+  created: '2026-11-09'
+  source: triage
+- id: adb2ff86f27f
+  reason: 'secubot triage: false positive (high confidence, single pass). The flagged
+    sink is reachable. `uiHandler` is the HTTP handler that serves the web UI, and
+    the path it serves comes from `r.URL.Path` (internal/server/ui.go:35). Path traversal
+    is still not possible, for three reasons that each block it on their own:
+
+    1. Line 35 runs `path.Clean` on the URL path before stripping the leading "/".
+    For a rooted path, `path.Clean` resolves every `..` element, so "/../.'
+  expires: '2026-12-09'
+  created: '2026-11-09'
+  source: triage
+- id: cd0939531c81
+  reason: 'secubot triage: false positive (high confidence, single pass). The flagged
+    line can run in production. runRvavSource is the inventory-update runner for rvav
+    sources, and it calls rvavClient at internal/runners/ansible/rvav.go:61. InsecureSkipVerify
+    is not hard-coded to true, though. It is set to `!verify`, and the caller passes
+    `verify || !set`, where `verify, set := cred.Inputs["verify_ssl"].(bool)` (rvav.go:57).
+    So certificate checking stays on unless the c'
+  expires: '2026-12-09'
+  created: '2026-11-09'
+  source: triage
+- id: e79ef9935767
+  reason: 'secubot triage: false positive (high confidence, single pass). Production
+    code does reach the handler: it is the router''s NotFound fallback at internal/server/server.go:134,
+    so any unauthenticated GET/HEAD to an unmatched path ends up here. Path traversal
+    still isn''t possible, for three separate reasons.
+
+
+    1. For GET/HEAD requests (ui.go:31 rejects all other methods), net/http gives
+    r.URL.Path in origin form, starting with "/". path.Clean on a rooted path remo'
+  expires: '2026-12-09'
+  created: '2026-11-09'
+  source: triage
+- id: f4d4b3e012ad
+  reason: 'secubot triage: false positive (high confidence, single pass). The scanners
+    flagged `tls.Config{InsecureSkipVerify: cfg.TLSSkipVerify}` at internal/vaultclient/vault.go:65.
+    The constructor `vaultclient.New` does run in production. It is called from the
+    credential-plugin lookups (internal/credplugins/plugins.go:117, used by the hashivault_kv
+    and hashivault_ssh plugins) and from the KMS vault-transit master-key setup (internal/kms/kms.go:36).
+    There is also a te'
+  expires: '2026-12-09'
+  created: '2026-11-09'
+  source: triage
