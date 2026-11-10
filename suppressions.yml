@@ -351,3 +351,43 @@ suppressions:
   expires: '2026-12-09'
   created: '2026-11-09'
   source: triage
+- id: 165a89a66623
+  reason: 'secubot triage: false positive (high confidence, single pass). The flagged
+    code (internal/credtypes/managed.go:219-223) defines the managed credential type
+    "controller" (Red Hat Ansible Automation Platform). It maps injector environment
+    variable names to template placeholders, for example "CONTROLLER_PASSWORD": "{{password}}"
+    and "TOWER_OAUTH_TOKEN": "{{oauth_token}}". gosec G101 fires on variable or key
+    names that contain words like PASSWORD or TOKEN. Every '
+  expires: '2026-12-10'
+  created: '2026-11-10'
+  source: triage
+- id: 6071306cd829
+  reason: 'secubot triage: false positive (high confidence, single pass). The flagged
+    line, internal/credtypes/managed.go:159, is in the built-in credential type definition
+    for Google Compute Engine. It is the injector template that builds a GCE service-account
+    JSON file. Every value that could be sensitive in it is a placeholder filled in
+    at runtime: `{{ssh_key_data|tojson}}`, `{{username|tojson}}` and `{{project|tojson}}`.
+    These come from user-supplied inputs, and lin'
+  expires: '2026-12-10'
+  created: '2026-11-10'
+  source: triage
+- id: 7c911d4fcce1
+  reason: 'secubot triage: false positive (high confidence, single pass). gosec G101
+    matches on variable or value names containing words like "credential". The flagged
+    line, internal/resources/access_list.go:19, declares `orgRoleOfAdd`. This is a
+    static map from RBAC permission codenames (e.g. "add_credential") to AWX role
+    field names (e.g. "credential_admin_role"). The values are role identifiers, not
+    passwords, tokens or keys. The map is only used in descendantRoles ('
+  expires: '2026-12-10'
+  created: '2026-11-10'
+  source: triage
+- id: a76050a28a52
+  reason: 'secubot triage: false positive (high confidence, single pass). The flagged
+    line, internal/resources/launch.go:26, declares `promptable`. This map links launch
+    field names such as "inventory", "credentials" and "limit" to the names of template
+    boolean flags such as "ask_credential_on_launch" (lines 26-33). gosec G101 matches
+    variable names and values that contain credential-like words such as "credential".
+    Here those words are only field and flag names, not se'
+  expires: '2026-12-10'
+  created: '2026-11-10'
+  source: triage
