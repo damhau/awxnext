@@ -75,9 +75,10 @@ func HandleLostInstances(ctx context.Context, app *api.App, leader string, depro
 	}
 }
 
-// Rejoin registers node again, measured, and applies the group policies:
-// the job manager's Rejoin, for a node marked lost whose heartbeats
-// resume, or one deleted as lost that comes back.
+// Rejoin registers node, measured, and applies the group policies: as a
+// node starts running jobs, and as the job manager's Rejoin, for a node
+// marked lost whose heartbeats resume, or one deleted as lost that comes
+// back.
 func Rejoin(ctx context.Context, app *api.App, node string) error {
 	return pgx.BeginFunc(ctx, app.DB, func(tx pgx.Tx) error {
 		tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtext($1))", "instance_registration_"+node)

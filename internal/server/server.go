@@ -135,9 +135,15 @@ func Handler(app *api.App) http.Handler {
 	return r
 }
 
-// StartJobs registers runners and starts dispatching and running jobs on
-// this node, and shipping its logs to the external log aggregator.
-func StartJobs(ctx context.Context, app *api.App) *jobs.Manager {
+// StartJobs registers this node as an instance, then starts dispatching
+// and running jobs on it, and shipping its logs to the external log
+// aggregator. Setup does not register it: the commands that call Setup
+// alone (migrate, backup, restore) would leave instances that jobs are
+// sent to until they are found lost.
+func StartJobs(ctx context.Context, app *api.App) (*jobs.Manager, error) {
+	if err := resources.Rejoin(ctx, app, app.Cfg.NodeName); err != nil {
+		return nil, fmt.Errorf("register this node: %w", err)
+	}
 	// Not slog's own default handler: it writes through the log package,
 	// which a new default sends back to slog.
 	base := logHandler
@@ -161,7 +167,7 @@ func StartJobs(ctx context.Context, app *api.App) *jobs.Manager {
 	if agent.Default != nil {
 		agent.Default.Start(ctx)
 	}
-	return m
+	return m, nil
 }
 
 // OpenKeyless connects and migrates without opening the keyring (used by key

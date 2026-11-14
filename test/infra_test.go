@@ -1,8 +1,11 @@
 package test
 
 import (
+	"context"
 	"fmt"
 	"testing"
+
+	"github.com/damhau/awxnext/internal/server"
 )
 
 func TestExecutionEnvironments(t *testing.T) {
@@ -69,6 +72,25 @@ func TestInstanceGroupsAndInstances(t *testing.T) {
 	must(t, a.post(fmt.Sprintf("organizations/%d/instance_groups/", org), map[string]any{"id": g}), 204)
 	must(t, member.get(fmt.Sprintf("instance_groups/%d/", g)), 200)
 	must(t, member.post("instance_groups/", map[string]any{"name": uniq("x")}), 403)
+}
+
+// Only a node that runs jobs is an instance: a command that opens the
+// database (the chart's migration Job, backup, restore) adds none.
+func TestSetupRegistersNoInstance(t *testing.T) {
+	cfg := *app.Cfg
+	cfg.NodeName = uniq("migrate")
+	other, err := server.Setup(context.Background(), &cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	other.DB.Close()
+	var n int
+	if err := app.DB.QueryRow(context.Background(), "SELECT count(*) FROM instances WHERE hostname = $1", cfg.NodeName).Scan(&n); err != nil || n != 0 {
+		t.Errorf("instances named %s: %d, %v", cfg.NodeName, n, err)
+	}
+	if err := app.DB.QueryRow(context.Background(), "SELECT count(*) FROM instances WHERE hostname = $1", app.Cfg.NodeName).Scan(&n); err != nil || n != 1 {
+		t.Errorf("the node that runs jobs, %s: %d instances, %v", app.Cfg.NodeName, n, err)
+	}
 }
 
 func TestLabels(t *testing.T) {

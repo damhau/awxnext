@@ -176,7 +176,10 @@ func serve(ctx context.Context, cfg *config.Config) error {
 	if err := os.MkdirAll(cfg.ProjectsRoot, 0o755); err != nil {
 		return fmt.Errorf("projects root: %w", err)
 	}
-	jm := server.StartJobs(ctx, app)
+	jm, err := server.StartJobs(ctx, app)
+	if err != nil {
+		return err
+	}
 	defer jm.Wait()
 	srv := &http.Server{
 		Addr:              cfg.Listen,

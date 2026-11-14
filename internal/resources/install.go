@@ -60,7 +60,7 @@ func applications(c *Ctx, w http.ResponseWriter, r *http.Request) {
 	api.WriteJSON(w, 200, Obj{"count": 0, "next": nil, "previous": nil, "results": []any{}})
 }
 
-// Bootstrap seeds data required at startup: managed roles, install uuid, this instance.
+// Bootstrap seeds data required at startup: managed roles, credential types, install uuid.
 func Bootstrap(ctx context.Context, app *api.App) error {
 	if err := rbac.SyncManaged(ctx, app.DB); err != nil {
 		return err
@@ -83,9 +83,6 @@ func Bootstrap(ctx context.Context, app *api.App) error {
 		if err := app.Settings.Set(ctx, "INSTALL_UUID", uuid); err != nil {
 			return err
 		}
-	}
-	if err := registerNode(ctx, app.DB, app, app.Cfg.NodeName); err != nil {
-		return err
 	}
 	if err := SeedInfrastructure(ctx, app); err != nil {
 		return err

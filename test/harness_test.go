@@ -83,7 +83,10 @@ func run(m *testing.M) int {
 		os.Setenv("PATH", "/opt/ansible-venv/bin:"+os.Getenv("PATH"))
 	}
 	jobsCtx, stopJobs := context.WithCancel(ctx)
-	jobManager = server.StartJobs(jobsCtx, app)
+	jobManager, err = server.StartJobs(jobsCtx, app)
+	if err != nil {
+		panic(err)
+	}
 	srv = httptest.NewServer(server.Handler(app))
 	cfg.ServiceURL, cfg.InternalURL = srv.URL, srv.URL
 	code := m.Run()
