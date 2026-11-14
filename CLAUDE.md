@@ -97,7 +97,7 @@ CI and the browser:
 
 - Commit on `main`, with no Claude or co-author trailers.
 - `main` has no branch protection: pushes, the owner's and Claude Code's, go straight to it,
-  and each green push deploys. Dependabot opens PRs, which the owner merges.
+  and each green push deploys. Dependabot opens PRs.
 - Stage explicit paths, never `git add -A`. The dotfiles at the root (`.bashrc`, `.claude/`,
   `.idea`, `.mcp.json`, `.playwright-mcp/`...) are not part of the project; `.gitignore` lists
   them.
