@@ -1,7 +1,9 @@
 package ansible
 
 import (
+	"archive/zip"
 	"bytes"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -105,5 +107,110 @@ func TestProcessDropsKeepalives(t *testing.T) {
 	}
 	if len(got) != 1 || got[0].Event["counter"] != float64(1) {
 		t.Fatalf("messages: %+v", got)
+	}
+}
+
+func readZip(t *testing.T, b []byte) map[string]*zip.File {
+	t.Helper()
+	zr, err := zip.NewReader(bytes.NewReader(b), int64(len(b)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]*zip.File{}
+	for _, f := range zr.File {
+		files[f.Name] = f
+	}
+	return files
+}
+
+func zipContent(t *testing.T, f *zip.File) string {
+	t.Helper()
+	rc, err := f.Open()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rc.Close()
+	b, err := io.ReadAll(rc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
+}
+
+func TestZipDirsLayout(t *testing.T) {
+	pdd := t.TempDir()
+	os.MkdirAll(filepath.Join(pdd, "env"), 0o755)
+	os.WriteFile(filepath.Join(pdd, "env", "extravars"), []byte(`{"a": 1}`), 0o600)
+	os.Symlink("env/extravars", filepath.Join(pdd, "vars"))
+	project := t.TempDir()
+	os.WriteFile(filepath.Join(project, "site.yml"), []byte("- hosts: all\n"), 0o644)
+	os.MkdirAll(filepath.Join(project, ".git"), 0o755)
+	os.WriteFile(filepath.Join(project, ".git", "config"), []byte("[core]\n"), 0o644)
+	// A manual project may be a symlink under the projects root; its files are
+	// sent, as AWX copies them.
+	linked := filepath.Join(t.TempDir(), "linked")
+	os.Symlink(project, linked)
+
+	var buf bytes.Buffer
+	if err := zipDirs(&buf, []Mount{{Path: pdd}, {Prefix: "project", Path: linked}}); err != nil {
+		t.Fatal(err)
+	}
+	files := readZip(t, buf.Bytes())
+	for _, name := range []string{"env/", "env/extravars", "vars", "project/", "project/site.yml"} {
+		if files[name] == nil {
+			t.Fatalf("no %s in %v", name, files)
+		}
+	}
+	if got := zipContent(t, files["env/extravars"]); got != `{"a": 1}` {
+		t.Fatalf("env/extravars: %q", got)
+	}
+	if files["vars"].Mode()&os.ModeSymlink == 0 || zipContent(t, files["vars"]) != "env/extravars" {
+		t.Fatalf("vars is not stored as a link: %v %q", files["vars"].Mode(), zipContent(t, files["vars"]))
+	}
+	for name := range files {
+		if strings.Contains(name, ".git") {
+			t.Fatalf("%s was sent", name)
+		}
+	}
+}
+
+// A file replaced by a symlink while the directory is zipped must not bring
+// in what the link points to outside the directory (#142).
+func TestZipDirsSymlinkSwap(t *testing.T) {
+	secret := filepath.Join(t.TempDir(), "secret")
+	os.WriteFile(secret, []byte("OUTSIDE-SECRET"), 0o600)
+	pdd := t.TempDir()
+	slot := filepath.Join(pdd, "slot")
+	os.WriteFile(slot, []byte("inside"), 0o600)
+	scratch := t.TempDir()
+
+	stop := make(chan struct{})
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		link, file := filepath.Join(scratch, "link"), filepath.Join(scratch, "file")
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+			}
+			os.Symlink(secret, link)
+			os.Rename(link, slot)
+			os.WriteFile(file, []byte("inside"), 0o600)
+			os.Rename(file, slot)
+		}
+	}()
+	defer func() { close(stop); <-done }()
+
+	for range 3000 {
+		var buf bytes.Buffer
+		if err := zipDirs(&buf, []Mount{{Path: pdd}}); err != nil {
+			continue
+		}
+		f := readZip(t, buf.Bytes())["slot"]
+		if f != nil && f.Mode()&os.ModeSymlink == 0 && zipContent(t, f) == "OUTSIDE-SECRET" {
+			t.Fatal("the file outside the directory was sent")
+		}
 	}
 }

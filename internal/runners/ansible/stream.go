@@ -14,6 +14,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 )
@@ -64,30 +65,29 @@ func zipDirs(w io.Writer, mounts []Mount) error {
 	return zw.Close()
 }
 
+// zipDir reads dir through an os.Root, so a file swapped for a symlink
+// between the walk and the read cannot make it read outside dir (#142).
 func zipDir(zw *zip.Writer, dir, prefix string) error {
-	return filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	return fs.WalkDir(root.FS(), ".", func(name string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		rel, err := filepath.Rel(dir, path)
-		if err != nil {
-			return err
-		}
-		if d.Name() == ".git" && path != dir {
+		if d.Name() == ".git" && name != "." {
 			// Project checkouts carry a .git file/dir that jobs do not need.
 			if d.IsDir() {
-				return filepath.SkipDir
+				return fs.SkipDir
 			}
 			return nil
 		}
-		if rel == "." {
-			if prefix == "" {
-				return nil
-			}
-			rel = ""
+		if name == "." && prefix == "" {
+			return nil
 		}
-		rel = filepath.ToSlash(filepath.Join(prefix, rel))
-		info, err := os.Lstat(path)
+		info, err := root.Lstat(name)
 		if err != nil {
 			return err
 		}
@@ -95,7 +95,7 @@ func zipDir(zw *zip.Writer, dir, prefix string) error {
 		if err != nil {
 			return err
 		}
-		hdr.Name = rel
+		hdr.Name = path.Join(prefix, name)
 		if d.IsDir() {
 			hdr.Name += "/"
 			_, err := zw.CreateHeader(hdr)
@@ -103,7 +103,7 @@ func zipDir(zw *zip.Writer, dir, prefix string) error {
 		}
 		if info.Mode()&os.ModeSymlink != 0 {
 			// Store symlinks as links (ansible-runner restores them).
-			target, err := os.Readlink(path)
+			target, err := root.Readlink(name)
 			if err != nil {
 				return err
 			}
@@ -123,7 +123,7 @@ func zipDir(zw *zip.Writer, dir, prefix string) error {
 		if err != nil {
 			return err
 		}
-		f, err := os.Open(path)
+		f, err := root.Open(name)
 		if err != nil {
 			return err
 		}
