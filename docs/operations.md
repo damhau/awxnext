@@ -75,6 +75,16 @@ the admin password and, with the bundled PostgreSQL, its password, in the secret
   the chart's `emptyDir` is writable by others, so job users are refused (README, "Job
   isolation").
 
+The pods run as their image's user, with no privileges, no capabilities, the `RuntimeDefault`
+seccomp profile and a read-only root file system, with `emptyDir` volumes where they write
+(`podSecurityContext` and `securityContext`, and the same under `postgresql` for the bundled
+PostgreSQL, which runs as its image's `postgres` user, uid 999). With the `podman` or `docker`
+runtime (`containerRuntime`, `agent.runtime`), give `securityContext` what the runtime needs.
+The replicas' limits (`resources`: 2 CPUs and 2 GiB by default) set their capacity: the chart
+passes them as `SYSTEM_TASK_ABS_CPU` and `SYSTEM_TASK_ABS_MEM`, so jobs that run on the
+replicas don't take more forks than the limits hold. To run more jobs on each replica, raise
+the limits.
+
 #### With Argo CD or Flux
 
 They render the chart with `helm template`, where the lookup that keeps the generated secrets

@@ -45,6 +45,29 @@ postgresql:
   image: postgres:16
   storage: 8Gi
   storageClass: ""
+  # The image's postgres user (uid 999), who already owns the data of
+  # installs whose entrypoint started as root (chart versions before these
+  # values). OnRootMismatch: the volume's group is set once, not at each start.
+  podSecurityContext:
+    runAsUser: 999
+    runAsGroup: 999
+    runAsNonRoot: true
+    fsGroup: 999
+    fsGroupChangePolicy: OnRootMismatch
+    seccompProfile:
+      type: RuntimeDefault
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop: [ALL]
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
   # External: a secret holding the connection URL
   # (postgres://user:password@host:5432/awxnext?sslmode=require), under
   # "key". For a CloudNativePG cluster, its <cluster>-app secret, key "uri".
@@ -92,6 +115,12 @@ agent:
   url: ""
   tokenSecret: ""
   runtime: none
+  # Requests only: its capacity comes from the node it runs on, whatever its
+  # limits, so a memory limit below the node's can get its jobs killed.
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
 
 # Run the migrations as a Job before an upgrade rolls the replicas. Off under
 # Argo CD: it runs the hook before every sync, the first one included, when
@@ -101,7 +130,35 @@ migrations:
   enabled: true
 
 env: []
-resources: {}
+
+# The awxnext pods (replicas, migration Job, agent): the image's user, no
+# privileges, a read-only root file system (/tmp is an emptyDir). The chart's
+# volumes keep jobs from running as job users (docs/operations.md), so the job
+# helper's capabilities are not needed. The podman and docker runtimes
+# (containerRuntime, agent.runtime) need more: override securityContext.
+podSecurityContext:
+  runAsUser: 1000
+  runAsGroup: 1000
+  runAsNonRoot: true
+  fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: [ALL]
+
+# The replicas and the migration Job. Jobs without a container group run in
+# the replicas, whose capacity (forks) comes from these limits
+# (SYSTEM_TASK_ABS_CPU and SYSTEM_TASK_ABS_MEM), not from the node's.
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: "2"
+    memory: 2Gi
 nodeSelector: {}
 tolerations: []
 affinity: {}

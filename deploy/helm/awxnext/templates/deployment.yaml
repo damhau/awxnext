@@ -16,16 +16,25 @@ spec:
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets: {{- toYaml . | nindent 8 }}
       {{- end }}
-      securityContext:
-        runAsUser: 1000
-        runAsGroup: 1000
-        fsGroup: 1000
+      {{- with .Values.podSecurityContext }}
+      securityContext: {{- toYaml . | nindent 8 }}
+      {{- end }}
       {{- if .Values.postgresql.bundled }}
       initContainers:
         - name: wait-for-postgresql
           image: {{ .Values.postgresql.image }}
           # A user name: the pod's has no passwd entry in this image.
           command: ["sh", "-c", "until pg_isready -h {{ include "awxnext.fullname" . }}-postgresql -p 5432 -U awxnext; do sleep 2; done"]
+          {{- with .Values.securityContext }}
+          securityContext: {{- toYaml . | nindent 12 }}
+          {{- end }}
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
       {{- end }}
       containers:
         - name: awxnext
@@ -33,6 +42,21 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           args: ["serve"]
           env:
+            # Capacity measures the node, not the container: without these, a
+            # replica would take more forks than its memory limit holds.
+            # Before awxnext.env, so that env can override them.
+            {{- if dig "limits" "cpu" nil (.Values.resources | default dict) }}
+            - name: SYSTEM_TASK_ABS_CPU
+              valueFrom:
+                resourceFieldRef:
+                  resource: limits.cpu
+            {{- end }}
+            {{- if dig "limits" "memory" nil (.Values.resources | default dict) }}
+            - name: SYSTEM_TASK_ABS_MEM
+              valueFrom:
+                resourceFieldRef:
+                  resource: limits.memory
+            {{- end }}
             {{- include "awxnext.env" . | nindent 12 }}
             # Each replica is an instance, reachable by the others.
             - name: AWXNEXT_NODE_NAME
@@ -70,13 +94,20 @@ spec:
               port: http
             initialDelaySeconds: 30
             periodSeconds: 15
+          {{- with .Values.securityContext }}
+          securityContext: {{- toYaml . | nindent 12 }}
+          {{- end }}
           volumeMounts:
             - name: data
               mountPath: /var/lib/awxnext
+            - name: tmp
+              mountPath: /tmp
           {{- with .Values.resources }}
           resources: {{- toYaml . | nindent 12 }}
           {{- end }}
       volumes:
+        - name: tmp
+          emptyDir: {}
         - name: data
           {{- if .Values.persistence.existingClaim }}
           persistentVolumeClaim:

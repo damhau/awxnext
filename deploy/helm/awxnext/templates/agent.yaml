@@ -18,9 +18,9 @@ spec:
         app.kubernetes.io/instance: {{ .Release.Name }}
         app.kubernetes.io/component: agent
     spec:
-      securityContext:
-        runAsUser: 1000
-        runAsGroup: 1000
+      {{- with .Values.podSecurityContext }}
+      securityContext: {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: agent
           image: {{ include "awxnext.image" . }}
@@ -34,10 +34,20 @@ spec:
                 secretKeyRef:
                   name: {{ required "agent.tokenSecret is required for the agent" .Values.agent.tokenSecret }}
                   key: token
+          {{- with .Values.securityContext }}
+          securityContext: {{- toYaml . | nindent 12 }}
+          {{- end }}
           volumeMounts:
             - name: work
               mountPath: /var/lib/awxnext
+            - name: tmp
+              mountPath: /tmp
+          {{- with .Values.agent.resources }}
+          resources: {{- toYaml . | nindent 12 }}
+          {{- end }}
       volumes:
         - name: work
+          emptyDir: {}
+        - name: tmp
           emptyDir: {}
 {{- end }}
