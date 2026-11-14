@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -280,33 +281,51 @@ func pruneRequirements(base string, keep int) {
 	}
 }
 
-// copyTree copies a directory tree, preserving file modes and symlinks.
+// copyTree copies a directory tree, preserving file modes and symlinks. It
+// reads src and writes dst through an os.Root each, so a file swapped for a
+// symlink during the copy cannot make it read or write outside them (#144).
 func copyTree(src, dst string) error {
-	return filepath.Walk(src, func(p string, info os.FileInfo, err error) error {
+	sr, err := os.OpenRoot(src)
+	if err != nil {
+		return err
+	}
+	defer sr.Close()
+	top, err := sr.Stat(".")
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(dst, top.Mode().Perm()|0o700); err != nil {
+		return err
+	}
+	dr, err := os.OpenRoot(dst)
+	if err != nil {
+		return err
+	}
+	defer dr.Close()
+	return fs.WalkDir(sr.FS(), ".", func(name string, d fs.DirEntry, err error) error {
+		if err != nil || name == "." {
+			return err
+		}
+		info, err := sr.Lstat(name)
 		if err != nil {
 			return err
 		}
-		rel, err := filepath.Rel(src, p)
-		if err != nil {
-			return err
-		}
-		target := filepath.Join(dst, rel)
 		switch {
 		case info.IsDir():
-			return os.MkdirAll(target, info.Mode().Perm()|0o700)
+			return dr.MkdirAll(name, info.Mode().Perm()|0o700)
 		case info.Mode()&os.ModeSymlink != 0:
-			link, err := os.Readlink(p)
+			link, err := sr.Readlink(name)
 			if err != nil {
 				return err
 			}
-			return os.Symlink(link, target)
+			return dr.Symlink(link, name)
 		case info.Mode().IsRegular():
-			in, err := os.Open(p)
+			in, err := sr.Open(name)
 			if err != nil {
 				return err
 			}
 			defer in.Close()
-			o, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, info.Mode().Perm())
+			o, err := dr.OpenFile(name, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, info.Mode().Perm())
 			if err != nil {
 				return err
 			}
