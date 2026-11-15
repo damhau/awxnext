@@ -1,5 +1,6 @@
 // Package system runs management jobs (cleanup of old jobs, activity
-// stream entries, sessions, tokens and host metrics) in-process.
+// stream entries, sessions, tokens, host metrics and event streams' events)
+// in-process.
 package system
 
 import (
@@ -8,6 +9,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/damhau/awxnext/internal/eventstreams"
 	"github.com/damhau/awxnext/internal/jobs"
 	"github.com/damhau/awxnext/internal/vars"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -69,6 +71,8 @@ func run(ctx context.Context, rc *jobs.RunContext) jobs.Result {
 		fn = t.cleanupHostMetrics
 	case "host_metric_summary_monthly":
 		fn = t.hostMetricSummaryMonthly
+	case "cleanup_event_streams":
+		fn = t.cleanupEventStreams
 	default:
 		return jobs.Result{Status: "error", Explanation: "Unknown management job type " + row.Str("job_type")}
 	}
@@ -257,6 +261,26 @@ func (t *task) hostMetricSummaryMonthly(ctx context.Context) error {
 	}
 	t.out.Line(fmt.Sprintf("Host metric summary computed for %d months, %d hosts counted this month", months, consumed))
 	return nil
+}
+
+// cleanupEventStreams removes the events each stream keeps no longer, by
+// its own retention: days takes no part.
+func (t *task) cleanupEventStreams(ctx context.Context) error {
+	t.out.Line("Cleaning up event stream events older than their stream's retention" + dry(t.dryRun))
+	res, err := eventstreams.Cleanup(ctx, t.db, time.Now(), t.dryRun)
+	for _, p := range res.Partitions {
+		t.out.Line(fmt.Sprintf("Partition %s %s", p, t.dropAction()))
+	}
+	t.out.Line(fmt.Sprintf("Events %s: %d", t.action(), res.Events))
+	t.out.Line(fmt.Sprintf("Event IDs kept to drop duplicates %s: %d", t.action(), res.IDs))
+	return err
+}
+
+func (t *task) dropAction() string {
+	if t.dryRun {
+		return "would be dropped"
+	}
+	return "dropped"
 }
 
 func (t *task) simple(sql, label string) func(context.Context) error {

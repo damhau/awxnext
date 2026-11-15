@@ -235,7 +235,7 @@ export const settingsPages: SettingsPage[] = [
   {
     slug: 'system',
     title: tr('System'),
-    blurb: tr('The service\'s address, the activity stream, what organization admins may do, and proxies.'),
+    blurb: tr('The service\'s address, the activity stream, what organization admins may do, proxies, and event streams.'),
     categories: ['system', 'named-url'],
     sections: [
       { id: 'service', title: tr('Service'), rows: [
@@ -252,6 +252,24 @@ export const settingsPages: SettingsPage[] = [
         rows: [
           row('REMOTE_HOST_HEADERS', { label: tr('Headers that carry the client\'s address') }),
           row('PROXY_IP_ALLOWED_LIST', { label: tr('Proxies trusted to set them') }),
+        ],
+      },
+      {
+        id: 'event-streams',
+        title: tr('Event streams'),
+        intro: tr('Outside systems post events to event streams. Senders with a client certificate show it to a proxy in front of awxnext, which passes it on in a header; senders with an OIDC token are checked against keys awxnext fetches from the token\'s issuer.'),
+        rows: [
+          row('EVENT_STREAM_TRUSTED_PROXIES', {
+            label: tr('Proxies trusted to pass client certificates'),
+            help: tr('One per entry: an address or a network. The header of any other client is ignored. Empty: mTLS streams refuse every request.'),
+            consequence: tr('A client at one of these addresses can pass any certificate it likes in the header.'),
+          }),
+          row('EVENT_STREAM_CLIENT_CERT_HEADER', { label: tr('Client certificate header') }),
+          row('EVENT_STREAM_ALLOWED_LOCAL_ADDRESSES', {
+            label: tr('Local addresses token issuers may be at'),
+            help: tr('Loopback and link-local addresses and cloud metadata services are refused: they are awxnext\'s own host. One per entry: an address, a network, or an address and port.'),
+            consequence: tr('Anyone who may create a credential can then make awxnext send requests to these addresses.'),
+          }),
         ],
       },
       { id: 'named-url', title: tr('Named URLs'), rows: [row('NAMED_URL_FORMATS', { label: tr('Named URL formats') }), row('NAMED_URL_GRAPH_NODES', { label: tr('Named URL graph') })] },

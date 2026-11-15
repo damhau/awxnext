@@ -51,6 +51,10 @@ type Route struct {
 	Handler func(c *Ctx, w http.ResponseWriter, r *http.Request)
 	// Public routes do not require authentication.
 	Public bool
+	// Anonymous routes never authenticate the caller as a user: their
+	// handler checks its own credentials, which the user authenticator must
+	// not see (a Basic password would count as a failed login).
+	Anonymous bool
 }
 
 func (a *App) Handle(method, pattern string, h func(c *Ctx, w http.ResponseWriter, r *http.Request)) {
@@ -59,6 +63,11 @@ func (a *App) Handle(method, pattern string, h func(c *Ctx, w http.ResponseWrite
 
 func (a *App) HandlePublic(method, pattern string, h func(c *Ctx, w http.ResponseWriter, r *http.Request)) {
 	a.Routes = append(a.Routes, Route{Method: method, Pattern: pattern, Handler: h, Public: true})
+}
+
+// HandleAnonymous registers a route whose callers are never users.
+func (a *App) HandleAnonymous(method, pattern string, h func(c *Ctx, w http.ResponseWriter, r *http.Request)) {
+	a.Routes = append(a.Routes, Route{Method: method, Pattern: pattern, Handler: h, Public: true, Anonymous: true})
 }
 
 var (

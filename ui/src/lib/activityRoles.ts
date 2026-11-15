@@ -12,6 +12,7 @@ const objectTypes: Record<string, string> = {
   instancegroup: 'instance group',
   notificationtemplate: 'notification template',
   credentialtype: 'credential type',
+  eventstream: 'event stream',
 }
 
 /** "Execute role on job template Deploy" from a role's summary, '' without a role field. */

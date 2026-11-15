@@ -263,6 +263,40 @@ var Managed = []Def{
 		str("ssl_ca_cert", "Certificate Authority data", "multiline", true, "help_text", "The CA that signed rvav's certificate, in PEM, when the system's CAs don't include it."),
 	}, []string{"url", "token"})},
 
+	// awxnext's own: what senders authenticate to an event stream with (M14).
+	// Not in AWX; EDA has types of the same names and inputs.
+	{Namespace: "event_stream_hmac", Name: "HMAC Event Stream", Kind: "token", Description: "Senders sign each event's body with a shared secret.", Inputs: inputs([]field{
+		str("secret", "HMAC Secret", "secret", true),
+		choice("hash_algorithm", "Hash Algorithm", "choices", []any{"sha1", "sha256", "sha512"}, "default", "sha256"),
+		str("http_header_key", "HMAC Header", "default", "X-Hub-Signature-256", "help_text", "The header that carries the signature."),
+		choice("signature_encoding", "Signature Encoding", "choices", []any{"hex", "base64"}, "default", "hex"),
+		str("signature_prefix", "Signature Prefix", "default", "sha256=", "help_text", "What comes before the signature in the header, such as sha256=. Can be empty."),
+	}, []string{"secret"})},
+	{Namespace: "event_stream_github", Name: "GitHub Event Stream", Kind: "token", Description: "A GitHub webhook's secret: GitHub signs each delivery with it (X-Hub-Signature-256).", Inputs: inputs([]field{
+		str("secret", "Webhook Secret", "secret", true),
+	}, []string{"secret"})},
+	{Namespace: "event_stream_gitlab", Name: "GitLab Event Stream", Kind: "token", Description: "A GitLab webhook's secret token, which GitLab sends in X-Gitlab-Token.", Inputs: inputs([]field{
+		str("token", "Secret Token", "secret", true),
+	}, []string{"token"})},
+	{Namespace: "event_stream_token", Name: "Token Event Stream", Kind: "token", Description: "Senders send a shared token in a header.", Inputs: inputs([]field{
+		str("token", "Token", "secret", true),
+		str("http_header_key", "Header", "default", "Authorization", "help_text", "The header that carries the token. In Authorization, the token follows Bearer."),
+	}, []string{"token"})},
+	{Namespace: "event_stream_basic", Name: "Basic Event Stream", Kind: "token", Description: "Senders authenticate with a username and password (HTTP Basic).", Inputs: inputs([]field{
+		str("username", "Username"),
+		str("password", "Password", "secret", true),
+	}, []string{"username", "password"})},
+	{Namespace: "event_stream_mtls", Name: "mTLS Event Stream", Kind: "token", Description: "Senders present a client certificate to the proxy in front of awxnext, which passes it on.", Inputs: inputs([]field{
+		str("ca_certificate", "CA Certificate", "multiline", true, "help_text", "The CA, in PEM, that signs the senders' certificates."),
+		str("subject", "Subject", "help_text", "The certificate's common name, a subject alternative name, or its whole subject. Empty: any certificate the CA signed."),
+	}, []string{"ca_certificate"})},
+	{Namespace: "event_stream_oidc", Name: "OIDC Event Stream", Kind: "token", Description: "Senders send a token from an OpenID Connect issuer, such as GitHub Actions.", Inputs: inputs([]field{
+		str("issuer", "Issuer URL", "format", "url", "help_text", "Such as https://token.actions.githubusercontent.com."),
+		str("audience", "Audience", "help_text", "The audience the tokens must be for."),
+		str("claims", "Claims Condition", "multiline", true, "help_text", "A CEL condition on the token's claims, such as claims.repository == \"org/app\". Empty: any token of the issuer for the audience."),
+		str("ca_certificate", "CA Certificate", "multiline", true, "help_text", "The CA, in PEM, of the issuer's certificate, when the system's CAs don't include it."),
+	}, []string{"issuer", "audience"})},
+
 	// External secret lookups (v1 scope: HashiCorp Vault and Azure Key Vault).
 	{Namespace: "hashivault_kv", Name: "HashiCorp Vault Secret Lookup", Kind: "external", Inputs: inputs(append(vaultInputs(),
 		choice("api_version", "API Version", "choices", []any{"v1", "v2"}, "default", "v1", "help_text", "API v1 is for static key/value lookups.  API v2 is for versioned key/value lookups."),

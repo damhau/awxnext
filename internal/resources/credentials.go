@@ -10,6 +10,7 @@ import (
 	"github.com/damhau/awxnext/internal/credplugins"
 	"github.com/damhau/awxnext/internal/credtypes"
 	"github.com/damhau/awxnext/internal/crypto"
+	"github.com/damhau/awxnext/internal/eventstreams"
 )
 
 var credentialKinds = labelled(
@@ -368,6 +369,11 @@ func registerCredentials() {
 			}
 			if err := inputErrors(credtypes.ValidateInputs(schema, inputs)); err != nil {
 				return err
+			}
+			if eventstreams.IsStreamCredential(namespace) {
+				if err := inputErrors(eventstreams.CheckInputs(namespace, inputs)); err != nil {
+					return err
+				}
 			}
 			// As AWX checks its managed types: an encrypted key needs its
 			// passphrase, and a passphrase needs an encrypted key.

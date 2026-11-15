@@ -3,6 +3,7 @@ package settings
 import (
 	"errors"
 	"fmt"
+	"regexp"
 	"strconv"
 
 	"github.com/damhau/awxnext/internal/netguard"
@@ -21,6 +22,12 @@ func init() {
 		{Key: "CUSTOM_VENV_PATHS", Category: "system", Type: "list", Default: []any{}, CompatOnly: true, Help: "No effect in awxnext: custom virtual environments are replaced by execution environments."},
 		{Key: "REMOTE_HOST_HEADERS", Category: "system", Type: "list", Default: []any{"REMOTE_ADDR", "REMOTE_HOST"}, Help: "Where a provisioning callback finds the calling host's address or name: REMOTE_ADDR is the connection's address, HTTP_<NAME> a request header, such as HTTP_X_FORWARDED_FOR behind a reverse proxy."},
 		{Key: "PROXY_IP_ALLOWED_LIST", Category: "system", Type: "list", Default: []any{}, Help: "The IP addresses of the proxies whose HTTP_ headers in REMOTE_HOST_HEADERS are trusted. Empty: any client's headers are trusted."},
+		{Key: "EVENT_STREAM_TRUSTED_PROXIES", Category: "system", Type: "list", Default: []any{}, Validate: networks, Label: "Proxies trusted to pass client certificates",
+			Help: "The addresses of the proxies in front of awxnext that check event stream senders' client certificates and pass them on in EVENT_STREAM_CLIENT_CERT_HEADER. One per entry: an address (10.0.0.5) or a network (10.0.0.0/8). The header of any other client is ignored. Empty: mTLS event streams refuse every request."},
+		{Key: "EVENT_STREAM_CLIENT_CERT_HEADER", Category: "system", Type: "string", Default: "X-Forwarded-Client-Cert", Validate: headerName, Label: "Client certificate header",
+			Help: "The header in which the trusted proxies pass the client's certificate: Envoy's X-Forwarded-Client-Cert, URL-encoded PEM (ingress-nginx's ssl-client-cert), or base64 DER (Traefik's X-Forwarded-Tls-Client-Cert)."},
+		{Key: "EVENT_STREAM_ALLOWED_LOCAL_ADDRESSES", Category: "system", Type: "list", Default: []any{}, Validate: localAddresses, Label: "Local addresses OIDC event stream issuers may be at",
+			Help: "awxnext fetches the keys of an OIDC event stream's issuer itself, from the address its credential gives, and refuses loopback (127.0.0.0/8, ::1), link-local (169.254.0.0/16, fe80::/10) and unspecified addresses, and cloud metadata services: they are awxnext's own host. Allow some here, one per entry: an address (127.0.0.1), a network (127.0.0.0/8), or an address and port (127.0.0.1:8443)."},
 		{Key: "SUBSCRIPTIONS_USERNAME", Category: "system", Type: "string", Default: "", CompatOnly: true, Help: "No effect in awxnext: there are no Red Hat subscriptions to manage."},
 		{Key: "AUTOMATION_ANALYTICS_GATHER_INTERVAL", Category: "system", Type: "integer", Default: 14400, CompatOnly: true, Help: "No effect in awxnext: nothing is sent to Red Hat analytics."},
 		{Key: "INSIGHTS_TRACKING_STATE", Category: "system", Type: "boolean", Default: false, CompatOnly: true, Help: "No effect in awxnext: nothing is sent to Red Hat analytics."},
@@ -140,6 +147,20 @@ func identityHosts(v any) error {
 func localAddresses(v any) error {
 	_, err := netguard.ParseAllowed(stringList(v))
 	return err
+}
+
+func networks(v any) error {
+	_, err := netguard.ParseNetworks(stringList(v))
+	return err
+}
+
+var headerRe = regexp.MustCompile(`^[A-Za-z0-9-]+$`)
+
+func headerName(v any) error {
+	if s, _ := v.(string); !headerRe.MatchString(s) {
+		return errors.New("Enter a header name: letters, digits and dashes.")
+	}
+	return nil
 }
 
 func stringList(v any) []string {

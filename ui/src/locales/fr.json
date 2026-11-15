@@ -2383,7 +2383,7 @@
   "GitHub Enterprise: members of an organization": "GitHub Enterprise : membres d’une organisation",
   "GitHub Enterprise: members of a team": "GitHub Enterprise : membres d’une équipe",
   "Organizations and teams": "Organisations et équipes",
-  "The service's address, the activity stream, what organization admins may do, and proxies.": "L’adresse du service, le flux d’activité, ce que peuvent faire les administrateurs d’organisation, et les proxys.",
+  "The service's address, the activity stream, what organization admins may do, proxies, and event streams.": "L’adresse du service, le flux d’activité, ce que peuvent faire les administrateurs d’organisation, les proxys, et les flux d’événements.",
   "Service": "Service",
   "Installation ID": "Identifiant de l’installation",
   "Activity stream": "Flux d’activité",
@@ -2871,5 +2871,15 @@
   "Not compared without one": "Pas de comparaison sans elle",
   "Passed: each step works.": "Réussi : chaque étape fonctionne.",
   "Failed: see the step marked.": "En échec : voir l’étape marquée.",
-  "Groups:": "Groupes :"
+  "Groups:": "Groupes :",
+  "Event streams": "Flux d’événements",
+  "Event stream": "Flux d’événements",
+  "Outside systems post events to event streams. Senders with a client certificate show it to a proxy in front of awxnext, which passes it on in a header; senders with an OIDC token are checked against keys awxnext fetches from the token's issuer.": "Des systèmes extérieurs envoient des événements aux flux d’événements. Les expéditeurs munis d’un certificat client le présentent à un proxy devant awxnext, qui le transmet dans un en-tête ; ceux munis d’un jeton OIDC sont vérifiés avec les clés qu’awxnext récupère auprès de l’émetteur du jeton.",
+  "Proxies trusted to pass client certificates": "Proxys autorisés à transmettre les certificats clients",
+  "One per entry: an address or a network. The header of any other client is ignored. Empty: mTLS streams refuse every request.": "Un par entrée : une adresse ou un réseau. L’en-tête de tout autre client est ignoré. Vide : les flux mTLS refusent toutes les requêtes.",
+  "A client at one of these addresses can pass any certificate it likes in the header.": "Un client à l’une de ces adresses peut transmettre n’importe quel certificat dans l’en-tête.",
+  "Client certificate header": "En-tête du certificat client",
+  "Local addresses token issuers may be at": "Adresses locales où peuvent se trouver les émetteurs de jetons",
+  "Loopback and link-local addresses and cloud metadata services are refused: they are awxnext's own host. One per entry: an address, a network, or an address and port.": "Les adresses de bouclage et de lien local et les services de métadonnées cloud sont refusés : ce sont l’hôte même d’awxnext. Une par entrée : une adresse, un réseau, ou une adresse et un port.",
+  "Removes the events each event stream keeps no longer, by the stream's own retention.": "Supprime les événements que chaque flux d’événements ne conserve plus, selon la rétention propre au flux."
 }

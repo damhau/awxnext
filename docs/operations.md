@@ -414,6 +414,137 @@ stay readable where they are, and deleting a job deletes its object at the next 
 (every 10 minutes). A backup holds the database only: archives in object storage are not in it, so keep
 the bucket's own backups or versioning.
 
+## Event streams
+
+An event stream takes events that outside systems post: Alertmanager or Grafana alerts, GitHub
+or GitLab webhooks, ServiceNow records, CloudEvents, or any JSON. It stores each one as a
+CloudEvent in the event log, where rules read them (roadmap M14). To create one, post to
+`/api/v2/event_streams/` with these fields:
+
+| Field | What it sets |
+|---|---|
+| `organization`, `name` | The stream's organization, and a name unique in it. Organization admins manage the organization's streams; the roles `EventStream Admin` and `EventStream Read` give one stream. |
+| `stream_type` | What the sender posts: `cloudevents`, `generic` (any JSON), `alertmanager`, `grafana`, `github`, `gitlab` or `servicenow`. |
+| `credential` | How the sender authenticates: a credential of one of the event stream types below, which you may use. |
+| `retention_days` | How long the log keeps the stream's events, 7 by default. |
+| `max_payload_bytes` | The largest request the stream takes, 1 MiB by default, at most 25 MiB. |
+| `rate_limit` | Events per minute, on each node, 6000 by default; 0 for no limit. A minute's events may arrive at once. |
+| `test_mode` | Keep and show the events, but hide them from rules. |
+| `mapping` | For `generic` streams, JSONPaths to the event's `id`, `type`, `source`, `subject` and `time` in the body, such as `{"id": "$.alert.id"}`. |
+
+The answer's `receiver_url` is where the sender posts: `<TOWER_URL_BASE>/api/v2/event_streams/<uuid>/post/`.
+The UUID is not a secret, the credential is. The stream's events are at
+`/api/v2/event_streams/N/events/`, and every stream you can see at `/api/v2/stream_events/`.
+
+### Senders' credentials
+
+The receiver never signs in a user: it checks the stream's credential only. Its secrets are
+encrypted as every credential's and can come from a secret lookup. Neither they nor the headers
+that carry them are stored with the events.
+
+| Credential type | The sender sends |
+|---|---|
+| HMAC Event Stream | A signature of the body with the secret, in `http_header_key` (`X-Hub-Signature-256` by default). `hash_algorithm` is `sha256` (default), `sha512` or `sha1`; `signature_encoding` `hex` (default) or `base64`; `signature_prefix` is what comes before it (`sha256=` by default). |
+| GitHub Event Stream | GitHub's `X-Hub-Signature-256` with the webhook's secret. |
+| GitLab Event Stream | GitLab's `X-Gitlab-Token`. |
+| Token Event Stream | `Authorization: Bearer <token>`, or the token alone in `http_header_key`. |
+| Basic Event Stream | `Authorization: Basic` with the username and password. |
+| mTLS Event Stream | A client certificate the credential's CA signs, with `subject` (optional) as its common name, a SAN or its whole DN. |
+| OIDC Event Stream | `Authorization: Bearer <token>`: a JWT the `issuer` signs, for the `audience`, whose claims meet `claims` (optional). |
+
+awxnext does not end TLS itself, so a proxy in front of it checks the client certificate and
+passes it on in a header. awxnext reads that header only from the addresses in
+`EVENT_STREAM_TRUSTED_PROXIES` (Settings, System, "Event streams"): without one, mTLS streams
+refuse every request. `EVENT_STREAM_CLIENT_CERT_HEADER` names the header,
+`X-Forwarded-Client-Cert` by default. It takes Envoy's and Istio's `X-Forwarded-Client-Cert`
+(the last element, the one the closest proxy added), URL-encoded PEM (ingress-nginx's
+`$ssl_client_escaped_cert`, as `Ssl-Client-Cert`), or base64 DER (Traefik). Make the proxy
+replace the header a client sends, not add to it: a client at a listed address can pass any
+certificate it likes.
+
+`claims` is a [CEL](https://cel.dev) condition on the token's claims, such as
+`claims.repository == "org/app" && claims.ref == "refs/heads/main"` for GitHub Actions' tokens
+(`issuer` `https://token.actions.githubusercontent.com`). A claim it names that the token lacks
+makes it false. awxnext fetches the issuer's discovery document and keys through the same
+checks as secret lookups: an issuer on loopback, a link-local address or a cloud metadata
+service needs an entry in `EVENT_STREAM_ALLOWED_LOCAL_ADDRESSES`.
+
+### What a stream answers
+
+| Status | When |
+|---|---|
+| `202` | The events are stored. The body lists each one's ID, source and `sequence` in the stream, and whether it was a `duplicate`. |
+| `400` | The body is not what the stream's type takes, or an event has no ID, source or type. |
+| `401`, `403` | The credentials are wrong or missing (`401`), or an OIDC token's claims don't meet the condition (`403`). |
+| `404` | No stream has this UUID. |
+| `413` | The request is larger than `max_payload_bytes`, or has more events than `rate_limit`. |
+| `415` | The content type is not one the stream's type takes. |
+| `429` | The stream's rate limit is reached; `Retry-After` says when to try again. |
+| `503` | The database or an OIDC issuer cannot be reached. Nothing is stored: send again. |
+
+A sender that gets anything but `202` can send the same request again. An event whose ID the
+stream already has, from the same source, is dropped and answered as a duplicate, for as long as
+the stream keeps its events. Where each event's ID comes from:
+
+- **CloudEvents**: its `id`, in binary mode (`Ce-*` headers), structured mode
+  (`application/cloudevents+json`) or batch mode (`application/cloudevents-batch+json`).
+  `traceparent` and `tracestate` are kept as extensions.
+- **Alertmanager and Grafana**: one event per alert of the group, with the ID
+  `<fingerprint>/<startsAt>/<status>` and the type `alert.firing` or `alert.resolved`. A group
+  sent again is dropped; an alert that resolves is a new event.
+- **GitHub**: `X-GitHub-Delivery`, with the type `github.<X-GitHub-Event>`.
+- **GitLab**: `Idempotency-Key`, else `X-Gitlab-Event-UUID`, with the type
+  `gitlab.<event>`, such as `gitlab.merge_request`.
+- **ServiceNow**: `<sys_id>/<sys_mod_count>`, else `<sys_id>/<sys_updated_on>`, one event per
+  record of an object, an array or a `result`.
+- **Generic**: `Idempotency-Key`, `X-Request-Id` or `X-Delivery-Id`, else the mapping's `id`,
+  else a new ID: without one, every request is a new event. The type is `X-Event-Type`, else the
+  mapping's, else `generic`.
+
+### Alertmanager
+
+Create a stream of the type `alertmanager` with a Token Event Stream credential, and point a
+receiver at its `receiver_url`:
+
+```yaml
+receivers:
+  - name: awxnext
+    webhook_configs:
+      - url: https://awxnext.example.com/api/v2/event_streams/<uuid>/post/
+        send_resolved: true
+        max_alerts: 0
+        http_config:
+          authorization:
+            type: Bearer
+            credentials_file: /etc/alertmanager/awxnext-token
+```
+
+Alertmanager sends the group again at each `repeat_interval`; awxnext keeps each alert once per
+start and status.
+
+### GitHub
+
+Create a stream of the type `github` with a GitHub Event Stream credential whose secret you
+choose. In the repository's or organization's Settings, Webhooks, add a webhook:
+
+1. **Payload URL**: the stream's `receiver_url`.
+2. **Content type**: `application/json` (`application/x-www-form-urlencoded` works too).
+3. **Secret**: the credential's secret.
+4. Choose the events to send.
+
+GitHub's redelivery of a delivery has the same `X-GitHub-Delivery`, so it is a duplicate.
+
+### Retention and test mode
+
+The event log is partitioned by day, like job events. The management job
+**Cleanup Event Streams** (`cleanup_event_streams`, daily by default) drops the days older than
+every stream's retention, then deletes each stream's events older than its own, and the events
+of deleted streams. With `dry_run` it says what it would delete.
+
+In test mode a stream's events are logged and shown with `test_mode: true`, but rules don't see
+them, then or after the stream leaves test mode. Each rule keeps its own position in each
+stream's log.
+
 ## Settings
 
 The Settings pages group AWX's settings by what they set up rather than by AWX's categories:

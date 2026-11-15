@@ -26,6 +26,7 @@ func Install(app *api.App) {
 	app.Handle("GET", "/api/v2/config/", configView)
 	installScheduleRoutes(app)
 	installWebhookRoutes(app)
+	installEventStreamRoutes(app)
 	installCallbackRoutes(app)
 	app.Handle("GET", "/api/v2/metrics/", handleAWXMetrics)
 	app.Handle("GET", "/api/v2/applications/", applications)

@@ -84,6 +84,26 @@ func parseAllowRule(e string) (allowRule, error) {
 	return allowRule{}, fmt.Errorf("%q is not an address (127.0.0.1), a network (127.0.0.0/8) or an address and port (127.0.0.1:8200)", e)
 }
 
+// ParseNetworks parses addresses and networks (10.0.0.1, 10.0.0.0/8), such
+// as the proxies a server trusts. It returns the valid ones, and an error
+// naming the first that is not.
+func ParseNetworks(entries []string) ([]netip.Prefix, error) {
+	var out []netip.Prefix
+	var first error
+	for _, e := range entries {
+		e = strings.TrimSpace(e)
+		if p, err := netip.ParsePrefix(e); err == nil {
+			out = append(out, p.Masked())
+		} else if a, err := netip.ParseAddr(e); err == nil {
+			a = a.Unmap()
+			out = append(out, netip.PrefixFrom(a, a.BitLen()))
+		} else if first == nil {
+			first = fmt.Errorf("%q is not an address (10.0.0.1) or a network (10.0.0.0/8)", e)
+		}
+	}
+	return out, first
+}
+
 func (l Allowed) allows(ap netip.AddrPort) bool {
 	a := ap.Addr().Unmap().WithZone("")
 	for _, r := range l {

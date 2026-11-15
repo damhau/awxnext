@@ -78,7 +78,10 @@ func (a *App) Router() chi.Router {
 	}
 	for _, rt := range a.Routes {
 		h := a.wrap(rt.Handler)
-		if rt.Public {
+		switch {
+		case rt.Anonymous:
+			h = a.wrapAnonymous(rt.Handler)
+		case rt.Public:
 			h = a.wrapPublic(rt.Handler)
 		}
 		r.Method(rt.Method, rt.Pattern, withAllow(allowHeader(methods[rt.Pattern]...), h))
@@ -259,6 +262,12 @@ func (a *App) wrapPublic(h func(c *Ctx, w http.ResponseWriter, r *http.Request))
 	return func(w http.ResponseWriter, r *http.Request) {
 		p, _ := authenticate(r, w)
 		h(a.newCtx(r, p), w, r)
+	}
+}
+
+func (a *App) wrapAnonymous(h func(c *Ctx, w http.ResponseWriter, r *http.Request)) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		h(a.newCtx(r, nil), w, r)
 	}
 }
 

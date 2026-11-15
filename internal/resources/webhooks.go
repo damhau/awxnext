@@ -17,7 +17,6 @@ import (
 	"math/big"
 	"net/http"
 	"net/url"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -25,6 +24,7 @@ import (
 	"github.com/damhau/awxnext/internal/api"
 	"github.com/damhau/awxnext/internal/crypto"
 	"github.com/damhau/awxnext/internal/jobs"
+	"github.com/damhau/awxnext/internal/jsonpath"
 	"github.com/damhau/awxnext/internal/rbac"
 	"github.com/damhau/awxnext/internal/vars"
 	"github.com/go-chi/chi/v5"
@@ -125,38 +125,6 @@ func handleWebhookKey(c *Ctx, w http.ResponseWriter, r *http.Request, obj Obj) {
 
 // --- generic webhook mapping ---
 
-var jsonPathRe = regexp.MustCompile(`^\$((\.[A-Za-z0-9_-]+)|(\[\d+\])|(\['[^']*'\])|(\["[^"]*"\]))*$`)
-var jsonPathSeg = regexp.MustCompile(`\.([A-Za-z0-9_-]+)|\[(\d+)\]|\['([^']*)'\]|\["([^"]*)"\]`)
-
-// JSONPath evaluates a simple path ($.a.b[0]['c']) against a decoded JSON document.
-func JSONPath(doc any, path string) (any, bool) {
-	if !jsonPathRe.MatchString(path) {
-		return nil, false
-	}
-	cur := doc
-	for _, m := range jsonPathSeg.FindAllStringSubmatch(path[1:], -1) {
-		switch {
-		case m[2] != "":
-			list, ok := cur.([]any)
-			i, _ := strconv.Atoi(m[2])
-			if !ok || i >= len(list) {
-				return nil, false
-			}
-			cur = list[i]
-		default:
-			key := m[1] + m[3] + m[4]
-			obj, ok := cur.(map[string]any)
-			if !ok {
-				return nil, false
-			}
-			if cur, ok = obj[key]; !ok {
-				return nil, false
-			}
-		}
-	}
-	return cur, true
-}
-
 var mappingPrompts = map[string]bool{"limit": true, "scm_branch": true, "job_tags": true, "skip_tags": true, "inventory": true}
 
 // validateWebhookMapping checks {"filter": {path: value}, "extra_vars": {var: path}, "<prompt>": path}.
@@ -167,7 +135,7 @@ func validateWebhookMapping(c *Ctx, v any, data Obj) error {
 	}
 	checkPath := func(p any) error {
 		s, ok := p.(string)
-		if !ok || !jsonPathRe.MatchString(s) {
+		if !ok || !jsonpath.Valid(s) {
 			return fmt.Errorf("Invalid JSONPath %v (use $.a.b[0]['c']).", p)
 		}
 		return nil
@@ -230,7 +198,7 @@ func verifyWebhook(service, key string, r *http.Request, body []byte) (*webhookE
 	}
 	ev := &webhookEvent{payload: payload}
 	get := func(path string) string {
-		v, _ := JSONPath(payload, path)
+		v, _ := jsonpath.Get(payload, path)
 		if v == nil {
 			return ""
 		}
@@ -280,7 +248,7 @@ func verifyWebhook(service, key string, r *http.Request, body []byte) (*webhookE
 			ev.ref = get("$.changes[0].toHash")
 		case strings.HasPrefix(ev.eventType, "pr:"):
 			ev.ref = get("$.pullRequest.fromRef.latestCommit")
-			if links, ok := JSONPath(payload, "$.pullRequest.links.self[0].href"); ok {
+			if links, ok := jsonpath.Get(payload, "$.pullRequest.links.self[0].href"); ok {
 				if u, err := url.Parse(fmt.Sprint(links)); err == nil {
 					ev.statusAPI = fmt.Sprintf("%s://%s/rest/build-status/1.0/commits/%s", u.Scheme, u.Host, ev.ref)
 				}
@@ -378,7 +346,7 @@ func receiveWebhook(c *Ctx, w http.ResponseWriter, r *http.Request, resName, ser
 		mapping, _ := tpl["webhook_mapping"].(map[string]any)
 		if f, ok := mapping["filter"].(map[string]any); ok {
 			for path, want := range f {
-				got, ok := JSONPath(ev.payload, path)
+				got, ok := jsonpath.Get(ev.payload, path)
 				if !ok || fmt.Sprint(got) != fmt.Sprint(want) {
 					api.WriteJSON(w, 200, Obj{"message": "Webhook ignored: filter did not match."})
 					return
@@ -387,14 +355,14 @@ func receiveWebhook(c *Ctx, w http.ResponseWriter, r *http.Request, resName, ser
 		}
 		if m, ok := mapping["extra_vars"].(map[string]any); ok {
 			for name, path := range m {
-				if v, ok := JSONPath(ev.payload, str(path)); ok {
+				if v, ok := jsonpath.Get(ev.payload, str(path)); ok {
 					extra[name] = v
 				}
 			}
 		}
 		for k := range mappingPrompts {
 			if p, ok := mapping[k].(string); ok {
-				if v, ok := JSONPath(ev.payload, p); ok {
+				if v, ok := jsonpath.Get(ev.payload, p); ok {
 					if k == "inventory" {
 						trusted[k] = v
 					} else {

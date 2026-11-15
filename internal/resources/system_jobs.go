@@ -25,6 +25,8 @@ var SystemJobTypes = []struct {
 	// A periodic task in AWX (weekly); a management job here, so it can be
 	// scheduled and run on demand.
 	{"host_metric_summary_monthly", "Host Metric Summary Monthly", "Compute the monthly host metric summary", "FREQ=WEEKLY;INTERVAL=1;BYDAY=MO", map[string]any{}},
+	// awxnext's own (M14): each event stream's retention.
+	{"cleanup_event_streams", "Cleanup Event Streams", "Remove events older than their stream's retention", "FREQ=DAILY;INTERVAL=1", map[string]any{}},
 }
 
 var systemJobTypeChoices = labelled("cleanup_jobs", "Remove jobs older than a certain number of days",
@@ -32,7 +34,8 @@ var systemJobTypeChoices = labelled("cleanup_jobs", "Remove jobs older than a ce
 	"cleanup_sessions", "Removes expired browser sessions from the database",
 	"cleanup_tokens", "Removes expired OAuth 2 access tokens and refresh tokens",
 	"cleanup_host_metrics", "Removes soft-deleted host metrics older than a certain number of days",
-	"host_metric_summary_monthly", "Computes the monthly summary of host metrics")
+	"host_metric_summary_monthly", "Computes the monthly summary of host metrics",
+	"cleanup_event_streams", "Removes the events each event stream keeps no longer")
 
 // SeedSystemJobTemplates creates the management job templates and their default schedules.
 func SeedSystemJobTemplates(ctx context.Context, app *api.App) error {

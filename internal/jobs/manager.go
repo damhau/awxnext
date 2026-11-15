@@ -114,6 +114,9 @@ type Manager struct {
 	wakeWork     chan struct{}
 	// TickHooks run on every dispatcher tick on the leader (schedules, workflows).
 	TickHooks []func(ctx context.Context, m *Manager)
+	// MaintainHooks run with the leader's maintenance, every ten minutes
+	// (partitions of other logs than job events).
+	MaintainHooks []func(ctx context.Context, m *Manager)
 	// StartedHooks run when a job starts running on this node; FinishedHooks
 	// after it reached a final status (notifications, workflows).
 	StartedHooks  []func(ctx context.Context, m *Manager, job Row)
@@ -750,6 +753,9 @@ func (m *Manager) maintain(ctx context.Context) {
 			// Rows for this day already landed in the default partition; keep using it.
 			slog.Debug("event partition", "name", name, "err", err)
 		}
+	}
+	for _, h := range m.MaintainHooks {
+		h(ctx, m)
 	}
 	if err := m.ArchiveEvents(ctx, m.App.Settings.Int(ctx, "JOB_EVENTS_HOT_DAYS")); err != nil && ctx.Err() == nil {
 		slog.Error("archiving job events", "err", err)

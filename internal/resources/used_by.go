@@ -50,6 +50,7 @@ var dependencies = map[string][]dependency{
 		{"galaxy_credentials", "cleared", `SELECT 'organizations', o.id, o.name FROM organization_galaxy_credentials x
 			JOIN organizations o ON o.id = x.organization_id WHERE x.credential_id = $1`},
 		{"credential", "cleared", `SELECT 'instance_groups', g.id, g.name FROM instance_groups g WHERE g.credential_id = $1`},
+		{"credential", "cleared", `SELECT 'event_streams', s.id, s.name FROM event_streams s WHERE s.credential_id = $1`},
 	},
 	"projects": {
 		{"source_project", "deleted", `SELECT ` + ujtResource + `, t.id, t.name FROM unified_job_templates t WHERE t.source_project_id = $1`},
