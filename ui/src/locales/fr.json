@@ -2874,6 +2874,8 @@
   "Groups:": "Groupes :",
   "Event streams": "Flux d’événements",
   "Event stream": "Flux d’événements",
+  "Event rules": "Règles d’événements",
+  "Event rule": "Règle d’événements",
   "Outside systems post events to event streams. Senders with a client certificate show it to a proxy in front of awxnext, which passes it on in a header; senders with an OIDC token are checked against keys awxnext fetches from the token's issuer.": "Des systèmes extérieurs envoient des événements aux flux d’événements. Les expéditeurs munis d’un certificat client le présentent à un proxy devant awxnext, qui le transmet dans un en-tête ; ceux munis d’un jeton OIDC sont vérifiés avec les clés qu’awxnext récupère auprès de l’émetteur du jeton.",
   "Proxies trusted to pass client certificates": "Proxys autorisés à transmettre les certificats clients",
   "One per entry: an address or a network. The header of any other client is ignored. Empty: mTLS streams refuse every request.": "Un par entrée : une adresse ou un réseau. L’en-tête de tout autre client est ignoré. Vide : les flux mTLS refusent toutes les requêtes.",

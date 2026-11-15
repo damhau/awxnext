@@ -542,8 +542,143 @@ every stream's retention, then deletes each stream's events older than its own, 
 of deleted streams. With `dry_run` it says what it would delete.
 
 In test mode a stream's events are logged and shown with `test_mode: true`, but rules don't see
-them, then or after the stream leaves test mode. Each rule keeps its own position in each
-stream's log.
+them, then or after the stream leaves test mode. The rules read each stream's log from a
+position of their own.
+
+## Event rules
+
+An event rule reads the events of one or more streams, and acts on the events its filter holds
+for: it launches a job or workflow template, sends a notification, or posts an event to another
+stream. To create one, post to `/api/v2/event_rules/` with these fields:
+
+| Field | What it sets |
+|---|---|
+| `organization`, `name` | The rule's organization, and a name unique in it. Organization admins manage the organization's rules; the roles `EventRule Admin` and `EventRule Read` give one rule. |
+| `streams` | The IDs of the streams the rule reads, at most 20. |
+| `filter` | A [CEL](https://cel.dev) condition on `event`, such as `event.type == "alert.firing"`. |
+| `key` | A CEL expression that gives a string, such as `event.data.labels.instance`. The throttle counts events by key. Empty: one key for all events. |
+| `throttle`, `throttle_window` | `once_within` or `once_after`, and the window in seconds (at most 7 days). Empty: the rule acts on every event. |
+| `action` | `launch` (the default), `notify` or `post_event`. |
+| `unified_job_template`, `extra_vars`, `limit` | For `launch`: the job or workflow template; each variable's name and the CEL expression of its value; a CEL expression that gives the limit. |
+| `notification_template`, `message` | For `notify`: the notification template, and a CEL expression that gives the message. |
+| `target_stream`, `event_type`, `event_data` | For `post_event`: the stream to post to, which the rule must not read, and CEL expressions that give the event's type and its data (the event's own data by default). |
+| `enabled` | `false` stops the rule. |
+
+The answer's `owner`, `stopped_reason` and `last_fired` are read-only.
+
+### Expressions
+
+Every expression sees `event`, the event as a CloudEvent's JSON format has it: `id`, `source`,
+`type`, `subject`, `time`, `data` and the extensions, such as `traceparent`. An action that
+`once_after` fires for several events also sees `events`, all of them in the order they were
+received; `event` is the first.
+
+When you save a rule, awxnext compiles each expression and checks its types against the schema
+of each stream's 100 latest events, test mode included. A field that the events don't have is
+dynamic and passes the check. A whole number is an `int`, a number with a fraction a `double`,
+and Alertmanager and Grafana streams know their alerts' fields (`labels` and `annotations` are
+maps of strings). A rule with an error is refused with `400`, the error under its field. For
+example, `event.data.labels.severity + 1 > 2` is refused, because `severity` is a string.
+`GET /api/v2/event_streams/N/schema/` shows the schema that a stream's rules are checked
+against.
+
+An expression that fails on an event, such as one that reads a field the event doesn't have,
+doesn't match it. Each evaluation is limited in cost and to one second.
+
+### Throttles
+
+- **`once_within`** acts on a key's first event, then holds back the key's events until
+  `throttle_window` seconds after that one.
+- **`once_after`** opens a window on the first event. When the window ends, the rule acts
+  once, for the first event of each key that the window collected.
+
+Both follow ansible-rulebook's `throttle`. The window counts from the time each event was
+received.
+
+### Actions
+
+- **`launch`** launches the template as the rule's owner, with `launch_type` `manual`, as a
+  user does. The template must prompt for what the rule sets: variables by
+  `ask_variables_on_launch` or its survey, the limit by `ask_limit_on_launch`. Variables
+  named `ansible_*` are refused unless `ALLOW_ANSIBLE_VARS_AT_LAUNCH` is on. The job's
+  `summary_fields.event_rule` names the rule, and `summary_fields.stream_event` the event: its
+  `stream`, `sequence`, `id`, `source`, `type` and `subject`, and how many `events` the action
+  fired for. `GET /api/v2/jobs/?event_rule=N` lists the jobs of rule N.
+- **`notify`** sends a notification with the template. A `webhook` posts the message when it is
+  an object, and otherwise the rule, the event and the message (`message`). An `email` has the
+  message as its subject and body.
+- **`post_event`** posts an event to the target stream, with the ID
+  `rule-<rule>-<stream>-<sequence>` and the source `/api/v2/event_rules/<rule>/`. Other rules
+  can read it. The extension `awxnextdepth` counts the rules an event went through: past 8,
+  the rule refuses to post, so rules that post to each other don't loop.
+
+### Owner and rights
+
+A rule runs as its owner: the user who saved it last, or, for a GitOps source, the user who
+last saved the source. To save an enabled rule, the owner must be able to view its streams and
+to perform its action: launch the template, change the notification template, or change the
+target stream. Otherwise the save is refused with `403` and the reason.
+
+awxnext checks the same rights again before each action. When the owner lost one, the rule
+stops: it is disabled, and its `stopped_reason` and the event's decision say why. To restart
+the rule, enable it again: you become its owner.
+
+### Decisions
+
+`GET /api/v2/event_rules/N/decisions/` lists what the rule decided for each event its filter
+held for, newest first, and `/api/v2/event_rule_decisions/` the decisions of every rule you can
+see. Each decision has the event (`stream`, `sequence`, `event_id`,
+`event_type`, `received`), the node that decided, the `key`, the `outcome` and its `reason`,
+and the `job` launched.
+
+| Outcome | Meaning |
+|---|---|
+| `launched`, `notified`, `posted` | The rule acted. |
+| `throttled` | `once_within` held the event back. |
+| `waiting`, `deduplicated` | `once_after` keeps the event for its window, or already has one with its key. |
+| `refused` | The owner may no longer run the rule, which stopped. |
+| `failed` | The action failed, such as a launch the template refused. |
+| `error` | An expression failed on the event, such as a key that is not a string. |
+| `dropped` | The rule was disabled before its window ended. |
+
+### Exactly once
+
+Each stream's events are decided in order, by one node at a time: a node holds a stream while it
+holds the stream's lock in PostgreSQL. A node decides a batch of events in one transaction:
+the decisions, the actions (the job, the notification, the posted event) and the stream's new
+position commit together, or not at all. If a node stops during a batch, the node that takes the
+stream over starts where the last commit stopped, so no event is lost or decided twice. A
+decision is unique for each rule and event, so an event read again, or sent again with the same
+ID, never acts twice.
+
+A rule acts on the events it reads while it is enabled: one created or enabled now starts with
+the next event.
+
+### Alertmanager remediation
+
+This rule restarts the service that an Alertmanager alert names, at most once an hour for each
+instance. The stream is the one in [Alertmanager](#alertmanager); the job template
+`Restart service` prompts for variables and the limit:
+
+```sh
+curl -u admin -H 'Content-Type: application/json' https://awxnext.example.com/api/v2/event_rules/ -d '{
+  "name": "Restart on ServiceDown",
+  "organization": 1,
+  "streams": [3],
+  "filter": "event.type == \"alert.firing\" && event.data.labels.alertname == \"ServiceDown\"",
+  "key": "event.data.labels.instance",
+  "throttle": "once_within",
+  "throttle_window": 3600,
+  "unified_job_template": 12,
+  "extra_vars": {"service": "event.data.labels.job", "summary": "event.data.annotations.summary"},
+  "limit": "event.data.labels.instance.split(\":\")[0]"
+}'
+```
+
+Each alert launches `Restart service` on its instance's host, with the variables `service` and
+`summary`. The same alert sent again at Alertmanager's `repeat_interval` is a duplicate, and a new
+one for the same instance within the hour is `throttled`. To declare the rule in git instead, see
+[GitOps](gitops.md).
 
 ## Settings
 

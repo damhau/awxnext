@@ -288,6 +288,9 @@ func receiveEvents(c *Ctx, w http.ResponseWriter, r *http.Request) {
 		unavailable(w, "storing events", err)
 		return
 	}
+	if !s.test {
+		WakeRules(c, c.App.DB, s.id)
+	}
 	stored, dups := 0, 0
 	for _, res := range results {
 		if res.Duplicate {

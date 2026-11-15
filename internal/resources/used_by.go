@@ -60,6 +60,10 @@ var dependencies = map[string][]dependency{
 			JOIN unified_job_templates t ON t.id = n.workflow_job_template_id WHERE n.unified_job_template_id = $1`},
 		{"project", "cleared", `SELECT 'gitops_sources', g.id, g.name FROM gitops_sources g WHERE g.project_id = $1`},
 	},
+	"event_streams": {
+		{"streams", "cleared", `SELECT 'event_rules', r.id, r.name FROM event_rules r WHERE r.streams @> jsonb_build_array($1::bigint)`},
+		{"target_stream", "cleared", `SELECT 'event_rules', r.id, r.name FROM event_rules r WHERE r.target_stream_id = $1`},
+	},
 	"execution_environments": {
 		{"execution_environment", "cleared", `SELECT ` + ujtResource + `, t.id, t.name FROM unified_job_templates t WHERE t.execution_environment_id = $1`},
 		{"default_environment", "cleared", `SELECT ` + ujtResource + `, t.id, t.name FROM unified_job_templates t WHERE t.default_environment_id = $1`},
@@ -75,6 +79,7 @@ var templateDependencies = []dependency{
 	{"unified_job_template", "deleted", `SELECT 'schedules', s.id, s.name FROM schedules s WHERE s.unified_job_template_id = $1`},
 	{"node_template", "cleared", `SELECT 'workflow_job_templates', t.id, t.name FROM workflow_job_template_nodes n
 		JOIN unified_job_templates t ON t.id = n.workflow_job_template_id WHERE n.unified_job_template_id = $1 AND n.workflow_job_template_id <> $1`},
+	{"unified_job_template", "deleted", `SELECT 'event_rules', r.id, r.name FROM event_rules r WHERE r.unified_job_template_id = $1`},
 }
 
 const maxDependents = 500

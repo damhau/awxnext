@@ -3,6 +3,7 @@
 //
 //	awxbench run --url https://awx.example.com --user admin --password ... --out awx.json
 //	awxbench table awx=awx.json awxnext=awxnext.json
+//	awxbench rules --url https://awxnext.example.com --events 20000
 //
 // The jobs run bench/playbooks from --project (this repository by default).
 package main
@@ -28,13 +29,15 @@ func main() {
 		run(os.Args[2:])
 	case "table":
 		table(os.Args[2:])
+	case "rules":
+		rulesRun(os.Args[2:])
 	default:
 		usage()
 	}
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: awxbench run --url URL --user U --password P [--out FILE] | awxbench table NAME=FILE...")
+	fmt.Fprintln(os.Stderr, "usage: awxbench run --url URL --user U --password P [--out FILE] | awxbench table NAME=FILE... | awxbench rules --url URL [--events N]")
 	os.Exit(2)
 }
 
@@ -100,4 +103,34 @@ func table(args []string) {
 		names, results = append(names, name), append(results, &r)
 	}
 	fmt.Print(bench.Markdown(results, names))
+}
+
+// rulesRun measures awxnext's event rules (AWX has none).
+func rulesRun(args []string) {
+	fs := flag.NewFlagSet("rules", flag.ExitOnError)
+	var t bench.Target
+	o := bench.RulesOptions{}
+	fs.StringVar(&t.URL, "url", "", "awxnext's base URL")
+	fs.StringVar(&t.User, "user", "admin", "user")
+	fs.StringVar(&t.Password, "password", os.Getenv("AWXBENCH_PASSWORD"), "password (or AWXBENCH_PASSWORD)")
+	fs.BoolVar(&t.Insecure, "insecure", false, "skip TLS verification")
+	fs.IntVar(&o.Events, "events", 20000, "events posted")
+	fs.IntVar(&o.Batch, "batch", 100, "events per request")
+	fs.IntVar(&o.Concurrency, "concurrency", 8, "requests at a time")
+	fs.IntVar(&o.Keys, "keys", 100, "hosts the events are about: the rule acts once per host")
+	fs.DurationVar(&o.Timeout, "timeout", 10*time.Minute, "longest wait for the rule")
+	fs.Parse(args)
+	if t.URL == "" {
+		usage()
+	}
+	o.Log = func(format string, a ...any) {
+		fmt.Fprintf(os.Stderr, time.Now().Format("15:04:05 ")+format+"\n", a...)
+	}
+	r, err := bench.Rules(context.Background(), t, o)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "awxbench:", err)
+		os.Exit(1)
+	}
+	b, _ := json.MarshalIndent(r, "", "  ")
+	fmt.Println(string(b))
 }

@@ -4,7 +4,8 @@
 // that source. A sync is atomic: either every document applies or nothing
 // changes. Supported kinds: Label, Project, Inventory (with inline Ansible
 // YAML inventory content), InventorySource, JobTemplate,
-// WorkflowJobTemplate (with nodes), NotificationTemplate, Schedule, Team.
+// WorkflowJobTemplate (with nodes), NotificationTemplate, Schedule, Team,
+// EventRule (its streams by name).
 //
 //	kind: JobTemplate
 //	name: Deploy web
@@ -114,7 +115,7 @@ type kind struct {
 }
 
 // order is the apply order (dependencies first); pruning runs in reverse.
-var order = []string{"Label", "Team", "Project", "Inventory", "InventorySource", "NotificationTemplate", "JobTemplate", "WorkflowJobTemplate", "Schedule"}
+var order = []string{"Label", "Team", "Project", "Inventory", "InventorySource", "NotificationTemplate", "JobTemplate", "WorkflowJobTemplate", "Schedule", "EventRule"}
 
 var kinds = map[string]kind{
 	"Label":                {res: "labels"},
@@ -126,6 +127,7 @@ var kinds = map[string]kind{
 	"JobTemplate":          {res: "job_templates"},
 	"WorkflowJobTemplate":  {res: "workflow_job_templates"},
 	"Schedule":             {res: "schedules", identity: scheduleIdentity},
+	"EventRule":            {res: "event_rules"},
 }
 
 var errDryRun = errors.New("dry run")
@@ -526,7 +528,7 @@ func (r *reconciler) listRefs(resName string, v any) ([]int64, error) {
 }
 
 // relations handled outside the resource fields.
-var relationKeys = map[string]bool{"credentials": true, "labels": true, "instance_groups": true, "survey_spec": true, "template": true}
+var relationKeys = map[string]bool{"credentials": true, "labels": true, "instance_groups": true, "survey_spec": true, "template": true, "streams": true}
 
 func (r *reconciler) applyDoc(d *Document) error {
 	k := kinds[d.Kind]
@@ -585,6 +587,25 @@ func (r *reconciler) applyDoc(d *Document) error {
 			return err
 		}
 		data["unified_job_template"] = id
+	}
+	if d.Kind == "EventRule" {
+		streams, err := r.listRefs("event_streams", d.Spec["streams"])
+		if err != nil {
+			return err
+		}
+		data["streams"] = streams
+		data["unified_job_template"] = nil
+		if t, ok := d.Spec["template"]; ok {
+			ref, err := templateRef(t)
+			if err != nil {
+				return err
+			}
+			id, err := r.resolveTemplate(ref)
+			if err != nil {
+				return err
+			}
+			data["unified_job_template"] = id
+		}
 	}
 	identity, args := "", []any{}
 	if k.identity != nil {

@@ -139,6 +139,47 @@ func Read(ctx context.Context, db DB, stream, after int64, limit int) ([]Stored,
 	return out, rows.Err()
 }
 
+// Get returns the event of a stream at sequence, test mode or not.
+func Get(ctx context.Context, db DB, stream, sequence int64) (Stored, error) {
+	rows, err := db.Query(ctx, `SELECT `+storedColumns+` FROM stream_events WHERE stream_id = $1 AND sequence = $2`, stream, sequence)
+	if err != nil {
+		return Stored{}, err
+	}
+	defer rows.Close()
+	if !rows.Next() {
+		if err := rows.Err(); err != nil {
+			return Stored{}, err
+		}
+		return Stored{}, pgx.ErrNoRows
+	}
+	return scanStored(rows)
+}
+
+// Recent returns up to limit of the latest events of streams, test mode
+// included: what rules are checked against.
+func Recent(ctx context.Context, db DB, streams []int64, limit int) ([]Stored, error) {
+	var out []Stored
+	for _, s := range streams {
+		rows, err := db.Query(ctx, `SELECT `+storedColumns+` FROM stream_events WHERE stream_id = $1 ORDER BY sequence DESC LIMIT $2`, s, limit)
+		if err != nil {
+			return nil, err
+		}
+		for rows.Next() {
+			ev, err := scanStored(rows)
+			if err != nil {
+				rows.Close()
+				return nil, err
+			}
+			out = append(out, ev)
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
+}
+
 // Position is where consumer has read a stream to: 0, its start, when it
 // never saved a position.
 func Position(ctx context.Context, db DB, consumer string, stream int64) (int64, error) {

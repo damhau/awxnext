@@ -32,6 +32,7 @@ export function modelLabel(model: string, many = false): string {
     notificationtemplate: [tr('Notification template'), tr('Notification templates')],
     instancegroup: [tr('Instance group'), tr('Instance groups')],
     eventstream: [tr('Event stream'), tr('Event streams')],
+    eventrule: [tr('Event rule'), tr('Event rules')],
   }
   const n = names[m]
   return n ? n[many ? 1 : 0] : m

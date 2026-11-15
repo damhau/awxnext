@@ -73,3 +73,40 @@ AWXBENCH_PASSWORD=... ./awxbench run --url https://awxnext.example.com --out awx
 without it, they run where each install runs jobs by default. `--project` and `--branch` name
 the repository holding `bench/playbooks` (this one by default). Each run creates its own objects,
 named `bench-<time>`, and leaves them in place.
+
+## Event rules
+
+AWX has no event rules of its own, so this measure is awxnext's alone. `awxbench rules` creates
+two CloudEvents streams without a rate limit and a rule that reads the first: a CEL filter on the
+type and the severity, the key `event.data.host`, `once_within` an hour, and `post_event` to the
+second stream. Then it posts events in batches (`application/cloudevents-batch+json`) and waits
+until the rule has decided every event that its filter holds for. One event in ten is a warning,
+which the filter drops; the events are about 100 hosts, so the rule posts 100 events and
+throttles the others.
+
+| Measure | What awxbench measures |
+|---|---|
+| Ingestion | Events accepted per second, from the first post until the last is accepted. |
+| Decisions | Events decided per second, from the first post until the rule has decided the last. |
+| Lag | The time from the last post accepted until the rule has decided the last event. |
+
+### Results
+
+2026-11-15, the Compose stack of `compat/` (awxnext and PostgreSQL 16, one node) on an AMD Ryzen
+9 7950X under WSL 2, with awxbench in the awxnext container:
+
+| Events (decided) | Per request, at a time | Ingestion (events/s) | Decisions (events/s) | Lag |
+|---|---|---|---|---|
+| 50,000 (45,000) | 100, 8 | 2,958 | 2,643 | 0.12 s |
+| 50,000 (45,000) | 500, 16 | 3,038 | 2,670 | 0.40 s |
+
+The rule keeps up with ingestion: it decides the last event a fraction of a second after it is
+stored. A stream stores its events one request at a time, in order, so one stream's ingestion
+bounds the measure, not the rule. To run it:
+
+```sh
+AWXBENCH_PASSWORD=... ./awxbench rules --url https://awxnext.example.com --events 50000
+```
+
+`--batch` and `--concurrency` set the events per request and the requests at a time, and
+`--keys` the number of hosts.

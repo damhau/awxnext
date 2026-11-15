@@ -200,6 +200,7 @@ func jobFields(templateField, templateRef string) []*Field {
 		{Name: "organization", Type: api.TFK, Ref: "organizations", ReadOnly: true, Nullable: true},
 		{Name: "instance_group", Type: api.TFK, Ref: "instance_groups", ReadOnly: true, Nullable: true},
 		{Name: "launched_by", Type: api.TJSON, ReadOnly: true, NoFilter: true},
+		{Name: "event_rule", Type: api.TFK, Ref: "event_rules", ReadOnly: true, Nullable: true, Hidden: true},
 		{Name: "cancel_flag", Type: api.TBool, ReadOnly: true, Hidden: true},
 		{Name: "emitted_events", Type: api.TInt, ReadOnly: true, Hidden: true},
 		{Name: "task_impact", Type: api.TInt, ReadOnly: true, Hidden: true},
@@ -390,7 +391,7 @@ func jobSummary(c *Ctx, objs []Obj) error {
 			sf["user_capabilities"] = Obj{}
 		}
 	}
-	return nil
+	return ruleJobSummary(c, objs)
 }
 
 var ansiRe = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)

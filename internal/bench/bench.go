@@ -347,6 +347,10 @@ func latency(ms []float64) Latency {
 }
 
 func waitFor(ctx context.Context, timeout time.Duration, done func() (bool, error)) error {
+	return pollFor(ctx, timeout, 500*time.Millisecond, done)
+}
+
+func pollFor(ctx context.Context, timeout, every time.Duration, done func() (bool, error)) error {
 	deadline := time.Now().Add(timeout)
 	for {
 		ok, err := done()
@@ -359,7 +363,7 @@ func waitFor(ctx context.Context, timeout time.Duration, done func() (bool, erro
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-time.After(500 * time.Millisecond):
+		case <-time.After(every):
 		}
 	}
 }

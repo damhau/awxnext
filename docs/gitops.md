@@ -99,9 +99,23 @@ spec:
 kind: Team
 name: Web operators
 members: [alice, bob]
+---
+kind: EventRule
+name: Restart on ServiceDown
+spec:
+  streams: [alertmanager]          # event streams, by name
+  filter: event.type == "alert.firing" && event.data.labels.alertname == "ServiceDown"
+  key: event.data.labels.instance
+  throttle: once_within
+  throttle_window: 3600
+  template: {kind: JobTemplate, name: Restart service}
+  extra_vars:
+    service: event.data.labels.job
 ```
 
 Kinds are applied in dependency order (Label, Team, Project, Inventory,
 InventorySource, NotificationTemplate, JobTemplate, WorkflowJobTemplate,
-Schedule) and pruned in reverse. Credentials are referenced, never declared:
-secrets stay out of git.
+Schedule, EventRule) and pruned in reverse. Credentials are referenced, never declared:
+secrets stay out of git. Event streams are referenced too: create them in the
+API or the UI. An event rule runs as the user who last saved the source
+([Event rules](operations.md#owner-and-rights)).

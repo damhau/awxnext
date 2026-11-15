@@ -165,6 +165,8 @@ func StartJobs(ctx context.Context, app *api.App) (*jobs.Manager, error) {
 	m.FinishedHooks = append(m.FinishedHooks, resources.JobFinishedNotifications, resources.WebhookStatusFinished, resources.WorkflowJobFinished, gitops.ProjectUpdated)
 	resources.Jobs = m
 	m.Start(ctx)
+	resources.Rules = resources.NewRuleEngine(app, app.Cfg.NodeName)
+	go resources.Rules.Run(ctx)
 	if agent.Default != nil {
 		agent.Default.Start(ctx)
 	}

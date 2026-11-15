@@ -20,13 +20,14 @@ var typePerms = map[string][]string{
 	"instancegroup":        {"view", "change", "delete", "use"},
 	"folder":               {"view", "change", "delete"},
 	"eventstream":          {"view", "change", "delete"},
+	"eventrule":            {"view", "change", "delete"},
 }
 
 // Types that can live in a folder.
 var folderChildTypes = []string{"credential", "project", "inventory", "jobtemplate", "workflowjobtemplate", "notificationtemplate"}
 
 // Types that can be created inside an organization (add_<type> is granted on the org).
-var orgChildTypes = []string{"team", "credential", "project", "inventory", "workflowjobtemplate", "notificationtemplate", "executionenvironment", "folder", "eventstream"}
+var orgChildTypes = []string{"team", "credential", "project", "inventory", "workflowjobtemplate", "notificationtemplate", "executionenvironment", "folder", "eventstream", "eventrule"}
 
 func perms(ct string, actions ...string) []string {
 	out := make([]string, 0, len(actions))
@@ -132,6 +133,8 @@ func buildManaged() []ManagedRole {
 
 		{"EventStream Admin", "Has all permissions to a single event stream", "eventstream", all("eventstream"), "admin_role"},
 		{"EventStream Read", "May view the event stream and its events", "eventstream", perms("eventstream", "view"), "read_role"},
+		{"EventRule Admin", "Has all permissions to a single event rule", "eventrule", all("eventrule"), "admin_role"},
+		{"EventRule Read", "May view the event rule and its decisions", "eventrule", perms("eventrule", "view"), "read_role"},
 
 		{"Folder Admin", "Has all permissions to a folder, its subfolders and every object inside", "folder", folderAdmin(), "admin_role"},
 		{"Folder Execute", "May run any job or workflow template in the folder", "folder", concat([]string{"view_folder"}, perms("jobtemplate", "view", "execute"), perms("workflowjobtemplate", "view", "execute")), "execute_role"},
