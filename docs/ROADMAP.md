@@ -37,7 +37,7 @@ be matched.
 | [M11 Notifications](#m11-notifications) | Email tested on a real mail server, Slack as in AWX, a Teams type, notifications when a result changes | 4 |
 | [M12 Beyond AWX](#m12-beyond-awx) | What changed before a failure, secrets kept out of job output, an MCP server, drifted hosts | 4 |
 | [M13 Collection hub](#m13-collection-hub) | A private Galaxy in awxnext: publish, approve, sign, mirror and install collections | 5 |
-| [M14 Event-driven automation](#m14-event-driven-automation) | Rulebooks run by `ansible-rulebook`, fed by event streams, launching awxnext's templates | 6 |
+| [M14 Event-driven automation](#m14-event-driven-automation) | Event streams into a durable log, rules evaluated by awxnext with guardrails, connectors, rulebooks imported | 10 |
 | [M15 Self-service portal](#m15-self-service-portal) | A catalog of requestable items, with approvals, quotas and environments that expire | 5 |
 
 ---
@@ -1599,84 +1599,147 @@ previous version, remotes and their syncs, the signing key.
 
 ## M14 Event-driven automation
 
-Rulebooks that react to events (an alert, a webhook, a Kafka message) by
-launching templates, as Event-Driven Ansible's controller does (Decision 18).
-awxnext runs them with `ansible-rulebook` itself, so existing rulebooks and
-source plugins work, on the job runtimes it already has. **Exit:** a rulebook
-from a git project, fed by an event stream, launches a template as its
-activation's owner, throttled, the rule audit shows the rule, the event and
-the job, and the `ansible.eda` collection manages it.
+Events (an alert, a webhook, a Kafka message) that launch templates, as
+Event-Driven Ansible's controller does, built for safe remediation (Decision
+19): event streams write to a durable log in PostgreSQL, and awxnext's nodes
+evaluate rules written in CEL, with their state in PostgreSQL, guardrails
+before any action, and a decision log that explains every event.
+`ansible.eda` source plugins run as connectors, and rulebooks are translated
+on import. Four stages: streams, rules, guardrails and the decision log
+(M14-01 to M14-05); connectors (M14-06); windows and fix checks (M14-07,
+M14-08); rulebooks and EDA's API (M14-09, M14-10). **Exit:** an Alertmanager
+alert launches its remediation once per key, inside its guardrails, after a
+backtest in shadow mode, and the decision log says why each event did or
+didn't launch anything; a Kafka topic feeds a rule through a connector; an
+EDA rulebook imports, and the `ansible.eda` collection manages it.
 
-### M14-01 Rulebooks and decision environments
-**Labels:** feature, projects · **Size:** M · [#157](https://github.com/damhau/awxnext/issues/157)
+### M14-01 Event streams and the event log
+**Labels:** feature, api, auth · **Size:** M · [#157](https://github.com/damhau/awxnext/issues/157)
 
-A project sync lists its revision's rulebooks, where EDA's controller looks
-for them (`extensions/eda/rulebooks/`, `rulebooks/`), invalid ones with
-their error. Decision environments are a type of their own, like execution
-environments, with a default `ansible-rulebook` image at an exact tag. Both
-are awxnext's objects under `/api/v2/`.
+Streams with their own URL receive CloudEvents (binary, structured, batch)
+and common payloads through adapters (Alertmanager, split into one event per
+alert; GitHub, GitLab, Grafana, ServiceNow, generic JSON), authenticated by
+HMAC, a token, mTLS, or OIDC tokens checked against their issuer. `202`
+only once the event is committed; duplicate IDs are dropped; payload and
+rate limits apply. Events go to a log partitioned by day, with each stream's
+retention; test mode keeps them from the rules.
 
-**Done when:** a sync lists a test project's rulebooks, an invalid one with
-its error, and decision environments work through the API with their rights.
+**Done when:** each authentication method and format works and bad
+credentials are refused, duplicates are dropped, `202` means stored, and
+test mode keeps events from the rules.
 
-### M14-02 Rulebook activations
-**Labels:** feature, jobs, instances · **Size:** L · [#158](https://github.com/damhau/awxnext/issues/158)
+### M14-02 Rules and their actions
+**Labels:** feature, jobs, rbac · **Size:** L · [#158](https://github.com/damhau/awxnext/issues/158)
 
-An activation runs `ansible-rulebook --worker` in its decision environment,
-connected back to awxnext over a websocket that sends what eda-server sends
-(rulebook, variables, controller URL and token, credentials). It runs where
-jobs run (a container group pod, podman or docker, an execution node) on one
-node at a time, and moves when that node is lost. Enable and disable, a
-restart policy with backoff, a status, and its log.
+A rule has a CEL filter (cel-go), type-checked when saved against the
+stream's inferred schema, a key, deduplication and throttling per key, and
+an action: launch a job or workflow template with variables mapped from the
+event, notify, or post to another stream. It runs as its owner, with rights
+checked when saved and at launch, and the rule and event ID are the
+launch's idempotency key. Each stream is evaluated in order by one node
+under a lock, its position saved with its decisions, so a failover loses
+and repeats nothing.
 
-**Done when:** a test activation runs in kind and on the Compose image,
-restarts as its policy says, and moves off a lost node.
+**Done when:** a test's alert launches its template once per key in the
+throttle window, a redelivered event or a failover launches nothing twice,
+and a rule with a type error, or whose owner lacks rights, launches nothing.
 
-### M14-03 Rule actions launch awxnext's templates
-**Labels:** feature, jobs, rbac · **Size:** M · [#159](https://github.com/damhau/awxnext/issues/159)
+### M14-03 Guardrails and rule modes
+**Labels:** feature, jobs, workflows · **Size:** M · [#159](https://github.com/damhau/awxnext/issues/159)
 
-`run_job_template` and `run_workflow_template` reach awxnext's `/api/v2/`
-with a token minted for the activation, as its owner, and revoked when it
-stops, instead of a stored AWX token. Their options (`job_args`, retries,
-`post_events` and `set_facts` from the job's artifacts) are tested against
-awxnext. The job shows the activation, rule and event that launched it.
+Checked before each action: at most N runs at once, no launch on a host a
+running job uses, a cap per inventory group, a circuit breaker after K
+firings of one key in a window, and maintenance windows and change freezes
+(calendars, as schedules have them). Modes: off, shadow (records what it
+would do), approval (through workflow approvals) and auto (a role of its
+own).
 
-**Done when:** a test activation launches a job and a workflow with the
-event's variables and gets their artifacts back, a template the owner can't
-run fails with the reason, and the token stops working with the activation.
+**Done when:** each guardrail holds an action back with its reason, the
+breaker trips and is reset, shadow launches nothing, and approval launches
+once approved.
 
-### M14-04 Event streams
-**Labels:** feature, api, auth · **Size:** M · [#160](https://github.com/damhau/awxnext/issues/160)
+### M14-04 Decision log, rule tests and backtests
+**Labels:** feature, api · **Size:** M · [#160](https://github.com/damhau/awxnext/issues/160)
 
-URLs in awxnext that receive events and pass them to activations, as EDA's
-event streams do: HMAC (GitHub's and GitLab's formats), basic, bearer token
-or mTLS, a rate limit, and a test mode that shows events without passing
-them on. How events reach the activation (EDA uses its database) is decided
-here. This holds the alert-driven runs proposed with M12: Alertmanager
-alerts, deduplicated by the rulebook's `throttle`.
+For each event and rule: matched or not (with the part of the filter that
+failed), throttled, held back by which guardrail, waiting, or launched job
+N. `awxnext rules test` runs sample events through rules offline, for a
+GitOps repository's CI, and `event_rules/N/backtest/` runs a rule over a
+period of the log. Prometheus metrics per stream and rule, and one
+OpenTelemetry trace from the event's `traceparent` to the job.
 
-**Done when:** each authentication method works and a bad one is refused,
-events reach the rules, and the documented Alertmanager example runs in a
-test: one job per alert in the throttle window, none on resolved alerts.
+**Done when:** each kind of decision is logged with its reason, rule tests
+pass and fail, a backtest gives its counts, and one trace runs from the
+event to the job.
 
-### M14-05 Rule audit and activation pages
-**Labels:** feature, ui, notifications · **Size:** M · [#161](https://github.com/damhau/awxnext/issues/161)
+### M14-05 Streams and rules in the UI
+**Labels:** feature, ui · **Size:** M · [#161](https://github.com/damhau/awxnext/issues/161)
 
-The rule audit, from what the worker reports: each rule that fired, its
-events, actions and jobs, with a retention. Pages for activations (status,
-restarts, log, audit), event streams (URL, test mode, last events), decision
-environments and a project's rulebooks. Notifications on an activation's
-failure or restart.
+Streams with setup snippets and their live events; a rule editor with CEL
+completion from the inferred schema, type errors as you type, and the draft
+run on recent events; the decision log from an event and from a rule;
+backtests, the breaker, and the success rate (M14-08).
 
-**Done when:** a fired rule shows its event, action and job through the API
-and the UI, the pages work in the browser, and a failing activation notifies.
+**Done when:** a rule is written against a stream's real events and saved
+in the browser, and `tsc` and Vitest pass.
 
-### M14-06 EDA's API for the `ansible.eda` collection
-**Labels:** compat, api · **Size:** L · [#162](https://github.com/damhau/awxnext/issues/162)
+### M14-06 Connectors on the agent
+**Labels:** feature, instances, credentials · **Size:** M · [#162](https://github.com/damhau/awxnext/issues/162)
+
+A small Python runner hosts any `ansible.eda` source plugin (`async def
+main(queue, args)`), without `ansible-rulebook` or Java, and posts its
+events to a stream over HTTPS, buffering while awxnext is out of reach. It
+runs where jobs run (an execution node's agent, a container group pod,
+podman or docker), in any image with the plugin's collection, decision
+environments included, on one node at a time, with restarts and credentials
+from awxnext.
+
+**Done when:** a test's connector runs `ansible.eda`'s `range` and
+`generic` sources, `full.yml` runs the Kafka source against Kafka, and a
+connector buffers through an outage and moves off a lost node.
+
+### M14-07 Windows, sequences and absence
+**Labels:** feature, jobs · **Size:** L · [#168](https://github.com/damhau/awxnext/issues/168)
+
+Per key: a count in a sliding window, all of several conditions within T, a
+sequence, and absence, fired by a timer at its deadline; the action gets
+every event that matched. State and timers are kept in PostgreSQL, so a
+restart or a failover loses no window. The decision log shows a window's
+progress.
+
+**Done when:** each primitive works in a test, absence fires at its
+deadline, and a restart or failover mid-window keeps its state.
+
+### M14-08 Check that a fix worked
+**Labels:** feature, jobs, notifications · **Size:** M · [#169](https://github.com/damhau/awxnext/issues/169)
+
+After its action, a rule can wait for the matching resolved event within T,
+or run a check template: fixed, not fixed, or failed. A fix that doesn't
+work escalates and counts towards the breaker. Each rule's success rate
+shows through the API, metrics and the UI.
+
+**Done when:** a fix that resolves its alert is recorded as fixed, one that
+doesn't escalates, and the success rate shows.
+
+### M14-09 Import rulebooks
+**Labels:** feature, projects · **Size:** M · [#170](https://github.com/damhau/awxnext/issues/170)
+
+A project's rulebooks (where EDA's controller looks for them) or an uploaded
+file become streams, connectors and rules: conditions as CEL; `throttle`,
+`all`, `any`, `not_all` and `timeout` as M14-07's primitives; the
+template actions as actions. `run_playbook` and `run_module` aren't
+translated. A report lists each rule, translated or not, with the reason.
+
+**Done when:** `ansible-rulebook`'s and `ansible.eda`'s example rulebooks
+import with their reports, and an imported Alertmanager rulebook behaves as
+it does under `ansible-rulebook`.
+
+### M14-10 EDA's API for the `ansible.eda` collection
+**Labels:** compat, api · **Size:** L · [#171](https://github.com/damhau/awxnext/issues/171)
 
 The `/api/eda/v1/` endpoints the `ansible.eda` collection calls, over
-awxnext's objects (EDA's projects and credentials are awxnext's), so that
-playbooks written for EDA's controller run unchanged. Tested by the
+awxnext's objects: its projects and credentials, connector images for
+decision environments, imported rulebooks for activations. Tested by the
 collection's integration targets in `compat/`.
 
 **Done when:** the collection's modules run in the compat suite, and what
@@ -1774,6 +1837,7 @@ These stay out unless you want any of them back:
 | Browser tests in CI | UI logic is covered by Vitest. Left out by decision on 2026-10-27. |
 | Subversion projects (was M4-09, #40) | Not needed. Left out by decision on 2026-10-29. |
 | Rulesets and code owners on `main` (was M9-03, #106) | awxnext is personal code, and secubot's PRs, then opened with `GITHUB_TOKEN`, started no CI, so required checks would have waited for ever. Left out by decision on 2026-11-01. |
+| Running rulebooks under `ansible-rulebook` | awxnext evaluates rules itself; rulebooks are translated on import (M14-09), and what doesn't translate is reported. Left out by decision on 2026-11-15 (Decision 19), unless real rulebooks need it. |
 
 ## Decisions
 
@@ -1889,16 +1953,41 @@ Taken on 2026-11-15:
       `ansible-galaxy` and `ansible-builder` use the hub unchanged.
       Execution and decision environment images stay in a container
       registry: awxnext hosts none.
-    - **Rulebooks** (M14) run in `ansible-rulebook`, in decision
-      environments, as EDA's controller runs them, so existing rulebooks and
-      source plugins work; awxnext writes no rule engine. Their objects use
-      awxnext's projects, credentials and organizations. EDA's own API, for
-      the `ansible.eda` collection, comes last (M14-06).
+    - **Rulebooks** (M14; replaced by Decision 19) run in `ansible-rulebook`,
+      in decision environments, as EDA's controller runs them, so existing
+      rulebooks and source plugins work; awxnext writes no rule engine.
+      Their objects use awxnext's projects, credentials and organizations.
+      EDA's own API, for the `ansible.eda` collection, comes last (M14-06,
+      now M14-10).
     - **The portal** (M15) grows from the operator view (`/run`), not as a
       separate portal such as Red Hat's, which is built on Backstage.
     - A sixth proposal, alert-driven runs (Alertmanager alerts launching
-      templates, deduplicated and throttled), is M14's event streams with
-      the rulebook's `throttle`, not a mechanism of its own.
+      templates, deduplicated and throttled), is M14's event streams and
+      their rules, not a mechanism of its own.
+19. M14 is redesigned the same day: awxnext evaluates events itself
+    instead of running `ansible-rulebook` (replacing Decision 18's item on
+    rulebooks). Running it in activations had two flaws:
+    - an activation fed by an event stream needs a database login, as
+      EDA's `pg_listener` source has, and PostgreSQL has no permission per
+      notification channel: with any login, an activation could send
+      awxnext's own notifications, such as `awx_cancel`, which cancels a
+      job on every node;
+    - events sent while an activation restarts or moves are lost.
+
+    Instead:
+    - event streams write to a durable log in PostgreSQL, and `202` means
+      stored;
+    - awxnext's nodes evaluate rules written in CEL, with their state in
+      PostgreSQL, guardrails before any action (blast radius, host locks, a
+      circuit breaker, maintenance windows, shadow and approval modes), a
+      decision log, rule tests and backtests;
+    - `ansible.eda` source plugins run as connectors, on the agent among
+      other places, without `ansible-rulebook`;
+    - rulebooks are translated on import, and what doesn't translate is
+      reported (M14-09). Running them under `ansible-rulebook` is left out.
+
+    #157 to #162 are rewritten for this design, and M14-07 to M14-10 (#168
+    to #171) are added.
 
 ## On GitHub
 
@@ -1912,5 +2001,7 @@ from CodeQL's first analysis. M4-11 (#122) was added the same day, for rvav. M9-
 (#107, #108) were rewritten the same day for secubot (Decision 15). M10 (#124 to #126) was added on 2026-11-02 for the small fixes found
 after M9. M10-04 (#129) and M11 (#130 to #132) were added on 2026-11-08
 (Decision 17). M11-04 (#147) and M12 to M15 (#148 to #167) were added on
-2026-11-15 (Decision 18). This file stays the index;
+2026-11-15 (Decision 18), and M14 was redesigned the same day (Decision
+19): #157 to #162 were rewritten, and M14-07 to M14-10 (#168 to #171)
+added. This file stays the index;
 when a task changes, change its issue too.
