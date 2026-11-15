@@ -34,7 +34,11 @@ be matched.
 | [M8 Settings that make sense](#m8-settings-that-make-sense) | Settings laid out by task, without JSON or AWX's jargon; the settings API unchanged | 10 |
 | [M9 Security](#m9-security) | Known vulnerabilities found by CI and fixed through reviewed PRs | 5 |
 | [M10 Small fixes](#m10-small-fixes) | The importer tested on a real AWX, parity.md matching the code, the deployed image scanned, the AWS lookup tested on moto | 4 |
-| [M11 Notifications](#m11-notifications) | Email tested on a real mail server, Slack as in AWX, a Teams type | 3 |
+| [M11 Notifications](#m11-notifications) | Email tested on a real mail server, Slack as in AWX, a Teams type, notifications when a result changes | 4 |
+| [M12 Beyond AWX](#m12-beyond-awx) | What changed before a failure, secrets kept out of job output, an MCP server, drifted hosts | 4 |
+| [M13 Collection hub](#m13-collection-hub) | A private Galaxy in awxnext: publish, approve, sign, mirror and install collections | 5 |
+| [M14 Event-driven automation](#m14-event-driven-automation) | Rulebooks run by `ansible-rulebook`, fed by event streams, launching awxnext's templates | 6 |
+| [M15 Self-service portal](#m15-self-service-portal) | A catalog of requestable items, with approvals, quotas and environments that expire | 5 |
 
 ---
 
@@ -1383,9 +1387,10 @@ wrong secret key, and what it found is fixed.
 ## M11 Notifications
 
 Notifications after M10: email is tested only against a fake server, Slack
-was left out, and there is no Teams type (Decision 17). **Exit:** email
-notifications pass against Mailpit in CI, AWX's Slack notifications work and
-import, and Teams notifications post a card.
+was left out, there is no Teams type (Decision 17), and every failure sends a
+message (Decision 18). **Exit:** email notifications pass against Mailpit in
+CI, AWX's Slack notifications work and import, Teams notifications post a
+card, and notifications can fire only when a result changes.
 
 ### M11-01 Test email notifications against a real mail server
 **Labels:** chore, notifications · **Size:** S · [#130](https://github.com/damhau/awxnext/issues/130)
@@ -1427,6 +1432,327 @@ receiver in the test.
 
 **Done when:** a Teams notification template works through the API and the
 UI, posts the card for each event, and the docs say how to make its URL.
+
+### M11-04 Notify when a result changes
+**Labels:** feature, notifications, ui · **Size:** M · [#147](https://github.com/damhau/awxnext/issues/147)
+
+AWX notifies every failure, so a template that fails each night sends the
+same message each night, and nothing says when it works again. awxnext adds
+three events of its own, attached like AWX's
+(`notification_templates_<event>/` on templates, projects, inventory sources
+and organizations), which AWX's clients don't see: `first_error` (a failure
+after a success), `recovered` (a success after a failure) and `slow` (more
+than twice the median of the template's last 10 successful runs, once it has
+5). Each has a default message and custom messages.
+
+**Done when:** each event fires once when the result changes, not on the
+later runs that keep it, through the API and the UI's Notifications tabs,
+and the docs say what each means.
+
+---
+
+## M12 Beyond AWX
+
+Features AWX lacks, proposed on 2026-11-15 (Decision 18). **Exit:** a failed
+job says what changed since the last success, credential secrets don't appear
+in job output, an assistant can use awxnext over MCP with its user's rights,
+and hosts that drift from their playbooks are listed.
+
+### M12-01 What changed since the last good run
+**Labels:** feature, jobs, ui · **Size:** M · [#148](https://github.com/damhau/awxnext/issues/148)
+
+The "Why it failed" panel links to the template's previous successful run
+but doesn't say what differs. `jobs/N/changes/` (and `workflow_jobs/N/`,
+awxnext's own) and the panel list: edits to the template, inventory,
+credentials and execution environment from their version history; the
+project's commits between the two revisions; a different image digest
+(recorded with each job from now on); different launch inputs; hosts added or
+removed. Secrets stay `$encrypted$`, and rights on each object apply.
+
+**Done when:** a test changes each of these between two runs and each is
+listed, an unchanged rerun lists nothing, and no secret appears.
+
+### M12-02 Keep credential secrets out of job output
+**Labels:** security, jobs · **Size:** M · [#149](https://github.com/damhau/awxnext/issues/149)
+
+A task that prints a secret (`debug`, `-vvv`, a failing `uri`) puts it in the
+output, for anyone who may read the job; AWX hides only the SCM password in
+project updates. awxnext replaces every secret it handed the job (secret
+credential inputs and lookups, survey passwords, prompted passwords) with
+`$encrypted$` in stdout and event data, before they are stored, published,
+sent to the log aggregator or archived: as given, JSON-escaped, and line by
+line. Values under 4 characters are left alone. The cost is measured with
+`cmd/awxbench`.
+
+**Done when:** a test job prints each kind of secret in each form and none
+is stored, published, sent or archived, the benchmark is in
+[benchmarks.md](benchmarks.md), and the docs say what isn't masked.
+
+### M12-03 An MCP server for assistants
+**Labels:** feature, api, auth · **Size:** M · [#150](https://github.com/damhau/awxnext/issues/150)
+
+`/api/mcp/` (Streamable HTTP, the official Go SDK), signed in with a personal
+access token or an OIDC bearer token, with its owner's rights. Tools by task:
+find objects, a job's status, failure and output, what changed (M12-01), a
+template's prompts, launch and relaunch on failed hosts, approve or deny, a
+host's recent results. Read-scope tokens get only the reading tools; the
+others carry MCP's `destructiveHint`. A setting turns it off.
+
+**Done when:** a Go test calls each tool through an MCP client, a read token
+cannot launch or approve, and the docs show the setup for Claude Code.
+
+### M12-04 Host history and drift
+**Labels:** feature, jobs, inventory, ui · **Size:** L · [#151](https://github.com/damhau/awxnext/issues/151)
+
+The design's Host screen ([DESIGN.md](awxnext-design/DESIGN.md), section 7):
+per-host, per-task results across jobs, in a table filled as events are
+stored, with its own retention. Its flags: changes every run, new failure,
+drift (a `changed` between `ok` runs with no template or revision change). A
+check-mode run that would change a host also marks it drifted, with the diff,
+until a run leaves it unchanged. A Drift page lists drifted hosts.
+
+**Done when:** a test's runs raise each flag, a check-mode run marks drift
+and an unchanged run clears it, and the Host screen and the Drift page show
+them.
+
+---
+
+## M13 Collection hub
+
+A private Galaxy in awxnext, as Red Hat's Private Automation Hub is beside
+AWX (Decision 18): teams publish their collections, approved and signed ones
+are installed by project syncs and image builds, and public ones are
+mirrored. It serves Galaxy's v3 API, so `ansible-galaxy` and
+`ansible-builder` use it unchanged; images stay in a container registry.
+**Exit:** a collection published with `ansible-galaxy collection publish` is
+approved, signed, and installed by a project sync that requires signatures,
+and galaxy.ansible.com collections are mirrored from a requirements file.
+
+### M13-01 Serve collections on Galaxy's API
+**Labels:** feature, api, projects · **Size:** M · [#152](https://github.com/damhau/awxnext/issues/152)
+
+Galaxy's v3 API under `/api/galaxy/`, read side, with galaxy_ng's
+repository URLs. Namespaces belong to organizations, read as awxnext's RBAC
+allows; `Authorization: Token` is accepted, as `ansible-galaxy` sends it.
+Files are kept where event archives are (the database, S3 or Azure Blob). A
+managed Galaxy credential lets project syncs install from it, with a token
+minted per sync.
+
+**Done when:** the real `ansible-galaxy` installs and downloads from it, a
+project sync installs through the managed credential, and a user without
+rights sees nothing.
+
+### M13-02 Publish and approve collections
+**Labels:** feature, api, rbac · **Size:** M · [#153](https://github.com/damhau/awxnext/issues/153)
+
+`ansible-galaxy collection publish` uploads to `staging`, with galaxy_ng's
+import task and log: layout, `MANIFEST.json` and `FILES.json` checksums,
+metadata, the namespace's organization, no duplicate version. Approval moves
+it to `published`, rejection to `rejected`; a namespace can approve on
+upload. Namespace owner, uploader and approver roles; deprecation, and
+deleting an unused version.
+
+**Done when:** a published collection installs once approved and not once
+rejected, only uploaders publish and approvers approve, and a bad upload is
+refused with its reason in the log.
+
+### M13-03 Sign collections and check their signatures
+**Labels:** feature, security, projects · **Size:** M · [#154](https://github.com/damhau/awxnext/issues/154)
+
+Approval signs `MANIFEST.json` with a GPG key awxnext keeps under its master
+key, and the v3 API serves each version's `signatures`, as `ansible-galaxy`
+reads them. Signatures made elsewhere can be uploaded; keys rotate. Project
+syncs and image builds can require N valid signatures, with the keyring from
+a GPG Public Key credential (M4-08).
+
+**Done when:** `ansible-galaxy collection install --keyring` and `verify`
+pass on a signed collection and fail on a tampered one, and a sync that
+requires signatures fails on an unsigned collection.
+
+### M13-04 Mirror collections from other servers
+**Labels:** feature, projects · **Size:** M · [#155](https://github.com/damhau/awxnext/issues/155)
+
+Remotes (galaxy.ansible.com, Red Hat's Automation Hub with its token,
+another galaxy_ng) sync the collections a requirements file lists, with
+their dependencies and signatures, into a repository of their own, on demand
+or on a schedule, each sync a job. `awxnext hub import` brings in what
+`ansible-galaxy collection download` wrote elsewhere, for hubs without
+internet.
+
+**Done when:** a test syncs from a fake Galaxy written in the test,
+`full.yml` mirrors one small collection from galaxy.ansible.com, and an
+import of a downloaded directory works.
+
+### M13-05 Collections in the UI
+**Labels:** feature, ui · **Size:** M · [#156](https://github.com/damhau/awxnext/issues/156)
+
+Browse and search collections; a collection's page with its versions,
+dependencies, README, each plugin's docs (read at import with `ansible-doc`),
+the install command, and the projects and execution environments that use
+it. Namespaces and their roles, the approval queue with a diff against the
+previous version, remotes and their syncs, the signing key.
+
+**Done when:** each page works in the browser for an owner and for a reader,
+`tsc` and Vitest pass, and a module's docs show on its page.
+
+---
+
+## M14 Event-driven automation
+
+Rulebooks that react to events (an alert, a webhook, a Kafka message) by
+launching templates, as Event-Driven Ansible's controller does (Decision 18).
+awxnext runs them with `ansible-rulebook` itself, so existing rulebooks and
+source plugins work, on the job runtimes it already has. **Exit:** a rulebook
+from a git project, fed by an event stream, launches a template as its
+activation's owner, throttled, the rule audit shows the rule, the event and
+the job, and the `ansible.eda` collection manages it.
+
+### M14-01 Rulebooks and decision environments
+**Labels:** feature, projects · **Size:** M · [#157](https://github.com/damhau/awxnext/issues/157)
+
+A project sync lists its revision's rulebooks, where EDA's controller looks
+for them (`extensions/eda/rulebooks/`, `rulebooks/`), invalid ones with
+their error. Decision environments are a type of their own, like execution
+environments, with a default `ansible-rulebook` image at an exact tag. Both
+are awxnext's objects under `/api/v2/`.
+
+**Done when:** a sync lists a test project's rulebooks, an invalid one with
+its error, and decision environments work through the API with their rights.
+
+### M14-02 Rulebook activations
+**Labels:** feature, jobs, instances · **Size:** L · [#158](https://github.com/damhau/awxnext/issues/158)
+
+An activation runs `ansible-rulebook --worker` in its decision environment,
+connected back to awxnext over a websocket that sends what eda-server sends
+(rulebook, variables, controller URL and token, credentials). It runs where
+jobs run (a container group pod, podman or docker, an execution node) on one
+node at a time, and moves when that node is lost. Enable and disable, a
+restart policy with backoff, a status, and its log.
+
+**Done when:** a test activation runs in kind and on the Compose image,
+restarts as its policy says, and moves off a lost node.
+
+### M14-03 Rule actions launch awxnext's templates
+**Labels:** feature, jobs, rbac · **Size:** M · [#159](https://github.com/damhau/awxnext/issues/159)
+
+`run_job_template` and `run_workflow_template` reach awxnext's `/api/v2/`
+with a token minted for the activation, as its owner, and revoked when it
+stops, instead of a stored AWX token. Their options (`job_args`, retries,
+`post_events` and `set_facts` from the job's artifacts) are tested against
+awxnext. The job shows the activation, rule and event that launched it.
+
+**Done when:** a test activation launches a job and a workflow with the
+event's variables and gets their artifacts back, a template the owner can't
+run fails with the reason, and the token stops working with the activation.
+
+### M14-04 Event streams
+**Labels:** feature, api, auth · **Size:** M · [#160](https://github.com/damhau/awxnext/issues/160)
+
+URLs in awxnext that receive events and pass them to activations, as EDA's
+event streams do: HMAC (GitHub's and GitLab's formats), basic, bearer token
+or mTLS, a rate limit, and a test mode that shows events without passing
+them on. How events reach the activation (EDA uses its database) is decided
+here. This holds the alert-driven runs proposed with M12: Alertmanager
+alerts, deduplicated by the rulebook's `throttle`.
+
+**Done when:** each authentication method works and a bad one is refused,
+events reach the rules, and the documented Alertmanager example runs in a
+test: one job per alert in the throttle window, none on resolved alerts.
+
+### M14-05 Rule audit and activation pages
+**Labels:** feature, ui, notifications · **Size:** M · [#161](https://github.com/damhau/awxnext/issues/161)
+
+The rule audit, from what the worker reports: each rule that fired, its
+events, actions and jobs, with a retention. Pages for activations (status,
+restarts, log, audit), event streams (URL, test mode, last events), decision
+environments and a project's rulebooks. Notifications on an activation's
+failure or restart.
+
+**Done when:** a fired rule shows its event, action and job through the API
+and the UI, the pages work in the browser, and a failing activation notifies.
+
+### M14-06 EDA's API for the `ansible.eda` collection
+**Labels:** compat, api · **Size:** L · [#162](https://github.com/damhau/awxnext/issues/162)
+
+The `/api/eda/v1/` endpoints the `ansible.eda` collection calls, over
+awxnext's objects (EDA's projects and credentials are awxnext's), so that
+playbooks written for EDA's controller run unchanged. Tested by the
+collection's integration targets in `compat/`.
+
+**Done when:** the collection's modules run in the compat suite, and what
+still fails is in `compat/known-failures.yml` with its reason.
+
+---
+
+## M15 Self-service portal
+
+The operator view (`/run`) lists every template a user may launch. M15
+makes it a governed catalog (Decision 18): chosen items, requestable without
+access to their templates, approvals before they run, quotas, and
+environments that their owners manage and that expire. **Exit:** a user with
+no access to a template requests its catalog item, a team approves, the
+environment is provisioned with its outputs, extended once, and torn down
+when it expires.
+
+### M15-01 Catalog items
+**Labels:** feature, api, rbac · **Size:** M · [#163](https://github.com/damhau/awxnext/issues/163)
+
+An item publishes a job or workflow template with its own name, description,
+icon, category and owner team, and its form: the questions to show, defaults
+and fixed answers. Its request role gives no role on the template, its
+inventory, project or credentials; the requester shows as the launcher.
+Version history, `used_by` and GitOps, as for other objects.
+
+**Done when:** a user with only the request role launches through the item
+but not the template, and a request that overrides a fixed answer is
+refused.
+
+### M15-02 Approvals before a request runs
+**Labels:** feature, workflows, notifications · **Size:** M · [#164](https://github.com/damhau/awxnext/issues/164)
+
+An item can make its requests wait for one or N approvers of its approver
+team, who see the answers and the requester, with a timeout that denies.
+Built on workflow approvals, so the bell, the approvals page,
+`workflow_approvals/` and their notifications work unchanged. The requester
+is notified of the outcome.
+
+**Done when:** a request runs once approved, doesn't once denied or timed
+out, and approvers and requester are notified.
+
+### M15-03 Environments and their lifecycle
+**Labels:** feature, workflows, jobs · **Size:** L · [#165](https://github.com/damhau/awxnext/issues/165)
+
+What an item's run provisioned is recorded as an environment, owned by the
+requester and their team, with the workflow's outputs (M3-04). Day-2 actions
+run the item's templates on it with those outputs. It expires after the
+item's lifetime, extendable N times, with warnings before; expiry or delete
+runs the teardown template, and a failed teardown leaves it flagged.
+
+**Done when:** a test's item provisions an environment with its outputs,
+runs a day-2 action, is extended, and is torn down at expiry, and a failed
+teardown is flagged.
+
+### M15-04 Quotas
+**Labels:** feature, rbac · **Size:** S · [#166](https://github.com/damhau/awxnext/issues/166)
+
+Limits per item and per team or user: active environments and requests per
+day. Over quota, a request is refused with the reason or waits for approval,
+as the item says. Admins see usage against quotas.
+
+**Done when:** an over-quota request is refused or waits, as the item says,
+and usage shows through the API and the UI.
+
+### M15-05 The portal
+**Labels:** feature, ui · **Size:** M · [#167](https://github.com/damhau/awxnext/issues/167)
+
+The operator view grows into the portal: the catalog by category, an item's
+request form with its preview and the quota left, My requests (status,
+approval, the run in plain words), My environments (outputs, day-2 actions,
+expiry). Users with only request roles land there after sign-in, without the
+admin navigation.
+
+**Done when:** a requester finds, requests and follows an item and manages
+its environment in the browser, and `tsc` and Vitest pass.
 
 ---
 
@@ -1550,6 +1876,30 @@ Taken on 2026-11-08:
     account because it needs no account or cost, and email against Mailpit
     (M11-01).
 
+Taken on 2026-11-15:
+
+18. awxnext grows past AWX (M11-04, M12 to M15). Five proposals of Claude
+    Code's are added: notifications when a result changes (M11-04), and in
+    M12 what changed before a failure, secrets masked in job output, an MCP
+    server, and host history with drift. The three products sold around AWX (a private
+    automation hub, an event-driven controller, a self-service portal) are
+    built into awxnext, with one server, API, RBAC and UI, rather than as
+    services of their own:
+    - **Collections** (M13) are served on Galaxy's v3 API, so
+      `ansible-galaxy` and `ansible-builder` use the hub unchanged.
+      Execution and decision environment images stay in a container
+      registry: awxnext hosts none.
+    - **Rulebooks** (M14) run in `ansible-rulebook`, in decision
+      environments, as EDA's controller runs them, so existing rulebooks and
+      source plugins work; awxnext writes no rule engine. Their objects use
+      awxnext's projects, credentials and organizations. EDA's own API, for
+      the `ansible.eda` collection, comes last (M14-06).
+    - **The portal** (M15) grows from the operator view (`/run`), not as a
+      separate portal such as Red Hat's, which is built on Backstage.
+    - A sixth proposal, alert-driven runs (Alertmanager alerts launching
+      templates, deduplicated and throttled), is M14's event streams with
+      the rulebook's `throttle`, not a mechanism of its own.
+
 ## On GitHub
 
 Created on 2026-10-27 on `damhau/awxnext`: the type, area and size labels,
@@ -1561,5 +1911,6 @@ runs. M8 (#94 to #102) was added on 2026-10-31, and M8-10 (#103) the same day, f
 from CodeQL's first analysis. M4-11 (#122) was added the same day, for rvav. M9-04 and M9-05
 (#107, #108) were rewritten the same day for secubot (Decision 15). M10 (#124 to #126) was added on 2026-11-02 for the small fixes found
 after M9. M10-04 (#129) and M11 (#130 to #132) were added on 2026-11-08
-(Decision 17). This file stays the index;
+(Decision 17). M11-04 (#147) and M12 to M15 (#148 to #167) were added on
+2026-11-15 (Decision 18). This file stays the index;
 when a task changes, change its issue too.
