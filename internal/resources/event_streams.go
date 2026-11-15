@@ -184,11 +184,12 @@ func streamEventsSub() *SubList {
 }
 
 // installEventStreamRoutes adds the receiver, whose callers are never users
-// but senders with the stream's credential, and the backtest of a draft
-// rule.
+// but senders with the stream's credential, and the backtest and the
+// editor's check of a draft rule.
 func installEventStreamRoutes(app *api.App) {
 	app.HandleAnonymous("POST", "/api/v2/event_streams/{uuid}/post/", receiveEvents)
 	app.Handle("POST", "/api/v2/event_rules/backtest/", backtestDraft)
+	app.Handle("POST", "/api/v2/event_rules/check/", checkDraft)
 }
 
 var uuidRe = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)

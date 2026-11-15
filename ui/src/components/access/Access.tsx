@@ -55,6 +55,9 @@ const typeLabels: Record<string, string> = {
   executionenvironment: tr('Execution environment'),
   folder: tr('Folder'),
   instancegroup: tr('Instance group'),
+  eventstream: tr('Event stream'),
+  eventrule: tr('Event rule'),
+  maintenancewindow: tr('Maintenance window'),
 }
 
 export function typeName(ct: string | null | undefined): string {
@@ -87,6 +90,12 @@ export function objectPath(ct: string | null | undefined, id: number | string): 
       return `/folders/${id}`
     case 'instancegroup':
       return `/instance-groups/${id}`
+    case 'eventstream':
+      return `/event-streams/${id}`
+    case 'eventrule':
+      return `/event-rules/${id}`
+    case 'maintenancewindow':
+      return `/maintenance-windows/${id}`
   }
   return null
 }
@@ -104,6 +113,9 @@ export const grantable: { resource: string; ct: string; label: string; plural: s
   { resource: 'execution_environments', ct: 'executionenvironment', label: tr('Execution environment'), plural: tr('Execution environments') },
   { resource: 'notification_templates', ct: 'notificationtemplate', label: tr('Notification template'), plural: tr('Notification templates') },
   { resource: 'instance_groups', ct: 'instancegroup', label: tr('Instance group'), plural: tr('Instance groups') },
+  { resource: 'event_streams', ct: 'eventstream', label: tr('Event stream'), plural: tr('Event streams') },
+  { resource: 'event_rules', ct: 'eventrule', label: tr('Event rule'), plural: tr('Event rules') },
+  { resource: 'maintenance_windows', ct: 'maintenancewindow', label: tr('Maintenance window'), plural: tr('Maintenance windows') },
 ]
 
 export interface RoleDef {
@@ -156,6 +168,9 @@ export function roleShort(name: string, ct?: string | null): string {
     executionenvironment: ['ExecutionEnvironment '],
     folder: ['Folder '],
     instancegroup: ['InstanceGroup '],
+    eventstream: ['EventStream '],
+    eventrule: ['EventRule '],
+    maintenancewindow: ['MaintenanceWindow '],
   }
   for (const p of prefixes[t] ?? []) if (name.startsWith(p)) return name.slice(p.length)
   return name

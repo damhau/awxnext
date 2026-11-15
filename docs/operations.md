@@ -546,6 +546,23 @@ In test mode a stream's events are logged and shown with `test_mode: true`, but 
 them, then or after the stream leaves test mode. The rules read each stream's log from a
 position of their own.
 
+### Streams in the UI
+
+**Events, Event streams** in the navigation lists the streams you can see. A stream's page has
+these tabs:
+
+- **Events**: the stream's latest events, newest first, refreshed every 3 seconds while **Live**
+  is on. Open an event to see its data. **Open the event and its decisions** shows the event's
+  page, with what each rule decided on it.
+- **Setup**: the receiver URL, the credential and the stream's limits, and how to point a sender
+  at it: an Alertmanager receiver, a GitHub or GitLab webhook, or `curl` for a token or basic
+  credential. **Turn on test mode** and **Leave test mode** switch test mode.
+- **Access**: the stream's roles.
+
+A stream created on the page starts in test mode, so that you can set up its sender and
+[write rules against its events](#writing-a-rule-against-real-events) before any rule acts on
+them.
+
 ## Event rules
 
 An event rule reads the events of one or more streams, and acts on the events its filter holds
@@ -589,6 +606,50 @@ against.
 
 An expression that fails on an event, such as one that reads a field the event doesn't have,
 doesn't match it. Each evaluation is limited in cost and to one second.
+
+### Writing a rule against real events
+
+**Events, Event rules** in the navigation lists the rules you can see. **New rule** opens the
+editor; on a stream's page or an event's, **New rule** and **Write a rule** open it with the
+stream chosen. To write a rule against a stream's events:
+
+1. Send the stream some events, in test mode if no rule must act on them yet.
+1. In the editor, choose the streams. Completion and type checks come from their latest events,
+   test mode's included: type a dot after `event` or one of its fields for the fields the events
+   have, with their types, or press **Ctrl+Space**.
+1. Write the filter. Each type error shows under its expression as you type, with its line and
+   column; select the position to move the cursor there.
+1. Read the pane **On the latest events**: it runs the draft on the streams' 20 latest events
+   and shows which match, with their key and what the action would get. For an event that
+   doesn't match, it marks the part of the filter that failed and shows its values.
+1. Set the key, the throttle, the action and its variables, the mode and the guardrails. Under a
+   launch's variables, the preview shows what the template would get from the latest matching
+   event.
+1. Optional: to see what the draft would have done over a longer period, select **Backtest the
+   draft…** (see [Backtests](#backtests)).
+1. Save. A new rule starts in `shadow` mode: see
+   [Moving a rule from shadow to auto](#moving-a-rule-from-shadow-to-auto).
+
+A rule's page shows its settings, its circuit breakers, which you can reset there, and its
+recent decisions. Its **Decisions** tab lists every [decision](#decisions), and its
+**Backtest** tab runs a [backtest](#backtests) of the saved rule.
+
+The editor checks a draft with `POST /api/v2/event_rules/check/`. It takes the rule's
+`streams`, `action`, `filter`, `key`, `extra_vars`, `limit`, `message`, `event_type` and
+`event_data`, and `events`, the number of latest events to run the draft on: 20 by default, at
+most 100. It saves nothing and acts on nothing; throttles and guardrails are a backtest's. The
+answer has:
+
+| Field | What it holds |
+|---|---|
+| `errors` | Each expression's errors, by field: `filter`, `key`, `limit`, `message`, `event_type`, `event_data`, and `extra_vars.<name>` for a variable. |
+| `schema_events` | How many events the schema was built from. |
+| `checked`, `matched` | How many events the draft ran on, and how many it matched. |
+| `truncated` | `true` when the check stopped at its 10-second limit. |
+| `events` | Each event checked, newest first: its `stream`, `sequence`, `event_id`, `event_type`, `received` and `test_mode`; whether it `matched`; for a miss, the `reason` and the failed part in `filter`, as a [decision](#decisions) has them; for a match, the `key` and the `action`'s values, or `key_error` and `action_errors`. |
+
+With a filter that doesn't compile, the check runs nothing and answers the errors alone. To
+check a draft, you need to see its streams; otherwise awxnext refuses with `403`.
 
 ### Throttles
 
@@ -685,7 +746,7 @@ People who can approve or deny a rule's approvals:
 - Users with the `Organization Approval` or `Organization Admin` role on its organization.
 
 Those who can view the rule see its approvals. `GET /api/v2/workflow_approvals/?event_rule=N`
-lists them.
+lists them. On the approvals page, a rule's approval links to its rule.
 
 Once the approval is decided, the decision takes its outcome:
 
@@ -751,6 +812,9 @@ curl -u admin -H 'Content-Type: application/json' https://awxnext.example.com/ap
 The answer gives how many breakers were reset. Resetting takes the right to change the rule.
 After a reset, the breaker counts the firings from then on.
 
+On the rule's page, **Circuit breakers** lists its tripped breakers, with **Reset** for each and
+**Reset all**.
+
 #### Maintenance windows and change freezes
 
 A maintenance window or a change freeze is a calendar of periods when rules must not act. Inside
@@ -779,6 +843,9 @@ change its inventory. Deleting a rule or a group takes it out of the windows tha
 The answer's `active` says whether a period is going on, `active_until` when it ends, and
 `next_start` when the next one starts. Windows have a version history and `used_by`, and a
 GitOps source can declare them (`MaintenanceWindow`, see [GitOps](gitops.md)).
+
+**Events, Maintenance windows** in the navigation lists the windows, whether each is on and when
+it starts next. **New window** creates one, with the same calendar editor as schedules.
 
 This change freeze holds back every rule of organization 1 on Saturdays from 22:00 to midnight,
 Zurich time, but on 26 December:

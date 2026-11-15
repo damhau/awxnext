@@ -35,6 +35,9 @@ const kinds: Record<string, [string, string]> = {
   instance_group: [tr('instance group'), tr('instance groups')],
   gitops_source: [tr('GitOps source'), tr('GitOps sources')],
   setting: [tr('setting'), tr('settings')],
+  event_stream: [tr('event stream'), tr('event streams')],
+  event_rule: [tr('event rule'), tr('event rules')],
+  maintenance_window: [tr('maintenance window'), tr('maintenance windows')],
 }
 
 export function kindOf(d: Dependent, n = 1): string {
@@ -61,6 +64,9 @@ const how: Record<string, string> = {
   default_environment: tr('as its default execution environment'),
   node_execution_environment: tr('as a step’s execution environment'),
   DEFAULT_EXECUTION_ENVIRONMENT: tr('as the global default'),
+  streams: tr('reads its events'),
+  target_stream: tr('posts events to it'),
+  event_rules: tr('holds its actions back'),
 }
 
 /** "as its inventory", "runs it in a step" */
@@ -96,6 +102,12 @@ export function linkTo(d: Dependent): string | null {
       return '/gitops'
     case 'setting':
       return '/settings'
+    case 'event_stream':
+      return `/event-streams/${d.id}`
+    case 'event_rule':
+      return `/event-rules/${d.id}`
+    case 'maintenance_window':
+      return `/maintenance-windows/${d.id}`
   }
   return null
 }

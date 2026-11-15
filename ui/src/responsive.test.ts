@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 // is a drawer; 600px and below, the phone layout. Every stylesheet uses the
 // same two, so pages change layout together.
 const read = (p: string) => readFileSync(new URL(p, import.meta.url), 'utf8')
-const sheets = ['./styles.css', './pages/admin/admin.css', './pages/automation/automation.css', './pages/resources/resources.css']
+const sheets = ['./styles.css', './pages/admin/admin.css', './pages/automation/automation.css', './pages/resources/resources.css', './pages/events/events.css']
 
 describe('responsive layout', () => {
   it('lets phones use their width', () => {

@@ -50,6 +50,9 @@ const paths: Record<string, string> = {
   info: 'M8 14A6 6 0 1 0 8 2a6 6 0 0 0 0 12zM8 7v4M8 5h.01',
   link: 'M6.5 9.5l3-3M7 4.5l1-1a2.8 2.8 0 0 1 4 4l-1 1M9 11.5l-1 1a2.8 2.8 0 0 1-4-4l1-1',
   terminal: 'M2.5 3h11v10h-11zM5 6.5l2 1.5-2 1.5M8.5 10h2.5',
+  stream: 'M1.5 5c2-1.5 3.5-1.5 5 0s3 1.5 5 0 2.5-1 3 -.5M1.5 8c2-1.5 3.5-1.5 5 0s3 1.5 5 0 2.5-1 3-.5M1.5 11c2-1.5 3.5-1.5 5 0s3 1.5 5 0 2.5-1 3-.5',
+  bolt: 'M9 1.5 3.5 9H8l-1 5.5L12.5 7H8z',
+  window: 'M2.5 3.5h11v9h-11zM2.5 6h11M6 8.5l1.5 1.5L10.5 7.5',
 }
 
 export type IconName = keyof typeof paths

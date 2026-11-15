@@ -89,6 +89,13 @@ export function ApprovalsPage() {
 
   const workflowCell = (a: Any) => {
     const wf = a.summary_fields?.source_workflow_job
+    const rule = a.summary_fields?.event_rule
+    if (!wf && rule)
+      return (
+        <Link to={`/event-rules/${rule.id}`} className="ellipsis">
+          {rule.name} <span className="faint small">{tr('event rule')}</span>
+        </Link>
+      )
     return wf ? (
       <Link to={`/jobs/workflow_job/${wf.id}`} className="ellipsis">
         {wf.name} <span className="mono faint">#{wf.id}</span>

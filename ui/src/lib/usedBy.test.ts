@@ -21,6 +21,13 @@ describe('used by', () => {
     expect(linkTo(d('schedule', 9, 'inventory', 'cleared', 'nightly run'))).toBe('/schedules?q=nightly%20run')
     expect(linkTo(d('inventory_source', 3, 'source_project', 'deleted'))).toBe('/inventory-sources/3')
   })
+  it('links the rules that read a stream and the windows that list a rule', () => {
+    expect(howUsed(d('event_rule', 5, 'streams'))).toBe('reads its events')
+    expect(linkTo(d('event_rule', 5, 'streams'))).toBe('/event-rules/5')
+    expect(linkTo(d('event_stream', 2, 'credential'))).toBe('/event-streams/2')
+    expect(howUsed(d('maintenance_window', 7, 'event_rules'))).toBe('holds its actions back')
+    expect(linkTo(d('maintenance_window', 7, 'event_rules'))).toBe('/maintenance-windows/7')
+  })
   it('counts by kind', () => {
     expect(countKinds([d('job_template', 1, 'inventory'), d('job_template', 2, 'inventory'), d('schedule', 3, 'inventory')])).toBe('2 job templates and 1 schedule')
     expect(countKinds([d('inventory', 1, 'input_inventories')])).toBe('1 inventory')

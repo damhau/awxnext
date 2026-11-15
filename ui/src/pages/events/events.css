@@ -1,0 +1,60 @@
+.cel { position: relative; }
+.cel-text { min-height: 34px; resize: vertical; line-height: 1.5; }
+.cel-pop { max-height: 240px; }
+.cel-pop .opt { font-size: 12px; padding: 5px 10px; }
+.cel-errors { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; color: var(--fail-ink); font-size: 12px; }
+.cel-caret { margin: 2px 0 0; font-family: var(--mono); font-size: 12px; color: var(--fail-ink); white-space: pre; overflow-x: auto; }
+.cel-miss mark { background: var(--fail-soft); color: var(--fail-deep); border-bottom: 1px solid var(--fail); padding: 0 1px; }
+.cel-seen { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; color: var(--ink-3); overflow-wrap: anywhere; }
+
+.decisions, .events, .draft-events { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+.decision, .event, .draft-event { border-top: 1px solid var(--line-soft); }
+.decision:first-child, .event:first-child, .draft-event:first-child { border-top: none; }
+.decision > summary, .event > summary, .draft-event > summary { list-style: none; cursor: pointer; display: grid; align-items: center; gap: 12px; padding: 8px 12px; min-width: 0; }
+.decision > summary::-webkit-details-marker, .event > summary::-webkit-details-marker, .draft-event > summary::-webkit-details-marker { display: none; }
+.decision > summary:hover, .event > summary:hover, .draft-event > summary:hover { background: var(--hover); }
+.decision[open] > summary, .event[open] > summary, .draft-event[open] > summary { background: var(--surface-2); }
+.decision > :not(summary), .event > :not(summary), .draft-event > :not(summary) { padding: 10px 12px 14px; }
+.decision > summary { grid-template-columns: 150px minmax(0, 1.2fr) minmax(0, 0.7fr) minmax(0, 2fr) auto; }
+.event > summary { grid-template-columns: 56px minmax(0, 1fr) minmax(0, 1.4fr) auto auto; }
+.draft-event > summary { grid-template-columns: auto auto minmax(0, 1fr) auto auto; gap: 8px; padding: 6px 10px; }
+.event-data { max-height: 420px; overflow: auto; }
+
+.rule-editor { display: grid; grid-template-columns: minmax(0, 860px) minmax(320px, 520px); gap: 20px; align-items: start; }
+.rule-editor .draft { position: sticky; top: 12px; max-height: calc(100vh - 24px); overflow-y: auto; }
+.var-row { display: grid; grid-template-columns: minmax(100px, 200px) minmax(0, 1fr) auto; gap: 6px; align-items: start; }
+.action-preview { border: 1px dashed var(--line-strong); border-radius: var(--radius); padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+.action-preview .kv dd pre { margin: 0; }
+
+.steps { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; }
+
+.badge.mode-shadow { background: var(--changed-soft); color: var(--changed-ink); }
+.badge.mode-approval { background: var(--lime-wash); border-color: var(--lime-line); color: var(--ink); }
+.badge.mode-auto { background: var(--ok-soft); color: var(--ok-ink); }
+.breakers { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.breakers li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto minmax(0, 2fr) auto; gap: 10px; align-items: center; padding: 6px 0; border-top: 1px solid var(--line-soft); }
+.breakers li:first-child { border-top: none; }
+.backtest-form { display: grid; grid-template-columns: repeat(3, minmax(0, 220px)) auto; gap: 12px 16px; align-items: end; }
+.outcome-counts { display: flex; flex-wrap: wrap; gap: 6px; }
+.outcome-counts .chip { display: inline-flex; align-items: center; }
+
+@media (max-width: 900px) {
+  .rule-editor { grid-template-columns: minmax(0, 1fr); }
+  .rule-editor .draft { position: static; max-height: none; }
+  .decision > summary { grid-template-columns: 130px minmax(0, 1fr) auto; }
+  .decision > summary .decision-key, .decision > summary .decision-reason { display: none; }
+  .backtest-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 600px) {
+  .event > summary { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .event > summary .event-subject, .event > summary .event-tag { display: none; }
+  .decision > summary { grid-template-columns: minmax(0, 1fr) auto; }
+  .decision > summary .decision-what { grid-column: 1 / -1; grid-row: 2; }
+  .var-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .var-row > .cel { grid-column: 1 / -1; grid-row: 2; }
+  .breakers li { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .breakers li > .small { grid-column: 2 / -1; }
+  .backtest-form { grid-template-columns: minmax(0, 1fr); }
+  .outcome-filter label { padding: 6px 9px; }
+}
