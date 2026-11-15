@@ -5,7 +5,8 @@
 // changes. Supported kinds: Label, Project, Inventory (with inline Ansible
 // YAML inventory content), InventorySource, JobTemplate,
 // WorkflowJobTemplate (with nodes), NotificationTemplate, Schedule, Team,
-// EventRule (its streams by name).
+// EventRule (its streams by name), MaintenanceWindow (its rules by name, its
+// groups by inventory and name).
 //
 //	kind: JobTemplate
 //	name: Deploy web
@@ -112,10 +113,12 @@ type kind struct {
 	res string
 	// scope column besides organization identifying objects by name.
 	identity func(r *reconciler, d *Document) (string, []any, error)
+	// relations of this kind handled outside the resource fields.
+	relations map[string]bool
 }
 
 // order is the apply order (dependencies first); pruning runs in reverse.
-var order = []string{"Label", "Team", "Project", "Inventory", "InventorySource", "NotificationTemplate", "JobTemplate", "WorkflowJobTemplate", "Schedule", "EventRule"}
+var order = []string{"Label", "Team", "Project", "Inventory", "InventorySource", "NotificationTemplate", "JobTemplate", "WorkflowJobTemplate", "Schedule", "EventRule", "MaintenanceWindow"}
 
 var kinds = map[string]kind{
 	"Label":                {res: "labels"},
@@ -128,6 +131,7 @@ var kinds = map[string]kind{
 	"WorkflowJobTemplate":  {res: "workflow_job_templates"},
 	"Schedule":             {res: "schedules", identity: scheduleIdentity},
 	"EventRule":            {res: "event_rules"},
+	"MaintenanceWindow":    {res: "maintenance_windows", relations: map[string]bool{"event_rules": true, "groups": true}},
 }
 
 var errDryRun = errors.New("dry run")
@@ -527,6 +531,37 @@ func (r *reconciler) listRefs(resName string, v any) ([]int64, error) {
 	return out, nil
 }
 
+// groupRefs resolves inventory groups given as {inventory, name}.
+func (r *reconciler) groupRefs(v any) ([]int64, error) {
+	if v == nil {
+		return []int64{}, nil
+	}
+	list, ok := v.([]any)
+	if !ok {
+		return nil, errors.New("groups must be a list of {inventory, name}")
+	}
+	out := []int64{}
+	for _, x := range list {
+		m, ok := x.(map[string]any)
+		inv, _ := m["inventory"].(string)
+		name, _ := m["name"].(string)
+		if !ok || inv == "" || name == "" {
+			return nil, errors.New("groups must be a list of {inventory, name}")
+		}
+		invID, err := r.lookup("inventories", inv, "")
+		if err != nil {
+			return nil, err
+		}
+		id, err := r.lookup("groups", name, "inventory_id = ?", invID)
+		if err != nil {
+			return nil, fmt.Errorf("group %q of inventory %q not found", name, inv)
+		}
+		out = append(out, id)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
+	return out, nil
+}
+
 // relations handled outside the resource fields.
 var relationKeys = map[string]bool{"credentials": true, "labels": true, "instance_groups": true, "survey_spec": true, "template": true, "streams": true}
 
@@ -538,7 +573,7 @@ func (r *reconciler) applyDoc(d *Document) error {
 		data["description"] = d.Description
 	}
 	for key, v := range d.Spec {
-		if relationKeys[key] {
+		if relationKeys[key] || k.relations[key] {
 			continue
 		}
 		f := field(res, key)
@@ -606,6 +641,17 @@ func (r *reconciler) applyDoc(d *Document) error {
 			}
 			data["unified_job_template"] = id
 		}
+	}
+	if d.Kind == "MaintenanceWindow" {
+		rules, err := r.listRefs("event_rules", d.Spec["event_rules"])
+		if err != nil {
+			return err
+		}
+		groups, err := r.groupRefs(d.Spec["groups"])
+		if err != nil {
+			return err
+		}
+		data["event_rules"], data["groups"] = rules, groups
 	}
 	identity, args := "", []any{}
 	if k.identity != nil {

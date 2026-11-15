@@ -96,7 +96,7 @@ func TestEventRuleLaunch(t *testing.T) {
 	a := f.a
 	am := newAlertStream(t, a, f.org)
 	jt := f.template(t, "site.yml", map[string]any{"ask_variables_on_launch": true, "ask_limit_on_launch": true})
-	rule := must(t, a.post("event_rules/", map[string]any{"name": uniq("disk"), "organization": f.org, "streams": []int64{am.id},
+	rule := must(t, a.post("event_rules/", map[string]any{"name": uniq("disk"), "organization": f.org, "streams": []int64{am.id}, "mode": "auto",
 		"filter": `event.type == "alert.firing" && event.data.labels.alertname == "DiskFull"`,
 		"key":    "event.data.labels.instance", "throttle": "once_within", "throttle_window": 3600,
 		"unified_job_template": jt,
@@ -181,7 +181,7 @@ func TestEventRuleOnceAfter(t *testing.T) {
 	target := newEventStream(t, a, org, streamCredential(t, a, org, eventstreams.CredToken, map[string]any{"token": "t2"}), eventstreams.TypeCloudEvents, nil)
 	must(t, a.post("event_rules/", map[string]any{"name": uniq("loop"), "organization": org, "streams": []int64{am.id}, "filter": "true",
 		"action": "post_event", "target_stream": am.id, "event_type": `"x"`}), 400)
-	rid := must(t, a.post("event_rules/", map[string]any{"name": uniq("batch"), "organization": org, "streams": []int64{am.id},
+	rid := must(t, a.post("event_rules/", map[string]any{"name": uniq("batch"), "organization": org, "streams": []int64{am.id}, "mode": "auto",
 		"filter": `event.type == "alert.firing"`, "key": "event.data.labels.instance", "throttle": "once_after", "throttle_window": 3,
 		"action": "post_event", "target_stream": target.id, "event_type": `"remediation." + event.data.labels.alertname`,
 		"event_data": `{"hosts": events.map(e, e.data.labels.instance), "first": event.data.labels.instance}`}), 201).id()
@@ -222,7 +222,7 @@ func TestEventRuleNotify(t *testing.T) {
 	rec, hook := newHookServer(t)
 	nt := must(t, a.post("notification_templates/", map[string]any{"name": uniq("hook"), "organization": org, "notification_type": "webhook",
 		"notification_configuration": map[string]any{"url": hook.URL}}), 201).id()
-	rid := must(t, a.post("event_rules/", map[string]any{"name": uniq("tell"), "organization": org, "streams": []int64{am.id},
+	rid := must(t, a.post("event_rules/", map[string]any{"name": uniq("tell"), "organization": org, "streams": []int64{am.id}, "mode": "auto",
 		"filter": "true", "action": "notify", "notification_template": nt,
 		"message": `{"text": event.data.annotations.summary, "instance": event.data.labels.instance}`}), 201).id()
 	am.alert(t, 1, testAlert{"DiskFull", "web-01", "2026-11-15T08:00:00Z", "f1"})
@@ -313,7 +313,7 @@ func TestEventRuleRights(t *testing.T) {
 	must(t, a.post("role_user_assignments/", map[string]any{"role_definition": roleDef(t, "Organization Admin"), "user": uid, "object_id": org}), 201)
 	am := newAlertStream(t, a, org)
 	jt := f.template(t, "site.yml", map[string]any{"ask_variables_on_launch": true})
-	body := map[string]any{"name": uniq("r"), "organization": org, "streams": []int64{am.id}, "filter": "true", "unified_job_template": jt,
+	body := map[string]any{"name": uniq("r"), "organization": org, "streams": []int64{am.id}, "filter": "true", "unified_job_template": jt, "mode": "auto",
 		"extra_vars": map[string]any{"target": "event.data.labels.instance"}}
 	if r := must(t, user.post("event_rules/", body), 403); !strings.Contains(r.Raw, "may not use the template") {
 		t.Errorf("refusal: %s", r.Raw)
@@ -386,7 +386,7 @@ func TestEventRuleFailover(t *testing.T) {
 	am := newAlertStream(t, a, f.org)
 	jt := f.template(t, "site.yml", map[string]any{"ask_variables_on_launch": true})
 	rid := must(t, a.post("event_rules/", map[string]any{"name": uniq("r"), "organization": f.org, "streams": []int64{am.id}, "filter": "true",
-		"unified_job_template": jt, "extra_vars": map[string]any{"target": "event.data.labels.instance"}}), 201).id()
+		"mode": "auto", "unified_job_template": jt, "extra_vars": map[string]any{"target": "event.data.labels.instance"}}), 201).id()
 
 	var failures atomic.Int32
 	resources.Rules.SetBeforeCommit(func(stream int64) error {

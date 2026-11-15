@@ -544,11 +544,13 @@ var approvalMessages = map[string]string{
 
 // notifyApproval sends "approvals" notifications of the workflow (and its
 // organization) for an approval reaching status running, approved, denied or timed_out.
+// An event rule's approval notifies its organization's.
 func notifyApproval(c *Ctx, approvalID int64, status string) {
 	var wfJob, wfjt, org int64
 	var name string
-	if err := c.App.DB.QueryRow(c, `SELECT w.id, coalesce(w.unified_job_template_id, 0), coalesce(w.organization_id, 0), a.name
-		FROM unified_jobs a JOIN workflow_job_nodes n ON n.job_id = a.id JOIN unified_jobs w ON w.id = n.workflow_job_id WHERE a.id = $1`, approvalID).
+	if err := c.App.DB.QueryRow(c, `SELECT coalesce(w.id, 0), coalesce(w.unified_job_template_id, 0), coalesce(w.organization_id, r.organization_id, 0), a.name
+		FROM unified_jobs a LEFT JOIN workflow_job_nodes n ON n.job_id = a.id LEFT JOIN unified_jobs w ON w.id = n.workflow_job_id
+		LEFT JOIN event_rules r ON r.id = a.event_rule_id WHERE a.id = $1 AND (w.id IS NOT NULL OR r.id IS NOT NULL)`, approvalID).
 		Scan(&wfJob, &wfjt, &org, &name); err != nil {
 		return
 	}
@@ -565,6 +567,9 @@ func notifyApproval(c *Ctx, approvalID int64, status string) {
 	}
 	rows.Close()
 	workflowURL := JobUIURL(c.App, wfJob)
+	if wfJob == 0 {
+		workflowURL = strings.TrimRight(c.App.Cfg.BaseURL, "/") + "/approvals"
+	}
 	meta, _ := json.MarshalIndent(map[string]any{"id": approvalID, "name": name, "url": workflowURL, "status": status,
 		"friendly_name": "Workflow Approval", "workflow_job": wfJob}, "", "    ")
 	tctx := map[string]any{"approval_status": status, "approval_node_name": name, "workflow_url": workflowURL,

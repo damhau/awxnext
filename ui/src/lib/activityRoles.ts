@@ -14,6 +14,7 @@ const objectTypes: Record<string, string> = {
   credentialtype: 'credential type',
   eventstream: 'event stream',
   eventrule: 'event rule',
+  maintenancewindow: 'maintenance window',
 }
 
 /** "Execute role on job template Deploy" from a role's summary, '' without a role field. */

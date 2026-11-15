@@ -64,6 +64,12 @@ var dependencies = map[string][]dependency{
 		{"streams", "cleared", `SELECT 'event_rules', r.id, r.name FROM event_rules r WHERE r.streams @> jsonb_build_array($1::bigint)`},
 		{"target_stream", "cleared", `SELECT 'event_rules', r.id, r.name FROM event_rules r WHERE r.target_stream_id = $1`},
 	},
+	"event_rules": {
+		{"event_rules", "cleared", `SELECT 'maintenance_windows', w.id, w.name FROM maintenance_windows w WHERE w.event_rules @> jsonb_build_array($1::bigint)`},
+	},
+	"groups": {
+		{"groups", "cleared", `SELECT 'maintenance_windows', w.id, w.name FROM maintenance_windows w WHERE w.inventory_groups @> jsonb_build_array($1::bigint)`},
+	},
 	"execution_environments": {
 		{"execution_environment", "cleared", `SELECT ` + ujtResource + `, t.id, t.name FROM unified_job_templates t WHERE t.execution_environment_id = $1`},
 		{"default_environment", "cleared", `SELECT ` + ujtResource + `, t.id, t.name FROM unified_job_templates t WHERE t.default_environment_id = $1`},

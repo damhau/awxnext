@@ -553,7 +553,7 @@ stream. To create one, post to `/api/v2/event_rules/` with these fields:
 
 | Field | What it sets |
 |---|---|
-| `organization`, `name` | The rule's organization, and a name unique in it. Organization admins manage the organization's rules; the roles `EventRule Admin` and `EventRule Read` give one rule. |
+| `organization`, `name` | The rule's organization, and a name unique in it. Organization admins manage the organization's rules; the roles `EventRule Admin`, `EventRule Automate`, `EventRule Approve` and `EventRule Read` give one rule (see [Modes](#modes)). |
 | `streams` | The IDs of the streams the rule reads, at most 20. |
 | `filter` | A [CEL](https://cel.dev) condition on `event`, such as `event.type == "alert.firing"`. |
 | `key` | A CEL expression that gives a string, such as `event.data.labels.instance`. The throttle counts events by key. Empty: one key for all events. |
@@ -562,6 +562,10 @@ stream. To create one, post to `/api/v2/event_rules/` with these fields:
 | `unified_job_template`, `extra_vars`, `limit` | For `launch`: the job or workflow template; each variable's name and the CEL expression of its value; a CEL expression that gives the limit. |
 | `notification_template`, `message` | For `notify`: the notification template, and a CEL expression that gives the message. |
 | `target_stream`, `event_type`, `event_data` | For `post_event`: the stream to post to, which the rule must not read, and CEL expressions that give the event's type and its data (the event's own data by default). |
+| `mode` | `shadow` (the default), `approval` or `auto`: see [Modes](#modes). |
+| `max_concurrent_runs`, `host_lock`, `max_group_share` | For `launch`: the [blast radius](#blast-radius). |
+| `breaker_firings`, `breaker_window`, `breaker_notification_template` | The [circuit breaker](#circuit-breaker). |
+| `window_action`, `approval_timeout` | What a [maintenance window](#maintenance-windows-and-change-freezes) does to an action: `hold` (the default) or `approval`; and how long an approval waits, in seconds (one hour by default, `0` for ever). |
 | `enabled` | `false` stops the rule. |
 
 The answer's `owner`, `stopped_reason` and `last_fired` are read-only.
@@ -623,13 +627,179 @@ awxnext checks the same rights again before each action. When the owner lost one
 stops: it is disabled, and its `stopped_reason` and the event's decision say why. To restart
 the rule, enable it again: you become its owner.
 
+A rule in `auto` mode also takes the `automate` permission on the rule: the `EventRule Automate`
+role, or `Organization Admin`. `EventRule Admin` doesn't include it. Because whoever saves an
+enabled rule becomes its owner, saving a rule in `auto` mode takes that role too.
+
+### Modes
+
+A rule's `mode` says what it does with an action that its guardrails let through:
+
+| Mode | What the rule does |
+|---|---|
+| `shadow` | Records what it would have done, and does nothing. New rules start in this mode. |
+| `approval` | Asks for a workflow approval of each action, and acts once it is approved. |
+| `auto` | Acts. |
+
+To turn a rule off, set `enabled` to `false`. Rules created before awxnext had modes are in
+`auto` mode.
+
+In `shadow` mode, the rule applies its filter, throttle and guardrails as in the other modes. Its
+decisions have the outcome `shadow`, with the reason ("Shadow mode: the rule would have launched
+job template Restart service on web-01.") and, in `details.action`, what it would have done: the
+template, the `extra_vars` and the `limit`, the notification's message, or the event it would
+have posted. The throttle keys and circuit breakers of `shadow` mode are its own: when you move
+the rule to another mode, its shadow decisions don't throttle it or count toward its breaker.
+
+### Moving a rule from shadow to auto
+
+1. Create the rule. It starts in `shadow` mode.
+1. Let it see real events, then read its decisions: `GET /api/v2/event_rules/N/decisions/`.
+   Check that each `shadow` decision is an action you want, and that `throttled` and `held`
+   decisions hold back what you expect.
+1. Optional: to have a person check each action first, move the rule to `approval` mode:
+   `PATCH /api/v2/event_rules/N/` with `{"mode": "approval"}`.
+1. When the decisions are right, move the rule to `auto` mode with `{"mode": "auto"}`. You
+   need the `EventRule Automate` role on the rule, or `Organization Admin`; otherwise awxnext
+   refuses with `403`.
+
+Changing the mode of a rule that holds `once_after` windows drops their events: the rule starts
+again from the next event. Moving a rule to `shadow` mode clears its shadow throttle keys and
+breakers, so each try starts afresh.
+
+### Approval mode
+
+In `approval` mode, each action creates a workflow approval, as a workflow's approval node does,
+and the decision waits with the outcome `awaiting_approval` and the approval's ID in `approval`.
+The approval is named after the rule and the action ("Restart on ServiceDown: launch job template
+Restart service on web-01"), its description names the event, and its
+`summary_fields.event_rule` names the rule. It appears on the approvals page and in the bell, and
+the organization's approval notifications tell of it as of a workflow's, with a link to the
+approvals page.
+
+People who can approve or deny a rule's approvals:
+
+- Users with the `EventRule Approve` or `EventRule Admin` role on the rule.
+- Users with the `Organization Approval` or `Organization Admin` role on its organization.
+
+Those who can view the rule see its approvals. `GET /api/v2/workflow_approvals/?event_rule=N`
+lists them.
+
+Once the approval is decided, the decision takes its outcome:
+
+| Approval | Decision |
+|---|---|
+| Approved | The rule acts, as its owner, and the decision is `launched`, `notified` or `posted`. awxnext checks the owner's rights and the blast radius again first; it doesn't check the maintenance windows and the breaker again. |
+| Denied | `denied`, with who denied it. |
+| Timed out after `approval_timeout` seconds | `timed_out`. |
+| Canceled, or the rule disabled or moved to `shadow` mode | `canceled`. awxnext cancels the pending approvals of a rule disabled, moved to `shadow` mode or deleted. |
+
+The rule acts once for each approval, even when several nodes run. An action that waits for
+approval holds its `once_within` key, and counts toward the circuit breaker, as an action does.
+
+### Guardrails
+
+Before each action, in every mode, awxnext checks the rule's guardrails. A guardrail that holds
+an action back gives the decision the outcome `held`, with the guardrail in `guardrail`, the
+reason in `reason`, and what it found in `details`. An action held back is dropped: the rule
+doesn't try it again later, and it doesn't hold its `once_within` key, so the key's next event
+can act.
+
+The guardrails are checked in this order: the circuit breaker, the maintenance windows and
+change freezes, then the blast radius.
+
+#### Blast radius
+
+These guardrails apply to rules that launch. Each compares hosts by name within an organization:
+a host named `web-01` in two inventories of the organization is the same host.
+
+| Field | What it holds back | `guardrail` |
+|---|---|---|
+| `max_concurrent_runs` | A launch while the rule has this many jobs or workflow jobs that haven't finished. `0`: no limit. | `max_concurrent_runs` |
+| `host_lock` | A launch on a host that a job or ad hoc command that hasn't finished runs on, the rule's own included. `details.hosts` lists the hosts, and `details.jobs` the jobs. | `host_lock` |
+| `max_group_share` | A launch that would put more than this percentage of the hosts of an inventory group (`all` included) under remediation at once: the launch's hosts and those of the unfinished jobs that rules launched, workflows' jobs included. A group may always have one host under remediation. `0`: no limit. | `group_share` |
+
+The hosts a launch runs on are those of its inventory that its limit selects, as Ansible
+resolves a pattern: groups and their children, host names, wildcards, `~` regular expressions,
+`&` and `!`. For a workflow, awxnext resolves the inventory and the limit of each job template
+node, prompts included. A pattern with a subscript (`web[0:2]`) or a file (`@hosts.txt`) selects
+more hosts than Ansible would, never fewer, and `details.hosts_approximate` says so. Disabled
+hosts are left out.
+
+#### Circuit breaker
+
+When a key fires `breaker_firings` times within `breaker_window` seconds, its circuit breaker
+trips: the rule holds back the key's events, with the guardrail `circuit_breaker`, until a person
+resets it. A firing is an action that ran, failed, waited for approval, or would have run in
+`shadow` mode. The other keys are not affected. `0` turns the breaker off.
+
+When the breaker trips, awxnext sends a notification with `breaker_notification_template`. A
+`webhook` posts the rule, the `key`, the `firings`, the `window` and the `reset` URL; an `email`
+has them in its body. Trips in `shadow` mode don't notify.
+
+To list a rule's breakers, `GET /api/v2/event_rules/N/breakers/`, or
+`/api/v2/event_rule_breakers/` for every rule you can see. A tripped breaker has `tripped_at`
+and the `firings` that tripped it; a reset one has `reset_at` and `reset_by`. To reset a
+breaker, post its key; post no key to reset every breaker of the rule:
+
+```sh
+curl -u admin -H 'Content-Type: application/json' https://awxnext.example.com/api/v2/event_rules/7/reset_breaker/ -d '{"key": "web-01:9100"}'
+```
+
+The answer gives how many breakers were reset. Resetting takes the right to change the rule.
+After a reset, the breaker counts the firings from then on.
+
+#### Maintenance windows and change freezes
+
+A maintenance window or a change freeze is a calendar of periods when rules must not act. Inside
+one, a rule's action is held back, with the guardrail `maintenance_window` or `change_freeze`, or,
+when the rule's `window_action` is `approval`, it waits for a [workflow
+approval](#approval-mode), in any mode but `shadow`. The window time is when awxnext received the
+event.
+
+To create one, post to `/api/v2/maintenance_windows/`:
+
+| Field | What it sets |
+|---|---|
+| `organization`, `name` | The window's organization, and a name unique in it. Organization admins manage the organization's windows; the roles `MaintenanceWindow Admin` and `MaintenanceWindow Read` give one window. |
+| `kind` | `maintenance` (the default) or `freeze`. |
+| `rrule` | When each period starts: `DTSTART`, `RRULE`, `EXRULE`, `RDATE` and `EXDATE`, as a schedule's `rrule`. Use `EXDATE` to skip a date. |
+| `duration` | How long each period lasts, in seconds, from one minute to 90 days. |
+| `event_rules` | The IDs of the rules the window covers. |
+| `groups` | The IDs of the inventory groups the window covers: a launch on one of their hosts, or of their children's. |
+| `enabled` | `false` turns the window off. |
+
+A window covers the rules that it lists, the launches on the hosts of the groups that it lists,
+or, when it lists neither, every rule of its organization. It covers only the rules of its own
+organization. Listing a rule takes the right to change it, and listing a group the right to
+change its inventory. Deleting a rule or a group takes it out of the windows that list it.
+
+The answer's `active` says whether a period is going on, `active_until` when it ends, and
+`next_start` when the next one starts. Windows have a version history and `used_by`, and a
+GitOps source can declare them (`MaintenanceWindow`, see [GitOps](gitops.md)).
+
+This change freeze holds back every rule of organization 1 on Saturdays from 22:00 to midnight,
+Zurich time, but on 26 December:
+
+```sh
+curl -u admin -H 'Content-Type: application/json' https://awxnext.example.com/api/v2/maintenance_windows/ -d '{
+  "name": "Saturday freeze",
+  "organization": 1,
+  "kind": "freeze",
+  "rrule": "DTSTART;TZID=Europe/Zurich:20261107T220000 RRULE:FREQ=WEEKLY;BYDAY=SA EXDATE;TZID=Europe/Zurich:20261226T220000",
+  "duration": 7200
+}'
+```
+
 ### Decisions
 
 `GET /api/v2/event_rules/N/decisions/` lists what the rule decided for each event its filter
 held for, newest first, and `/api/v2/event_rule_decisions/` the decisions of every rule you can
 see. Each decision has the event (`stream`, `sequence`, `event_id`,
-`event_type`, `received`), the node that decided, the `key`, the `outcome` and its `reason`,
-and the `job` launched.
+`event_type`, `received`), the node that decided, the rule's `mode` then, the `key`, the
+`outcome` and its `reason`, the `guardrail` that held the action back or sent it for approval,
+the `approval` it waits for, and the `job` launched. `fired` marks the decisions that count
+toward the circuit breaker.
 
 | Outcome | Meaning |
 |---|---|
@@ -639,7 +809,11 @@ and the `job` launched.
 | `refused` | The owner may no longer run the rule, which stopped. |
 | `failed` | The action failed, such as a launch the template refused. |
 | `error` | An expression failed on the event, such as a key that is not a string. |
-| `dropped` | The rule was disabled before its window ended. |
+| `dropped` | The rule was disabled, or changed mode, before its window ended. |
+| `held` | A [guardrail](#guardrails) held the action back: `guardrail` names it. |
+| `shadow` | In `shadow` mode, what the rule would have done. |
+| `awaiting_approval` | The action waits for the workflow approval in `approval`. |
+| `denied`, `timed_out`, `canceled` | The approval was denied, timed out, or canceled. |
 
 ### Exactly once
 

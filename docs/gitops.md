@@ -111,11 +111,25 @@ spec:
   template: {kind: JobTemplate, name: Restart service}
   extra_vars:
     service: event.data.labels.job
+  mode: auto                       # shadow by default
+  host_lock: true
+  breaker_firings: 3
+---
+kind: MaintenanceWindow
+name: Saturday freeze
+spec:
+  kind: freeze
+  rrule: "DTSTART;TZID=Europe/Zurich:20261107T220000 RRULE:FREQ=WEEKLY;BYDAY=SA"
+  duration: 7200
+  event_rules: [Restart on ServiceDown]   # rules, by name
+  groups:                                 # inventory groups, by inventory and name
+    - {inventory: Production, name: web}
 ```
 
 Kinds are applied in dependency order (Label, Team, Project, Inventory,
 InventorySource, NotificationTemplate, JobTemplate, WorkflowJobTemplate,
-Schedule, EventRule) and pruned in reverse. Credentials are referenced, never declared:
+Schedule, EventRule, MaintenanceWindow) and pruned in reverse. Credentials are referenced, never declared:
 secrets stay out of git. Event streams are referenced too: create them in the
 API or the UI. An event rule runs as the user who last saved the source
-([Event rules](operations.md#owner-and-rights)).
+([Event rules](operations.md#owner-and-rights)): a rule in `auto` mode takes that user's
+`EventRule Automate` role, or `Organization Admin`.

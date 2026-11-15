@@ -636,9 +636,14 @@ func registerWorkflows() {
 		name: "workflow_approvals", typ: "workflow_approval", verbose: "Workflow Approval",
 		templateField: "workflow_approval_template", templateRes: "workflow_approval_templates",
 		visible: func(c *Ctx, arg ArgFunc) string {
-			return "t.id IN (SELECT n.job_id FROM workflow_job_nodes n JOIN unified_jobs t ON t.id = n.workflow_job_id WHERE " + wjVisible(c, arg) + ")"
+			// An event rule's approvals are seen by those who see the rule.
+			return "t.id IN (SELECT n.job_id FROM workflow_job_nodes n JOIN unified_jobs t ON t.id = n.workflow_job_id WHERE " + wjVisible(c, arg) +
+				") OR t.event_rule_id IN (SELECT t.id FROM event_rules t WHERE " + api.ViewPredicate(c, api.Lookup("event_rules"), arg) + ")"
 		},
 		canManage: func(c *Ctx, job Obj) (bool, error) {
+			if rule := approvalRule(c, job); rule != 0 {
+				return rulePerm(c, rule, "change")
+			}
 			wf := approvalWorkflowTemplate(c, job)
 			if wf == 0 {
 				return false, nil
@@ -740,15 +745,34 @@ func approvalWorkflowTemplate(c *Ctx, job Obj) int64 {
 	return wf
 }
 
+// approvalRule returns the event rule whose action an approval holds, or 0.
+func approvalRule(c *Ctx, job Obj) int64 {
+	var rule int64
+	c.DB().QueryRow(c, "SELECT coalesce(event_rule_id, 0) FROM unified_jobs WHERE id = $1 AND type = 'workflow_approval'", job["id"]).Scan(&rule)
+	return rule
+}
+
+// rulePerm checks a permission on an event rule; one the user can't see is
+// refused.
+func rulePerm(c *Ctx, rule int64, perm string) (bool, error) {
+	ok, err := api.HasPermID(c, "event_rules", rule, perm)
+	if errors.Is(err, api.ErrNotFound) {
+		return false, nil
+	}
+	return ok, err
+}
+
 func canApprove(c *Ctx, job Obj) error {
 	if c.User.Superuser {
 		return nil
 	}
-	wf := approvalWorkflowTemplate(c, job)
-	if wf == 0 {
-		return api.ErrForbidden
+	var ok bool
+	var err error
+	if rule := approvalRule(c, job); rule != 0 {
+		ok, err = rulePerm(c, rule, "approve")
+	} else if wf := approvalWorkflowTemplate(c, job); wf != 0 {
+		ok, err = ujtPerm(c, wf, "approve")
 	}
-	ok, err := ujtPerm(c, wf, "approve")
 	if err != nil {
 		return err
 	}
@@ -788,6 +812,9 @@ func decideApproval(c *Ctx, w http.ResponseWriter, obj Obj, approve bool) {
 		return
 	}
 	notifyApproval(c, id, map[bool]string{true: "approved", false: "denied"}[approve])
+	if approvalRule(c, obj) != 0 {
+		c.DB().Exec(c, "SELECT pg_notify($1, '')", rulesChannel)
+	}
 	w.WriteHeader(204)
 }
 

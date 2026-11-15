@@ -2883,5 +2883,8 @@
   "Client certificate header": "En-tête du certificat client",
   "Local addresses token issuers may be at": "Adresses locales où peuvent se trouver les émetteurs de jetons",
   "Loopback and link-local addresses and cloud metadata services are refused: they are awxnext's own host. One per entry: an address, a network, or an address and port.": "Les adresses de bouclage et de lien local et les services de métadonnées cloud sont refusés : ce sont l’hôte même d’awxnext. Une par entrée : une adresse, un réseau, ou une adresse et un port.",
-  "Removes the events each event stream keeps no longer, by the stream's own retention.": "Supprime les événements que chaque flux d’événements ne conserve plus, selon la rétention propre au flux."
+  "Removes the events each event stream keeps no longer, by the stream's own retention.": "Supprime les événements que chaque flux d’événements ne conserve plus, selon la rétention propre au flux.",
+  "Automate": "Automatiser",
+  "Maintenance window": "Fenêtre de maintenance",
+  "Maintenance windows": "Fenêtres de maintenance"
 }

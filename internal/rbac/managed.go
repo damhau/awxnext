@@ -20,14 +20,15 @@ var typePerms = map[string][]string{
 	"instancegroup":        {"view", "change", "delete", "use"},
 	"folder":               {"view", "change", "delete"},
 	"eventstream":          {"view", "change", "delete"},
-	"eventrule":            {"view", "change", "delete"},
+	"eventrule":            {"view", "change", "delete", "approve", "automate"},
+	"maintenancewindow":    {"view", "change", "delete"},
 }
 
 // Types that can live in a folder.
 var folderChildTypes = []string{"credential", "project", "inventory", "jobtemplate", "workflowjobtemplate", "notificationtemplate"}
 
 // Types that can be created inside an organization (add_<type> is granted on the org).
-var orgChildTypes = []string{"team", "credential", "project", "inventory", "workflowjobtemplate", "notificationtemplate", "executionenvironment", "folder", "eventstream", "eventrule"}
+var orgChildTypes = []string{"team", "credential", "project", "inventory", "workflowjobtemplate", "notificationtemplate", "executionenvironment", "folder", "eventstream", "eventrule", "maintenancewindow"}
 
 func perms(ct string, actions ...string) []string {
 	out := make([]string, 0, len(actions))
@@ -98,7 +99,7 @@ func buildManaged() []ManagedRole {
 		{"Organization NotificationTemplate Admin", "Can manage all notifications of the organization", "organization", concat([]string{"view_organization", "add_notificationtemplate"}, all("notificationtemplate")), "notification_admin_role"},
 		{"Organization JobTemplate Admin", "Can manage all job templates of the organization", "organization", concat([]string{"view_organization"}, all("jobtemplate")), "job_template_admin_role"},
 		{"Organization ExecutionEnvironment Admin", "Can manage all execution environments of the organization", "organization", concat([]string{"view_organization", "add_executionenvironment"}, all("executionenvironment")), "execution_environment_admin_role"},
-		{"Organization Approval", "Can approve or deny a workflow approval node", "organization", concat([]string{"view_organization"}, perms("workflowjobtemplate", "view", "approve")), "approval_role"},
+		{"Organization Approval", "Can approve or deny a workflow approval node", "organization", concat([]string{"view_organization"}, perms("workflowjobtemplate", "view", "approve"), perms("eventrule", "view", "approve")), "approval_role"},
 
 		{"Team Admin", "Can manage a single team and its membership", "team", all("team"), "admin_role"},
 		{"Team Member", "Inherits permissions assigned to this team", "team", []string{"view_team", "member_team"}, "member_role"},
@@ -133,8 +134,14 @@ func buildManaged() []ManagedRole {
 
 		{"EventStream Admin", "Has all permissions to a single event stream", "eventstream", all("eventstream"), "admin_role"},
 		{"EventStream Read", "May view the event stream and its events", "eventstream", perms("eventstream", "view"), "read_role"},
-		{"EventRule Admin", "Has all permissions to a single event rule", "eventrule", all("eventrule"), "admin_role"},
+		// Admin leaves out automate: whoever creates a rule is its admin, and
+		// putting it in auto mode takes a role of its own.
+		{"EventRule Admin", "Has all permissions to a single event rule but putting it in auto mode", "eventrule", perms("eventrule", "view", "change", "delete", "approve"), "admin_role"},
+		{"EventRule Automate", "May put the event rule in auto mode, where its actions run without approval", "eventrule", perms("eventrule", "view", "change", "automate"), "automate_role"},
+		{"EventRule Approve", "May approve or deny the actions of the event rule", "eventrule", perms("eventrule", "view", "approve"), "approval_role"},
 		{"EventRule Read", "May view the event rule and its decisions", "eventrule", perms("eventrule", "view"), "read_role"},
+		{"MaintenanceWindow Admin", "Has all permissions to a single maintenance window", "maintenancewindow", all("maintenancewindow"), "admin_role"},
+		{"MaintenanceWindow Read", "May view the maintenance window", "maintenancewindow", perms("maintenancewindow", "view"), "read_role"},
 
 		{"Folder Admin", "Has all permissions to a folder, its subfolders and every object inside", "folder", folderAdmin(), "admin_role"},
 		{"Folder Execute", "May run any job or workflow template in the folder", "folder", concat([]string{"view_folder"}, perms("jobtemplate", "view", "execute"), perms("workflowjobtemplate", "view", "execute")), "execute_role"},

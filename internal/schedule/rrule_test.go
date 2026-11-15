@@ -69,3 +69,44 @@ func TestMultipleRulesAndExrule(t *testing.T) {
 		t.Fatal("zones missing")
 	}
 }
+
+func TestActive(t *testing.T) {
+	r, err := Parse("DTSTART;TZID=Europe/Zurich:20240101T220000 RRULE:FREQ=DAILY EXDATE;TZID=Europe/Zurich:20240103T220000")
+	if err != nil {
+		t.Fatal(err)
+	}
+	zurich, _ := time.LoadLocation("Europe/Zurich")
+	at := func(s string) time.Time {
+		x, err := time.ParseInLocation("2006-01-02 15:04", s, zurich)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return x
+	}
+	for _, tc := range []struct {
+		at   string
+		want string
+	}{
+		{"2024-01-01 21:59", ""},
+		{"2024-01-01 22:00", "2024-01-02 00:00"},
+		{"2024-01-01 23:59", "2024-01-02 00:00"},
+		{"2024-01-02 00:00", ""},
+		{"2024-01-03 23:00", ""},
+		{"2024-01-04 22:30", "2024-01-05 00:00"},
+		{"2023-12-31 23:00", ""},
+	} {
+		_, end, ok := r.Active(at(tc.at), 2*time.Hour)
+		got := ""
+		if ok {
+			got = end.In(zurich).Format("2006-01-02 15:04")
+		}
+		if got != tc.want {
+			t.Errorf("%s: active until %q, want %q", tc.at, got, tc.want)
+		}
+	}
+	overlap, _ := Parse("DTSTART:20240101T000000Z RRULE:FREQ=HOURLY")
+	start, end, ok := overlap.Active(time.Date(2024, 1, 1, 5, 30, 0, 0, time.UTC), 3*time.Hour)
+	if !ok || start.Hour() != 5 || end.Hour() != 8 {
+		t.Fatalf("overlapping occurrences: %v %v %v", start, end, ok)
+	}
+}

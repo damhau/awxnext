@@ -22,7 +22,8 @@ import (
 // Event rules (awxnext, roadmap M14-02): a CEL filter over the events of
 // some streams, a key and a throttle per key, and an action the rule runs
 // as its owner: a launch, a notification, or an event posted to another
-// stream. The evaluator is in rule_engine.go.
+// stream. The evaluator is in rule_engine.go, the guardrails that hold
+// actions back (roadmap M14-03) in rule_guardrails.go.
 
 const (
 	actionLaunch = "launch"
@@ -34,6 +35,13 @@ const (
 	schemaEvents      = 100
 	maxRuleStreams    = 20
 	maxThrottleWindow = 7 * 24 * 3600
+
+	modeShadow   = "shadow"
+	modeApproval = "approval"
+	modeAuto     = "auto"
+
+	windowHold     = "hold"
+	windowApproval = "approval"
 )
 
 // eventRule is a rule as the evaluator and the checks see it.
@@ -46,7 +54,7 @@ type eventRule struct {
 	Filter       string
 	Key          string
 	Throttle     string
-	Window       int
+	Window       int64
 	Action       string
 	Template     *int64
 	ExtraVars    map[string]string
@@ -56,6 +64,16 @@ type eventRule struct {
 	Target       *int64
 	EventType    string
 	EventData    string
+
+	Mode                string
+	MaxRuns             int64
+	HostLock            bool
+	GroupShare          int64
+	BreakerFirings      int64
+	BreakerWindow       int64
+	BreakerNotification *int64
+	WindowAction        string
+	ApprovalTimeout     int64
 
 	// stopped is set when the evaluator stops the rule within a batch.
 	stopped bool
@@ -90,12 +108,17 @@ func ruleFromObj(o Obj) *eventRule {
 		Filter: str(o["filter"]), Key: str(o["key"]), Throttle: str(o["throttle"]), Action: str(o["action"]),
 		Template: optID(o["unified_job_template"]), Limit: str(o["limit"]), Notification: optID(o["notification_template"]),
 		Message: str(o["message"]), Target: optID(o["target_stream"]), EventType: str(o["event_type"]), EventData: str(o["event_data"]),
-		ExtraVars: map[string]string{},
+		ExtraVars: map[string]string{}, Mode: str(o["mode"]), HostLock: boolv(o["host_lock"]),
+		BreakerNotification: optID(o["breaker_notification_template"]), WindowAction: str(o["window_action"]),
 	}
 	r.ID, _ = api.ID(o["id"])
 	r.Org, _ = api.ID(o["organization"])
-	w, _ := api.ID(o["throttle_window"])
-	r.Window = int(w)
+	r.Window, _ = api.ID(o["throttle_window"])
+	r.MaxRuns, _ = api.ID(o["max_concurrent_runs"])
+	r.GroupShare, _ = api.ID(o["max_group_share"])
+	r.BreakerFirings, _ = api.ID(o["breaker_firings"])
+	r.BreakerWindow, _ = api.ID(o["breaker_window"])
+	r.ApprovalTimeout, _ = api.ID(o["approval_timeout"])
 	if m, ok := o["extra_vars"].(map[string]any); ok {
 		for k, v := range m {
 			r.ExtraVars[k] = fmt.Sprint(v)
@@ -167,6 +190,8 @@ func registerEventRules() {
 			{Name: "streams", Type: api.TJSON, Required: true, Validate: validateRuleStreams,
 				Help: "The ids of the event streams whose events the rule reads."},
 			{Name: "enabled", Type: api.TBool, Default: true},
+			{Name: "mode", Type: api.TChoice, Default: modeShadow, Choices: labelled(modeShadow, "Shadow", modeApproval, "Approval", modeAuto, "Auto"),
+				Help: "shadow: record what the rule would do, and do nothing. approval: each action waits for a workflow approval. auto: act. Putting a rule in auto mode takes the EventRule Automate role."},
 			{Name: "owner", Type: api.TFK, Ref: "users", ReadOnly: true, Nullable: true,
 				Help: "The user the rule runs as: whoever saved it last. Its rights are checked when it is saved and at each action."},
 			exprField("filter", "A CEL condition on event, such as event.type == \"alert.firing\". The rule acts on the events it holds for.", true),
@@ -185,6 +210,20 @@ func registerEventRules() {
 			{Name: "target_stream", Type: api.TFK, Ref: "event_streams", Nullable: true, Help: "The stream the rule posts events to."},
 			exprField("event_type", "A CEL expression giving the posted event's type.", false),
 			exprField("event_data", "A CEL expression giving the posted event's data. Empty: the event's own data.", false),
+			{Name: "max_concurrent_runs", Type: api.TInt, Default: 0, Validate: between(0, maxRuleRuns),
+				Help: "Most jobs the rule's launches may run at once: a launch beyond is held back. 0: no limit."},
+			{Name: "host_lock", Type: api.TBool, Default: false, Help: "Hold back a launch on a host that a running job uses."},
+			{Name: "max_group_share", Type: api.TInt, Default: 0, Validate: between(0, 100),
+				Help: "Most percent of an inventory group's hosts that the jobs of event rules may run on at once: a launch beyond is held back. 0: no limit."},
+			{Name: "breaker_firings", Type: api.TInt, Default: 0, Validate: between(0, maxBreakerFirings),
+				Help: "Firings of one key within breaker_window that trip its circuit breaker: the rule stops acting for the key until a person resets it. 0: no breaker."},
+			{Name: "breaker_window", Type: api.TInt, Default: 3600, Validate: between(1, maxThrottleWindow), Help: "The circuit breaker's window, in seconds."},
+			{Name: "breaker_notification_template", Type: api.TFK, Ref: "notification_templates", Nullable: true,
+				Help: "The notification sent when a key's circuit breaker trips."},
+			{Name: "window_action", Type: api.TChoice, Default: windowHold, Choices: labelled(windowHold, "Hold back", windowApproval, "Ask for approval"),
+				Help: "What the rule does with an action inside a maintenance window or a change freeze: hold it back, or ask for an approval."},
+			{Name: "approval_timeout", Type: api.TInt, Default: 3600, Validate: between(0, maxThrottleWindow),
+				Help: "Seconds the rule's approvals wait before they time out. 0: no limit."},
 			{Name: "stopped_reason", Type: api.TText, ReadOnly: true, Help: "Why the rule stopped by itself, such as its owner losing a right."},
 			{Name: "last_fired", Type: api.TDateTime, ReadOnly: true, Nullable: true, Help: "When the rule last acted."},
 		},
@@ -195,8 +234,11 @@ func registerEventRules() {
 		AfterUpdate: func(c *Ctx, old, obj Obj) error {
 			return ruleSaved(c, old, obj)
 		},
-		Summary:  ruleSummary,
-		SubLists: []*SubList{readOnlyChildSub("decisions", "event_rule_decisions", "rule_id")},
+		BeforeDelete: cancelRuleApprovals,
+		Summary:      ruleSummary,
+		SubLists: []*SubList{readOnlyChildSub("decisions", "event_rule_decisions", "rule_id"),
+			readOnlyChildSub("breakers", "event_rule_breakers", "rule_id")},
+		Actions: []*api.Action{{Name: "reset_breaker", Methods: []string{"POST"}, Perm: "change", Handler: resetBreakerView}},
 	})
 
 	api.Register(&Resource{
@@ -224,11 +266,49 @@ func registerEventRules() {
 			{Name: "key", Type: api.TString, ReadOnly: true},
 			{Name: "outcome", Type: api.TChoice, ReadOnly: true, Choices: labelled(
 				"launched", "Launched", "notified", "Notified", "posted", "Posted", "throttled", "Throttled",
-				"deduplicated", "Deduplicated", "waiting", "Waiting", "refused", "Refused", "failed", "Failed", "error", "Error", "dropped", "Dropped")},
+				"deduplicated", "Deduplicated", "waiting", "Waiting", "refused", "Refused", "failed", "Failed", "error", "Error", "dropped", "Dropped",
+				"shadow", "Shadow", "held", "Held back", "awaiting_approval", "Awaiting approval", "denied", "Denied", "timed_out", "Timed out",
+				"canceled", "Canceled")},
 			{Name: "reason", Type: api.TText, ReadOnly: true},
+			{Name: "mode", Type: api.TChoice, ReadOnly: true, Choices: labelled(modeShadow, "Shadow", modeApproval, "Approval", modeAuto, "Auto"),
+				Help: "The rule's mode when it decided."},
+			{Name: "guardrail", Type: api.TChoice, ReadOnly: true, Choices: labelled("", "None", guardBreaker, "Circuit breaker",
+				guardMaintenance, "Maintenance window", guardFreeze, "Change freeze", guardRuns, "Concurrent runs", guardHostLock, "Host lock",
+				guardGroupShare, "Group share"), Help: "What held the action back, or made it wait for approval."},
+			{Name: "fired", Type: api.TBool, ReadOnly: true, Help: "The action ran, asked for approval, or would have run in shadow mode: the circuit breaker counts it."},
+			{Name: "approval", Column: "approval_id", Type: api.TFK, Ref: "workflow_approvals", ReadOnly: true, Nullable: true,
+				Help: "The workflow approval the action waits for."},
 			{Name: "window", Column: "window_id", Type: api.TInt, ReadOnly: true, Nullable: true, Help: "The once_after window the event belongs to."},
 			{Name: "job", Type: api.TFK, Ref: "unified_jobs", ReadOnly: true, Nullable: true},
 			{Name: "details", Type: api.TJSON, ReadOnly: true},
+		},
+		View: func(c *Ctx, arg ArgFunc) string {
+			return fmt.Sprintf("t.rule_id IN (SELECT t.id FROM event_rules t WHERE %s)", api.ViewPredicate(c, ruleRes, arg))
+		},
+	})
+
+	api.Register(&Resource{
+		Name:         "event_rule_breakers",
+		Type:         "event_rule_breaker",
+		Table:        "event_rule_breakers",
+		Verbose:      "Event Rule Breaker",
+		NoTimestamps: true,
+		NoName:       true,
+		ReadOnly:     true,
+		NoActivity:   true,
+		Ordering:     "-id",
+		SearchFields: []string{"key"},
+		Fields: []*Field{
+			{Name: "created", Type: api.TDateTime, ReadOnly: true},
+			{Name: "modified", Type: api.TDateTime, ReadOnly: true},
+			{Name: "rule", Type: api.TFK, Ref: "event_rules", ReadOnly: true},
+			{Name: "shadow", Type: api.TBool, ReadOnly: true, Help: "Tripped by the rule in shadow mode, which only records it."},
+			{Name: "key", Type: api.TString, ReadOnly: true},
+			{Name: "tripped_at", Type: api.TDateTime, ReadOnly: true, Nullable: true,
+				Help: "When the breaker tripped, as the event that tripped it was received. Empty: reset."},
+			{Name: "firings", Type: api.TInt, ReadOnly: true, Help: "The firings within the window that tripped it."},
+			{Name: "reset_at", Type: api.TDateTime, ReadOnly: true, Nullable: true},
+			{Name: "reset_by", Type: api.TFK, Ref: "users", ReadOnly: true, Nullable: true},
 		},
 		View: func(c *Ctx, arg ArgFunc) string {
 			return fmt.Sprintf("t.rule_id IN (SELECT t.id FROM event_rules t WHERE %s)", api.ViewPredicate(c, ruleRes, arg))
@@ -327,7 +407,8 @@ func saveEventRule(c *Ctx, old, data Obj) error {
 	}
 	changed := old == nil
 	for _, f := range []string{"streams", "filter", "key", "throttle", "throttle_window", "action", "unified_job_template",
-		"extra_vars", "limit", "notification_template", "message", "target_stream", "event_type", "event_data"} {
+		"extra_vars", "limit", "notification_template", "message", "target_stream", "event_type", "event_data",
+		"mode", "max_concurrent_runs", "host_lock", "max_group_share", "breaker_notification_template"} {
 		if _, ok := data[f]; ok && (old == nil || !sameValue(old[f], data[f])) {
 			changed = true
 		}
@@ -346,6 +427,9 @@ func saveEventRule(c *Ctx, old, data Obj) error {
 	oc := *c
 	oc.User = owner
 	if err := checkRuleTargets(&oc, r); err != nil {
+		return err
+	}
+	if err := checkRuleGuardrails(&oc, r); err != nil {
 		return err
 	}
 	s, err := streamSchema(c, r.Streams)
@@ -386,6 +470,17 @@ func checkRuleShape(r *eventRule) error {
 	fe := api.FieldErrors{}
 	if r.Throttle != "" && r.Window < 1 {
 		fe.Add("throttle_window", "A throttle needs a window of at least one second.")
+	}
+	if r.Action != actionLaunch {
+		if r.MaxRuns > 0 {
+			fe.Add("max_concurrent_runs", "Only a rule that launches has runs to bound.")
+		}
+		if r.HostLock {
+			fe.Add("host_lock", "Only a rule that launches has hosts to lock.")
+		}
+		if r.GroupShare > 0 {
+			fe.Add("max_group_share", "Only a rule that launches has hosts to share.")
+		}
 	}
 	switch r.Action {
 	case actionLaunch:
@@ -504,9 +599,19 @@ func checkRuleExprs(s *rules.Schema, r *eventRule) error {
 }
 
 // ruleRefusal says why the user of c may not run the rule, or "" when they
-// may: they must see its streams and be allowed its action.
+// may: they must see its streams and be allowed its action, and, for a rule
+// in auto mode, be allowed to automate it.
 func ruleRefusal(c *Ctx, r *eventRule) (string, error) {
 	who := c.User.Username
+	if r.Mode == modeAuto {
+		ok, err := api.HasPerm(c, api.Lookup("event_rules"), Obj{"id": r.ID, "organization": r.Org}, "automate")
+		if err != nil {
+			return "", err
+		}
+		if !ok {
+			return fmt.Sprintf("%s may not put the rule in auto mode: that takes the EventRule Automate role.", who), nil
+		}
+	}
 	streams := api.Lookup("event_streams")
 	for _, s := range r.Streams {
 		ok, err := api.CanView(c, streams, s)
@@ -554,9 +659,25 @@ func ruleRefusal(c *Ctx, r *eventRule) (string, error) {
 
 // ruleSaved starts the rule on its streams: a stream no other enabled rule
 // reads starts at its latest event, so a rule doesn't act on events
-// received before it was enabled. A rule disabled drops its open window.
+// received before it was enabled. A rule disabled, or changing mode, drops
+// its open window.
 func ruleSaved(c *Ctx, old, obj Obj) error {
 	id, _ := api.ID(obj["id"])
+	if old != nil && str(old["mode"]) != str(obj["mode"]) {
+		if err := dropWindows(c, c.DB(), id, "The rule changed mode before its window ended."); err != nil {
+			return err
+		}
+		if str(obj["mode"]) == modeShadow {
+			// A new shadow run starts from nothing.
+			for _, sql := range []string{`DELETE FROM event_rule_keys WHERE rule_id = $1 AND shadow`,
+				`DELETE FROM event_rule_breakers WHERE rule_id = $1 AND shadow`,
+				`UPDATE event_rules SET shadow_since = now() WHERE id = $1`} {
+				if _, err := c.DB().Exec(c, sql, id); err != nil {
+					return err
+				}
+			}
+		}
+	}
 	if !boolv(obj["enabled"]) {
 		if old != nil && boolv(old["enabled"]) {
 			return dropWindows(c, c.DB(), id, "The rule was disabled before its window ended.")

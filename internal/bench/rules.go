@@ -112,7 +112,7 @@ func Rules(ctx context.Context, t Target, o RulesOptions) (*RulesResult, error) 
 	}
 	rule, err := c.create(ctx, "event_rules/", map[string]any{"name": name, "organization": org, "streams": []int64{source},
 		"filter": `event.type == "bench.alert" && event.data.severity == "critical"`, "key": "event.data.host",
-		"throttle": "once_within", "throttle_window": 3600, "action": "post_event", "target_stream": target,
+		"throttle": "once_within", "throttle_window": 3600, "action": "post_event", "target_stream": target, "mode": "auto",
 		"event_type": `"bench.remediate"`, "event_data": `{"host": event.data.host, "n": event.data.n}`})
 	if err != nil {
 		return nil, err

@@ -22,6 +22,7 @@ func init() {
 	registerWebhooks()
 	registerEventStreams()
 	registerEventRules()
+	registerMaintenanceWindows()
 	registerRoles()
 	registerActivity()
 	registerRelatedLists()

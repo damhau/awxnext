@@ -33,6 +33,7 @@ export function modelLabel(model: string, many = false): string {
     instancegroup: [tr('Instance group'), tr('Instance groups')],
     eventstream: [tr('Event stream'), tr('Event streams')],
     eventrule: [tr('Event rule'), tr('Event rules')],
+    maintenancewindow: [tr('Maintenance window'), tr('Maintenance windows')],
   }
   const n = names[m]
   return n ? n[many ? 1 : 0] : m
@@ -50,13 +51,14 @@ export function actionLabel(p: Perm): string {
     update: tr('Sync'),
     adhoc: tr('Run commands'),
     approve: tr('Approve'),
+    automate: tr('Automate'),
     member: tr('Be a member'),
     audit: tr('Audit'),
   }
   return labels[p.action] ?? p.action
 }
 
-const actionOrder = ['view', 'use', 'execute', 'update', 'adhoc', 'approve', 'member', 'change', 'add', 'delete']
+const actionOrder = ['view', 'use', 'execute', 'update', 'adhoc', 'approve', 'automate', 'member', 'change', 'add', 'delete']
 
 /** The allowed permissions by kind of object: the role's own type first. */
 export function groupPerms(allowed: string[], contentType: string): { model: string; perms: Perm[] }[] {

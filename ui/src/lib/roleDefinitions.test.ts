@@ -8,11 +8,15 @@ describe('role definitions', () => {
     expect(actionLabel(parsePerm('awx.adhoc_inventory'))).toBe('Run commands')
     expect(modelLabel('awx.jobtemplate')).toBe('Job template')
     expect(modelLabel('inventory', true)).toBe('Inventories')
+    expect(actionLabel(parsePerm('awx.automate_eventrule'))).toBe('Automate')
+    expect(modelLabel('awx.maintenancewindow', true)).toBe('Maintenance windows')
   })
   it('groups by kind of object, the role’s own first', () => {
     const g = groupPerms(['awx.view_inventory', 'awx.change_jobtemplate', 'awx.view_jobtemplate', 'shared.view_organization'], 'shared.organization')
     expect(g.map((x) => x.model)).toEqual(['organization', 'inventory', 'jobtemplate'])
     expect(g[2].perms.map((p) => p.action)).toEqual(['view', 'change'])
+    const rule = groupPerms(['awx.change_eventrule', 'awx.automate_eventrule', 'awx.approve_eventrule', 'awx.view_eventrule'], 'awx.eventrule')
+    expect(rule[0].perms.map((p) => p.action)).toEqual(['view', 'approve', 'automate', 'change'])
   })
   it('keeps view on for what it grants', () => {
     expect(togglePerm([], 'awx.execute_jobtemplate').sort()).toEqual(['awx.execute_jobtemplate', 'awx.view_jobtemplate'])

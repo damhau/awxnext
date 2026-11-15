@@ -248,3 +248,17 @@ func (r *Rule) Last() (time.Time, bool) {
 	}
 	return last, !last.IsZero()
 }
+
+// Active returns the occurrence that covers t when each lasts d: the latest
+// one started at or before t and ending after it, and when it ends.
+func (r *Rule) Active(t time.Time, d time.Duration) (start, end time.Time, ok bool) {
+	s, found := r.After(t.Add(-d))
+	for i := 0; found && !s.After(t) && i < 10000; i++ {
+		start, ok = s, true
+		s, found = r.After(s)
+	}
+	if ok {
+		end = start.Add(d)
+	}
+	return start, end, ok
+}

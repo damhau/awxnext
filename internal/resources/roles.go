@@ -147,6 +147,8 @@ func ctLabel(ct string) string {
 		return "Event Stream"
 	case "eventrule":
 		return "Event Rule"
+	case "maintenancewindow":
+		return "Maintenance Window"
 	}
 	return strings.ToUpper(ct[:1]) + ct[1:]
 }
