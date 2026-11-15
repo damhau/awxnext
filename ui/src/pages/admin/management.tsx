@@ -24,7 +24,7 @@ const explain: Record<string, string> = {
   cleanup_sessions: tr('Removes expired browser sessions.'),
   cleanup_tokens: tr('Removes expired API tokens.'),
   cleanup_host_metrics: tr('Removes soft-deleted host metrics older than the retention period.'),
-  cleanup_event_streams: tr('Removes the events each event stream keeps no longer, by the stream\'s own retention.'),
+  cleanup_event_streams: tr('Removes the events each event stream keeps no longer, by the stream\'s own retention, and the rule decisions on them.'),
 }
 
 function LaunchDialog({ t, onClose }: { t: SJT; onClose: () => void }) {

@@ -238,7 +238,8 @@ func registerEventRules() {
 		Summary:      ruleSummary,
 		SubLists: []*SubList{readOnlyChildSub("decisions", "event_rule_decisions", "rule_id"),
 			readOnlyChildSub("breakers", "event_rule_breakers", "rule_id")},
-		Actions: []*api.Action{{Name: "reset_breaker", Methods: []string{"POST"}, Perm: "change", Handler: resetBreakerView}},
+		Actions: []*api.Action{{Name: "reset_breaker", Methods: []string{"POST"}, Perm: "change", Handler: resetBreakerView},
+			{Name: "backtest", Methods: []string{"POST"}, Perm: "view", Handler: backtestView}},
 	})
 
 	api.Register(&Resource{
@@ -265,7 +266,7 @@ func registerEventRules() {
 			{Name: "node", Type: api.TString, ReadOnly: true, Help: "The node that decided."},
 			{Name: "key", Type: api.TString, ReadOnly: true},
 			{Name: "outcome", Type: api.TChoice, ReadOnly: true, Choices: labelled(
-				"launched", "Launched", "notified", "Notified", "posted", "Posted", "throttled", "Throttled",
+				"not_matched", "Not matched", "launched", "Launched", "notified", "Notified", "posted", "Posted", "throttled", "Throttled",
 				"deduplicated", "Deduplicated", "waiting", "Waiting", "refused", "Refused", "failed", "Failed", "error", "Error", "dropped", "Dropped",
 				"shadow", "Shadow", "held", "Held back", "awaiting_approval", "Awaiting approval", "denied", "Denied", "timed_out", "Timed out",
 				"canceled", "Canceled")},
@@ -280,11 +281,21 @@ func registerEventRules() {
 				Help: "The workflow approval the action waits for."},
 			{Name: "window", Column: "window_id", Type: api.TInt, ReadOnly: true, Nullable: true, Help: "The once_after window the event belongs to."},
 			{Name: "job", Type: api.TFK, Ref: "unified_jobs", ReadOnly: true, Nullable: true},
-			{Name: "details", Type: api.TJSON, ReadOnly: true},
+			{Name: "details", Type: api.TJSON, ReadOnly: true,
+				Help: "What the decision saw: for not_matched, the filter's part that failed (filter.expression, filter.start and filter.end in the filter, filter.error) and the values it read (filter.values)."},
+			{Name: "trace_id", Type: api.TString, ReadOnly: true, Help: "The OpenTelemetry trace of the event's decisions and of the job launched. Empty: none."},
 		},
 		View: func(c *Ctx, arg ArgFunc) string {
 			return fmt.Sprintf("t.rule_id IN (SELECT t.id FROM event_rules t WHERE %s)", api.ViewPredicate(c, ruleRes, arg))
 		},
+	})
+	events := api.Lookup("stream_events")
+	events.SubLists = append(events.SubLists, &SubList{Name: "decisions", Target: "event_rule_decisions", ReadOnly: true,
+		Filter: func(arg ArgFunc, pid int64) string {
+			// received finds the decisions' partition.
+			return fmt.Sprintf(`(t.stream_id, t.sequence, t.received) = (SELECT e.stream_id, e.sequence, e.received FROM stream_events e WHERE e.id = %s)`, arg(pid))
+		},
+		Order: func(int64) string { return "t.rule_id" },
 	})
 
 	api.Register(&Resource{

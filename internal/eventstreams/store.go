@@ -180,6 +180,26 @@ func Recent(ctx context.Context, db DB, streams []int64, limit int) ([]Stored, e
 	return out, nil
 }
 
+// Between returns the events of streams received in [since, until), test
+// mode's aside, in the order they were received: at most limit.
+func Between(ctx context.Context, db DB, streams []int64, since, until time.Time, limit int) ([]Stored, error) {
+	rows, err := db.Query(ctx, `SELECT `+storedColumns+` FROM stream_events WHERE stream_id = ANY($1) AND NOT test_mode
+		AND received >= $2 AND received < $3 ORDER BY received, stream_id, sequence LIMIT $4`, streams, since, until, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Stored
+	for rows.Next() {
+		ev, err := scanStored(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, ev)
+	}
+	return out, rows.Err()
+}
+
 // Position is where consumer has read a stream to: 0, its start, when it
 // never saved a position.
 func Position(ctx context.Context, db DB, consumer string, stream int64) (int64, error) {
@@ -198,22 +218,25 @@ func SavePosition(ctx context.Context, db DB, consumer string, stream, position 
 	return err
 }
 
-const partitionPrefix = "stream_events_"
+// partitioned are the tables partitioned by day: the event log and the
+// rules' decisions on it.
+var partitioned = []string{"stream_events", "event_rule_decisions"}
 
-var partitionRe = regexp.MustCompile(`^stream_events_(\d{8})$`)
+var partitionRe = regexp.MustCompile(`_(\d{8})$`)
 
-// MaintainPartitions creates the log's partitions of today and the next
-// two days.
+// MaintainPartitions creates the partitions of today and the next two days.
 func MaintainPartitions(ctx context.Context, db DB) {
 	now := time.Now().UTC()
-	for d := 0; d < 3; d++ {
-		day := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC).AddDate(0, 0, d)
-		name := partitionPrefix + day.Format("20060102")
-		_, err := db.Exec(ctx, fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s PARTITION OF stream_events FOR VALUES FROM ('%s') TO ('%s')`,
-			pgx.Identifier{name}.Sanitize(), day.Format(time.RFC3339), day.AddDate(0, 0, 1).Format(time.RFC3339)))
-		if err != nil {
-			// The day's events already landed in the default partition; it keeps them.
-			slog.Debug("stream event partition", "name", name, "err", err)
+	for _, table := range partitioned {
+		for d := 0; d < 3; d++ {
+			day := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC).AddDate(0, 0, d)
+			name := table + "_" + day.Format("20060102")
+			_, err := db.Exec(ctx, fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s PARTITION OF %s FOR VALUES FROM ('%s') TO ('%s')`,
+				pgx.Identifier{name}.Sanitize(), pgx.Identifier{table}.Sanitize(), day.Format(time.RFC3339), day.AddDate(0, 0, 1).Format(time.RFC3339)))
+			if err != nil {
+				// The day's rows already landed in the default partition; it keeps them.
+				slog.Debug("partition", "name", name, "err", err)
+			}
 		}
 	}
 }
@@ -227,6 +250,53 @@ type CleanupResult struct {
 
 const cleanupBatch = 10000
 
+// dropDays drops the day partitions of table that end before cutoff and
+// returns them with the rows they held. With dryRun it only counts.
+func dropDays(ctx context.Context, db DB, table string, cutoff time.Time, dryRun bool) ([]string, int64, error) {
+	rows, err := db.Query(ctx, `SELECT c.relname FROM pg_inherits i JOIN pg_class c ON c.oid = i.inhrelid
+		WHERE i.inhparent = $1::regclass ORDER BY c.relname`, table)
+	if err != nil {
+		return nil, 0, err
+	}
+	var parts []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			rows.Close()
+			return nil, 0, err
+		}
+		parts = append(parts, name)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
+	var dropped []string
+	var total int64
+	for _, name := range parts {
+		m := partitionRe.FindStringSubmatch(name)
+		if m == nil || name != table+"_"+m[1] {
+			continue
+		}
+		day, err := time.Parse("20060102", m[1])
+		if err != nil || day.AddDate(0, 0, 1).After(cutoff) {
+			continue
+		}
+		var n int64
+		if err := db.QueryRow(ctx, `SELECT count(*) FROM `+pgx.Identifier{name}.Sanitize()).Scan(&n); err != nil {
+			return dropped, total, err
+		}
+		if !dryRun {
+			if _, err := db.Exec(ctx, `DROP TABLE `+pgx.Identifier{name}.Sanitize()); err != nil {
+				return dropped, total, err
+			}
+		}
+		dropped = append(dropped, name)
+		total += n
+	}
+	return dropped, total, nil
+}
+
 // Cleanup removes what streams keep no longer: the days older than every
 // stream's retention, whole, then each stream's expired events, the events
 // of deleted streams, and the IDs kept to drop duplicates, as long as
@@ -237,42 +307,10 @@ func Cleanup(ctx context.Context, db DB, now time.Time, dryRun bool) (CleanupRes
 	if err := db.QueryRow(ctx, `SELECT coalesce(max(retention_days), 0) FROM event_streams`).Scan(&longest); err != nil {
 		return res, err
 	}
-	cutoff := now.UTC().AddDate(0, 0, -longest)
-	rows, err := db.Query(ctx, `SELECT c.relname FROM pg_inherits i JOIN pg_class c ON c.oid = i.inhrelid
-		WHERE i.inhparent = 'stream_events'::regclass ORDER BY c.relname`)
+	var err error
+	res.Partitions, res.Events, err = dropDays(ctx, db, "stream_events", now.UTC().AddDate(0, 0, -longest), dryRun)
 	if err != nil {
 		return res, err
-	}
-	var parts []string
-	for rows.Next() {
-		var name string
-		if err := rows.Scan(&name); err != nil {
-			rows.Close()
-			return res, err
-		}
-		parts = append(parts, name)
-	}
-	rows.Close()
-	for _, name := range parts {
-		m := partitionRe.FindStringSubmatch(name)
-		if m == nil {
-			continue
-		}
-		day, err := time.Parse("20060102", m[1])
-		if err != nil || day.AddDate(0, 0, 1).After(cutoff) {
-			continue
-		}
-		var n int64
-		if err := db.QueryRow(ctx, `SELECT count(*) FROM `+pgx.Identifier{name}.Sanitize()).Scan(&n); err != nil {
-			return res, err
-		}
-		if !dryRun {
-			if _, err := db.Exec(ctx, `DROP TABLE `+pgx.Identifier{name}.Sanitize()); err != nil {
-				return res, err
-			}
-		}
-		res.Partitions = append(res.Partitions, name)
-		res.Events += n
 	}
 
 	type stream struct {
@@ -280,7 +318,7 @@ func Cleanup(ctx context.Context, db DB, now time.Time, dryRun bool) (CleanupRes
 		days int
 	}
 	var streams []stream
-	rows, err = db.Query(ctx, `SELECT id, retention_days FROM event_streams ORDER BY id`)
+	rows, err := db.Query(ctx, `SELECT id, retention_days FROM event_streams ORDER BY id`)
 	if err != nil {
 		return res, err
 	}

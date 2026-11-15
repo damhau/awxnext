@@ -14,6 +14,7 @@ import (
 	"github.com/damhau/awxnext/internal/jobs"
 	"github.com/damhau/awxnext/internal/metrics"
 	"github.com/damhau/awxnext/internal/rbac"
+	"github.com/damhau/awxnext/internal/tracing"
 	"github.com/damhau/awxnext/internal/vars"
 )
 
@@ -819,6 +820,12 @@ func launchNode(c *Ctx, wf jobs.Row, n *wfNode, node Obj, extra map[string]any) 
 	tpl, err := api.Get(c, tplRes, n.ujt)
 	if err != nil {
 		return 0, fmt.Errorf("the node's template no longer exists")
+	}
+	if tp := wf.Str("trace_parent"); tp != "" {
+		// The workflow's jobs run in the trace it was launched in.
+		traced := *c
+		traced.Context = tracing.WithTraceparent(c.Context, tp, "")
+		c = &traced
 	}
 	switch n.ujtType {
 	case "job_template":

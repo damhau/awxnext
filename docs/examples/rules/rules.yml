@@ -1,0 +1,24 @@
+kind: EventRule
+name: Restart on ServiceDown
+spec:
+  streams: [alertmanager]
+  filter: event.type == "alert.firing" && event.data.labels.alertname == "ServiceDown"
+  key: event.data.labels.instance
+  throttle: once_within
+  throttle_window: 3600
+  template: {kind: JobTemplate, name: Restart service}
+  extra_vars:
+    service: event.data.labels.job
+  limit: event.data.labels.instance
+  mode: auto
+  host_lock: true
+  breaker_firings: 3
+  breaker_window: 86400
+---
+kind: MaintenanceWindow
+name: Saturday freeze
+spec:
+  kind: freeze
+  rrule: "DTSTART;TZID=Europe/Zurich:20261107T220000 RRULE:FREQ=WEEKLY;BYDAY=SA"
+  duration: 7200
+  event_rules: [Restart on ServiceDown]

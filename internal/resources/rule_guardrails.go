@@ -176,6 +176,10 @@ type guards struct {
 	invOrg map[int64]int64
 	jobs   []runningJob
 	done   bool
+	wins   map[int64][]window
+	// past, in a backtest, stands for the jobs running at the time at.
+	past *pastRuns
+	at   time.Time
 }
 
 func newGuards(ctx context.Context, db api.DBTX) *guards {
@@ -183,6 +187,7 @@ func newGuards(ctx context.Context, db api.DBTX) *guards {
 }
 
 type runningJob struct {
+	// id is 0 for a launch a backtest simulated.
 	id, inventory int64
 	// org is the organization of the job's inventory: hosts are the same
 	// by name within one.
@@ -291,6 +296,9 @@ func (g *guards) targets(p *plan) (hostpattern.Set, map[int64]bool, bool, error)
 // running lists the jobs and ad hoc commands that are not finished, those
 // of event rules marked, a workflow's jobs included.
 func (g *guards) running() ([]runningJob, error) {
+	if g.past != nil {
+		return g.past.running(g.at), nil
+	}
 	if g.done {
 		return g.jobs, nil
 	}
@@ -346,7 +354,9 @@ func (g *guards) blastRadius(r *eventRule, p *plan) (*hold, error) {
 	}
 	if r.MaxRuns > 0 {
 		var n int64
-		if err := g.db.QueryRow(g.ctx, `SELECT count(*) FROM unified_jobs WHERE event_rule_id = $1 AND type <> 'workflow_approval' AND status = ANY($2)`,
+		if g.past != nil {
+			n = g.past.launches(g.at)
+		} else if err := g.db.QueryRow(g.ctx, `SELECT count(*) FROM unified_jobs WHERE event_rule_id = $1 AND type <> 'workflow_approval' AND status = ANY($2)`,
 			r.ID, activeJobStatus).Scan(&n); err != nil {
 			return nil, err
 		}
@@ -396,8 +406,12 @@ func (g *guards) blastRadius(r *eventRule, p *plan) (*hold, error) {
 		}
 		if len(busy) > 0 {
 			list := sortedHosts(busy)
+			reason := fmt.Sprintf("Job %d, still running, uses %s.", by[0], listHosts(list))
+			if by[0] == 0 {
+				reason = fmt.Sprintf("A launch of the rule, still running, uses %s.", listHosts(list))
+			}
 			return &hold{guardrail: guardHostLock, details: map[string]any{"hosts": capHosts(list), "jobs": by, "hosts_approximate": approx},
-				reason: fmt.Sprintf("Job %d, still running, uses %s.", by[0], listHosts(list))}, nil
+				reason: reason}, nil
 		}
 	}
 	if r.GroupShare > 0 {
@@ -480,27 +494,8 @@ type window struct {
 // listing it, by listing none (its organization's), or by listing a group
 // with a host the launch runs on.
 func (g *guards) windows(r *eventRule, p *plan, at time.Time) (*hold, error) {
-	rows, err := g.db.Query(g.ctx, `SELECT id, name, kind, rrule, duration, inventory_groups, event_rules @> jsonb_build_array($1::bigint),
-			event_rules = '[]'::jsonb AND inventory_groups = '[]'::jsonb
-		FROM maintenance_windows WHERE enabled AND organization_id = $2 AND (event_rules @> jsonb_build_array($1::bigint)
-			OR event_rules = '[]'::jsonb OR inventory_groups <> '[]'::jsonb)
-		ORDER BY kind, id`, r.ID, r.Org)
+	list, err := g.windowList(r)
 	if err != nil {
-		return nil, err
-	}
-	var list []window
-	for rows.Next() {
-		var w window
-		var groups []int64
-		if err := rows.Scan(&w.id, &w.name, &w.kind, &w.rrule, &w.duration, &groups, &w.listsRule, &w.organization); err != nil {
-			rows.Close()
-			return nil, err
-		}
-		w.groups = groups
-		list = append(list, w)
-	}
-	rows.Close()
-	if err := rows.Err(); err != nil {
 		return nil, err
 	}
 	var targets hostpattern.Set
@@ -547,6 +542,41 @@ func (g *guards) windows(r *eventRule, p *plan, at time.Time) (*hold, error) {
 		return h, nil
 	}
 	return nil, nil
+}
+
+// windowList loads the windows that may cover the rule, once.
+func (g *guards) windowList(r *eventRule) ([]window, error) {
+	if list, ok := g.wins[r.ID]; ok {
+		return list, nil
+	}
+	rows, err := g.db.Query(g.ctx, `SELECT id, name, kind, rrule, duration, inventory_groups, event_rules @> jsonb_build_array($1::bigint),
+			event_rules = '[]'::jsonb AND inventory_groups = '[]'::jsonb
+		FROM maintenance_windows WHERE enabled AND organization_id = $2 AND (event_rules @> jsonb_build_array($1::bigint)
+			OR event_rules = '[]'::jsonb OR inventory_groups <> '[]'::jsonb)
+		ORDER BY kind, id`, r.ID, r.Org)
+	if err != nil {
+		return nil, err
+	}
+	var list []window
+	for rows.Next() {
+		var w window
+		var groups []int64
+		if err := rows.Scan(&w.id, &w.name, &w.kind, &w.rrule, &w.duration, &groups, &w.listsRule, &w.organization); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		w.groups = groups
+		list = append(list, w)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if g.wins == nil {
+		g.wins = map[int64][]window{}
+	}
+	g.wins[r.ID] = list
+	return list, nil
 }
 
 // groupHosts returns the hosts of groups, their descendants' included.

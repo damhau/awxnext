@@ -133,3 +133,6 @@ secrets stay out of git. Event streams are referenced too: create them in the
 API or the UI. An event rule runs as the user who last saved the source
 ([Event rules](operations.md#owner-and-rights)): a rule in `auto` mode takes that user's
 `EventRule Automate` role, or `Organization Admin`.
+Documents of kind `EventRuleTest` are tests of the rules, which
+`awxnext rules test` runs in your CI ([Testing rules offline](operations.md#testing-rules-offline)):
+a sync skips them.

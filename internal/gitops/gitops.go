@@ -225,13 +225,23 @@ func checkout(ctx context.Context, app *api.App, project *int64) (string, string
 	return dir, sha, err
 }
 
-// Load reads all YAML documents below dir.
+// TestKind is the kind of `awxnext rules test`'s documents: a sync skips
+// them, so that a rule's tests can live next to it.
+const TestKind = "EventRuleTest"
+
+// Load reads all YAML documents below dir but the tests.
 func Load(dir string) ([]*Document, error) {
-	var docs []*Document
+	docs, _, err := LoadWithTests(dir)
+	return docs, err
+}
+
+// LoadWithTests reads all YAML documents below dir: the declarations, and
+// the tests apart.
+func LoadWithTests(dir string) (docs, tests []*Document, err error) {
 	if _, err := os.Stat(dir); err != nil {
-		return nil, fmt.Errorf("path %s not found in the project", filepath.Base(dir))
+		return nil, nil, fmt.Errorf("path %s not found in the project", filepath.Base(dir))
 	}
-	err := filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
+	err = filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -267,6 +277,11 @@ func Load(dir string) ([]*Document, error) {
 				return fmt.Errorf("%s#%d: %w", filepath.ToSlash(rel), n, err)
 			}
 			doc.File = fmt.Sprintf("%s#%d", filepath.ToSlash(rel), n)
+			if doc.Kind == TestKind {
+				doc.Spec, _ = normalize(doc.Spec).(map[string]any)
+				tests = append(tests, &doc)
+				continue
+			}
 			if _, ok := kinds[doc.Kind]; !ok {
 				return fmt.Errorf("%s: unsupported kind %q", doc.File, doc.Kind)
 			}
@@ -279,7 +294,7 @@ func Load(dir string) ([]*Document, error) {
 		}
 		return nil
 	})
-	return docs, err
+	return docs, tests, err
 }
 
 func hasKind(n *yaml.Node) bool {

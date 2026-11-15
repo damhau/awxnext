@@ -61,6 +61,8 @@ Commands:
   agent             run a remote execution node agent (dials back to the control plane)
   shim              run one job inside a container group pod (started by the control plane)
   install-shim DEST copy this binary to DEST (job pod init container)
+  rules test [-v] DIR
+                    run the EventRuleTest documents of a GitOps directory through its event rules, offline
   version           print the version
 `)
 	os.Exit(2)
@@ -97,6 +99,10 @@ func main() {
 		err = runAgent(ctx, os.Args[2:])
 	case "shim":
 		err = runShim(ctx, os.Args[2:])
+	case "rules":
+		code := rulesCommand(ctx, os.Args[2:])
+		stop()
+		os.Exit(code)
 	case "install-shim":
 		if len(os.Args) != 3 {
 			usage()

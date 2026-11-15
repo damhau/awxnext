@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -23,13 +24,24 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-var enabled bool
+var (
+	enabled atomic.Bool
+	// installed is a provider a test installed, in place of the global one.
+	installed atomic.Pointer[trace.TracerProvider]
+)
+
+const tracerName = "github.com/damhau/awxnext"
 
 // Enabled reports whether spans are exported.
-func Enabled() bool { return enabled }
+func Enabled() bool { return enabled.Load() }
 
 // Tracer returns the application tracer.
-func Tracer() trace.Tracer { return otel.Tracer("github.com/damhau/awxnext") }
+func Tracer() trace.Tracer {
+	if tp := installed.Load(); tp != nil {
+		return (*tp).Tracer(tracerName)
+	}
+	return otel.Tracer(tracerName)
+}
 
 // Setup configures the global tracer provider when an OTLP endpoint is set.
 // The returned function flushes and stops the exporter.
@@ -56,8 +68,48 @@ func Setup(ctx context.Context, version, node string) (func(context.Context) err
 	}
 	tp := sdktrace.NewTracerProvider(sdktrace.WithBatcher(exp), sdktrace.WithResource(res))
 	otel.SetTracerProvider(tp)
-	enabled = true
+	enabled.Store(true)
 	return tp.Shutdown, nil
+}
+
+// Install makes tp the application's tracer provider and turns spans on,
+// as Setup does with an exporter (tests). restore puts things back.
+func Install(tp trace.TracerProvider) (restore func()) {
+	prev, was := installed.Load(), enabled.Load()
+	installed.Store(&tp)
+	enabled.Store(true)
+	return func() {
+		installed.Store(prev)
+		enabled.Store(was)
+	}
+}
+
+// WithTraceparent returns ctx with the remote parent a W3C traceparent and
+// tracestate name; ctx as it is when traceparent is empty or invalid.
+func WithTraceparent(ctx context.Context, traceparent, tracestate string) context.Context {
+	if traceparent == "" {
+		return ctx
+	}
+	carrier := propagation.MapCarrier{"traceparent": traceparent}
+	if tracestate != "" {
+		carrier["tracestate"] = tracestate
+	}
+	return propagation.TraceContext{}.Extract(ctx, carrier)
+}
+
+// Traceparent is the W3C traceparent of ctx's span; empty without one.
+func Traceparent(ctx context.Context) string {
+	carrier := propagation.MapCarrier{}
+	propagation.TraceContext{}.Inject(ctx, carrier)
+	return carrier["traceparent"]
+}
+
+// TraceID is the trace id of ctx's span, in hex; empty without one.
+func TraceID(ctx context.Context) string {
+	if sc := trace.SpanContextFromContext(ctx); sc.IsValid() {
+		return sc.TraceID().String()
+	}
+	return ""
 }
 
 type statusWriter struct {
@@ -77,7 +129,7 @@ func (s *statusWriter) Unwrap() http.ResponseWriter { return s.ResponseWriter }
 // Middleware starts a server span per request, continuing incoming W3C trace context.
 func Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !enabled || r.Header.Get("Upgrade") != "" {
+		if !enabled.Load() || r.Header.Get("Upgrade") != "" {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -108,7 +160,7 @@ type QueryTracer struct{}
 type spanKey struct{}
 
 func (QueryTracer) TraceQueryStart(ctx context.Context, _ *pgx.Conn, data pgx.TraceQueryStartData) context.Context {
-	if !enabled || !trace.SpanContextFromContext(ctx).IsValid() {
+	if !enabled.Load() || !trace.SpanContextFromContext(ctx).IsValid() {
 		return ctx
 	}
 	stmt := strings.Join(strings.Fields(data.SQL), " ")

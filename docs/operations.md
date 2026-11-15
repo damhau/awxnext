@@ -539,7 +539,8 @@ GitHub's redelivery of a delivery has the same `X-GitHub-Delivery`, so it is a d
 The event log is partitioned by day, like job events. The management job
 **Cleanup Event Streams** (`cleanup_event_streams`, daily by default) drops the days older than
 every stream's retention, then deletes each stream's events older than its own, and the events
-of deleted streams. With `dry_run` it says what it would delete.
+of deleted streams. It cleans up the rules' [decisions](#decisions) too. With `dry_run` it says
+what it would delete.
 
 In test mode a stream's events are logged and shown with `test_mode: true`, but rules don't see
 them, then or after the stream leaves test mode. The rules read each stream's log from a
@@ -656,7 +657,8 @@ the rule to another mode, its shadow decisions don't throttle it or count toward
 1. Create the rule. It starts in `shadow` mode.
 1. Let it see real events, then read its decisions: `GET /api/v2/event_rules/N/decisions/`.
    Check that each `shadow` decision is an action you want, and that `throttled` and `held`
-   decisions hold back what you expect.
+   decisions hold back what you expect. To see what the rule would have done with the events
+   the log already holds, run a [backtest](#backtests).
 1. Optional: to have a person check each action first, move the rule to `approval` mode:
    `PATCH /api/v2/event_rules/N/` with `{"mode": "approval"}`.
 1. When the decisions are right, move the rule to `auto` mode with `{"mode": "auto"}`. You
@@ -793,16 +795,18 @@ curl -u admin -H 'Content-Type: application/json' https://awxnext.example.com/ap
 
 ### Decisions
 
-`GET /api/v2/event_rules/N/decisions/` lists what the rule decided for each event its filter
-held for, newest first, and `/api/v2/event_rule_decisions/` the decisions of every rule you can
-see. Each decision has the event (`stream`, `sequence`, `event_id`,
-`event_type`, `received`), the node that decided, the rule's `mode` then, the `key`, the
-`outcome` and its `reason`, the `guardrail` that held the action back or sent it for approval,
-the `approval` it waits for, and the `job` launched. `fired` marks the decisions that count
-toward the circuit breaker.
+`GET /api/v2/event_rules/N/decisions/` lists what the rule decided for each event it read, newest
+first, and `/api/v2/event_rule_decisions/` the decisions of every rule you can see.
+`GET /api/v2/stream_events/N/decisions/` lists the decisions of every rule on one event. Each
+decision has the event (`stream`, `sequence`, `event_id`, `event_type`, `received`), the node
+that decided, the rule's `mode` then, the `key`, the `outcome` and its `reason`, the `guardrail`
+that held the action back or sent it for approval, the `approval` it waits for, the `job`
+launched, and the `trace_id` of the event's [trace](#metrics-and-traces). `fired` marks the
+decisions that count toward the circuit breaker.
 
 | Outcome | Meaning |
 |---|---|
+| `not_matched` | The filter didn't hold for the event, or failed on it. |
 | `launched`, `notified`, `posted` | The rule acted. |
 | `throttled` | `once_within` held the event back. |
 | `waiting`, `deduplicated` | `once_after` keeps the event for its window, or already has one with its key. |
@@ -814,6 +818,169 @@ toward the circuit breaker.
 | `shadow` | In `shadow` mode, what the rule would have done. |
 | `awaiting_approval` | The action waits for the workflow approval in `approval`. |
 | `denied`, `timed_out`, `canceled` | The approval was denied, timed out, or canceled. |
+
+A `not_matched` decision names the part of the filter that failed. With the filter
+`event.type == "alert.firing" && event.data.labels.alertname == "DiskFull"` and a `HighCPU`
+alert, the reason is `The filter's condition event.data.labels.alertname == "DiskFull" is
+false.`, and `details.filter` holds:
+
+```json
+{
+  "expression": "event.data.labels.alertname == \"DiskFull\"",
+  "start": 32,
+  "end": 73,
+  "values": [{"expression": "event.data.labels.alertname", "value": "HighCPU"}]
+}
+```
+
+`start` and `end` are the part's offsets in the filter, and `values` what its operands were,
+at most five. A long value is summarized: a string by its length, an object by its keys, a list
+by its size. When the filter failed on the event, such as on a key the event doesn't have,
+`error` says why. The decision holds no copy of the event: the event is in the stream's log.
+
+To keep the log small, a `not_matched` decision is kept as long as its event, for its stream's
+`retention_days`. The other decisions are kept for **Days event rule decisions are kept**
+(`EVENT_RULE_DECISION_RETENTION_DAYS`, 90 by default), or longer when their stream keeps its
+events longer; `0` keeps them as long as their events. The management job
+**Cleanup Event Streams** removes them, and the throttle keys that expired more than a day ago.
+The decision log is partitioned by day, like the event log.
+
+### Backtests
+
+A backtest runs a rule over a period of the event log, as `shadow` mode would have, and says
+how many times the rule would have fired, on which keys and hosts, and what its guardrails would
+have held back. It records no decision and takes no throttle key, so you can run it on a rule in
+any mode.
+
+To backtest a saved rule, post to `/api/v2/event_rules/N/backtest/`. To try a change first, add
+the rule's fields that you'd change: the backtest runs that draft and leaves the rule as it is.
+To backtest a rule you haven't saved, post all its fields to `/api/v2/event_rules/backtest/`:
+
+```sh
+curl -u admin -H 'Content-Type: application/json' https://awxnext.example.com/api/v2/event_rules/7/backtest/ -d '{
+  "since": "2026-11-14T00:00:00Z",
+  "until": "2026-11-15T00:00:00Z",
+  "host_lock": true
+}'
+```
+
+| Field | What it sets |
+|---|---|
+| `since`, `until` | The period, in RFC 3339. By default, the last 24 hours. |
+| `max_events` | The most events to read, at most 10,000 (the default). |
+
+The answer has the counts (`events`, `matched`, `fired`), the `outcomes` and the `held` actions
+by guardrail, the `keys` and `hosts` that fired most, at most 100 of each, the circuit
+`breakers` that tripped, the filter's `misses` grouped by the part that failed, and the first
+200 `decisions` that matched. `truncated` is `true` when the period held more events than
+`max_events`, or the backtest stopped at its 30-second limit: `until` is then the last event read.
+
+A backtest approximates what happened. Its `approximations` list says how:
+
+- Throttles, `once_after` windows and circuit breakers start empty at `since`.
+- Maintenance windows, change freezes, inventories and templates are today's.
+- The blast radius counts the jobs that the job history shows running at each event's time,
+  but the rule's own, and the launches that the backtest simulates. A simulated launch runs as
+  long as the template's last finished jobs took on average, or five minutes.
+- An action that would ask for approval counts as `awaiting_approval`, and as a firing.
+
+To run a backtest, you need to see the rule, its streams, and the template, notification
+template or stream it acts on. Otherwise awxnext refuses with `403`.
+
+### Testing rules offline
+
+`awxnext rules test DIR` runs sample events through the event rules of a
+[GitOps](gitops.md) directory, without a server, and compares the decisions with the ones you
+expect. Run it in the CI of the repository that declares your rules. Tests are YAML documents
+of kind `EventRuleTest`, in any file of the directory; a sync skips them. This test checks the
+rule in [Alertmanager remediation](#alertmanager-remediation):
+
+```yaml
+kind: EventRuleTest
+name: Restart once per instance an hour
+spec:
+  rule: Restart on ServiceDown        # the EventRule, by name
+  start: "2026-11-02T08:00:00Z"       # when the first event is received
+  events:
+    - type: alert.firing
+      data: {labels: {alertname: ServiceDown, instance: web1, job: nginx}}
+      expect:
+        outcome: fired
+        key: web1
+        extra_vars: {service: nginx}
+    - at: 10m                         # received 10 minutes after start
+      type: alert.firing
+      data: {labels: {alertname: ServiceDown, instance: web1, job: nginx}}
+      expect: throttled
+    - at: 75m
+      type: alert.firing
+      data: {labels: {alertname: DiskFull, instance: web1}}
+      expect:
+        outcome: not_matched
+        reason: event.data.labels.alertname == "ServiceDown"
+```
+
+An event is a CloudEvent's `type`, `data`, and optionally `id`, `source`, `subject`, `time` and
+`extensions`. Or it is a `payload` as a stream of `format` receives it, such as `alertmanager`,
+with optional `headers`: a payload can make several events, and `expect` then takes one
+expectation, or a list of one for each event. `at` is a duration after `start`, or a date and
+time; without `at`, an event is received a second after the one before. `rule` can be left out
+when the directory has one rule.
+
+`expect` is the outcome alone, or an object with the `outcome` and any of these:
+
+| Field | What it checks |
+|---|---|
+| `key` | The event's key. |
+| `guardrail` | The guardrail that held the action back or sent it for approval. |
+| `reason` | Text that the reason holds; for `not_matched`, the part of the filter that failed and its values. |
+| `extra_vars`, `limit` | For a launch: the variables listed, and the limit. |
+| `message` | For a notification: the message. |
+| `event_type`, `event_data` | For a posted event: its type and data. |
+
+The outcomes are `fired` (the rule acted, or would have in `shadow` mode), `awaiting_approval`,
+`held`, `throttled`, `deduplicated`, `waiting`, `not_matched` and `error`. The test checks the
+filter, the key, both throttles, the circuit breaker, the rule's mode and `window_action`, the
+maintenance windows and change freezes the directory declares for the rule or for every rule,
+and the action's expressions, which it type-checks against the test's events. The blast radius
+(`max_concurrent_runs`, `host_lock`, `max_group_share`) needs the jobs running on a server, and
+windows that list only inventory groups need the inventory: the test doesn't check them, and an
+expectation of a hold by one of them fails. A `once_after` window still open at the end of a test
+fires.
+
+```console
+$ awxnext rules test -v rules/
+ok    rules_test.yml#1  Restart once per instance an hour (3 events)
+1 test, 1 passed, 0 failed
+```
+
+`awxnext rules test` exits with `0` when every test passes, `1` when a test fails, and `2` when
+a document doesn't load or a rule's expression doesn't compile. `-v` lists the tests that pass
+too. The repository's [`docs/examples/rules`](examples/rules) directory holds a rule, a change
+freeze and their tests.
+
+### Metrics and traces
+
+`/metrics` publishes these metrics for each node. Streams and rules are labelled by their ID,
+never by key or event value:
+
+| Metric | What it counts |
+|---|---|
+| `awxnext_event_stream_received_total{stream}` | Events a stream stored. |
+| `awxnext_event_stream_duplicates_total{stream}` | Events a stream dropped as already received. |
+| `awxnext_event_stream_refused_total{stream, reason}` | Requests a stream refused: `invalid`, `unauthorized`, `forbidden`, `not_found`, `too_large`, `rate_limited`, `unavailable` or `error`. `stream` is empty when the URL names no stream. |
+| `awxnext_event_stream_lag_seconds{stream}` | A histogram of the seconds from an event's receipt to the rules' decisions on it. |
+| `awxnext_event_stream_backlog_events{stream}` | The events the rules still have to decide, as of the node's last batch. |
+| `awxnext_event_rule_matched_total{rule}` | Events the rule's filter held for. |
+| `awxnext_event_rule_decisions_total{rule, outcome}` | Decisions by outcome. A decision that waits for a window or an approval counts again when it gets its final outcome, such as `launched` or `failed`. |
+| `awxnext_event_rule_held_total{rule, guardrail}` | Actions a guardrail held back. |
+
+With tracing on (`OTEL_EXPORTER_OTLP_ENDPOINT`), each event the rules decide has a trace: a span
+`event_stream event`, with a span `event_rule decide` for each rule that matched it, and the
+spans of the job it launched under that. The trace continues the event's own: the CloudEvents
+`traceparent` extension, or the `traceparent` header of the request that carried the event.
+An event without one starts a new trace. A decision's `trace_id` names its trace, and an event
+the rule posts carries the trace on.
 
 ### Exactly once
 
@@ -976,6 +1143,8 @@ Only three settings with no effect, whose shape is free-form, are still JSON:
 - **Metrics:** `/metrics` (Prometheus; `AWXNEXT_METRICS_TOKEN` to protect it) and
   `/api/v2/metrics/`, AWX's.
 - **Traces:** OpenTelemetry, with `OTEL_EXPORTER_OTLP_ENDPOINT`.
+- **Event streams and rules:** their metrics and traces are in
+  [Metrics and traces](#metrics-and-traces).
 - **Logs:** JSON on stderr (`AWXNEXT_LOG_FORMAT=json`), and AWX's external logging to
   logstash, Splunk, Loggly, Sumo Logic or any HTTPS, TCP or UDP receiver (Settings, Logging).
 - **Instance health:** the Instances page, `awxnext list-instances`, and

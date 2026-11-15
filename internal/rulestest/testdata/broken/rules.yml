@@ -1,0 +1,19 @@
+kind: EventRule
+name: Broken
+spec:
+  filter: event.data.count > "3"
+  key: event.data.host
+---
+kind: EventRuleTest
+name: Names no rule
+spec:
+  rule: Missing
+  events:
+    - type: x
+---
+kind: EventRuleTest
+name: Uses the broken rule
+spec:
+  events:
+    - type: metric
+      data: {count: 4, host: a}

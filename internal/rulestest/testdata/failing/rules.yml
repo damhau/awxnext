@@ -1,0 +1,18 @@
+kind: EventRule
+name: Page on disk full
+spec:
+  streams: [alerts]
+  filter: event.type == "alert.firing" && event.data.labels.alertname == "DiskFull"
+  key: event.data.labels.instance
+  throttle: once_after
+  throttle_window: 300
+  action: notify
+  message: '"Disk full on " + event.data.labels.instance'
+  mode: approval
+---
+kind: MaintenanceWindow
+name: Night
+spec:
+  rrule: "DTSTART:20260101T000000Z RRULE:FREQ=DAILY"
+  duration: 3600
+  groups: [{inventory: Production, name: db}]

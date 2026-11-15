@@ -1,0 +1,81 @@
+kind: EventRuleTest
+name: Restart once per instance an hour
+spec:
+  rule: Restart on ServiceDown
+  start: "2026-11-02T08:00:00Z"
+  events:
+    - type: alert.firing
+      data: {labels: {alertname: ServiceDown, instance: web1, job: nginx}}
+      expect:
+        outcome: fired
+        key: web1
+        extra_vars: {service: nginx}
+        limit: web1
+    - at: 10m
+      type: alert.firing
+      data: {labels: {alertname: ServiceDown, instance: web1, job: nginx}}
+      expect: throttled
+    - at: 11m
+      type: alert.firing
+      data: {labels: {alertname: ServiceDown, instance: web2, job: nginx}}
+      expect: {outcome: fired, key: web2}
+    - at: 70m
+      type: alert.firing
+      data: {labels: {alertname: ServiceDown, instance: web1, job: nginx}}
+      expect: fired
+    - at: 75m
+      type: alert.firing
+      data: {labels: {alertname: DiskFull, instance: web1}}
+      expect:
+        outcome: not_matched
+        reason: event.data.labels.alertname == "ServiceDown"
+---
+kind: EventRuleTest
+name: An Alertmanager notification
+spec:
+  rule: Restart on ServiceDown
+  start: "2026-11-02T08:00:00Z"
+  events:
+    - format: alertmanager
+      payload:
+        status: firing
+        alerts:
+          - {status: firing, labels: {alertname: ServiceDown, instance: web1, job: nginx}, startsAt: "2026-11-02T07:59:00Z"}
+          - {status: resolved, labels: {alertname: ServiceDown, instance: web2, job: nginx}, startsAt: "2026-11-02T07:00:00Z", endsAt: "2026-11-02T07:58:00Z"}
+      expect: [fired, not_matched]
+---
+kind: EventRuleTest
+name: Held back by the Saturday freeze
+spec:
+  rule: Restart on ServiceDown
+  start: "2026-11-07T21:30:00Z"
+  events:
+    - type: alert.firing
+      data: {labels: {alertname: ServiceDown, instance: web1, job: nginx}}
+      expect: {outcome: held, guardrail: change_freeze}
+    - at: 2h
+      type: alert.firing
+      data: {labels: {alertname: ServiceDown, instance: web1, job: nginx}}
+      expect: fired
+---
+kind: EventRuleTest
+name: The breaker trips on the third firing
+spec:
+  rule: Restart on ServiceDown
+  start: "2026-11-03T08:00:00Z"
+  events:
+    - type: alert.firing
+      data: {labels: {alertname: ServiceDown, instance: db1, job: postgres}}
+      expect: fired
+    - at: 2h
+      type: alert.firing
+      data: {labels: {alertname: ServiceDown, instance: db1, job: postgres}}
+      expect: fired
+    - at: 4h
+      type: alert.firing
+      data: {labels: {alertname: ServiceDown, instance: db1, job: postgres}}
+      expect: fired
+    - at: 6h
+      type: alert.firing
+      data: {labels: {alertname: ServiceDown, instance: db1, job: postgres}}
+      expect: {outcome: held, guardrail: circuit_breaker}

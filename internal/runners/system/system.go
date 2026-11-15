@@ -11,6 +11,7 @@ import (
 
 	"github.com/damhau/awxnext/internal/eventstreams"
 	"github.com/damhau/awxnext/internal/jobs"
+	"github.com/damhau/awxnext/internal/settings"
 	"github.com/damhau/awxnext/internal/vars"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -27,11 +28,12 @@ func Register() {
 }
 
 type task struct {
-	db     *pgxpool.Pool
-	out    *jobs.Output
-	days   int
-	dryRun bool
-	self   int64
+	db       *pgxpool.Pool
+	settings *settings.Store
+	out      *jobs.Output
+	days     int
+	dryRun   bool
+	self     int64
 }
 
 func run(ctx context.Context, rc *jobs.RunContext) jobs.Result {
@@ -40,7 +42,7 @@ func run(ctx context.Context, rc *jobs.RunContext) jobs.Result {
 	if err != nil {
 		return jobs.Result{Status: "failed", Explanation: "Invalid extra_vars: " + err.Error()}
 	}
-	t := &task{db: rc.M.DB(), out: rc.Out, self: row.ID()}
+	t := &task{db: rc.M.DB(), settings: rc.M.App.Settings, out: rc.Out, self: row.ID()}
 	if v, ok := ev["days"]; ok {
 		n, err := strconv.Atoi(fmt.Sprint(v))
 		if f, isF := v.(float64); isF {
@@ -264,7 +266,7 @@ func (t *task) hostMetricSummaryMonthly(ctx context.Context) error {
 }
 
 // cleanupEventStreams removes the events each stream keeps no longer, by
-// its own retention: days takes no part.
+// its own retention, and the rules' decisions on them: days takes no part.
 func (t *task) cleanupEventStreams(ctx context.Context) error {
 	t.out.Line("Cleaning up event stream events older than their stream's retention" + dry(t.dryRun))
 	res, err := eventstreams.Cleanup(ctx, t.db, time.Now(), t.dryRun)
@@ -273,6 +275,17 @@ func (t *task) cleanupEventStreams(ctx context.Context) error {
 	}
 	t.out.Line(fmt.Sprintf("Events %s: %d", t.action(), res.Events))
 	t.out.Line(fmt.Sprintf("Event IDs kept to drop duplicates %s: %d", t.action(), res.IDs))
+	if err != nil {
+		return err
+	}
+	keep := t.settings.Int(ctx, "EVENT_RULE_DECISION_RETENTION_DAYS")
+	t.out.Line(fmt.Sprintf("Cleaning up event rule decisions: those that matched kept %d days at least%s", keep, dry(t.dryRun)))
+	dec, err := eventstreams.CleanupDecisions(ctx, t.db, time.Now(), keep, t.dryRun)
+	for _, p := range dec.Partitions {
+		t.out.Line(fmt.Sprintf("Partition %s %s", p, t.dropAction()))
+	}
+	t.out.Line(fmt.Sprintf("Decisions %s: %d", t.action(), dec.Decisions))
+	t.out.Line(fmt.Sprintf("Expired throttle keys %s: %d", t.action(), dec.Keys))
 	return err
 }
 

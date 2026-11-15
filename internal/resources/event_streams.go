@@ -183,10 +183,12 @@ func streamEventsSub() *SubList {
 	return s
 }
 
-// installEventStreamRoutes adds the receiver. Its callers are never users:
-// they authenticate with the stream's credential.
+// installEventStreamRoutes adds the receiver, whose callers are never users
+// but senders with the stream's credential, and the backtest of a draft
+// rule.
 func installEventStreamRoutes(app *api.App) {
 	app.HandleAnonymous("POST", "/api/v2/event_streams/{uuid}/post/", receiveEvents)
+	app.Handle("POST", "/api/v2/event_rules/backtest/", backtestDraft)
 }
 
 var uuidRe = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
@@ -205,7 +207,14 @@ func unavailable(w http.ResponseWriter, what string, err error) {
 
 // receiveEvents takes a sender's events. 202 means they are committed to
 // the log; on 503 nothing is, and the sender may send them again.
-func receiveEvents(c *Ctx, w http.ResponseWriter, r *http.Request) {
+func receiveEvents(c *Ctx, rw http.ResponseWriter, r *http.Request) {
+	w := &statusRecorder{ResponseWriter: rw}
+	stream := ""
+	defer func() {
+		if w.status >= 400 {
+			streamRefused.With(stream, refusal(w.status)).Inc()
+		}
+	}()
 	uuid := strings.ToLower(chi.URLParam(r, "uuid"))
 	if !uuidRe.MatchString(uuid) {
 		writeStreamError(w, http.StatusNotFound, "Not found.")
@@ -229,12 +238,13 @@ func receiveEvents(c *Ctx, w http.ResponseWriter, r *http.Request) {
 		unavailable(w, "reading the stream", err)
 		return
 	}
+	stream = idLabel(s.id)
 	tooLarge := fmt.Sprintf("This stream takes requests of at most %d bytes.", s.maxBytes)
 	if r.ContentLength > int64(s.maxBytes) {
 		writeStreamError(w, http.StatusRequestEntityTooLarge, tooLarge)
 		return
 	}
-	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, int64(s.maxBytes)))
+	body, err := io.ReadAll(http.MaxBytesReader(rw, r.Body, int64(s.maxBytes)))
 	if err != nil {
 		var mbe *http.MaxBytesError
 		if errors.As(err, &mbe) {
@@ -299,6 +309,8 @@ func receiveEvents(c *Ctx, w http.ResponseWriter, r *http.Request) {
 			stored++
 		}
 	}
+	streamReceived.With(stream).Add(float64(stored))
+	streamDuplicates.With(stream).Add(float64(dups))
 	api.WriteJSON(w, http.StatusAccepted, Obj{"received": len(results), "stored": stored, "duplicates": dups, "events": results})
 }
 

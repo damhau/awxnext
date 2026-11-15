@@ -68,7 +68,7 @@ func waitRules(t *testing.T, stream int64) {
 func decisions(t *testing.T, a *client, rule int64) []string {
 	t.Helper()
 	var out []string
-	for _, d := range must(t, a.get(fmt.Sprintf("event_rules/%d/decisions/?order_by=sequence&page_size=200", rule)), 200).results() {
+	for _, d := range must(t, a.get(fmt.Sprintf("event_rules/%d/decisions/?not__outcome=not_matched&order_by=sequence&page_size=200", rule)), 200).results() {
 		out = append(out, fmt.Sprintf("%v %v", d["sequence"], d["outcome"]))
 	}
 	return out

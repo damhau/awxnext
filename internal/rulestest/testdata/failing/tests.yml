@@ -1,0 +1,37 @@
+kind: EventRuleTest
+name: Batches a window
+spec:
+  start: 2026-01-01T12:00:00Z
+  events:
+    - type: alert.firing
+      data: {labels: {alertname: DiskFull, instance: db1}}
+      expect: {outcome: awaiting_approval, message: "Disk full on db1"}
+    - at: 1m
+      type: alert.firing
+      data: {labels: {alertname: DiskFull, instance: db1}}
+      expect: deduplicated
+    - at: 2m
+      type: alert.firing
+      data: {labels: {alertname: DiskFull, instance: db2}}
+      expect: awaiting_approval
+---
+kind: EventRuleTest
+name: Wrong expectations
+spec:
+  start: 2026-01-01T12:00:00Z
+  events:
+    - type: alert.firing
+      data: {labels: {alertname: DiskFull, instance: db1}}
+      expect: fired
+    - at: 1m
+      type: alert.firing
+      data: {labels: {alertname: CPU, instance: db1}}
+      expect: {outcome: not_matched, reason: event.type}
+    - at: 2m
+      type: alert.firing
+      data: {labels: {alertname: DiskFull, instance: db2}}
+      expect: {outcome: held, guardrail: host_lock}
+    - at: 3m
+      type: alert.firing
+      data: {labels: {alertname: DiskFull, instance: db3}}
+      expect: {outcome: awaiting_approval, key: db4, message: "Disk full on db4"}

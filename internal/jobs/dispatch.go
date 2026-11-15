@@ -11,6 +11,7 @@ import (
 
 	"github.com/damhau/awxnext/internal/api"
 	"github.com/damhau/awxnext/internal/metrics"
+	"github.com/damhau/awxnext/internal/tracing"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -22,6 +23,12 @@ func Create(ctx context.Context, db api.DBTX, values map[string]any) (int64, err
 	}
 	if _, ok := values["status"]; !ok {
 		values["status"] = "pending"
+	}
+	// A job created in a trace, as an event rule's launch is, runs in it.
+	if _, ok := values["trace_parent"]; !ok {
+		if tp := tracing.Traceparent(ctx); tp != "" {
+			values["trace_parent"] = tp
+		}
 	}
 	keys := make([]string, 0, len(values))
 	for k := range values {

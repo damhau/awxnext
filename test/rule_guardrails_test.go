@@ -25,7 +25,7 @@ func (s eventStream) fire(t *testing.T, instance string) {
 
 func ruleDecisions(t *testing.T, a *client, rule int64) []map[string]any {
 	t.Helper()
-	return must(t, a.get(fmt.Sprintf("event_rules/%d/decisions/?order_by=sequence&page_size=200", rule)), 200).results()
+	return must(t, a.get(fmt.Sprintf("event_rules/%d/decisions/?not__outcome=not_matched&order_by=sequence&page_size=200", rule)), 200).results()
 }
 
 func lastDecision(t *testing.T, a *client, rule int64) map[string]any {

@@ -270,6 +270,12 @@ export const settingsPages: SettingsPage[] = [
             help: tr('Loopback and link-local addresses and cloud metadata services are refused: they are awxnext\'s own host. One per entry: an address, a network, or an address and port.'),
             consequence: tr('Anyone who may create a credential can then make awxnext send requests to these addresses.'),
           }),
+          row('EVENT_RULE_DECISION_RETENTION_DAYS', {
+            label: tr('Keep rule decisions for'),
+            help: tr('The decisions of rules that matched an event, as long as the event at least. A decision whose filter didn\'t match is kept only as long as its event.'),
+            unit: tr('days'),
+            none: [0, tr('As long as their events')],
+          }),
         ],
       },
       { id: 'named-url', title: tr('Named URLs'), rows: [row('NAMED_URL_FORMATS', { label: tr('Named URL formats') }), row('NAMED_URL_GRAPH_NODES', { label: tr('Named URL graph') })] },

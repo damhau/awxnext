@@ -268,6 +268,15 @@ func (a *App) BuildOpenAPI() Obj {
 	}
 	schemas["Association"] = Obj{"type": "object", "required": []string{"id"}, "properties": Obj{
 		"id": Obj{"type": "integer"}, "disassociate": Obj{"type": "boolean"}}}
+	used := map[string]bool{}
+	for _, item := range paths {
+		for _, op := range item.(Obj) {
+			if o, ok := op.(Obj); ok {
+				id, _ := o["operationId"].(string)
+				used[id] = true
+			}
+		}
+	}
 	for _, rt := range a.Routes {
 		p := rt.Pattern
 		if !strings.HasPrefix(p, "/api/") {
@@ -283,7 +292,14 @@ func (a *App) BuildOpenAPI() Obj {
 		if _, exists := item[m]; exists {
 			continue
 		}
-		op := Obj{"operationId": strings.Trim(strings.NewReplacer("/api/v2/", "", "/", "_", "{", "", "}", "").Replace(p), "_") + "_" + m,
+		id := strings.Trim(strings.NewReplacer("/api/v2/", "", "/", "_", "{", "", "}", "").Replace(p), "_") + "_" + m
+		if used[id] {
+			// A collection route named as an action of the resource's
+			// objects, such as event_rules/backtest/.
+			id = strings.TrimSuffix(id, "_"+m) + "_collection_" + m
+		}
+		used[id] = true
+		op := Obj{"operationId": id,
 			"responses": withErrors(map[string]Obj{"200": jsonResp("OK", Obj{"type": "object", "additionalProperties": true})})}
 		if rt.Public {
 			op["security"] = []Obj{}

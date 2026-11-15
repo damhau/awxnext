@@ -430,7 +430,7 @@ func (m *Manager) run(parent context.Context, id int64) {
 		m.finish(context.Background(), row, Result{Status: "error", Explanation: "No runner for job type " + row.Str("type")})
 		return
 	}
-	ctx, span := tracing.StartSpan(ctx, "job "+row.Str("type"), attribute.Int64("awx.job.id", id), attribute.String("awx.job.type", row.Str("type")),
+	ctx, span := tracing.StartSpan(tracing.WithTraceparent(ctx, row.Str("trace_parent"), ""), "job "+row.Str("type"), attribute.Int64("awx.job.id", id), attribute.String("awx.job.type", row.Str("type")),
 		attribute.String("awx.job.name", row.Str("name")), attribute.Int64("awx.unified_job_template.id", row.Int("unified_job_template_id")))
 	defer func() {
 		final, _ := LoadRow(context.Background(), m.DB(), id)

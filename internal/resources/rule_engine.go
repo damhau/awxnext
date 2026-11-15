@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/damhau/awxnext/internal/api"
 	"github.com/damhau/awxnext/internal/auth"
@@ -21,6 +23,7 @@ import (
 	"github.com/damhau/awxnext/internal/jobs"
 	"github.com/damhau/awxnext/internal/rbac"
 	"github.com/damhau/awxnext/internal/rules"
+	"github.com/damhau/awxnext/internal/tracing"
 )
 
 // The rule engine evaluates each stream's events in order, on one node at
@@ -263,9 +266,11 @@ func (e *RuleEngine) Pass(ctx context.Context) (bool, error) {
 type afterCommit struct {
 	notifications []int64
 	approvals     []int64
+	counts        ruleCounts
 }
 
 func (a *afterCommit) run(ctx context.Context, app *api.App) {
+	a.counts.publish()
 	for _, id := range a.notifications {
 		go deliver(ctx, app, id)
 	}
@@ -337,18 +342,38 @@ func (e *RuleEngine) Step(ctx context.Context, stream int64) (int, error) {
 		return 0, err
 	}
 	after := &afterCommit{}
+	var misses []miss
 	for _, ev := range events {
 		val := rules.Value(ev)
+		ectx, span := eventSpan(ctx, ev)
+		trace := tracing.TraceID(ectx)
+		n := len(misses)
 		for _, r := range rs {
 			if r.stopped {
 				continue
 			}
-			if err := e.decide(ctx, tx, after, r, ev, val); err != nil {
+			ok, m := rules.Filter(ctx, r.Filter, rules.Vars{Event: val})
+			if !ok {
+				misses = append(misses, miss{rule: r, ev: ev, miss: m, trace: trace})
+				continue
+			}
+			if err := e.decide(ectx, tx, after, r, ev, val); err != nil {
+				tracing.EndSpan(span, err)
 				return 0, err
 			}
 		}
+		span.SetAttributes(attribute.Int("awxnext.event_rules.not_matched", len(misses)-n))
+		span.End()
 	}
-	if err := eventstreams.SavePosition(ctx, tx, rulesConsumer, stream, events[len(events)-1].Sequence); err != nil {
+	if err := e.recordMisses(ctx, tx, after, stream, misses); err != nil {
+		return 0, err
+	}
+	last := events[len(events)-1].Sequence
+	if err := eventstreams.SavePosition(ctx, tx, rulesConsumer, stream, last); err != nil {
+		return 0, err
+	}
+	var newest int64
+	if err := tx.QueryRow(ctx, `SELECT last_sequence FROM event_streams WHERE id = $1`, stream).Scan(&newest); err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return 0, err
 	}
 	if fn := e.beforeCommit.Load(); fn != nil {
@@ -362,7 +387,92 @@ func (e *RuleEngine) Step(ctx context.Context, stream int64) (int, error) {
 		return 0, err
 	}
 	after.run(ctx, e.app)
+	label := idLabel(stream)
+	now := time.Now()
+	for _, ev := range events {
+		streamLag.With(label).Observe(now.Sub(ev.Received).Seconds())
+	}
+	streamBacklog.With(label).Set(float64(max(newest-last, 0)))
 	return len(events), nil
+}
+
+// eventSpan starts the span of an event's decisions, in the trace the
+// event names in its traceparent extension, or in a new one.
+func eventSpan(ctx context.Context, ev eventstreams.Stored) (context.Context, trace.Span) {
+	ctx = tracing.WithTraceparent(ctx, extension(ev, "traceparent"), extension(ev, "tracestate"))
+	return tracing.StartSpan(ctx, "event_stream event", attribute.Int64("awxnext.event_stream.id", ev.Stream),
+		attribute.Int64("awxnext.event_stream.sequence", ev.Sequence), attribute.String("cloudevents.event_id", ev.ID),
+		attribute.String("cloudevents.event_source", ev.Source), attribute.String("cloudevents.event_type", ev.Type))
+}
+
+// ruleSpan starts the span of a rule's decision. Without an event span in
+// ctx, as when a window ends or an approval is granted later, it joins the
+// event's trace.
+func ruleSpan(ctx context.Context, r *eventRule, ev eventstreams.Stored) (context.Context, trace.Span) {
+	if !trace.SpanContextFromContext(ctx).IsValid() {
+		ctx = tracing.WithTraceparent(ctx, extension(ev, "traceparent"), extension(ev, "tracestate"))
+	}
+	return tracing.StartSpan(ctx, "event_rule decide", attribute.Int64("awxnext.event_rule.id", r.ID),
+		attribute.String("awxnext.event_rule.name", r.Name), attribute.String("awxnext.event_rule.mode", r.Mode))
+}
+
+func extension(ev eventstreams.Stored, name string) string {
+	v, _ := ev.Extensions[name].(string)
+	return v
+}
+
+// miss is an event a rule's filter didn't match.
+type miss struct {
+	rule  *eventRule
+	ev    eventstreams.Stored
+	miss  *rules.Miss
+	trace string
+}
+
+// recordMisses records the batch's events that rules' filters didn't
+// match, at once: most events match no rule.
+func (e *RuleEngine) recordMisses(ctx context.Context, tx pgx.Tx, after *afterCommit, stream int64, misses []miss) error {
+	if len(misses) == 0 {
+		return nil
+	}
+	n := len(misses)
+	ruleIDs, seqs := make([]int64, n), make([]int64, n)
+	ids, sources, types, reasons, modes, details, traces := make([]string, n), make([]string, n), make([]string, n), make([]string, n), make([]string, n), make([]string, n), make([]string, n)
+	received := make([]time.Time, n)
+	for i, m := range misses {
+		ruleIDs[i], seqs[i], received[i] = m.rule.ID, m.ev.Sequence, m.ev.Received
+		ids[i], sources[i], types[i] = m.ev.ID, m.ev.Source, m.ev.Type
+		reasons[i], modes[i], traces[i] = m.miss.Reason(), m.rule.Mode, m.trace
+		b, err := json.Marshal(map[string]any{"filter": m.miss.Details()})
+		if err != nil {
+			return err
+		}
+		details[i] = string(b)
+	}
+	rows, err := tx.Query(ctx, `INSERT INTO event_rule_decisions (rule_id, stream_id, sequence, event_id, event_source, event_type, received, node,
+			outcome, reason, mode, details, trace_id)
+		SELECT x.rule, $2, x.seq, x.id, x.source, x.type, x.received, $3, 'not_matched', x.reason, x.mode, x.details::jsonb, x.trace
+		FROM unnest($1::bigint[], $4::bigint[], $5::text[], $6::text[], $7::text[], $8::timestamptz[], $9::text[], $10::text[], $11::text[], $12::text[])
+			AS x(rule, seq, id, source, type, received, reason, mode, details, trace)
+		ON CONFLICT (rule_id, stream_id, sequence, received) DO NOTHING RETURNING rule_id`,
+		ruleIDs, stream, e.node, seqs, ids, sources, types, received, reasons, modes, details, traces)
+	if err != nil {
+		return err
+	}
+	counted := map[int64]int{}
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return err
+		}
+		counted[id]++
+	}
+	rows.Close()
+	for id, k := range counted {
+		after.outcome(id, outcome{name: "not_matched"}, k)
+	}
+	return rows.Err()
 }
 
 // member is an event an action fires for, with its decision and key.
@@ -398,16 +508,15 @@ func (o outcome) fired() bool {
 func (r *eventRule) shadow() bool { return r.Mode == modeShadow }
 
 // decide records what a rule does with an event it matches, and does it.
-func (e *RuleEngine) decide(ctx context.Context, tx pgx.Tx, after *afterCommit, r *eventRule, ev eventstreams.Stored, val map[string]any) error {
+func (e *RuleEngine) decide(ctx context.Context, tx pgx.Tx, after *afterCommit, r *eventRule, ev eventstreams.Stored, val map[string]any) (err error) {
+	ctx, span := ruleSpan(ctx, r, ev)
+	defer func() { tracing.EndSpan(span, err) }()
 	vars := rules.Vars{Event: val}
-	if ok, err := rules.Match(ctx, r.Filter, vars); err != nil || !ok {
-		return nil
-	}
 	key := ""
 	if r.Key != "" {
 		k, err := rules.Text(ctx, r.Key, vars)
 		if err != nil {
-			return e.record(ctx, tx, r, ev, outcome{name: "error", reason: "The key could not be evaluated: " + err.Error()})
+			return e.record(ctx, tx, after, r, ev, outcome{name: "error", reason: "The key could not be evaluated: " + err.Error()})
 		}
 		key = k
 	}
@@ -419,16 +528,16 @@ func (e *RuleEngine) decide(ctx context.Context, tx pgx.Tx, after *afterCommit, 
 			ON CONFLICT (rule_id, shadow, key) DO UPDATE SET held_until = EXCLUDED.held_until WHERE k.held_until <= $5 RETURNING held_until`,
 			r.ID, r.shadow(), key, ev.Received.Add(time.Duration(r.Window)*time.Second), ev.Received).Scan(&until)
 		if errors.Is(err, pgx.ErrNoRows) {
-			return e.record(ctx, tx, r, ev, outcome{name: "throttled", key: key, reason: "The key acted less than the window ago."})
+			return e.record(ctx, tx, after, r, ev, outcome{name: "throttled", key: key, reason: "The key acted less than the window ago."})
 		}
 		if err != nil {
 			return err
 		}
 	}
 	var id int64
-	err := tx.QueryRow(ctx, `INSERT INTO event_rule_decisions (rule_id, stream_id, sequence, event_id, event_source, event_type, received, node, outcome, mode)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending', $9) ON CONFLICT (rule_id, stream_id, sequence) DO NOTHING RETURNING id`,
-		r.ID, ev.Stream, ev.Sequence, ev.ID, ev.Source, ev.Type, ev.Received, e.node, r.Mode).Scan(&id)
+	err = tx.QueryRow(ctx, `INSERT INTO event_rule_decisions (rule_id, stream_id, sequence, event_id, event_source, event_type, received, node, outcome, mode, trace_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending', $9, $10) ON CONFLICT (rule_id, stream_id, sequence, received) DO NOTHING RETURNING id`,
+		r.ID, ev.Stream, ev.Sequence, ev.ID, ev.Source, ev.Type, ev.Received, e.node, r.Mode, tracing.TraceID(ctx)).Scan(&id)
 	if errors.Is(err, pgx.ErrNoRows) {
 		// Decided before: the event was read again.
 		return nil
@@ -436,6 +545,7 @@ func (e *RuleEngine) decide(ctx context.Context, tx pgx.Tx, after *afterCommit, 
 	if err != nil {
 		return err
 	}
+	after.matched(r.ID)
 	out, err := e.throttle(ctx, tx, after, r, member{ev: ev, val: val, decision: id, key: key})
 	if err != nil {
 		return err
@@ -447,27 +557,37 @@ func (e *RuleEngine) decide(ctx context.Context, tx pgx.Tx, after *afterCommit, 
 			return err
 		}
 	}
-	return saveOutcome(ctx, tx, id, r.Mode, out)
+	return saveOutcome(ctx, tx, after, r.ID, id, ev.Received, r.Mode, out)
 }
 
 // saveOutcome gives a decision its outcome. Details add to those it has.
-func saveOutcome(ctx context.Context, db pgx.Tx, id int64, mode string, out outcome) error {
+// received is the decision's, which finds its partition.
+func saveOutcome(ctx context.Context, db pgx.Tx, after *afterCommit, rule, id int64, received time.Time, mode string, out outcome) error {
 	details := out.details
 	if details == nil {
 		details = map[string]any{}
 	}
-	_, err := db.Exec(ctx, `UPDATE event_rule_decisions SET outcome = $2, reason = $3, key = $4, job_id = $5, window_id = coalesce($6, window_id),
-		mode = $7, guardrail = coalesce(nullif($8, ''), guardrail), fired = fired OR $9, approval_id = coalesce($10, approval_id), details = details || $11::jsonb, modified = now()
-		WHERE id = $1`, id, out.name, out.reason, out.key, out.job, out.window, mode, out.guardrail, out.fired(), out.approval, details)
+	trace.SpanFromContext(ctx).SetAttributes(attribute.String("awxnext.event_rule.outcome", out.name))
+	_, err := db.Exec(ctx, `UPDATE event_rule_decisions SET outcome = $3, reason = $4, key = $5, job_id = $6, window_id = coalesce($7, window_id),
+		mode = $8, guardrail = coalesce(nullif($9, ''), guardrail), fired = fired OR $10, approval_id = coalesce($11, approval_id), details = details || $12::jsonb, modified = now()
+		WHERE id = $1 AND received = $2`, id, received, out.name, out.reason, out.key, out.job, out.window, mode, out.guardrail, out.fired(), out.approval, details)
+	if err == nil {
+		after.outcome(rule, out, 1)
+	}
 	return err
 }
 
 // record records a decision that doesn't act, unless the event was decided
 // before.
-func (e *RuleEngine) record(ctx context.Context, tx pgx.Tx, r *eventRule, ev eventstreams.Stored, out outcome) error {
-	_, err := tx.Exec(ctx, `INSERT INTO event_rule_decisions (rule_id, stream_id, sequence, event_id, event_source, event_type, received, node, outcome, reason, key, mode)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) ON CONFLICT (rule_id, stream_id, sequence) DO NOTHING`,
-		r.ID, ev.Stream, ev.Sequence, ev.ID, ev.Source, ev.Type, ev.Received, e.node, out.name, out.reason, out.key, r.Mode)
+func (e *RuleEngine) record(ctx context.Context, tx pgx.Tx, after *afterCommit, r *eventRule, ev eventstreams.Stored, out outcome) error {
+	trace.SpanFromContext(ctx).SetAttributes(attribute.String("awxnext.event_rule.outcome", out.name))
+	tag, err := tx.Exec(ctx, `INSERT INTO event_rule_decisions (rule_id, stream_id, sequence, event_id, event_source, event_type, received, node, outcome, reason, key, mode, trace_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) ON CONFLICT (rule_id, stream_id, sequence, received) DO NOTHING`,
+		r.ID, ev.Stream, ev.Sequence, ev.ID, ev.Source, ev.Type, ev.Received, e.node, out.name, out.reason, out.key, r.Mode, tracing.TraceID(ctx))
+	if err == nil && tag.RowsAffected() == 1 {
+		after.matched(r.ID)
+		after.outcome(r.ID, out, 1)
+	}
 	return err
 }
 
@@ -610,18 +730,25 @@ func (e *RuleEngine) fireWindow(ctx context.Context, db pgx.Tx, after *afterComm
 		members = append(members, member{ev: ev, val: rules.Value(ev), decision: x.id, key: x.key})
 	}
 	if len(members) > 0 {
-		outs, err := e.fire(ctx, db, after, r, members)
+		sctx, span := ruleSpan(ctx, r, members[0].ev)
+		outs, err := e.fire(sctx, db, after, r, members)
 		if err != nil {
+			tracing.EndSpan(span, err)
 			return err
 		}
 		for i, m := range members {
-			if err := saveOutcome(ctx, db, m.decision, r.Mode, outs[i]); err != nil {
+			if err := saveOutcome(sctx, db, after, r.ID, m.decision, m.ev.Received, r.Mode, outs[i]); err != nil {
+				tracing.EndSpan(span, err)
 				return err
 			}
 		}
+		span.End()
 	}
-	_, err = db.Exec(ctx, `UPDATE event_rule_decisions SET outcome = 'dropped', reason = $2, modified = now() WHERE window_id = $1 AND outcome = 'waiting'`,
+	tag, err := db.Exec(ctx, `UPDATE event_rule_decisions SET outcome = 'dropped', reason = $2, modified = now() WHERE window_id = $1 AND outcome = 'waiting'`,
 		wid, "The window's events are no longer in the log.")
+	if err == nil && tag.RowsAffected() > 0 {
+		after.outcome(r.ID, outcome{name: "dropped"}, int(tag.RowsAffected()))
+	}
 	return err
 }
 
@@ -896,19 +1023,20 @@ func (e *RuleEngine) resolveApproval(ctx context.Context, approval int64) error 
 	if status == "pending" {
 		return nil
 	}
-	rows, err := tx.Query(ctx, `SELECT id, rule_id, stream_id, sequence, key, mode FROM event_rule_decisions
+	rows, err := tx.Query(ctx, `SELECT id, received, rule_id, stream_id, sequence, key, mode FROM event_rule_decisions
 		WHERE approval_id = $1 AND outcome = 'awaiting_approval' ORDER BY received, stream_id, sequence FOR UPDATE`, approval)
 	if err != nil {
 		return err
 	}
 	type ref struct {
 		id, rule, stream, seq int64
+		received              time.Time
 		key, mode             string
 	}
 	var refs []ref
 	for rows.Next() {
 		var x ref
-		if err := rows.Scan(&x.id, &x.rule, &x.stream, &x.seq, &x.key, &x.mode); err != nil {
+		if err := rows.Scan(&x.id, &x.received, &x.rule, &x.stream, &x.seq, &x.key, &x.mode); err != nil {
 			rows.Close()
 			return err
 		}
@@ -951,8 +1079,14 @@ func (e *RuleEngine) resolveApproval(ctx context.Context, approval int64) error 
 		}
 		if len(members) == 0 {
 			out = outcome{name: "dropped", reason: "The approved events are no longer in the log."}
-		} else if out, err = e.act(ctx, tx, after, r, members, true); err != nil {
-			return err
+		} else {
+			sctx, span := ruleSpan(ctx, r, members[0].ev)
+			out, err = e.act(sctx, tx, after, r, members, true)
+			span.SetAttributes(attribute.String("awxnext.event_rule.outcome", out.name))
+			tracing.EndSpan(span, err)
+			if err != nil {
+				return err
+			}
 		}
 	case timedOut:
 		out = outcome{name: "timed_out", reason: "The approval timed out."}
@@ -968,7 +1102,7 @@ func (e *RuleEngine) resolveApproval(ctx context.Context, approval int64) error 
 	for _, x := range refs {
 		o := out
 		o.key = x.key
-		if err := saveOutcome(ctx, tx, x.id, x.mode, o); err != nil {
+		if err := saveOutcome(ctx, tx, after, x.rule, x.id, x.received, x.mode, o); err != nil {
 			return err
 		}
 	}
@@ -1208,7 +1342,9 @@ func (e *RuleEngine) planPost(c *Ctx, r *eventRule, members []member, vars rules
 		Data:            data,
 		Extensions:      map[string]any{depthExtension: depth + 1},
 	}
-	if tp, ok := first.Extensions["traceparent"]; ok {
+	if tp := tracing.Traceparent(c); tp != "" {
+		ev.Extensions["traceparent"] = tp
+	} else if tp, ok := first.Extensions["traceparent"]; ok {
 		ev.Extensions["traceparent"] = tp
 	}
 	return &plan{action: actionPost, event: ev, target: *r.Target, test: test}, nil
