@@ -1,0 +1,13 @@
+---
+- name: 48 echo
+  hosts: all
+  sources:
+    - name: range
+      range:
+        limit: 5
+  rules:
+    - name: r1
+      condition: event.i == 1
+      action:
+        debug:
+          msg: Hurray it works

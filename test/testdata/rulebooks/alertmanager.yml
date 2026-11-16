@@ -1,0 +1,80 @@
+# The Alertmanager rulebook of TestRulebookAlertmanager: run by
+# ansible-rulebook against awxnext as its controller, and imported into
+# awxnext, it launches the same jobs for the same alerts.
+- name: Alertmanager
+  hosts: all
+  sources:
+    - name: alerts
+      ansible.eda.alertmanager:
+        host: 127.0.0.1
+        port: "{{ alertmanager_port }}"
+        data_host_path: labels.instance
+  rules:
+    - name: Restart a service that is down
+      condition: >-
+        event.alert.status == "firing" and event.alert.labels.alertname == "ServiceDown"
+        and event.alert.labels.service is defined
+      throttle:
+        once_within: 1 hour
+        group_by_attributes:
+          - event.alert.labels.instance
+          - event.alert.labels.service
+      action:
+        run_job_template:
+          name: "{{ restart_template }}"
+          organization: "{{ organization }}"
+          job_args:
+            extra_vars:
+              service: "{{ event.alert.labels.service }}"
+
+    - name: Clean a full disk
+      condition: >-
+        event.alert.status == "firing" and event.alert.labels.alertname in ["DiskFull", "DiskAlmostFull"]
+        and event.alert.labels.mountpoint is match("/var", ignorecase=true)
+      action:
+        run_job_template:
+          name: "{{ clean_template }}"
+          organization: "{{ organization }}"
+          job_args:
+            extra_vars:
+              mountpoint: "{{ event.alert.labels.mountpoint }}"
+              severity: "{{ event.alert.labels.severity }}"
+            limit: "{{ event.alert.labels.host }}"
+
+    - name: Escalate an unreachable host
+      condition: >-
+        event.alert.status == "firing" and event.alert.labels.severity == "critical"
+        and event.alert.annotations.summary is search("unreachable", ignorecase=true)
+      action:
+        post_event:
+          event:
+            escalate: "{{ event.alert.labels.alertname }}"
+            host: "{{ event.alert.labels.host }}"
+
+    - name: Page the on-call team
+      condition: event.escalate is defined
+      action:
+        run_job_template:
+          name: "{{ page_template }}"
+          organization: "{{ organization }}"
+          job_args:
+            extra_vars:
+              alert: "{{ event.escalate }}"
+            limit: "{{ event.host }}"
+
+    - name: Note a resolved alert
+      condition: event.alert.status == "resolved" and event.alert.labels.alertname != "Sentinel"
+      action:
+        debug:
+          msg: "LOG {{ event.alert.labels.alertname }} on {{ event.alert.labels.host }} resolved"
+
+    - name: Sentinel
+      condition: event.alert.labels.alertname == "Sentinel"
+      action:
+        run_job_template:
+          name: "{{ page_template }}"
+          organization: "{{ organization }}"
+          job_args:
+            extra_vars:
+              alert: sentinel
+            limit: h1

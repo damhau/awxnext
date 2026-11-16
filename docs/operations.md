@@ -720,8 +720,10 @@ history, `used_by`, and GitOps documents of kind `EventConnector` ([GitOps](gito
 ## Event rules
 
 An event rule reads the events of one or more streams, and acts on the events its filter holds
-for: it launches a job or workflow template, sends a notification, or posts an event to another
-stream. To create one, post to `/api/v2/event_rules/` with these fields:
+for: it launches a job or workflow template, sends a notification, posts an event to another
+stream, or records a message in its decision log. To create one, post to
+`/api/v2/event_rules/` with these fields, or import a rulebook of ansible-rulebook (see
+[Importing rulebooks](#importing-rulebooks)):
 
 | Field | What it sets |
 |---|---|
@@ -733,9 +735,11 @@ stream. To create one, post to `/api/v2/event_rules/` with these fields:
 | `pattern`, `pattern_window` | `count`, `all`, `sequence` or `absence`, and its window in seconds (at most 7 days): see [Patterns](#patterns). Empty: no pattern. |
 | `conditions` | For `all`, `sequence` and `absence`: CEL conditions on `event`, 2 to 10, exactly 2 for `absence`. |
 | `pattern_count` | For `count`: how many events, 2 to 1,000. |
-| `action` | `launch` (the default), `notify` or `post_event`. |
+| `action` | `launch` (the default), `notify`, `post_event` or `log`. |
 | `unified_job_template`, `extra_vars`, `limit` | For `launch`: the job or workflow template; each variable's name and the CEL expression of its value; a CEL expression that gives the limit. |
-| `notification_template`, `message` | For `notify`: the notification template, and a CEL expression that gives the message. |
+| `retries`, `retry_delay` | For `launch`: how many times the rule launches a failed job again, at most 10, and how many seconds after the job ended, at most 3,600. |
+| `post_artifacts`, `artifacts_stream` | For `launch`: `event` or `fact` posts the artifacts of each job (its `set_stats`) once the job ends, to `artifacts_stream` (the rule's first stream by default). Empty: the rule posts nothing. |
+| `notification_template`, `message` | For `notify`: the notification template, and a CEL expression that gives the message. For `log`: a CEL expression that gives the message the decision records. |
 | `target_stream`, `event_type`, `event_data` | For `post_event`: the stream to post to, which the rule must not read, and CEL expressions that give the event's type and its data (the event's own data by default). |
 | `mode` | `shadow` (the default), `approval` or `auto`: see [Modes](#modes). |
 | `max_concurrent_runs`, `host_lock`, `max_group_share` | For `launch`: the [blast radius](#blast-radius). |
@@ -743,7 +747,8 @@ stream. To create one, post to `/api/v2/event_rules/` with these fields:
 | `window_action`, `approval_timeout` | What a [maintenance window](#maintenance-windows-and-change-freezes) does to an action: `hold` (the default) or `approval`; and how long an approval waits, in seconds (one hour by default, `0` for ever). |
 | `enabled` | `false` stops the rule. |
 
-The answer's `owner`, `stopped_reason` and `last_fired` are read-only.
+The answer's `owner`, `stopped_reason` and `last_fired` are read-only, and so is `rulebook`: the
+rulebook whose import made the rule, if one did.
 
 ### Expressions
 
@@ -918,6 +923,15 @@ its decisions.
   `rule-<rule>-<stream>-<sequence>` and the source `/api/v2/event_rules/<rule>/`. Other rules
   can read it. The extension `awxnextdepth` counts the rules an event went through: past 8,
   the rule refuses to post, so rules that post to each other don't loop.
+- **`log`** records the message in the decision, with the outcome `logged`: its `reason` holds
+  the first 1,000 characters, and `details.message` the whole message.
+
+A rule that launches can follow its jobs, as ansible-rulebook's `run_job_template` does. With
+`retries`, when a job fails, the rule waits `retry_delay` seconds and launches the template
+again with the same prompts, as its owner, up to `retries` times; a job that ends in `error` or
+`canceled` isn't launched again. With `post_artifacts`, when a job ends, the rule posts the
+job's artifacts as an event of type `post_event` (`event`) or `set_fact` (`fact`), with the ID
+`rule-<rule>-job-<job>`, to `artifacts_stream`. Posting takes the right to change that stream.
 
 ### Owner and rights
 
@@ -1490,6 +1504,168 @@ Each alert launches `Restart service` on its instance's host, with the variables
 `summary`. The same alert sent again at Alertmanager's `repeat_interval` is a duplicate, and a new
 one for the same instance within the hour is `throttled`. To declare the rule in git instead, see
 [GitOps](gitops.md).
+
+## Importing rulebooks
+
+awxnext imports the rulebooks of [ansible-rulebook](https://ansible.readthedocs.io/projects/rulebook/)
+1.3: it translates each ruleset into event streams, event connectors and event rules, and
+reports, for each source, rule and action, whether it translated it, and why not. Every rulebook
+belongs to a project:
+
+- **A project's files.** Each sync of a git project imports the `.yml` and `.yaml` files at the
+  top of `extensions/eda/rulebooks/` and `rulebooks/` that hold a list of rulesets, at most 200
+  files of 1 MiB each. Files in subdirectories, and other YAML files, are left out. To import
+  the project's last checkout again without a sync, post to
+  `/api/v2/projects/N/import_rulebooks/`; a manual project, which has no sync, imports its
+  directory's rulebooks that way. A rulebook that can't be imported doesn't fail the sync: its
+  log says why.
+- **An uploaded file.** To upload one, post to `/api/v2/rulebooks/` with `name`, `project` and
+  `rulesets`, the rulebook's YAML. Each change to `rulesets` or `variables` imports it again.
+
+`GET /api/v2/projects/N/rulebooks/` lists a project's rulebooks. A rulebook has these fields:
+
+| Field | What it holds |
+|---|---|
+| `name`, `project` | The file's name, or its path when two files have the same name; the project. |
+| `path` | The file in the project. Empty: an uploaded rulebook. |
+| `rulesets` | The rulebook's YAML. |
+| `variables` | The rulebook's variables, as ansible-rulebook's `--vars`: `vars.name` in conditions, `{{ name }}` in the arguments of sources and actions. You can set them on a file's rulebook too. |
+| `revision`, `imported` | The project's revision the file came from; when the rulebook was last imported. |
+| `import_error` | Why the last import couldn't read the rulebook. The objects of the import before stay as they were. |
+| `report` | What became of each ruleset, source, rule and action: `translated`, `partial` or `not_translated`, the `reasons` for what isn't, the `notes` where awxnext behaves otherwise than ansible-rulebook, and the `object` each piece became. `summary` counts the rules by status. |
+
+`/api/v2/rulebooks/N/event_streams/`, `event_connectors/` and `event_rules/` list the objects a
+rulebook's imports made, and `POST /api/v2/rulebooks/N/import/` imports it again. Whoever can
+view the project can view its rulebooks and their reports; adding, changing, deleting and
+importing a rulebook takes the right to change the project. Rulebooks aren't a GitOps kind:
+their project's git repository already holds them.
+
+In the UI, a project's **Rulebooks** tab lists them, imports them again and uploads one; a
+rulebook's page shows its report, with a link to each object. The editor of an imported rule
+leaves its streams, conditions and action alone, and changes its description, mode, fix check
+and guardrails.
+
+### What an import makes
+
+The objects are named after the project, the rulebook, the ruleset and the source or rule, such
+as `ops/rulebooks/web.yml: Web / Deploy`. They belong to the project's organization.
+
+- **Sources.** `ansible.eda.webhook` becomes a `generic` event stream, and
+  `ansible.eda.alertmanager` an `alertmanager` stream: senders post to the stream's receiver URL
+  rather than to the plugin's host and port, and authenticate with the stream's credential.
+  Any other source becomes an event connector that runs the plugin, and posts to a
+  CloudEvents stream of the ruleset. The `eda.builtin` sources of ansible-rulebook run as their
+  twins in `ansible.eda`. A source from a directory (`ansible-rulebook -S`) isn't translated.
+- **Rules.** Each action of a rule becomes an event rule; `debug` and `print_event` alongside
+  another action are recorded by that action's decisions.
+- **Templates.** `run_job_template` and `run_workflow_template` name a template by `name` and
+  `organization`. The import looks it up among the templates the importing user can view: the
+  person who uploaded or imported the rulebook, or else the user who last changed the project.
+  A template that doesn't exist is reported; create it, and import the rulebook again. The
+  names may come from the rulebook's variables, not from the event.
+
+An import makes nothing that acts. Its rules start disabled, in `shadow` mode, with no owner;
+its streams start without a credential, so they refuse events; its connectors start disabled.
+To turn a ruleset on:
+
+1. Give each stream a credential, and each connector its execution environment and
+   credentials, then enable the connectors.
+2. Enable each rule in `shadow` mode, and read its decisions against real events.
+3. Move the rules to `auto` or `approval` (see
+   [Moving a rule from shadow to auto](#moving-a-rule-from-shadow-to-auto)).
+
+### Importing again
+
+Each import updates the objects of the import before: a rule, a source or an action that
+stays in the rulebook keeps its object, with its ID, its history and its decisions. The
+translated fields follow the rulebook: the filter, the key, the pattern, the throttle, the
+action and its template, variables and limit. What an operator decides stays: `enabled`,
+`mode`, the description, the guardrails, the checks, the stream's credential, retention and
+test mode, and the connector's execution environment and credentials. A rule that is new in
+the rulebook starts disabled; an object whose piece left the rulebook is deleted; a file that
+left the project takes its rulebook and objects with it.
+
+An enabled rule whose translation changed is checked again, as its owner. When the owner can't
+use the new template or stream, the import disables the rule, and its `stopped_reason` says
+why.
+
+Changing a translated field of an imported object by hand answers `409` and names the fields
+to change in the rulebook; deleting an imported object answers `409` too. Deleting an uploaded
+rulebook deletes its objects. To delete a file's rulebook, remove the file and sync the
+project.
+
+### How rulebooks translate
+
+**Conditions** become CEL filters. awxnext translates `==`, `!=`, `<`, `<=`, `>`, `>=`, `+`
+and `-` on numbers, `and`, `or`, `not`, `is defined`, `is not defined`, `in`, `not in`,
+`contains`, `not contains`, `is search`, `is match` and `is regex` with `ignorecase` and
+`multiline`, `is select` and `is selectattr` with their operators, `vars.` from the
+rulebook's variables, and `{{ }}` with `default(value)` in the arguments of sources and actions.
+As in ansible-rulebook, a condition on an attribute the event lacks doesn't hold, and a bare
+attribute holds only when it is `true`.
+
+**Patterns.** `all` becomes an `all` pattern, with its `timeout`, or else the ruleset's
+`default_events_ttl`, as the window. `any` becomes one filter that holds for any of the
+conditions. `not_all` with 2 conditions and a `timeout` becomes an `absence` pattern. The
+actions of a rule with several conditions read its events as `events.m_0`, `events.m_1` and so
+on. A throttle's `once_within` and `once_after` become the rule's throttle, keyed by its
+`group_by_attributes`, and `accumulate_within` a `count` pattern of `threshold` events.
+
+**Ruleset options.**
+
+- `match_multiple_rules` false (the default): an event goes to the first rule it matches, so
+  each rule's filter leaves out the events of the rules before it. True: each rule acts on
+  every event it matches.
+- `default_events_ttl` is the window of the ruleset's patterns, 2 hours by default.
+- `execution_strategy`: see the differences below.
+- `gather_facts` isn't translated: awxnext's rules don't see the hosts' facts.
+- `hosts` is the limit of a launch that sets none, when its event names no hosts in
+  `event.meta.hosts`, and of every such launch of a rule with several conditions.
+
+**Actions.**
+
+| ansible-rulebook | awxnext |
+|---|---|
+| `run_job_template`, `run_workflow_template` | `launch`, with `job_args.extra_vars` and `job_args.limit`, the variable `ansible_eda` (the ruleset, the rule and the event or events, as ansible-rulebook sets it), `retries` and `delay` as `retries` and `retry_delay`, and `post_events` and `set_facts` as `post_artifacts`. The template must prompt for variables and the limit: otherwise AWX leaves them out, and so does the rule, with a note. |
+| `post_event`, `set_fact` | `post_event` to the ruleset's stream, or the stream of the ruleset it names. |
+| `debug`, `print_event` | `log`: the message, or the event, in the decision log. |
+| `run_playbook`, `run_module`, `shutdown`, `retract_fact` and the others | Not translated: the report says why. |
+
+### Differences from ansible-rulebook
+
+Where awxnext can't do what ansible-rulebook does, the import reports the piece as not
+translated rather than approximating it. Where it does it otherwise, the report notes it:
+
+- **Facts.** awxnext keeps no facts. `set_fact` and `set_facts` post an event that the rules
+  match once, as it comes, and conditions on `fact.` read that event. `retract_fact` isn't
+  translated.
+- **Joins.** A condition reads the event it tests: a condition on `events.` or `facts.`, such
+  as `events.m_0.host == events.m_1.host`, isn't translated.
+- **Sequential execution.** ansible-rulebook runs a ruleset's actions one at a time and waits
+  for each job. awxnext's rules act as their events come; to keep jobs from overlapping, set
+  `max_concurrent_runs` or `host_lock`.
+- **Actions of a rule.** Each action is a rule of its own: they act on the same events without
+  waiting for each other.
+- **Alertmanager.** The stream gives the rules each alert, as ansible-rulebook with
+  `skip_original_data: true`, and takes an alert again only when its status or start changes.
+  ansible-rulebook acts again on each notification that repeats an alert; awxnext acts once,
+  unless the throttle would let it act again. `event.payload`, `event.meta.endpoint` and
+  `event.meta.headers` aren't translated.
+- **Webhooks.** `event.meta.endpoint` and `event.meta.headers` aren't translated, and the
+  plugin's `token` and `hmac_secret` are the stream credential's.
+- **Expressions.** `*` and `/`, which ansible-rulebook 1.3 parses but doesn't evaluate, and
+  regular expressions that Go's RE2 doesn't take, such as lookaheads, aren't translated.
+- **Patterns.** An `absence` window opens on an event of the first condition only, where
+  ansible-rulebook's `not_all` opens it on either; an event can count for several conditions of
+  an `all` pattern, where ansible-rulebook matches it with one. A throttle on a rule with
+  several conditions isn't translated: such a rule acts once per window.
+
+awxnext's tests import every example rulebook of ansible-rulebook 1.3.2 and of the ansible.eda
+2.13.0 collection. They also give the same Alertmanager notifications to an Alertmanager
+rulebook run by ansible-rulebook itself and imported into awxnext, and check that each launches
+the jobs and logs the messages that `test/testdata/rulebooks/alertmanager.expected.json` lists,
+written from ansible-rulebook's semantics. awxnext launches one job fewer, for the alert that
+Alertmanager sends again.
 
 ## Settings
 

@@ -1,0 +1,16 @@
+---
+- name: 42 contains
+  hosts: all
+  sources:
+    - name: generic
+      eda.builtin.generic:
+        payload:
+          - id_list:
+             - 1
+             - 2
+             - 3
+  rules:
+    - name: r1
+      condition: event.id_list contains 1 
+      action:
+        debug:

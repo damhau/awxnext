@@ -1,0 +1,11 @@
+[
+  "launch clean: Alertmanager / Clean a full disk, limit \"h2\", vars {\"mountpoint\":\"/var/log\",\"severity\":\"warning\"}, alert DiskFull a2 2026-11-16T08:01:00Z firing, hosts [\"h2\"]",
+  "launch clean: Alertmanager / Clean a full disk, limit \"h2\", vars {\"mountpoint\":\"/var/log\",\"severity\":\"warning\"}, alert DiskFull a2 2026-11-16T08:01:00Z firing, hosts [\"h2\"]",
+  "launch clean: Alertmanager / Clean a full disk, limit \"h3\", vars {\"mountpoint\":\"/var/lib\",\"severity\":\"critical\"}, alert DiskFull a7 2026-11-16T08:14:00Z firing, hosts [\"h3\"]",
+  "launch page: Alertmanager / Page the on-call team, limit \"h3\", vars {\"alert\":\"HostUnreachable\"}, event {\"escalate\":\"HostUnreachable\",\"host\":\"h3\"}",
+  "launch page: Alertmanager / Sentinel, limit \"h1\", vars {\"alert\":\"sentinel\"}, alert Sentinel a9 2026-11-16T08:30:00Z firing, hosts [\"h1\"]",
+  "launch restart: Alertmanager / Restart a service that is down, limit \"h1\", vars {\"service\":\"nginx\"}, alert ServiceDown a1 2026-11-16T08:00:00Z firing, hosts [\"h1\"]",
+  "launch restart: Alertmanager / Restart a service that is down, limit \"h1\", vars {\"service\":\"postgres\"}, alert ServiceDown a3 2026-11-16T08:02:00Z firing, hosts [\"h1\"]",
+  "log: LOG DiskFull on h2 resolved",
+  "log: LOG ServiceDown on h1 resolved"
+]

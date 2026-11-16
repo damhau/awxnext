@@ -20,6 +20,7 @@ type Stream = Base & {
   organization: number
   stream_type: string
   credential: number | null
+  rulebook: number | null
   test_mode: boolean
   retention_days: number
   max_payload_bytes: number
@@ -121,7 +122,7 @@ export function StreamDetail() {
                 {tr('Edit')}
               </Link>
             )}
-            {caps.delete && (
+            {caps.delete && !s.rulebook && (
               <button className="btn danger" onClick={() => del({ path: `event_streams/${id}/`, name: s.name, what: tr('event stream'), then: '/event-streams' })}>
                 {tr('Delete')}
               </button>
@@ -260,6 +261,7 @@ function Setup({ stream }: { stream: Stream }) {
                 [tr('Rate limit'), stream.rate_limit ? trn(stream.rate_limit, '{n} event a minute', '{n} events a minute') : tr('None')],
                 [tr('Largest request'), tr('{n} KiB', { n: Math.round(stream.max_payload_bytes / 1024) })],
                 [tr('Keeps events'), trn(stream.retention_days, '{n} day', '{n} days')],
+                [tr('Rulebook'), stream.rulebook ? <Link to={`/rulebooks/${stream.rulebook}`}>{stream.summary_fields.rulebook?.name ?? asIs(`#${stream.rulebook}`)}</Link> : false],
               ]}
             />
           </div>

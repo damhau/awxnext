@@ -510,6 +510,36 @@ func TestUnifiedTemplateCapabilities(t *testing.T) {
 	}
 }
 
+// As in AWX, a template's row in the unified list holds what its own
+// endpoint shows: ansible-rulebook finds a template there, then launches it
+// from related.launch with the prompts the row says it takes.
+func TestUnifiedTemplateTypedFields(t *testing.T) {
+	a := adminClient(t)
+	org := must(t, a.post("organizations/", map[string]any{"name": uniq("org")}), 201).id()
+	wf := must(t, a.post("workflow_job_templates/", map[string]any{"name": uniq("wf"), "organization": org,
+		"ask_limit_on_launch": true, "ask_variables_on_launch": true}), 201).Body
+	rows := must(t, a.get(fmt.Sprintf("unified_job_templates/?name=%s", wf["name"])), 200).results()
+	if len(rows) != 1 {
+		t.Fatalf("template not listed: %v", rows)
+	}
+	row := rows[0]
+	want := wf["related"].(map[string]any)["launch"]
+	if got := row["related"].(map[string]any)["launch"]; got == nil || got != want {
+		t.Errorf("related.launch: %v, want %v", got, want)
+	}
+	for _, f := range []string{"ask_limit_on_launch", "ask_variables_on_launch", "ask_labels_on_launch", "ask_inventory_on_launch"} {
+		if row[f] != wf[f] {
+			t.Errorf("%s: %v, want %v", f, row[f], wf[f])
+		}
+	}
+	if row["ask_limit_on_launch"] != true || row["summary_fields"].(map[string]any)["organization"].(map[string]any)["name"] == nil {
+		t.Errorf("row: %v", row)
+	}
+	if row["url"] != wf["url"] {
+		t.Errorf("url: %v, want %v", row["url"], wf["url"])
+	}
+}
+
 func TestUserPasswordPlaceholderActiveAndSSO(t *testing.T) {
 	a := adminClient(t)
 	name := uniq("u")

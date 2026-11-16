@@ -1,2 +1,8 @@
 /* Tables inside panels: the panel already draws the frame. */
 .flush .table-wrap { border: none; border-radius: 0; }
+
+/* A rulebook's report: one row per source or rule, its actions under it. */
+.rulebook-list { gap: 0; }
+.rulebook-list > .rulebook-rule { display: block; padding: 8px 0; border-top: 1px solid var(--line); }
+.rulebook-list > .rulebook-rule:first-child { border-top: none; padding-top: 0; }
+.rulebook-yaml { margin: 0; max-height: 420px; overflow: auto; border: none; border-radius: 0; font-size: 12px; }

@@ -92,7 +92,7 @@ func readRuleDraft(body Obj) (*ruleDraft, error) {
 	if d.action == "" {
 		d.action = actionLaunch
 	}
-	if d.action != actionLaunch && d.action != actionNotify && d.action != actionPost {
+	if d.action != actionLaunch && d.action != actionNotify && d.action != actionPost && d.action != actionLog {
 		fe.Add("action", fmt.Sprintf("\"%s\" is not a valid choice.", d.action))
 	}
 	if v, ok := body["extra_vars"]; ok && v != nil {
@@ -162,7 +162,7 @@ func (d *ruleDraft) mappings() []draftExpr {
 			out = append(out, draftExpr{"extra_vars." + k, d.vars[k], rules.Any})
 		}
 		out = append(out, draftExpr{"limit", d.limit, rules.String})
-	case actionNotify:
+	case actionNotify, actionLog:
 		out = append(out, draftExpr{"message", d.message, rules.Any})
 	case actionPost:
 		out = append(out, draftExpr{"event_type", d.typ, rules.String}, draftExpr{"event_data", d.data, rules.Any})

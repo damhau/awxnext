@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"html"
 	"net/http"
+	"net/url"
 	"regexp"
 	"slices"
 	"strconv"
@@ -557,6 +558,64 @@ func eventLevel(e string) int {
 	return 0
 }
 
+// ujtAsTyped adds to each template what its own endpoint shows, as AWX's
+// unified list does: clients find a template there and launch it from the
+// row, as ansible-rulebook's run_job_template reads related.launch and the
+// ask_*_on_launch prompts. What the row already has stays.
+func ujtAsTyped(c *Ctx, objs []Obj) error {
+	byType := map[string][]int{}
+	for i, o := range objs {
+		byType[str(o["type"])] = append(byType[str(o["type"])], i)
+	}
+	for typ, idx := range byType {
+		r := api.LookupType(typ)
+		if r == nil {
+			continue
+		}
+		ids := make([]string, len(idx))
+		for j, i := range idx {
+			id, _ := api.ID(objs[i]["id"])
+			ids[j] = strconv.FormatInt(id, 10)
+		}
+		rows, _, err := api.List(c, r, api.ListParams{Params: url.Values{"id__in": {strings.Join(ids, ",")}}, Page: 1, PageSize: len(ids)})
+		if err != nil {
+			return err
+		}
+		typed, err := api.Serialize(c, r, rows)
+		if err != nil {
+			return err
+		}
+		byID := make(map[int64]Obj, len(typed))
+		for _, t := range typed {
+			id, _ := api.ID(t["id"])
+			byID[id] = t
+		}
+		for _, i := range idx {
+			id, _ := api.ID(objs[i]["id"])
+			t, ok := byID[id]
+			if !ok {
+				continue
+			}
+			for k, v := range t {
+				cur, had := objs[i][k]
+				dst, nested := cur.(Obj)
+				src, isObj := v.(Obj)
+				switch {
+				case nested && isObj:
+					for kk, vv := range src {
+						if _, ok := dst[kk]; !ok {
+							dst[kk] = vv
+						}
+					}
+				case !had:
+					objs[i][k] = v
+				}
+			}
+		}
+	}
+	return nil
+}
+
 func registerUnified() {
 	ujt := api.Register(&Resource{
 		Name:     "unified_job_templates",
@@ -581,7 +640,12 @@ func registerUnified() {
 		},
 		SummaryFields: []string{"id", "name", "description", "type"},
 		View:          ujtView,
-		Summary:       ujtSummary,
+		Summary: func(c *Ctx, objs []Obj) error {
+			if err := ujtSummary(c, objs); err != nil {
+				return err
+			}
+			return ujtAsTyped(c, objs)
+		},
 	})
 	ujt.Serialize = func(c *Ctx, o Obj) {
 		if r := api.LookupType(str(o["type"])); r != nil {

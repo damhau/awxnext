@@ -112,10 +112,20 @@ func registerEventStreams() {
 			{Name: "uuid", Type: api.TString, ReadOnly: true},
 			{Name: "last_sequence", Type: api.TInt, ReadOnly: true, Help: "The number of the stream's last event."},
 			{Name: "last_event_at", Type: api.TDateTime, ReadOnly: true, Nullable: true},
+			rulebookField(),
+			rulebookKeyField(),
 		},
 		BeforeSave: func(c *Ctx, old, data Obj) error {
+			if err := lockImported(c, api.Lookup("event_streams"), old, data, streamOperatorFields); err != nil {
+				return err
+			}
 			v, given := data["credential"]
 			if !given && old != nil {
+				return nil
+			}
+			// An imported stream waits for its operator's credential: the
+			// receiver refuses events until it has one.
+			if v == nil && importing(c) {
 				return nil
 			}
 			if old != nil && fmt.Sprint(v) == fmt.Sprint(old["credential"]) {
@@ -142,7 +152,8 @@ func registerEventStreams() {
 				rel["receiver"] = path
 			}
 		},
-		SubLists: []*SubList{streamEventsSub()},
+		BeforeDelete: func(c *Ctx, obj Obj) error { return refuseImportedDelete(c, "event stream", obj) },
+		SubLists:     []*SubList{streamEventsSub()},
 	})
 
 	api.Register(&Resource{

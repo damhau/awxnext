@@ -205,7 +205,12 @@ func refuseAnsibleVars(c *Ctx, field string, vars map[string]any) error {
 	return api.FieldError(field, fmt.Sprintf("Variables %s cannot be set at launch: ansible_* variables control how Ansible connects and runs. Set them on the template, inventory or host instead.", strings.Join(names, ", ")))
 }
 
-func isAnsibleVar(name string) bool { return strings.HasPrefix(strings.ToLower(name), "ansible_") }
+// isAnsibleVar says whether a variable is one of Ansible's. ansible_eda is
+// not: it is the event ansible-rulebook's run_job_template sends, which
+// imported rules send as it does.
+func isAnsibleVar(name string) bool {
+	return strings.HasPrefix(strings.ToLower(name), "ansible_") && name != "ansible_eda"
+}
 
 // refuseUnprompted fails a launch that sends fields the template does not
 // prompt for. AWX ignores them and starts the job anyway, so a limit meant for

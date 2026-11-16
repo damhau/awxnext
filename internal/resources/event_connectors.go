@@ -87,6 +87,8 @@ func registerEventConnectors() {
 			{Name: "restart_count", Type: api.TInt, ReadOnly: true, Help: "Restarts in a row."},
 			{Name: "stats", Type: api.TJSON, ReadOnly: true,
 				Help: "What the connector last reported: events sent, buffered, dropped and rejected, retries, and whether awxnext is unreachable."},
+			rulebookField(),
+			rulebookKeyField(),
 		},
 		BeforeSave: saveEventConnector,
 		AfterUpdate: func(c *Ctx, old, obj Obj) error {
@@ -96,9 +98,10 @@ func registerEventConnectors() {
 			}
 			return nil
 		},
-		Summary:  connectorSummary,
-		SubLists: []*SubList{connectorRunsSub()},
-		Actions:  []*api.Action{{Name: "restart", Methods: []string{"POST"}, Perm: "change", Handler: restartConnectorView}},
+		BeforeDelete: func(c *Ctx, obj Obj) error { return refuseImportedDelete(c, "event connector", obj) },
+		Summary:      connectorSummary,
+		SubLists:     []*SubList{connectorRunsSub()},
+		Actions:      []*api.Action{{Name: "restart", Methods: []string{"POST"}, Perm: "change", Handler: restartConnectorView}},
 	})
 
 	api.Register(&Resource{
@@ -203,6 +206,9 @@ func validateConnectorFilters(c *Ctx, v any, data Obj) error {
 }
 
 func saveEventConnector(c *Ctx, old, data Obj) error {
+	if err := lockImported(c, api.Lookup("event_connectors"), old, data, connectorOperatorFields); err != nil {
+		return err
+	}
 	merged := Obj{}
 	for k, v := range old {
 		merged[k] = v

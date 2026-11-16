@@ -3427,5 +3427,94 @@
   "Launches the check": "Lance la vérification",
   "The firings whose key a resolving event of the log resolved within the check’s time: without the rule’s actions, or by the actions taken then.": "Les déclenchements dont un événement de résolution du journal a résolu la clé dans le délai de la vérification : sans les actions de la règle, ou grâce aux actions prises alors.",
   "Resolved": "Résolus",
-  "{resolved} of {checked} ({rate})": "{resolved} sur {checked} ({rate})"
+  "{resolved} of {checked} ({rate})": "{resolved} sur {checked} ({rate})",
+  "Logged": "Consigné",
+  "Log a message": "Consigner un message",
+  "Translated": "Traduit",
+  "Partly translated": "Traduit en partie",
+  "Not translated": "Non traduit",
+  "{translated} of {n} rules translated": {
+    "one": "{translated} règle sur {n} traduite",
+    "other": "{translated} règles sur {n} traduites"
+  },
+  "{n} partly": {
+    "one": "{n} en partie",
+    "other": "{n} en partie"
+  },
+  "{n} not": {
+    "one": "{n} non",
+    "other": "{n} non"
+  },
+  "{action}: {reason}": "{action} : {reason}",
+  "Give {n} streams a credential: they refuse events until then.": {
+    "one": "Donnez un identifiant à {n} flux : il refuse les événements d’ici là.",
+    "other": "Donnez un identifiant à {n} flux : ils refusent les événements d’ici là."
+  },
+  "Enable {n} connectors, with their execution environments and credentials.": {
+    "one": "Activez {n} connecteur, avec son environnement d’exécution et ses identifiants.",
+    "other": "Activez {n} connecteurs, avec leurs environnements d’exécution et leurs identifiants."
+  },
+  "Enable {n} rules in shadow mode, and read their decisions before moving them to auto.": {
+    "one": "Activez {n} règle en mode fantôme, et lisez ses décisions avant de la passer en automatique.",
+    "other": "Activez {n} règles en mode fantôme, et lisez leurs décisions avant de les passer en automatique."
+  },
+  "The variables are a mapping (name: value).": "Les variables sont un dictionnaire (nom : valeur).",
+  "This rule comes from a rulebook: change its streams, conditions and action there, and import it again. Its description, mode and guardrails are yours.": "Cette règle vient d’un rulebook : changez-y ses flux, ses conditions et son action, puis importez-le à nouveau. Sa description, son mode et ses garde-fous sont les vôtres.",
+  "Logs a message": "Consigne un message",
+  "Launch a job that failed again, up to this many times. 0: never.": "Relancer un job en échec, jusqu’à ce nombre de fois. 0 : jamais.",
+  "From when the failed job ended.": "À partir de la fin du job en échec.",
+  "Post the job’s artifacts": "Publier les artefacts du job",
+  "No": "Non",
+  "As an event (post_event)": "Comme événement (post_event)",
+  "As a fact (set_fact)": "Comme fait (set_fact)",
+  "Once the job ends, what it set with set_stats, for other rules to read.": "À la fin du job, ce qu’il a défini avec set_stats, pour que d’autres règles le lisent.",
+  "Empty: the rule’s first stream.": "Vide : le premier flux de la règle.",
+  "A CEL expression; each decision records its value.": "Une expression CEL ; chaque décision consigne sa valeur.",
+  "Rulebook": "Rulebook",
+  "{n} retries of a failed job, after {delay}": {
+    "one": "{n} nouvelle tentative d’un job en échec, après {delay}",
+    "other": "{n} nouvelles tentatives d’un job en échec, après {delay}"
+  },
+  "Posted as {kind} to {stream}": "Publiés comme {kind} dans {stream}",
+  "the rule’s first stream": "le premier flux de la règle",
+  "Rulebooks": "Rulebooks",
+  "{ruleset} / {rule}: {status}": "{ruleset} / {rule} : {status}",
+  "Imported {n} rulebooks": {
+    "one": "{n} rulebook importé",
+    "other": "{n} rulebooks importés"
+  },
+  "uploaded": "téléversé",
+  "Can’t be read": "Illisible",
+  "Imported": "Importé",
+  "Each sync imports the rulebooks in extensions/eda/rulebooks/ and rulebooks/ into event streams, connectors and rules, which start disabled.": "Chaque synchronisation importe les rulebooks de extensions/eda/rulebooks/ et rulebooks/ en flux d’événements, connecteurs et règles, désactivés au départ.",
+  "Import again": "Importer à nouveau",
+  "Upload a rulebook": "Téléverser un rulebook",
+  "No rulebooks": "Aucun rulebook",
+  "Add rulebooks to the project’s repository and sync it, or upload one.": "Ajoutez des rulebooks au dépôt du projet et synchronisez-le, ou téléversez-en un.",
+  "Upload a rulebook to import it.": "Téléversez un rulebook pour l’importer.",
+  "{n} rulebooks": {
+    "one": "{n} rulebook",
+    "other": "{n} rulebooks"
+  },
+  "The YAML of ansible-rulebook’s rulesets. Saving imports it.": "Le YAML des rulesets d’ansible-rulebook. L’enregistrer l’importe.",
+  "As ansible-rulebook’s --vars, in YAML or JSON: vars.name in conditions, {{ name }} in the arguments of sources and actions.": "Comme --vars d’ansible-rulebook, en YAML ou JSON : vars.name dans les conditions, {{ name }} dans les arguments des sources et des actions.",
+  "Importing…": "Import…",
+  "Save and import": "Enregistrer et importer",
+  "Upload and import": "Téléverser et importer",
+  "The import makes event streams, connectors and rules, all disabled, and reports what doesn’t translate.": "L’import crée des flux d’événements, des connecteurs et des règles, tous désactivés, et signale ce qui ne se traduit pas.",
+  "Variables of {name}": "Variables de {name}",
+  "The rulebook is {path} of its project: change it there, and sync the project.": "Le rulebook est {path} de son projet : changez-le là, puis synchronisez le projet.",
+  "recorded by the rule’s decisions": "consigné par les décisions de la règle",
+  "as {kind}": "comme {kind}",
+  "Ruleset {name}": "Ruleset {name}",
+  "Imported {name}": "{name} importé",
+  "rulebook": "rulebook",
+  "Its streams, connectors and rules are deleted with it.": "Ses flux, connecteurs et règles sont supprimés avec lui.",
+  "The last import couldn’t read the rulebook: {error} The objects of the import before stay as they were.": "Le dernier import n’a pas pu lire le rulebook : {error} Les objets de l’import précédent restent tels quels.",
+  "To turn it on": "Pour l’activer",
+  "Nothing imported yet": "Rien d’importé pour l’instant",
+  "File": "Fichier",
+  "Uploaded": "Téléversé",
+  "Made by the import": "Créés par l’import",
+  "Import again reads the rulebooks in extensions/eda/rulebooks/ and rulebooks/ of the project’s directory into event streams, connectors and rules, which start disabled.": "Importer à nouveau lit les rulebooks de extensions/eda/rulebooks/ et rulebooks/ du répertoire du projet en flux d’événements, connecteurs et règles, désactivés au départ."
 }

@@ -33,6 +33,7 @@ type Connector = Base & {
   organization: number
   event_stream: number
   source: string
+  rulebook: number | null
   args: Record<string, unknown>
   filters: Record<string, unknown>[]
   credentials: number[]
@@ -183,7 +184,7 @@ export function ConnectorDetail() {
                 {tr('Edit')}
               </Link>
             )}
-            {caps.delete && (
+            {caps.delete && !c.rulebook && (
               <button className="btn danger" onClick={() => del({ path: `event_connectors/${id}/`, name: c.name, what: tr('event connector'), then: '/event-connectors' })}>
                 {tr('Delete')}
               </button>
@@ -276,6 +277,7 @@ function Details({ c }: { c: Connector }) {
               [tr('Buffer'), trn(c.buffer_size, '{n} event', '{n} events')],
               [tr('Restarts'), restartText(c.restart_policy, c.restart_delay, c.max_restarts)],
               [tr('Organization'), <Link to={`/organizations/${c.organization}`}>{sf.organization?.name}</Link>],
+              [tr('Rulebook'), c.rulebook ? <Link to={`/rulebooks/${c.rulebook}`}>{sf.rulebook?.name ?? asIs(`#${c.rulebook}`)}</Link> : false],
               [tr('Changed'), <Ago at={c.modified} />],
             ]}
           />

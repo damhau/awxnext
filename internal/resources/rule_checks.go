@@ -214,7 +214,7 @@ func (e *RuleEngine) openChecks(ctx context.Context, db pgx.Tx, after *afterComm
 	var deadline, finished *time.Time
 	switch out.name {
 	case "launched":
-	case "notified", "posted":
+	case "notified", "posted", "logged":
 		state, deadline, finished = checkWatching, &wait, &now
 		if r.Check == checkTemplate {
 			state = checkChecking

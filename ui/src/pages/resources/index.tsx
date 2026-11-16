@@ -40,6 +40,11 @@ const ProjectForm = m_projects('ProjectForm')
 const ProjectJobsTab = m_projects('ProjectJobsTab')
 const ProjectList = m_projects('ProjectList')
 const ProjectSchedulesTab = m_projects('ProjectSchedulesTab')
+const m_rulebooks = lazyModule(() => import('./rulebooks'))
+const ProjectRulebooksTab = m_rulebooks('ProjectRulebooksTab')
+const RulebookDetail = m_rulebooks('RulebookDetail')
+const RulebookEdit = m_rulebooks('RulebookEdit')
+const RulebookNew = m_rulebooks('RulebookNew')
 
 /** Renders an inventory tab with the inventory loaded by the parent route. */
 function InvTab({ tab: Tab }: { tab: (p: { inv: Inventory }) => React.ReactNode }) {
@@ -68,13 +73,17 @@ export function resourceRoutes() {
       <Route path="projects" element={<ProjectList />} />
       <Route path="projects/new" element={<ProjectForm />} />
       <Route path="projects/:id/edit" element={<ProjectForm />} />
+      <Route path="projects/:id/rulebooks/new" element={<RulebookNew />} />
       <Route path="projects/:id" element={<ProjectDetail />}>
         <Route index element={<ProjectDetailsTab />} />
         <Route path="jobs" element={<ProjectJobsTab />} />
+        <Route path="rulebooks" element={<ProjectRulebooksTab />} />
         <Route path="schedules" element={<ProjectSchedulesTab />} />
         <Route path="notifications" element={<ProjectNotificationsTab />} />
         <Route path="access" element={<ProjectAccessTab />} />
       </Route>
+      <Route path="rulebooks/:id" element={<RulebookDetail />} />
+      <Route path="rulebooks/:id/edit" element={<RulebookEdit />} />
       <Route path="credentials" element={<CredentialList />} />
       <Route path="credentials/new" element={<CredentialForm />} />
       <Route path="credentials/:id/edit" element={<CredentialForm />} />

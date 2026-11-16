@@ -46,7 +46,7 @@ interface CheckResult {
   events: CheckedEvent[]
 }
 
-type RefKey = 'organization' | 'unified_job_template' | 'notification_template' | 'target_stream' | 'breaker_notification_template' | 'check_template' | 'check_notification_template'
+type RefKey = 'organization' | 'unified_job_template' | 'notification_template' | 'target_stream' | 'artifacts_stream' | 'breaker_notification_template' | 'check_template' | 'check_notification_template'
 
 /** A number of seconds, as a number of a unit. */
 function DurationInput({ label, seconds, onChange, help, error, optional }: { label: ReactNode; seconds: number; onChange: (s: number) => void; help?: ReactNode; error?: string; optional?: boolean }) {
@@ -97,6 +97,7 @@ export function RuleEditor({ rule }: { rule?: Any }) {
     unified_job_template: asRef(rule?.unified_job_template, sf.unified_job_template),
     notification_template: asRef(rule?.notification_template, sf.notification_template),
     target_stream: asRef(rule?.target_stream, sf.target_stream),
+    artifacts_stream: asRef(rule?.artifacts_stream, sf.artifacts_stream),
     breaker_notification_template: asRef(rule?.breaker_notification_template, sf.breaker_notification_template),
     check_template: asRef(rule?.check_template, sf.check_template),
     check_notification_template: asRef(rule?.check_notification_template, sf.check_notification_template),
@@ -174,6 +175,9 @@ export function RuleEditor({ rule }: { rule?: Any }) {
   const errOf = (field: string) => saveErrors[field] || check?.errors[field] || undefined
   const firstMatch = check?.events.find((e) => e.matched)
   const launch = d.action === 'launch'
+  // An imported rule's conditions and action are its rulebook's: the API
+  // refuses to change them, so the editor doesn't offer to.
+  const imported = !!rule?.rulebook
   const approvalAsked = d.mode === 'approval' || d.window_action === 'approval'
 
   const save = async () => {
@@ -215,6 +219,13 @@ export function RuleEditor({ rule }: { rule?: Any }) {
           save()
         }}
       >
+        {imported && (
+          <div className="notice">
+            {tr('This rule comes from a rulebook: change its streams, conditions and action there, and import it again. Its description, mode and guardrails are yours.')}{' '}
+            <Link to={`/rulebooks/${rule.rulebook}`}>{sf.rulebook?.name ?? asIs(`#${rule.rulebook}`)}</Link>
+          </div>
+        )}
+        <fieldset disabled={imported} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
         <div className="form-grid">
           <TextInput label={tr('Name')} value={d.name} onChange={(v) => set('name', v)} error={saveErrors.name} autoFocus={!rule} />
           <Lookup label={tr('Organization')} resource="organizations/" value={refs.organization} onChange={(v) => setRef('organization', v)} error={saveErrors.organization} />
@@ -228,7 +239,7 @@ export function RuleEditor({ rule }: { rule?: Any }) {
             meta={(r) => (r.test_mode ? <span className="tag">{tr('test mode')}</span> : <span className="faint small">{r.stream_type}</span>)}
             help={schema ? trn(schema.events, 'Completion and types come from the streams’ latest event.', 'Completion and types come from the streams’ {n} latest events.') : tr('The events the rule reads. Completion and types come from their latest events.')}
           />
-          <TextArea label={tr('Description')} optional rows={2} value={d.description} onChange={(v) => set('description', v)} />
+          {!imported && <TextArea label={tr('Description')} optional rows={2} value={d.description} onChange={(v) => set('description', v)} />}
         </div>
 
         <section className="form-section">
@@ -334,6 +345,7 @@ export function RuleEditor({ rule }: { rule?: Any }) {
               ['launch', tr('Launches a template')],
               ['notify', tr('Notifies')],
               ['post_event', tr('Posts an event')],
+              ['log', tr('Logs a message')],
             ]}
           />
           {d.action === 'launch' && (
@@ -370,12 +382,34 @@ export function RuleEditor({ rule }: { rule?: Any }) {
                   </div>
                 </div>
               </Field>
+              <div className="form-grid">
+                <TextInput label={tr('Retries')} type="number" value={d.retries} onChange={(v) => set('retries', Number(v))} error={saveErrors.retries} help={tr('Launch a job that failed again, up to this many times. 0: never.')} />
+                {d.retries > 0 && <DurationInput label={tr('After')} seconds={d.retry_delay} onChange={(v) => set('retry_delay', v)} error={saveErrors.retry_delay} help={tr('From when the failed job ended.')} />}
+                <SelectField
+                  label={tr('Post the job’s artifacts')}
+                  value={d.post_artifacts}
+                  onChange={(v) => set('post_artifacts', v)}
+                  error={saveErrors.post_artifacts}
+                  options={[
+                    ['', tr('No')],
+                    ['event', tr('As an event (post_event)')],
+                    ['fact', tr('As a fact (set_fact)')],
+                  ]}
+                  help={tr('Once the job ends, what it set with set_stats, for other rules to read.')}
+                />
+                {d.post_artifacts && <Lookup label={tr('To the stream')} optional resource="event_streams/" value={refs.artifacts_stream} onChange={(v) => setRef('artifacts_stream', v)} error={saveErrors.artifacts_stream} help={tr('Empty: the rule’s first stream.')} />}
+              </div>
             </>
           )}
           {d.action === 'notify' && (
             <div className="form-grid">
               <Lookup label={tr('Notification')} resource="notification_templates/" value={refs.notification_template} onChange={(v) => setRef('notification_template', v)} error={saveErrors.notification_template} />
               <CelInput label={tr('Message')} optional full={false} value={d.message} onChange={(v) => set('message', v)} schema={schema} error={errOf('message')} placeholder={tr('"Disk full on " + event.data.labels.instance')} />
+            </div>
+          )}
+          {d.action === 'log' && (
+            <div className="form-grid">
+              <CelInput label={tr('Message')} full={false} value={d.message} onChange={(v) => set('message', v)} schema={schema} error={errOf('message')} placeholder={tr('"Disk full on " + event.data.labels.instance')} help={tr('A CEL expression; each decision records its value.')} />
             </div>
           )}
           {d.action === 'post_event' && (
@@ -387,6 +421,12 @@ export function RuleEditor({ rule }: { rule?: Any }) {
           )}
           <ActionPreview event={firstMatch} action={d.action} />
         </section>
+        </fieldset>
+        {imported && (
+          <div className="form-grid">
+            <TextArea label={tr('Description')} optional rows={2} value={d.description} onChange={(v) => set('description', v)} />
+          </div>
+        )}
 
         <section className="form-section">
           <h2>{tr('Mode')}</h2>
@@ -575,7 +615,7 @@ function ActionPreview({ event, action }: { event?: CheckedEvent; action: string
           [tr('Variables'), a.extra_vars ?? {}],
           [tr('Limit'), a.limit],
         ]
-      : action === 'notify'
+      : action === 'notify' || action === 'log'
         ? [[tr('Message'), a.message]]
         : [
             [tr('Event type'), a.event_type],

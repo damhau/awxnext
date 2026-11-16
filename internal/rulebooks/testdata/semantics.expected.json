@@ -1,0 +1,112 @@
+{
+ "r01_missing_ne": [],
+ "r02_not_missing_eq": [],
+ "r03_str_contains": [],
+ "r04_list_contains": [
+  "e1"
+ ],
+ "r05_int_eq_str": [],
+ "r06_defined": [
+  "e1"
+ ],
+ "r07_and_not_defined": [
+  "e2"
+ ],
+ "r08_float_int": [
+  "e1"
+ ],
+ "r09_search_ic": [
+  "e1"
+ ],
+ "r10_select": [
+  "e1"
+ ],
+ "r11_selectattr": [
+  "e1"
+ ],
+ "r12_in": [
+  "e1"
+ ],
+ "r13_add": [
+  "e2"
+ ],
+ "r14_str_lt": [
+  "e1"
+ ],
+ "r15_two_paths": [
+  "e1"
+ ],
+ "r16_null": [
+  "e1"
+ ],
+ "r17_missing_or": [
+  "e2"
+ ],
+ "r18_match": [
+  "e1"
+ ],
+ "r19_match_mid": [],
+ "r20_regex": [
+  "e1"
+ ],
+ "r21_not_in": [
+  "e2"
+ ],
+ "r22_missing_not_in": [],
+ "r23_str_ne": [
+  "e2"
+ ],
+ "r24_not_contains": [],
+ "r25_bool_true": [
+  "e1",
+  "e2",
+  "e3",
+  "e4"
+ ],
+ "r26_selectattr_missing": [],
+ "r27_select_not": [
+  "e1"
+ ],
+ "r28_and_or": [
+  "e1"
+ ],
+ "r29_or_and": [],
+ "r30_bare": [
+  "e2"
+ ],
+ "r31_ne_missing_both": [],
+ "r32_lt_missing": [],
+ "r33_not_select_missing": [],
+ "r34_not_contains_missing": [],
+ "r35_int_div": [
+  "e1"
+ ],
+ "r36_selectattr_ne": [
+  "e1"
+ ],
+ "r37_not_selectattr": [
+  "e1"
+ ],
+ "r38_search_list": [
+  "e1"
+ ],
+ "r39_is_not_search": [
+  "e1",
+  "e2"
+ ],
+ "r40_not_search_missing": [],
+ "r41_bare": [
+  "e3"
+ ],
+ "r42_not_bare": [
+  "e1",
+  "e3",
+  "e4"
+ ],
+ "r43_not_bare_missing": [
+  "e4"
+ ],
+ "r44_bare_and": [
+  "e3"
+ ]
+}

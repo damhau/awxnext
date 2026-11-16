@@ -1,0 +1,256 @@
+# Conditions whose results under ansible-rulebook 1.3.2 are recorded in
+# semantics.expected.json: each rule's debug prints "R <rule> <event id>".
+# TestSemantics checks that their translations match the same events, and
+# TestRulebookSemanticsUnderAnsibleRulebook runs them under ansible-rulebook.
+- name: sem
+  hosts: all
+  match_multiple_rules: true
+  sources:
+  - eda.builtin.generic:
+      payload:
+      - id: e1
+        s: abc
+        l:
+        - a
+        - b
+        i: 1
+        f: 1.0
+        objs:
+        - a: 1
+        - a: 2
+        nums:
+        - 1
+        - 5
+        a: 2
+        b: 2
+        n: null
+      - id: e2
+        s: xyz
+        i: 2
+      - id: e3
+        t: true
+        f: false
+      - id: e4
+        t: x
+        f: 0
+  rules:
+  - name: r01_missing_ne
+    condition: event.missing != 1
+    action:
+      debug:
+        msg: R r01_missing_ne {{ event.id }}
+  - name: r02_not_missing_eq
+    condition: not (event.missing == 1)
+    action:
+      debug:
+        msg: R r02_not_missing_eq {{ event.id }}
+  - name: r03_str_contains
+    condition: event.s contains "a"
+    action:
+      debug:
+        msg: R r03_str_contains {{ event.id }}
+  - name: r04_list_contains
+    condition: event.l contains "a"
+    action:
+      debug:
+        msg: R r04_list_contains {{ event.id }}
+  - name: r05_int_eq_str
+    condition: event.i == "1"
+    action:
+      debug:
+        msg: R r05_int_eq_str {{ event.id }}
+  - name: r06_defined
+    condition: event.objs is defined
+    action:
+      debug:
+        msg: R r06_defined {{ event.id }}
+  - name: r08_float_int
+    condition: event.f == 1
+    action:
+      debug:
+        msg: R r08_float_int {{ event.id }}
+  - name: r09_search_ic
+    condition: event.s is search("B", ignorecase=true)
+    action:
+      debug:
+        msg: R r09_search_ic {{ event.id }}
+  - name: r10_select
+    condition: event.nums is select(">", 3)
+    action:
+      debug:
+        msg: R r10_select {{ event.id }}
+  - name: r11_selectattr
+    condition: event.objs is selectattr("a", "==", 2)
+    action:
+      debug:
+        msg: R r11_selectattr {{ event.id }}
+  - name: r12_in
+    condition: event.i in [1, 3]
+    action:
+      debug:
+        msg: R r12_in {{ event.id }}
+  - name: r13_add
+    condition: event.i + 1 == 3
+    action:
+      debug:
+        msg: R r13_add {{ event.id }}
+  - name: r14_str_lt
+    condition: event.s < "b"
+    action:
+      debug:
+        msg: R r14_str_lt {{ event.id }}
+  - name: r15_two_paths
+    condition: event.a == event.b
+    action:
+      debug:
+        msg: R r15_two_paths {{ event.id }}
+  - name: r16_null
+    condition: event.n == null
+    action:
+      debug:
+        msg: R r16_null {{ event.id }}
+  - name: r17_missing_or
+    condition: event.missing == 1 or event.i == 2
+    action:
+      debug:
+        msg: R r17_missing_or {{ event.id }}
+  - name: r18_match
+    condition: event.s is match("ab")
+    action:
+      debug:
+        msg: R r18_match {{ event.id }}
+  - name: r19_match_mid
+    condition: event.s is match("bc")
+    action:
+      debug:
+        msg: R r19_match_mid {{ event.id }}
+  - name: r20_regex
+    condition: event.s is regex("b.$")
+    action:
+      debug:
+        msg: R r20_regex {{ event.id }}
+  - name: r21_not_in
+    condition: event.i not in [1, 3]
+    action:
+      debug:
+        msg: R r21_not_in {{ event.id }}
+  - name: r22_missing_not_in
+    condition: event.missing not in [1, 3]
+    action:
+      debug:
+        msg: R r22_missing_not_in {{ event.id }}
+  - name: r23_str_ne
+    condition: event.s != "abc"
+    action:
+      debug:
+        msg: R r23_str_ne {{ event.id }}
+  - name: r24_not_contains
+    condition: event.l not contains "a"
+    action:
+      debug:
+        msg: R r24_not_contains {{ event.id }}
+  - name: r25_bool_true
+    condition: true
+    action:
+      debug:
+        msg: R r25_bool_true {{ event.id }}
+  - name: r26_selectattr_missing
+    condition: event.objs is selectattr("zz", "==", 2)
+    action:
+      debug:
+        msg: R r26_selectattr_missing {{ event.id }}
+  - name: r27_select_not
+    condition: event.nums is not select(">", 3)
+    action:
+      debug:
+        msg: R r27_select_not {{ event.id }}
+  - name: r28_and_or
+    condition: event.i == 9 and event.i == 9 or event.id == "e1"
+    action:
+      debug:
+        msg: R r28_and_or {{ event.id }}
+  - name: r29_or_and
+    condition: event.id == "e1" or event.i == 9 and event.i == 9
+    action:
+      debug:
+        msg: R r29_or_and {{ event.id }}
+  - name: r30_bare
+    condition: event.id == e2
+    action:
+      debug:
+        msg: R r30_bare {{ event.id }}
+  - name: r31_ne_missing_both
+    condition: event.missing != event.other
+    action:
+      debug:
+        msg: R r31_ne_missing_both {{ event.id }}
+  - name: r32_lt_missing
+    condition: event.missing < 3
+    action:
+      debug:
+        msg: R r32_lt_missing {{ event.id }}
+  - name: r33_not_select_missing
+    condition: event.missing is not select(">", 3)
+    action:
+      debug:
+        msg: R r33_not_select_missing {{ event.id }}
+  - name: r34_not_contains_missing
+    condition: event.missing not contains "a"
+    action:
+      debug:
+        msg: R r34_not_contains_missing {{ event.id }}
+  - name: r35_int_div
+    condition: event.i - 1 == 0
+    action:
+      debug:
+        msg: R r35_int_div {{ event.id }}
+  - name: r36_selectattr_ne
+    condition: event.objs is selectattr("a", "!=", 1)
+    action:
+      debug:
+        msg: R r36_selectattr_ne {{ event.id }}
+  - name: r37_not_selectattr
+    condition: event.objs is not selectattr("a", "==", 3)
+    action:
+      debug:
+        msg: R r37_not_selectattr {{ event.id }}
+  - name: r38_search_list
+    condition: event.l is search("a")
+    action:
+      debug:
+        msg: R r38_search_list {{ event.id }}
+  - name: r39_is_not_search
+    condition: event.s is not search("q")
+    action:
+      debug:
+        msg: R r39_is_not_search {{ event.id }}
+  - name: r40_not_search_missing
+    condition: event.missing is not search("q")
+    action:
+      debug:
+        msg: R r40_not_search_missing {{ event.id }}
+  - name: r07_and_not_defined
+    condition: event.i == 2 and event.objs is not defined
+    action:
+      debug:
+        msg: R r07_and_not_defined {{ event.id }}
+  - name: r41_bare
+    condition: event.t
+    action:
+      debug:
+        msg: R r41_bare {{ event.id }}
+  - name: r42_not_bare
+    condition: not event.f
+    action:
+      debug:
+        msg: R r42_not_bare {{ event.id }}
+  - name: r43_not_bare_missing
+    condition: not event.t
+    action:
+      debug:
+        msg: R r43_not_bare_missing {{ event.id }}
+  - name: r44_bare_and
+    condition: event.t and event.id == "e3"
+    action:
+      debug:
+        msg: R r44_bare_and {{ event.id }}

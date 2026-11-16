@@ -166,7 +166,7 @@ export function RuleDetail() {
                 {tr('Edit')}
               </Link>
             )}
-            {caps.delete && (
+            {caps.delete && !r.rulebook && (
               <button className="btn danger" onClick={() => del({ path: `event_rules/${id}/`, name: r.name, what: tr('event rule'), then: '/event-rules' })}>
                 {tr('Delete')}
               </button>
@@ -262,11 +262,19 @@ function Overview({ r }: { r: Any }) {
               [tr('Action'), target],
               [tr('Variables'), vars.length ? <pre className="code">{vars.map(([k, v]) => `${k}: ${v}`).join('\n')}</pre> : false],
               [tr('Limit'), r.action === 'launch' && r.limit ? <span className="mono">{r.limit}</span> : false],
-              [tr('Message'), r.action === 'notify' && r.message ? <span className="mono">{r.message}</span> : false],
+              [tr('Message'), (r.action === 'notify' || r.action === 'log') && r.message ? <span className="mono">{r.message}</span> : false],
+              [tr('Retries'), r.action === 'launch' && r.retries ? trn(r.retries, '{n} retry of a failed job, after {delay}', '{n} retries of a failed job, after {delay}', { delay: duration(r.retry_delay) }) : false],
+              [
+                tr('Artifacts'),
+                r.action === 'launch' && r.post_artifacts
+                  ? tr('Posted as {kind} to {stream}', { kind: r.post_artifacts === 'fact' ? asIs('set_fact') : asIs('post_event'), stream: sf.artifacts_stream?.name ?? tr('the rule’s first stream') })
+                  : false,
+              ],
               [tr('Event type'), r.action === 'post_event' ? <span className="mono">{r.event_type}</span> : false],
               [tr('Event data'), r.action === 'post_event' && r.event_data ? <span className="mono">{r.event_data}</span> : false],
               [tr('Check the fix'), <CheckWhat r={r} />],
               [tr('Resolving event'), r.check === 'event' ? <pre className="code">{r.check_condition}</pre> : false],
+              [tr('Rulebook'), r.rulebook ? <Link to={`/rulebooks/${r.rulebook}`}>{sf.rulebook?.name ?? asIs(`#${r.rulebook}`)}</Link> : false],
               [tr('Owner'), sf.owner ? <span title={tr('The rule runs with the rights of the user who last saved it.')}>{userName(sf.owner)}</span> : <span className="faint">—</span>],
               [tr('Last fired'), r.last_fired ? <Ago at={r.last_fired} /> : <span className="faint">{tr('Never')}</span>],
             ]}

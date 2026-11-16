@@ -1,0 +1,15 @@
+---
+- name: Test shutdown action
+  hosts: all
+  gather_facts: false
+  sources:
+    - range:
+        limit: 2
+        delay: 3
+  rules:
+    - name: "Host 1 rule"
+      condition: event.i == 1
+      action:
+        shutdown:
+          delay: 1.1845
+          message: My rule has triggered a shutdown

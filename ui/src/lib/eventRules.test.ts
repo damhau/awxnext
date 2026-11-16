@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  actionSummary,
   checkBody,
   checkOutcomeView,
   completionsAt,
@@ -157,6 +158,7 @@ describe('decisions', () => {
   })
   it('shows each outcome as a cell', () => {
     expect(outcomeView('launched')).toMatchObject({ cell: 'ok', kind: 'acted' })
+    expect(outcomeView('logged')).toMatchObject({ cell: 'ok', kind: 'acted' })
     expect(outcomeView('shadow')).toMatchObject({ cell: 'changed', kind: 'would' })
     expect(outcomeView('held')).toMatchObject({ cell: 'canceled', kind: 'held' })
     expect(outcomeView('not_matched')).toMatchObject({ cell: 'none', kind: 'missed' })
@@ -177,6 +179,17 @@ describe('the rule draft', () => {
     d.vars = [['host', 'event.subject'], [' ', 'x'], ['bad name', 'y']]
     expect(ruleBody(d)).toMatchObject({ unified_job_template: 4, extra_vars: { host: 'event.subject', 'bad name': 'y' }, notification_template: null })
     expect(checkBody(d, 5)).toMatchObject({ extra_vars: { host: 'event.subject' }, events: 5 })
+  })
+  it('keeps a log’s message, and a launch’s follow-ups only for a launch', () => {
+    const d = draftOf({ action: 'log', message: 'event.data', retries: 2, retry_delay: 30, post_artifacts: 'event', artifacts_stream: 5 })
+    expect(ruleBody(d)).toMatchObject({ action: 'log', message: 'event.data', retries: 0, retry_delay: 0, post_artifacts: '', artifacts_stream: null })
+    d.action = 'launch'
+    expect(ruleBody(d)).toMatchObject({ message: '', retries: 2, retry_delay: 30, post_artifacts: 'event', artifacts_stream: 5 })
+    d.retries = 0
+    d.post_artifacts = ''
+    expect(ruleBody(d)).toMatchObject({ retry_delay: 0, artifacts_stream: null })
+    expect(draftOf()).toMatchObject({ retries: 0, retry_delay: 0, post_artifacts: '', artifacts_stream: null })
+    expect(actionSummary({ action: 'log' })).toBe('Log a message')
   })
   it('starts new rules in shadow mode, with a window ready for a throttle', () => {
     expect(draftOf()).toMatchObject({ mode: 'shadow', enabled: true, throttle: '', throttle_window: 3600, action: 'launch', vars: [] })

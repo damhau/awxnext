@@ -1,0 +1,26 @@
+---
+- name: 31 run module missing args
+  hosts: all
+  sources:
+    - eda.builtin.generic:
+        payload:
+          - name: fred
+            i: 1
+          - name: fred
+            i: 2
+  rules:
+    - name: r1
+      condition: event.i == 1
+      action:
+        run_module:
+          name: ansible.builtin.debug
+          module_args:
+              idonotexist: fred
+
+
+
+
+
+
+
+

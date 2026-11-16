@@ -16,6 +16,7 @@ import (
 	"github.com/damhau/awxnext/internal/auth"
 	"github.com/damhau/awxnext/internal/eventstreams"
 	"github.com/damhau/awxnext/internal/rbac"
+	"github.com/damhau/awxnext/internal/rulebooks"
 	"github.com/damhau/awxnext/internal/rules"
 )
 
@@ -30,6 +31,7 @@ const (
 	actionLaunch = "launch"
 	actionNotify = "notify"
 	actionPost   = "post_event"
+	actionLog    = "log"
 
 	// schemaEvents is how many of each stream's latest events a rule's
 	// expressions are checked against.
@@ -88,6 +90,13 @@ type eventRule struct {
 	CheckNotification *int64
 	CheckApproval     bool
 
+	Retries         int64
+	RetryDelay      int64
+	PostArtifacts   string
+	ArtifactsStream *int64
+	// Rulebook is the rulebook the rule was imported from (M14-09).
+	Rulebook *int64
+
 	// stopped is set when the evaluator stops the rule within a batch.
 	stopped bool
 }
@@ -125,7 +134,10 @@ func ruleFromObj(o Obj) *eventRule {
 		BreakerNotification: optID(o["breaker_notification_template"]), WindowAction: str(o["window_action"]),
 		Check: str(o["check"]), CheckCondition: str(o["check_condition"]), CheckTemplate: optID(o["check_template"]),
 		CheckNotification: optID(o["check_notification_template"]), CheckApproval: boolv(o["check_approval"]),
+		PostArtifacts: str(o["post_artifacts"]), ArtifactsStream: optID(o["artifacts_stream"]), Rulebook: optID(o["rulebook"]),
 	}
+	r.Retries, _ = api.ID(o["retries"])
+	r.RetryDelay, _ = api.ID(o["retry_delay"])
 	r.ID, _ = api.ID(o["id"])
 	r.Org, _ = api.ID(o["organization"])
 	r.Window, _ = api.ID(o["throttle_window"])
@@ -252,16 +264,25 @@ func registerEventRules() {
 			{Name: "pattern_window", Type: api.TInt, Default: 0, Validate: between(0, maxThrottleWindow),
 				Help: "The pattern's window, in seconds, by the time events were received."},
 			{Name: "action", Type: api.TChoice, Default: actionLaunch,
-				Choices: labelled(actionLaunch, "Launch a template", actionNotify, "Send a notification", actionPost, "Post an event to another stream")},
+				Choices: labelled(actionLaunch, "Launch a template", actionNotify, "Send a notification", actionPost, "Post an event to another stream",
+					actionLog, "Record a message in the decision log")},
 			{Name: "unified_job_template", Type: api.TFK, Ref: "unified_job_templates", Nullable: true, Help: "The job or workflow template to launch."},
 			{Name: "extra_vars", Type: api.TJSON, Default: Obj{}, Validate: validateRuleVars,
 				Help: "The launch's variables: each name and the CEL expression of its value, over event and events."},
 			{Name: "limit", Column: "job_limit", Type: api.TText, MaxLength: rules.MaxLength, Help: "A CEL expression giving the launch's limit."},
 			{Name: "notification_template", Type: api.TFK, Ref: "notification_templates", Nullable: true},
-			exprField("message", "A CEL expression giving the notification's message: a string, or an object a webhook posts as its body.", false),
+			exprField("message", "A CEL expression giving the notification's message: a string, or an object a webhook posts as its body. For a rule that logs, what its decisions record.", false),
 			{Name: "target_stream", Type: api.TFK, Ref: "event_streams", Nullable: true, Help: "The stream the rule posts events to."},
 			exprField("event_type", "A CEL expression giving the posted event's type.", false),
 			exprField("event_data", "A CEL expression giving the posted event's data. Empty: the event's own data.", false),
+			{Name: "retries", Type: api.TInt, Default: 0, Validate: between(0, rulebooks.MaxRetries),
+				Help: "Times the rule launches again a job of its that failed, as ansible-rulebook's retries."},
+			{Name: "retry_delay", Type: api.TInt, Default: 0, Validate: between(0, rulebooks.MaxRetryDelay),
+				Help: "Seconds the rule waits, once a job failed, before it launches it again."},
+			{Name: "post_artifacts", Type: api.TChoice, Default: "", Choices: labelled("", "No", "event", "As an event", "fact", "As a fact"),
+				Help: "Post the artifacts of the rule's jobs (set_stats) to artifacts_stream once they end, as ansible-rulebook's post_events and set_facts: an event of type post_event or set_fact."},
+			{Name: "artifacts_stream", Type: api.TFK, Ref: "event_streams", Nullable: true,
+				Help: "The stream post_artifacts posts to. Empty: the rule's first stream."},
 			{Name: "max_concurrent_runs", Type: api.TInt, Default: 0, Validate: between(0, maxRuleRuns),
 				Help: "Most jobs the rule's launches may run at once: a launch beyond is held back. 0: no limit."},
 			{Name: "host_lock", Type: api.TBool, Default: false, Help: "Hold back a launch on a host that a running job uses."},
@@ -291,6 +312,8 @@ func registerEventRules() {
 				Help: "The share of the rule's checked actions that fixed their key, from 0 to 1, over the last EVENT_RULE_SUCCESS_RATE_DAYS days: fixed out of fixed, not fixed and action failed. Empty: no check settled. summary_fields.checks has the counts."},
 			{Name: "stopped_reason", Type: api.TText, ReadOnly: true, Help: "Why the rule stopped by itself, such as its owner losing a right."},
 			{Name: "last_fired", Type: api.TDateTime, ReadOnly: true, Nullable: true, Help: "When the rule last acted."},
+			rulebookField(),
+			rulebookKeyField(),
 		},
 		BeforeSave: saveEventRule,
 		AfterCreate: func(c *Ctx, obj Obj) error {
@@ -299,8 +322,13 @@ func registerEventRules() {
 		AfterUpdate: func(c *Ctx, old, obj Obj) error {
 			return ruleSaved(c, old, obj)
 		},
-		BeforeDelete: cancelRuleApprovals,
-		Summary:      ruleSummary,
+		BeforeDelete: func(c *Ctx, obj Obj) error {
+			if err := refuseImportedDelete(c, "event rule", obj); err != nil {
+				return err
+			}
+			return cancelRuleApprovals(c, obj)
+		},
+		Summary: ruleSummary,
 		SubLists: []*SubList{readOnlyChildSub("decisions", "event_rule_decisions", "rule_id"),
 			readOnlyChildSub("breakers", "event_rule_breakers", "rule_id"), readOnlyChildSub("patterns", "event_rule_patterns", "rule_id"),
 			readOnlyChildSub("checks", "event_rule_checks", "rule_id")},
@@ -335,7 +363,7 @@ func registerEventRules() {
 				"not_matched", "Not matched", "launched", "Launched", "notified", "Notified", "posted", "Posted", "throttled", "Throttled",
 				"deduplicated", "Deduplicated", "waiting", "Waiting", "refused", "Refused", "failed", "Failed", "error", "Error", "dropped", "Dropped",
 				"shadow", "Shadow", "held", "Held back", "awaiting_approval", "Awaiting approval", "denied", "Denied", "timed_out", "Timed out",
-				"canceled", "Canceled", rules.Expired, "Expired", rules.Cleared, "Cleared", rules.Ignored, "Ignored")},
+				"canceled", "Canceled", rules.Expired, "Expired", rules.Cleared, "Cleared", rules.Ignored, "Ignored", "logged", "Logged")},
 			{Name: "reason", Type: api.TText, ReadOnly: true},
 			{Name: "mode", Type: api.TChoice, ReadOnly: true, Choices: labelled(modeShadow, "Shadow", modeApproval, "Approval", modeAuto, "Auto"),
 				Help: "The rule's mode when it decided."},
@@ -519,16 +547,23 @@ func saveEventRule(c *Ctx, old, data Obj) error {
 		"extra_vars", "limit", "notification_template", "message", "target_stream", "event_type", "event_data",
 		"mode", "max_concurrent_runs", "host_lock", "max_group_share", "breaker_notification_template",
 		"pattern", "conditions", "pattern_count", "pattern_window",
-		"check", "check_condition", "check_window", "check_template", "check_notification_template", "check_approval"} {
+		"check", "check_condition", "check_window", "check_template", "check_notification_template", "check_approval",
+		"retries", "retry_delay", "post_artifacts", "artifacts_stream"} {
 		if _, ok := data[f]; ok && (old == nil || !sameValue(old[f], data[f])) {
 			changed = true
 		}
+	}
+	if err := lockImported(c, api.Lookup("event_rules"), old, data, ruleOperatorFields); err != nil {
+		return err
 	}
 	if !enabled && !changed {
 		return nil
 	}
 	if err := checkRuleShape(r); err != nil {
 		return err
+	}
+	if importing(c) {
+		return saveImportedRule(c, old, data, r)
 	}
 	owner, err := ruleOwner(c)
 	if err != nil {
@@ -543,12 +578,17 @@ func saveEventRule(c *Ctx, old, data Obj) error {
 	if err := checkRuleGuardrails(&oc, r); err != nil {
 		return err
 	}
-	s, err := streamSchema(c, r.Streams)
-	if err != nil {
-		return err
-	}
-	if err := checkRuleExprs(s, r); err != nil {
-		return err
+	// An imported rule's expressions were compiled when the rulebook was
+	// translated: they read events as ansible-rulebook does, whatever their
+	// stream's schema says.
+	if r.Rulebook == nil {
+		s, err := streamSchema(c, r.Streams)
+		if err != nil {
+			return err
+		}
+		if err := checkRuleExprs(s, r); err != nil {
+			return err
+		}
 	}
 	if !enabled {
 		return nil
@@ -590,6 +630,12 @@ func checkRuleShape(r *eventRule) error {
 	checkRulePattern(r, fe)
 	checkRuleCheck(r, fe)
 	if r.Action != actionLaunch {
+		if r.Retries > 0 {
+			fe.Add("retries", "Only a rule that launches has jobs to launch again.")
+		}
+		if r.PostArtifacts != "" {
+			fe.Add("post_artifacts", "Only a rule that launches has jobs whose artifacts to post.")
+		}
 		if r.MaxRuns > 0 {
 			fe.Add("max_concurrent_runs", "Only a rule that launches has runs to bound.")
 		}
@@ -612,7 +658,9 @@ func checkRuleShape(r *eventRule) error {
 	case actionPost:
 		if r.Target == nil {
 			fe.Add("target_stream", "A rule that posts events needs the stream to post them to.")
-		} else if slices.Contains(r.Streams, *r.Target) {
+		} else if slices.Contains(r.Streams, *r.Target) && r.Rulebook == nil {
+			// A rulebook's post_event goes to its own ruleset: the depth of
+			// posted events stops loops.
 			fe.Add("target_stream", "A rule cannot post to a stream it reads.")
 		}
 		if strings.TrimSpace(r.EventType) == "" {
@@ -631,6 +679,14 @@ func checkRuleTargets(c *Ctx, r *eventRule) error {
 	}
 	if n != len(r.Streams) {
 		return api.FieldError("streams", "An event stream of the list does not exist.")
+	}
+	if r.ArtifactsStream != nil {
+		if err := c.DB().QueryRow(c, "SELECT count(*) FROM event_streams WHERE id = $1", *r.ArtifactsStream).Scan(&n); err != nil {
+			return err
+		}
+		if n == 0 {
+			return api.FieldError("artifacts_stream", fmt.Sprintf("Invalid pk \"%d\" - object does not exist.", *r.ArtifactsStream))
+		}
 	}
 	if err := checkCheckTemplate(c, r); err != nil {
 		return err
@@ -736,6 +792,10 @@ func checkRuleExprs(s *rules.Schema, r *eventRule) error {
 		if r.EventData != "" {
 			check("event_data", r.EventData, rules.Any)
 		}
+	case actionLog:
+		if r.Message != "" {
+			check("message", r.Message, rules.Any)
+		}
 	}
 	return fe.Err()
 }
@@ -785,6 +845,9 @@ func ruleRefusal(c *Ctx, r *eventRule) (string, error) {
 			return reason, err
 		}
 	}
+	if reason, err := artifactsRefusal(c, r); reason != "" || err != nil {
+		return reason, err
+	}
 	switch r.Action {
 	case actionLaunch:
 		if r.Template == nil {
@@ -806,6 +869,37 @@ func ruleRefusal(c *Ctx, r *eventRule) (string, error) {
 		return check(ok, err, fmt.Sprintf("event stream %d", *r.Target))
 	}
 	return "", nil
+}
+
+// artifactsRefusal says why the user of c may not post the artifacts of
+// the rule's jobs, or "" when they may.
+func artifactsRefusal(c *Ctx, r *eventRule) (string, error) {
+	if r.PostArtifacts == "" {
+		return "", nil
+	}
+	stream := artifactsStream(r)
+	if stream == 0 {
+		return "The rule has no stream to post its artifacts to.", nil
+	}
+	ok, err := api.HasPermID(c, "event_streams", stream, "change")
+	if errors.Is(err, api.ErrNotFound) {
+		return "The artifacts stream no longer exists.", nil
+	}
+	if err != nil || ok {
+		return "", err
+	}
+	return fmt.Sprintf("%s may not post to event stream %d.", c.User.Username, stream), nil
+}
+
+// artifactsStream is where the rule posts its jobs' artifacts.
+func artifactsStream(r *eventRule) int64 {
+	if r.ArtifactsStream != nil {
+		return *r.ArtifactsStream
+	}
+	if len(r.Streams) > 0 {
+		return r.Streams[0]
+	}
+	return 0
 }
 
 // ruleSaved starts the rule on its streams: a stream no other enabled rule

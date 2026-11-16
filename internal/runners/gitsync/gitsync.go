@@ -356,6 +356,13 @@ func runProjectUpdate(ctx context.Context, rc *jobs.RunContext) jobs.Result {
 			return jobs.Result{Status: "error", Explanation: err.Error()}
 		}
 		pruneRevisions(app.Cfg.ProjectsRoot, pid, sha, 10)
+		// A rulebook that can't be imported doesn't fail the sync: its
+		// playbooks are usable, and the rulebook says why.
+		if n, err := resources.RulebooksProjectUpdated(ctx, app, pid, dir, sha); err != nil {
+			rc.Out.Line("WARNING: " + err.Error())
+		} else if n > 0 {
+			rc.Out.Line(fmt.Sprintf("Imported %d rulebooks", n))
+		}
 	}
 	rc.Out.Line("Project update successful")
 	return jobs.Result{Status: "successful", Update: map[string]any{"scm_revision": sha}}

@@ -2,7 +2,8 @@ name: Full
 
 # Everything: the whole Go suite with the race detector (job tests, object
 # storage against MinIO and Azurite, event connectors with ansible.eda and
-# its Kafka source against Kafka), the chart (helm.yml), the image with
+# its Kafka source against Kafka, imported rulebooks against ansible-rulebook
+# itself), the chart (helm.yml), the image with
 # Compose (compose.yml), the importer against a real AWX (import-awx.yml)
 # and AWX's clients (compat.yml, a job per suite). Nightly, and by hand before
 # a milestone is closed: gh workflow run full.yml
@@ -39,6 +40,8 @@ jobs:
       # A real execution environment's contents, read from its registry.
       AWXNEXT_TEST_EE_IMAGE: quay.io/ansible/awx-ee:24.6.1
       AWXNEXT_TEST_KAFKA_BOOTSTRAP: localhost:9092
+      # The differential test of imported rulebooks runs this command.
+      AWXNEXT_TEST_ANSIBLE_RULEBOOK: ansible-rulebook
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -56,6 +59,13 @@ jobs:
         run: |
           pip install pyyaml==6.0.3 aiokafka==0.15.0 aiohttp==3.14.5 fastavro==1.13.1
           ansible-galaxy collection install ansible.eda:==2.13.0 -p ~/.cache/awxnext/collections
+      # ansible-rulebook runs its rules in Drools, on a JVM of Java 17 or later.
+      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: ansible-rulebook for the rulebook differential test
+        run: pip install ansible-rulebook==1.3.2 dpath==2.2.0
       # pg_dump and pg_restore of the server's major version, for the backup test.
       - name: PostgreSQL client tools
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends postgresql-client-16
@@ -80,6 +90,11 @@ jobs:
       # a piece is missing.
       - name: ansible.eda and Kafka connector tests, verbose
         run: go test -count=1 -run 'TestEventConnector(EDA|Kafka)' -v ./test/
+      # Its log shows ansible-rulebook's outcome and awxnext's. With
+      # AWXNEXT_TEST_ANSIBLE_RULEBOOK set it fails, not skips, when
+      # ansible-rulebook or Java is missing.
+      - name: rulebook differential test against ansible-rulebook, verbose
+        run: go test -count=1 -run 'TestRulebookAlertmanagerDifferential' -v ./test/
 
   helm:
     uses: ./.github/workflows/helm.yml

@@ -441,6 +441,7 @@ legend { font-weight: 500; margin-bottom: 8px; padding: 0; }
   display: flex; align-items: center; gap: 4px; flex-wrap: wrap; cursor: text;
 }
 .lookup-box:focus-within { border-color: var(--ink); box-shadow: 0 0 0 3px var(--accent-ring); }
+.lookup-box:has(input:disabled) { background: var(--surface-3); color: var(--muted); }
 .lookup-box input { border: none; outline: none; flex: 1; min-width: 80px; height: 26px; padding: 0 4px; background: none; }
 .lookup-box .chip { font-family: var(--sans); }
 .popover {

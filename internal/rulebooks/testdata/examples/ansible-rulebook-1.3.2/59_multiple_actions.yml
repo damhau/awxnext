@@ -1,0 +1,23 @@
+- hosts: all
+  name: 59 Multiple Actions
+  sources:
+  - name: range
+    range:
+      limit: 5
+      delay: 0.05
+  rules:
+  - name: r1
+    condition: event.i == 1
+    actions:
+      - debug:
+      - print_event:
+           pretty: true
+      - debug:
+           msg: "Multiple Action Message1"
+      - debug:
+           msg: "Multiple Action Message2"
+  - name: r2
+    condition: event.i == 2
+    action:
+      debug:
+        msg: Single Action

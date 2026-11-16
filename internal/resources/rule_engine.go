@@ -263,6 +263,9 @@ func (e *RuleEngine) Pass(ctx context.Context) (bool, error) {
 	if err := e.SettleChecks(ctx); err != nil && ctx.Err() == nil {
 		slog.Warn("event rules: settling checks failed", "err", err)
 	}
+	if err := e.FollowJobs(ctx); err != nil && ctx.Err() == nil {
+		slog.Warn("event rules: following jobs failed", "err", err)
+	}
 	if err := e.ResolveApprovals(ctx); err != nil && ctx.Err() == nil {
 		slog.Warn("event rules: resolving approvals failed", "err", err)
 	}
@@ -290,7 +293,8 @@ const ruleColumns = `id, name, organization_id, streams, owner_id, filter, key, 
 	unified_job_template_id, extra_vars, job_limit, notification_template_id, message, target_stream_id, event_type, event_data,
 	mode, max_concurrent_runs, host_lock, max_group_share, breaker_firings, breaker_window, breaker_notification_template_id,
 	window_action, approval_timeout, pattern, conditions, pattern_count, pattern_window,
-	check_kind, check_condition, check_window, check_template_id, check_notification_template_id, check_approval`
+	check_kind, check_condition, check_window, check_template_id, check_notification_template_id, check_approval,
+	retries, retry_delay, post_artifacts, artifacts_stream_id, rulebook_id`
 
 func scanRule(row pgx.Row) (*eventRule, error) {
 	r := &eventRule{}
@@ -298,7 +302,8 @@ func scanRule(row pgx.Row) (*eventRule, error) {
 		&r.Template, &r.ExtraVars, &r.Limit, &r.Notification, &r.Message, &r.Target, &r.EventType, &r.EventData,
 		&r.Mode, &r.MaxRuns, &r.HostLock, &r.GroupShare, &r.BreakerFirings, &r.BreakerWindow, &r.BreakerNotification,
 		&r.WindowAction, &r.ApprovalTimeout, &r.Pattern, &r.Conditions, &r.PatternCount, &r.PatternWindow,
-		&r.Check, &r.CheckCondition, &r.CheckWindow, &r.CheckTemplate, &r.CheckNotification, &r.CheckApproval)
+		&r.Check, &r.CheckCondition, &r.CheckWindow, &r.CheckTemplate, &r.CheckNotification, &r.CheckApproval,
+		&r.Retries, &r.RetryDelay, &r.PostArtifacts, &r.ArtifactsStream, &r.Rulebook)
 	return r, err
 }
 
@@ -532,7 +537,7 @@ type outcome struct {
 // or asked for approval.
 func (o outcome) fired() bool {
 	switch o.name {
-	case "launched", "notified", "posted", "failed", "shadow", "awaiting_approval":
+	case "launched", "notified", "posted", "logged", "failed", "shadow", "awaiting_approval":
 		return true
 	}
 	return false
@@ -917,10 +922,13 @@ func (e *RuleEngine) act(ctx context.Context, db pgx.Tx, after *afterCommit, r *
 		return outcome{}, err
 	}
 	switch out.name {
-	case "launched", "notified", "posted":
+	case "launched", "notified", "posted", "logged":
 		if _, err := db.Exec(ctx, "UPDATE event_rules SET last_fired = now() WHERE id = $1", r.ID); err != nil {
 			return outcome{}, err
 		}
+	}
+	if err := openFollowup(ctx, db, r, members, out); err != nil {
+		return outcome{}, err
 	}
 	return out, e.openChecks(ctx, db, after, r, members, out)
 }
@@ -1237,6 +1245,8 @@ func (e *RuleEngine) plan(c *Ctx, r *eventRule, members []member, vars rules.Var
 		return e.planNotify(c, r, members, vars)
 	case actionPost:
 		return e.planPost(c, r, members, vars)
+	case actionLog:
+		return planLog(c, r, vars)
 	}
 	return nil, api.Detail(400, "Unknown action "+r.Action+".")
 }
@@ -1256,13 +1266,15 @@ func (p *plan) summary() string {
 		return s
 	case actionNotify:
 		return "send " + p.subject
+	case actionLog:
+		return "log the event"
 	}
 	return fmt.Sprintf("post a %s event to stream %d", p.event.Type, p.target)
 }
 
 // done is what the action did, for shadow mode's reason.
 func (p *plan) done() string {
-	return strings.Replace(strings.Replace(strings.Replace(p.summary(), "launch ", "launched ", 1), "send ", "sent ", 1), "post ", "posted ", 1)
+	return strings.NewReplacer("launch ", "launched ", "send ", "sent ", "post ", "posted ", "log ", "logged ").Replace(p.summary())
 }
 
 // describe is what the action would do, for its decision.
@@ -1276,6 +1288,8 @@ func (p *plan) describe() map[string]any {
 		return d
 	case actionNotify:
 		return map[string]any{"notify": p.tpl, "subject": p.subject, "message": p.message}
+	case actionLog:
+		return map[string]any{"log": p.message}
 	}
 	return map[string]any{"post": p.target, "event_type": p.event.Type, "event_id": p.event.ID, "data": json.RawMessage(p.event.Data)}
 }
@@ -1323,6 +1337,36 @@ func (e *RuleEngine) planLaunch(c *Ctx, r *eventRule, vars rules.Vars) (*plan, e
 		return nil, err
 	}
 	return &plan{action: actionLaunch, tpl: tpl, tplType: typ, body: body, runs: runs}, nil
+}
+
+// planLog evaluates what a rule that logs records: its message, as
+// ansible-rulebook's debug and print_event print it.
+func planLog(c *Ctx, r *eventRule, vars rules.Vars) (*plan, error) {
+	var msg any
+	if r.Message != "" {
+		v, err := rules.Eval(c, r.Message, vars)
+		if err != nil {
+			return nil, &evalError{"The message", err}
+		}
+		msg = v
+	}
+	return &plan{action: actionLog, message: msg}, nil
+}
+
+// maxLogText bounds the message a logged decision's reason shows; its
+// details keep the whole of it.
+const maxLogText = 1000
+
+func logText(msg any) string {
+	s, ok := msg.(string)
+	if !ok && msg != nil {
+		b, _ := json.Marshal(msg)
+		s = string(b)
+	}
+	if len(s) > maxLogText {
+		s = s[:maxLogText-3] + "..."
+	}
+	return s
 }
 
 func (e *RuleEngine) planNotify(c *Ctx, r *eventRule, members []member, vars rules.Vars) (*plan, error) {
@@ -1436,6 +1480,8 @@ func (e *RuleEngine) execute(c *Ctx, after *afterCommit, r *eventRule, members [
 		}
 		after.notifications = append(after.notifications, id)
 		return outcome{name: "notified"}, nil
+	case actionLog:
+		return outcome{name: "logged", reason: logText(p.message), details: map[string]any{"message": p.message}}, nil
 	}
 	res, err := eventstreams.Ingest(c, logDB(c), p.target, p.test, []eventstreams.Event{p.event})
 	if err != nil {

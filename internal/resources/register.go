@@ -24,6 +24,7 @@ func init() {
 	registerEventRules()
 	registerMaintenanceWindows()
 	registerEventConnectors()
+	registerRulebooks()
 	registerRoles()
 	registerActivity()
 	registerRelatedLists()

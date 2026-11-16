@@ -1,0 +1,22 @@
+---
+- name: 19 is defined
+  hosts: all
+  sources:
+    - range:
+        limit: 5
+  rules:
+    - name: r1
+      condition: event.i == 1
+      action:
+        set_fact:
+          fact:
+            msg: hello
+    - name: r2
+      condition: event.msg is defined
+      action:
+        debug:
+    - name: r3
+      condition: event.payload is defined
+      action:
+        print_event:
+          pretty: true

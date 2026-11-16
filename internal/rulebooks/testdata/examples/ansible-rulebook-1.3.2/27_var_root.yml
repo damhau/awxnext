@@ -1,0 +1,34 @@
+---
+- name: 27 multiple events all with var_root
+  hosts: all
+  sources:
+    - name: generic
+      eda.builtin.generic:
+        payload:
+          - webhook:
+              payload:
+                url: http://www.example.com
+                action: merge
+          - kafka:
+              message:
+                topic: testing
+                channel: red
+          - webhook:
+              payload:
+                url: http://www.example.com
+                action: merge
+          - kafka:
+              message:
+                topic: testing
+                channel: red
+  rules:
+    - name: r1
+      condition:
+        all: 
+          - events.webhook << event.webhook.payload.url == "http://www.example.com"
+          - events.kafka << event.kafka.message.channel == "red"
+      action:
+        print_event:
+          var_root:
+            webhook.payload: webhook
+            kafka.message: kafka

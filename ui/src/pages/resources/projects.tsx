@@ -485,6 +485,7 @@ export function ProjectDetail() {
               {tr('Details')}
             </Tab>
             <Tab to={`${base}/jobs`}>{tr('Syncs')}</Tab>
+            <Tab to={`${base}/rulebooks`}>{tr('Rulebooks')}</Tab>
             <Tab to={`${base}/schedules`}>{tr('Schedules')}</Tab>
             <Tab to={`${base}/notifications`}>{tr('Notifications')}</Tab>
             <Tab to={`${base}/access`}>{tr('Access')}</Tab>

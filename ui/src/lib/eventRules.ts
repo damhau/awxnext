@@ -245,6 +245,8 @@ export function outcomeView(outcome: string): OutcomeView {
       return { cell: 'ok', label: tr('Notified'), kind: 'acted' }
     case 'posted':
       return { cell: 'ok', label: tr('Posted'), kind: 'acted' }
+    case 'logged':
+      return { cell: 'ok', label: tr('Logged'), kind: 'acted' }
     case 'shadow':
       return { cell: 'changed', label: tr('Shadow'), kind: 'would' }
     case 'fired':
@@ -288,7 +290,7 @@ export function outcomeView(outcome: string): OutcomeView {
 /** The outcomes behind each choice of the decision log's filter. */
 export const OUTCOME_FILTERS: { value: string; label: string; outcomes: string[] }[] = [
   { value: '', label: tr('All'), outcomes: [] },
-  { value: 'acted', label: tr('Acted'), outcomes: ['launched', 'notified', 'posted', 'shadow', 'awaiting_approval'] },
+  { value: 'acted', label: tr('Acted'), outcomes: ['launched', 'notified', 'posted', 'logged', 'shadow', 'awaiting_approval'] },
   { value: 'held', label: tr('Held back'), outcomes: ['held', 'throttled', 'deduplicated', 'dropped', 'denied', 'timed_out', 'canceled', 'waiting', 'expired', 'cleared', 'ignored'] },
   { value: 'failed', label: tr('Failed'), outcomes: ['refused', 'failed', 'error'] },
   { value: 'missed', label: tr('Not matched'), outcomes: ['not_matched'] },
@@ -476,6 +478,10 @@ export interface RuleDraft {
   target_stream: number | null
   event_type: string
   event_data: string
+  retries: number
+  retry_delay: number
+  post_artifacts: string
+  artifacts_stream: number | null
   max_concurrent_runs: number
   host_lock: boolean
   max_group_share: number
@@ -518,6 +524,10 @@ export function draftOf(r?: Record<string, any>): RuleDraft {
     target_stream: r?.target_stream ?? null,
     event_type: r?.event_type ?? '',
     event_data: r?.event_data ?? '',
+    retries: r?.retries ?? 0,
+    retry_delay: r?.retry_delay ?? 0,
+    post_artifacts: r?.post_artifacts ?? '',
+    artifacts_stream: r?.artifacts_stream ?? null,
     max_concurrent_runs: r?.max_concurrent_runs ?? 0,
     host_lock: r?.host_lock ?? false,
     max_group_share: r?.max_group_share ?? 0,
@@ -567,10 +577,14 @@ export function ruleBody(d: RuleDraft): Record<string, unknown> {
     extra_vars: launch ? vars : {},
     limit: launch ? d.limit : '',
     notification_template: d.action === 'notify' ? d.notification_template : null,
-    message: d.action === 'notify' ? d.message : '',
+    message: d.action === 'notify' || d.action === 'log' ? d.message : '',
     target_stream: d.action === 'post_event' ? d.target_stream : null,
     event_type: d.action === 'post_event' ? d.event_type : '',
     event_data: d.action === 'post_event' ? d.event_data : '',
+    retries: launch ? d.retries : 0,
+    retry_delay: launch && d.retries ? d.retry_delay : 0,
+    post_artifacts: launch ? d.post_artifacts : '',
+    artifacts_stream: launch && d.post_artifacts ? d.artifacts_stream : null,
     max_concurrent_runs: launch ? d.max_concurrent_runs : 0,
     host_lock: launch && d.host_lock,
     max_group_share: launch ? d.max_group_share : 0,
@@ -746,6 +760,8 @@ export function actionSummary(r: Record<string, any>): string {
       return tr('Notify {name}', { name: sf.notification_template?.name ?? `#${r.notification_template ?? '?'}` })
     case 'post_event':
       return tr('Post to {name}', { name: sf.target_stream?.name ?? `#${r.target_stream ?? '?'}` })
+    case 'log':
+      return tr('Log a message')
   }
   return r.action
 }
