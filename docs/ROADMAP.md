@@ -33,7 +33,7 @@ be matched.
 | [M7 UI completeness](#m7-ui-completeness) | Every API feature reachable from the UI; the remaining UI goals | 17 |
 | [M8 Settings that make sense](#m8-settings-that-make-sense) | Settings laid out by task, without JSON or AWX's jargon; the settings API unchanged | 10 |
 | [M9 Security](#m9-security) | Known vulnerabilities found by CI and fixed through reviewed PRs | 5 |
-| [M10 Small fixes](#m10-small-fixes) | The importer tested on a real AWX, parity.md matching the code, the deployed image scanned, the AWS lookup tested on moto | 4 |
+| [M10 Small fixes](#m10-small-fixes) | The importer tested on a real AWX, parity.md matching the code, the deployed image scanned, the AWS lookup tested on moto, M14-10's leftovers | 5 |
 | [M11 Notifications](#m11-notifications) | Email tested on a real mail server, Slack as in AWX, a Teams type, notifications when a result changes | 4 |
 | [M12 Beyond AWX](#m12-beyond-awx) | What changed before a failure, secrets kept out of job output, an MCP server, drifted hosts | 4 |
 | [M13 Collection hub](#m13-collection-hub) | A private Galaxy in awxnext: publish, approve, sign, mirror and install collections | 5 |
@@ -1381,6 +1381,20 @@ fail with AWS's error. What it finds is fixed, and the fake corrected.
 
 **Done when:** the test passes in `full.yml` against moto and fails with a
 wrong secret key, and what it found is fixed.
+
+### M10-05 UI for the EDA fields, and a clear 403 on activations
+**Labels:** ui, rbac · **Size:** S · [#176](https://github.com/damhau/awxnext/issues/176)
+
+M14-10 left some fields with no UI (added on 2026-11-16): a project's
+`scm_proxy` and `scm_verify_ssl`, an event stream's `additional_data_headers`,
+and a rulebook's `source_streams`. The project, event stream and rulebook
+pages get them. Also, an Organization Project Admin who creates or enables an
+activation gets a 403 that doesn't say why. The activation changes the
+connectors and rules its import made, which only an Organization Admin may
+change. The refusal names the object and the missing role.
+
+**Done when:** the four fields can be read and set in the UI, and the 403
+names what is missing.
 
 ---
 
