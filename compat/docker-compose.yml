@@ -42,7 +42,7 @@ services:
 
   # The proxy of ansible.eda's project target: http://eda:testpass@squid:3128.
   squid:
-    image: ubuntu/squid:6.6-24.04_beta
+    image: ubuntu/squid:6.6-24.04_beta@sha256:6a097f68bae708cedbabd6188d68c7e2e7a38cedd05a176e1cc0ba29e3bbe029
     volumes:
       - ./squid/squid.conf:/etc/squid/squid.conf:ro
       - ./squid/passwd:/etc/squid/passwd:ro
