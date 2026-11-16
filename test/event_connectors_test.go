@@ -56,6 +56,9 @@ func requireConnectors(t *testing.T, extra ...string) {
 	t.Helper()
 	slow(t)
 	if _, err := exec.LookPath("python3"); err != nil {
+		if edaRequired() {
+			t.Fatal("python3 not installed")
+		}
 		t.Skip("python3 not installed")
 	}
 	root := t.TempDir()
@@ -75,25 +78,36 @@ func requireConnectors(t *testing.T, extra ...string) {
 // is looked for on ANSIBLE_COLLECTIONS_PATH, then in
 // ~/.cache/awxnext/collections (ansible-galaxy collection install
 // ansible.eda -p ~/.cache/awxnext/collections), and its Python is
-// AWXNEXT_TEST_EDA_PYTHON or python3.
-func requireEDA(t *testing.T) string {
+// AWXNEXT_TEST_EDA_PYTHON or python3, which must import modules. Without
+// them the test skips, or fails where the setup is required (edaRequired).
+func requireEDA(t *testing.T, modules ...string) string {
 	t.Helper()
 	slow(t)
+	missing := t.Skipf
+	if edaRequired() {
+		missing = t.Fatalf
+	}
 	home, _ := os.UserHomeDir()
 	paths := append(filepath.SplitList(os.Getenv("ANSIBLE_COLLECTIONS_PATH")), filepath.Join(home, ".cache", "awxnext", "collections"))
 	for _, p := range paths {
 		if _, err := os.Stat(filepath.Join(p, "ansible_collections", "ansible", "eda", "extensions", "eda", "plugins", "event_source", "range.py")); err == nil {
 			py := edaPython()
-			if err := exec.Command(py, "-c", "import yaml").Run(); err != nil {
-				t.Skipf("%s has no PyYAML, which ansible.eda's sources need", py)
+			imports := strings.Join(append([]string{"yaml"}, modules...), ", ")
+			if out, err := exec.Command(py, "-c", "import "+imports).CombinedOutput(); err != nil {
+				missing("%s cannot import %s, which ansible.eda's sources need: %v\n%s", py, imports, err, out)
 			}
 			requireConnectors(t, p)
 			return py
 		}
 	}
-	t.Skip("ansible.eda is not installed")
+	missing("ansible.eda is not installed in %s", strings.Join(paths, ", "))
 	return ""
 }
+
+// edaRequired: full.yml sets AWXNEXT_TEST_KAFKA_BOOTSTRAP and installs
+// ansible.eda with its sources' packages, so there a missing piece is a
+// broken setup, not a reason to skip.
+func edaRequired() bool { return os.Getenv("AWXNEXT_TEST_KAFKA_BOOTSTRAP") != "" }
 
 func edaPython() string {
 	if py := os.Getenv("AWXNEXT_TEST_EDA_PYTHON"); py != "" {
@@ -571,10 +585,7 @@ func TestEventConnectorKafka(t *testing.T) {
 	if bootstrap == "" {
 		t.Skip("AWXNEXT_TEST_KAFKA_BOOTSTRAP is not set")
 	}
-	py := requireEDA(t)
-	if err := exec.Command(py, "-c", "import aiokafka, aiohttp, fastavro").Run(); err != nil {
-		t.Skipf("%s lacks the Kafka source's dependencies", py)
-	}
+	py := requireEDA(t, "aiokafka", "aiohttp", "fastavro")
 	host, port, _ := strings.Cut(bootstrap, ":")
 	topic := uniq("awxnext-connector")
 	// The messages go first: the source then reads the topic from its
