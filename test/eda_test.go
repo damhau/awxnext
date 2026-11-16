@@ -507,6 +507,56 @@ func TestEDAActivations(t *testing.T) {
 	must(t, u.patch(eda(fmt.Sprintf("activations/%v/", mine["id"])), map[string]any{"description": "x"}), 403)
 	must(t, orgAdmin.post(eda(fmt.Sprintf("activations/%v/disable/", mine["id"])), nil), 204)
 
+	// Enabling one puts its rules in auto mode: that takes the EventRule
+	// Automate role on each, as putting a rule in auto mode by hand does.
+	operator, operatorID := newUser(t, a)
+	grant := func(role string, id any) {
+		t.Helper()
+		must(t, a.post("role_user_assignments/", map[string]any{"role_definition": roleDef(t, role), "user": operatorID, "object_id": id}), 201)
+	}
+	grant("Project Admin", pid)
+	grant("ExecutionEnvironment Admin", de["id"])
+	grant("JobTemplate Execute", jt)
+	theirs := num(must(t, a.post(eda("activations/"), map[string]any{"name": uniq("act"), "rulebook_id": rb, "decision_environment_id": de["id"],
+		"organization_id": org, "is_enabled": false}), 201).Body["id"])
+	for _, c := range rulebookObjects(t, a, theirs, "event_connectors") {
+		grant("EventConnector Admin", c["id"])
+	}
+	for _, es := range rulebookObjects(t, a, theirs, "event_streams") {
+		grant("EventStream Read", es["id"])
+	}
+	theirRules := rulebookObjects(t, a, theirs, "event_rules")
+	for _, r := range theirRules {
+		grant("EventRule Admin", r["id"])
+	}
+	theirURL := eda(fmt.Sprintf("activations/%d/", theirs))
+	if r := must(t, operator.post(theirURL+"enable/", nil), 403); !strings.Contains(r.Raw, "EventRule Automate") {
+		t.Errorf("enable without automate: %s", r.Raw)
+	}
+	if got := must(t, a.get(theirURL), 200).Body; got["is_enabled"] != false {
+		t.Errorf("enabled without automate: %v", got)
+	}
+	for name, r := range rulebookObjects(t, a, theirs, "event_rules") {
+		if r["enabled"] != false || r["mode"] == "auto" {
+			t.Errorf("rule %s turned on without automate: %v", name, r)
+		}
+	}
+	for name, c := range rulebookObjects(t, a, theirs, "event_connectors") {
+		if c["enabled"] != false {
+			t.Errorf("connector %s turned on without automate: %v", name, c)
+		}
+	}
+	for _, r := range theirRules {
+		grant("EventRule Automate", r["id"])
+	}
+	must(t, operator.post(theirURL+"enable/", nil), 204)
+	for name, r := range rulebookObjects(t, a, theirs, "event_rules") {
+		if r["enabled"] != true || r["mode"] != "auto" || r["owner"] != float64(operatorID) {
+			t.Errorf("rule %s once automate is granted: %v", name, r)
+		}
+	}
+	must(t, operator.post(theirURL+"disable/", nil), 204)
+
 	// Deleting the project deletes its activations.
 	must(t, a.delete(eda(fmt.Sprintf("projects/%d/", pid))), 204)
 	waitFor(t, "the project's activations to go", func() bool { return a.get(againURL).Status == 404 })
