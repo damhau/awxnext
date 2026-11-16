@@ -33,11 +33,12 @@ COPY --from=ghcr.io/astral-sh/uv:0.13.5 /uv /usr/local/bin/uv
 # Debian's security fixes as soon as they are published, not when the base
 # image is next rebuilt (make vuln-images scans the image). PostgreSQL 16's
 # client tools (pg_dump, pg_restore) for awxnext backup and restore, from the
-# PostgreSQL project's repository: Debian's are version 15.
+# PostgreSQL project's repository: Debian's are version 15. The key's download
+# retries: a dropped HTTP/2 stream failed full.yml's chart test (run 43817781351).
 RUN apt-get update \
 	&& apt-get upgrade -y \
 	&& apt-get install -y --no-install-recommends git openssh-client sshpass ca-certificates curl gnupg libcap2-bin \
-	&& curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmor -o /usr/share/keyrings/pgdg.gpg \
+	&& curl -fsSL --retry 5 --retry-all-errors https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmor -o /usr/share/keyrings/pgdg.gpg \
 	&& echo "deb [signed-by=/usr/share/keyrings/pgdg.gpg] http://apt.postgresql.org/pub/repos/apt bookworm-pgdg main" > /etc/apt/sources.list.d/pgdg.list \
 	&& apt-get update \
 	&& apt-get install -y --no-install-recommends postgresql-client-16 \
