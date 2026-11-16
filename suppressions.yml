@@ -1,4 +1,5 @@
-# Managed by secubot (false positives agreed by triage + adversarial review).
+# Managed by secubot: false positives agreed by triage, and (source: upstream)
+# dependencies waiting for a fixed release, which lapse once a fix is reported.
 # Entries expire and are then re-triaged. Delete an entry to force re-triage now.
 suppressions:
 - id: 18a5d40a3ec0
@@ -390,4 +391,114 @@ suppressions:
     Here those words are only field and flag names, not se'
   expires: '2026-12-10'
   created: '2026-11-10'
+  source: triage
+- id: 3807c904b3c2
+  reason: 'secubot triage: false positive (high confidence, single pass). This exec.Command
+    does run in production. The event-connector supervisor calls it from start() when
+    a connector runs locally (internal/resources/connector_runs.go:534 → startLocal
+    at line 578). Users don''t control the command, though, so it can''t be used for
+    command injection.
+
+
+    Where args comes from:
+
+    (1) connectors.Argv returns ["sh", "-c", pick, boot, python] (internal/connectors/connectors.go:52'
+  expires: '2026-12-16'
+  created: '2026-11-16'
+  source: triage
+- id: 404b7e177c53
+  reason: 'secubot triage: false positive (high confidence, single pass). The flagged
+    code is reachable: edaTokenList is registered as the GET handler for the EDA users/me/awx-tokens/
+    endpoint (eda.go:515-517). It is not injectable, though. The only string concatenated
+    into the SQL at line 560 is `where`, which is built only from constant literals:
+    " WHERE user_id = $1" and optionally " AND name = $2" (eda.go:555-557). The user-controlled
+    `name` query parameter and the '
+  expires: '2026-12-16'
+  created: '2026-11-16'
+  source: triage
+- id: 597b4a5d5f5b
+  reason: 'secubot triage: false positive (high confidence, single pass). The flagged
+    query is in edaTokenList, an HTTP handler for EDA controller tokens, so production
+    requests do reach it. It still is not exploitable as SQL injection. Each value
+    placed into the SQL string with fmt.Sprintf is either a constant or a Go integer:
+
+    - `edaTokenCols` is a constant string (eda.go:537).
+
+    - `where` is built only from fixed string pieces, `" WHERE user_id = $1"` and
+    `" AND name = '
+  expires: '2026-12-16'
+  created: '2026-11-16'
+  source: triage
+- id: 6063a5bff9f1
+  reason: 'secubot triage: false positive (high confidence, single pass). This is
+    a JavaScript Semgrep rule (javascript.lang.security.detect-insecure-websocket)
+    matching the string literal "ws://" inside Go code. The flagged line is in BaseURL
+    (internal/connectors/connectors.go:85-96). That function is a pure string helper.
+    It strips an "/agent/v1/" suffix and swaps the scheme: wss:// becomes https://
+    (line 91) and ws:// becomes http:// (line 93). It opens no WebSocket '
+  expires: '2026-12-16'
+  created: '2026-11-16'
+  source: triage
+- id: 71fa06596b8f
+  reason: 'secubot triage: false positive (high confidence, single pass). This is
+    a false positive. Semgrep applied a JavaScript rule (javascript.lang.security.detect-insecure-websocket)
+    to a Go file, and it matched only because the string literal "ws://" appears in
+    the code. The flagged line, internal/connectors/connectors.go:92, is in BaseURL
+    (lines 85-96). That function is a pure string conversion: it removes any "/agent/v1/"
+    suffix and maps the scheme of an existing'
+  expires: '2026-12-16'
+  created: '2026-11-16'
+  source: triage
+- id: 8b8a49979ac6
+  reason: 'secubot triage: false positive (high confidence, single pass). The flagged
+    line is `go deliver(ctx, app, id)` at internal/resources/rule_engine.go:285. It
+    passes the caller''s `ctx` to the goroutine and does not use context.Background/TODO,
+    so the rule''s description does not match this line. The `ctx` here is not request-scoped.
+    It is the lifetime context of the background rule engine worker: RuleEngine.Run(ctx)
+    at rule_engine.go:86, which leads to run, Pass, '
+  expires: '2026-12-16'
+  created: '2026-11-16'
+  source: triage
+- id: d402b51d2433
+  reason: 'secubot triage: false positive (high confidence, single pass). This is
+    a false positive. gosec G101 flagged line 27 only because the constant name `CredHMAC`
+    contains "Cred". The value, "event_stream_hmac", is not a secret. It is the name
+    of a credential type, one of seven in the block at lines 26-34 (event_stream_github,
+    event_stream_gitlab, and so on). The code uses these names to decide how to verify
+    an incoming request (the `switch cred.Namespace` in Veri'
+  expires: '2026-12-16'
+  created: '2026-11-16'
+  source: triage
+- id: e1b5ac1bd0b2
+  reason: 'secubot triage: false positive (high confidence, single pass). InsecureSkipVerify
+    is not hard-coded to true. It is set from `t.Insecure` (internal/bench/rules.go:61),
+    and that field is filled only by the operator''s `-insecure` command-line flag
+    of the standalone benchmarking tool `awxbench`, which defaults to false (cmd/awxbench/main.go:116).
+    The only callers of `bench.Rules` are `awxbench` (cmd/awxbench/main.go:129) and
+    a test (test/bench_test.go). The awxne'
+  expires: '2026-12-16'
+  created: '2026-11-16'
+  source: triage
+- id: f06f3c7b4e20
+  reason: 'secubot triage: false positive (high confidence, single pass). This is
+    a false positive. Line 32 of internal/eventstreams/auth.go is `CredMTLS = "event_stream_mtls"`.
+    It sits in a const block (lines 26-34) of credential-type namespace identifiers
+    such as "event_stream_hmac" and "event_stream_token". gosec G101 flags it only
+    because the constant name contains "Cred". These values are type labels, not secrets.
+    They are compared against `cred.Namespace` in the `'
+  expires: '2026-12-16'
+  created: '2026-11-16'
+  source: triage
+- id: fedead0f06cd
+  reason: 'secubot triage: false positive (high confidence, single pass). This line
+    does run in production. RunAgent/session (internal/agent/client.go:174-177) and
+    RunShim (client.go:186-196) both call runUnit. For connector work units, `site`
+    is written to the stdin of the spawned connector process (client.go:288-289).
+    This is not command or code injection, though.
+
+
+    1. `site` is not command text. It comes from `connectors.SiteFor(url, cfg.CACert,
+    cfg.InsecureSkipVerify'
+  expires: '2026-12-16'
+  created: '2026-11-16'
   source: triage
