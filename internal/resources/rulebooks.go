@@ -46,7 +46,7 @@ var (
 	ruleOperatorFields = []string{"description", "enabled", "mode", "max_concurrent_runs", "host_lock", "max_group_share",
 		"breaker_firings", "breaker_window", "breaker_notification_template", "window_action", "approval_timeout",
 		"check", "check_condition", "check_window", "check_template", "check_notification_template", "check_approval"}
-	streamOperatorFields    = []string{"description", "credential", "test_mode", "retention_days", "max_payload_bytes", "rate_limit", "mapping"}
+	streamOperatorFields    = []string{"description", "credential", "test_mode", "retention_days", "max_payload_bytes", "rate_limit", "mapping", "additional_data_headers"}
 	connectorOperatorFields = []string{"description", "enabled", "credentials", "execution_environment", "instance_group", "python",
 		"restart_policy", "restart_delay", "max_restarts", "buffer_size"}
 )
@@ -175,6 +175,8 @@ func registerRulebooks() {
 			{Name: "rulesets", Type: api.TText, MaxLength: rulebooks.MaxSize, Help: "The rulebook's YAML: its rulesets."},
 			{Name: "variables", Type: api.TJSON, Default: Obj{}, Validate: validateRulebookVars,
 				Help: "The rulebook's variables, as ansible-rulebook's --vars: vars.name in conditions, {{ name }} in the arguments of sources and actions."},
+			{Name: "source_streams", Type: api.TJSON, Default: Obj{}, Validate: validateSourceStreams,
+				Help: "Sources fed by an existing event stream instead of their own, as EDA's source mappings: each source's name (__SOURCE_n for the rulebook's nth source without one) and the stream's id."},
 			{Name: "revision", Type: api.TString, ReadOnly: true, Help: "The project's revision the file was imported from."},
 			{Name: "imported", Type: api.TDateTime, ReadOnly: true, Nullable: true, Help: "When the rulebook was last imported."},
 			{Name: "import_error", Type: api.TText, ReadOnly: true,
@@ -232,8 +234,37 @@ func registerRulebooks() {
 		readOnlyChildSub("event_rules", "event_rules", "rulebook_id"),
 	}
 	proj.SubLists = append(proj.SubLists, childSub("rulebooks", "rulebooks", "project_id", "project"))
+	// The database deletes a project's rulebooks with it; their streams,
+	// connectors and rules go first, as when a rulebook is deleted.
+	projectDelete := proj.BeforeDelete
+	proj.BeforeDelete = func(c *Ctx, obj Obj) error {
+		if projectDelete != nil {
+			if err := projectDelete(c, obj); err != nil {
+				return err
+			}
+		}
+		return deleteProjectRulebooks(c, obj)
+	}
 	proj.Actions = append(proj.Actions, &api.Action{Name: "import_rulebooks", Methods: []string{"POST"}, Perm: "change",
 		Handler: importProjectRulebooksView})
+}
+
+func deleteProjectRulebooks(c *Ctx, project Obj) error {
+	rows, err := c.DB().Query(c, "SELECT id FROM rulebooks WHERE project_id = $1 ORDER BY id", project["id"])
+	if err != nil {
+		return err
+	}
+	ids, err := pgx.CollectRows(rows, pgx.RowTo[int64])
+	if err != nil {
+		return err
+	}
+	for _, id := range ids {
+		ic := importCtx(c, id)
+		if err := deleteRulebookObjects(ic, Obj{"id": id}); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func writeRulebook(c *Ctx, w http.ResponseWriter, id int64) {
@@ -254,6 +285,31 @@ func validateRulebookVars(c *Ctx, v any, data Obj) error {
 		return errors.New("Expected an object: the rulebook's variables by name.")
 	}
 	return nil
+}
+
+func validateSourceStreams(c *Ctx, v any, data Obj) error {
+	m, ok := v.(map[string]any)
+	if !ok && v != nil {
+		return errors.New("Expected an object: each source's name and the id of the event stream that feeds it.")
+	}
+	for name, id := range m {
+		if _, ok := api.ID(id); !ok || name == "" {
+			return fmt.Errorf("Invalid event stream id %v for source %q.", id, name)
+		}
+	}
+	return nil
+}
+
+// sourceStreams are a rulebook's source mappings, by source name.
+func sourceStreams(v any) map[string]int64 {
+	out := map[string]int64{}
+	m, _ := v.(map[string]any)
+	for name, id := range m {
+		if n, ok := api.ID(id); ok {
+			out[name] = n
+		}
+	}
+	return out
 }
 
 func saveRulebook(c *Ctx, old, data Obj) error {
@@ -283,6 +339,13 @@ func saveRulebook(c *Ctx, old, data Obj) error {
 		return api.FieldError("project", "The project has no organization: a rulebook's streams and rules need one.")
 	}
 	data["organization"] = *org
+	if v, ok := data["source_streams"]; ok && (old == nil || !sameValue(old["source_streams"], v)) {
+		for _, id := range sourceStreams(v) {
+			if err := requireVisibleID(c, "source_streams", "event_streams", id); err != nil {
+				return err
+			}
+		}
+	}
 	if str(merged["path"]) != "" {
 		return nil
 	}
@@ -291,7 +354,8 @@ func saveRulebook(c *Ctx, old, data Obj) error {
 	}
 	if _, ok := data["rulesets"]; ok || old == nil {
 		vars, _ := merged["variables"].(map[string]any)
-		if _, err := rulebooks.Translate([]byte(str(merged["rulesets"])), rulebooks.Options{Name: str(merged["name"]), Variables: vars}); err != nil {
+		if _, err := rulebooks.Translate([]byte(str(merged["rulesets"])), rulebooks.Options{Name: str(merged["name"]), Variables: vars,
+			SourceStreams: sourceStreams(merged["source_streams"])}); err != nil {
 			return api.FieldError("rulesets", "The rulebook can't be read: "+err.Error()+".")
 		}
 	}
@@ -304,7 +368,8 @@ func importAfterSave(c *Ctx, old, obj Obj) error {
 	if importing(c) {
 		return nil
 	}
-	if old != nil && sameValue(old["rulesets"], obj["rulesets"]) && sameValue(old["variables"], obj["variables"]) {
+	if old != nil && sameValue(old["rulesets"], obj["rulesets"]) && sameValue(old["variables"], obj["variables"]) &&
+		sameValue(old["source_streams"], obj["source_streams"]) {
 		return nil
 	}
 	id, _ := api.ID(obj["id"])
@@ -410,7 +475,8 @@ func ImportRulebook(c *Ctx, id int64, viewer *rbac.Principal) error {
 		return err
 	}
 	vars, _ := rb["variables"].(map[string]any)
-	plan, err := rulebooks.Translate([]byte(str(rb["rulesets"])), rulebooks.Options{Name: pname + "/" + str(rb["name"]), Variables: vars})
+	plan, err := rulebooks.Translate([]byte(str(rb["rulesets"])), rulebooks.Options{Name: pname + "/" + str(rb["name"]), Variables: vars,
+		SourceStreams: sourceStreams(rb["source_streams"])})
 	if err != nil {
 		_, err := c.DB().Exec(c, "UPDATE rulebooks SET import_error = $2, imported = now(), modified = now() WHERE id = $1", id, err.Error()+".")
 		return err
@@ -442,6 +508,18 @@ func (a *applier) apply() error {
 	}
 	failed := map[string]string{}
 	for _, s := range a.plan.Streams {
+		if s.Existing != 0 {
+			var ok bool
+			if err := a.c.DB().QueryRow(a.c, "SELECT EXISTS (SELECT 1 FROM event_streams WHERE id = $1)", s.Existing).Scan(&ok); err != nil {
+				return err
+			}
+			if !ok {
+				failed[s.Key] = fmt.Sprintf("The event stream %d of its source mapping doesn't exist.", s.Existing)
+				continue
+			}
+			a.streams[s.Key] = s.Existing
+			continue
+		}
 		obj, err := a.save(streams, have[s.Key], s.Key, Obj{"name": s.Name, "organization": a.org, "stream_type": s.Type}, nil)
 		if err != nil {
 			failed[s.Key] = "Its event stream can't be saved: " + describeError(err)
@@ -534,7 +612,7 @@ func (a *applier) apply() error {
 		}
 	}
 	for key, obj := range have {
-		if _, ok := a.streams[key]; !ok {
+		if id, ok := a.streams[key]; !ok || fmt.Sprint(id) != fmt.Sprint(obj["id"]) {
 			if err := api.Delete(a.c, streams, obj); err != nil {
 				return err
 			}
@@ -872,6 +950,9 @@ func rulebookShaped(text []byte) bool {
 // translated again, and those whose file is gone are deleted with their
 // objects. viewer is who looks templates up; nil: the project's last
 // editor.
+//
+// EDA's activations of the project's rulebooks that restart on a project
+// update get their rulebook's new text and restart.
 func ImportProjectRulebooks(c *Ctx, app *api.App, project int64, dir, revision string, viewer *rbac.Principal) (int, error) {
 	files, err := scanRulebooks(dir)
 	if err != nil {
@@ -949,7 +1030,7 @@ func ImportProjectRulebooks(c *Ctx, app *api.App, project int64, dir, revision s
 				return err
 			}
 		}
-		return nil
+		return RefreshEDAActivations(sys, project, viewer)
 	})
 }
 

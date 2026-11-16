@@ -18,7 +18,9 @@ Suites:
   cli         smoke tests of the awx CLI (awxkit)
   terraform   the acceptance tests of the ansible/aap Terraform provider,
               after its own fixture playbook (with awx.awx standing in for
-              the certified collections)
+              the certified collections, and ansible.eda for EDA's tasks)
+  eda         the ansible.eda integration targets from the collection's
+              release tag, against awxnext's EDA API (/api/eda/v1/)
 
 Results are compared with compat/known-failures.yml. A failure that is not
 listed, or a listed test that now passes, fails the run, so the list stays
@@ -45,6 +47,7 @@ import yaml
 
 AWX_TAG = "24.6.1"
 TF_PROVIDER_TAG = "v1.5.0"
+EDA_TAG = "v2.13.0"
 HERE = Path(__file__).resolve().parent
 KNOWN = HERE / "known-failures.yml"
 CACHE = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache")) / "awxnext-compat"
@@ -118,6 +121,7 @@ class Runner:
             PATH=f"{BIN}{os.pathsep}{os.environ.get('PATH', '')}",
         )
         self.collection_dir = None
+        self.eda_root = None
         self.demo_ready = False
 
     def selected(self, name):
@@ -142,11 +146,28 @@ class Runner:
         self.collection_dir = dest
         return dest
 
-    def playbook(self, name, playbook, cwd, timeout):
+    # The ansible.eda collection from its release tag, with its integration targets as roles.
+    def eda_collection(self):
+        if self.eda_root:
+            return self.eda_root
+        src = fetch("https://github.com/ansible/event-driven-ansible", EDA_TAG, CACHE / f"event-driven-ansible-{EDA_TAG}")
+        root = self.report / "work" / "eda-collections"
+        dest = root / "ansible_collections" / "ansible" / "eda"
+        shutil.rmtree(root, ignore_errors=True)
+        shutil.copytree(src, dest, ignore=shutil.ignore_patterns(".git", "tests"))
+        for t in (src / "tests" / "integration" / "targets").iterdir():
+            shutil.copytree(t, dest / "roles" / t.name)
+        self.eda_root = root
+        return root
+
+    def eda_env(self):
+        return dict(self.env, ANSIBLE_COLLECTIONS_PATH=os.pathsep.join([str(self.eda_collection()), self.env["ANSIBLE_COLLECTIONS_PATH"]]))
+
+    def playbook(self, name, playbook, cwd, timeout, env=None):
         start = time.monotonic()
         log = self.logs / f"{name}.log"
         try:
-            p = subprocess.run([str(BIN / "ansible-playbook"), str(playbook)], cwd=cwd, env=self.env,
+            p = subprocess.run([str(BIN / "ansible-playbook"), str(playbook)], cwd=cwd, env=env or self.env,
                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=timeout)
             out, status = p.stdout, "pass" if p.returncode == 0 else "fail"
         except subprocess.TimeoutExpired as e:
@@ -200,6 +221,28 @@ class Runner:
             status, secs, detail, log = self.demo_data() if t == "demo_data" else self.run_target(t)
             print(f"  {status:7} {secs:6.1f}s  {t}  {detail}", flush=True)
             results.append(Result("collection", t, status, secs, detail, log))
+        return results
+
+    # ansible.eda's integration targets, after AWX's demo data (Default, Demo Job Template).
+    def suite_eda(self):
+        self.collection()
+        self.demo_data()
+        roles = self.eda_collection() / "ansible_collections" / "ansible" / "eda" / "roles"
+        work = self.report / "work"
+        results = []
+        for t in sorted(p.name for p in roles.iterdir()):
+            if not self.selected(t):
+                continue
+            play = work / f"play-eda-{t}.yml"
+            play.write_text(yaml.safe_dump([{
+                "name": t, "hosts": "localhost", "connection": "local", "gather_facts": False,
+                "vars": {"ansible_python_interpreter": "{{ ansible_playbook_python }}", "aap_hostname": self.args.host,
+                         "aap_username": self.args.username, "aap_password": self.args.password, "aap_validate_certs": False},
+                "roles": [f"ansible.eda.{t}"],
+            }]))
+            status, secs, detail, log = self.playbook(f"eda-{t}", play, work, self.args.timeout, env=self.eda_env())
+            print(f"  {status:7} {secs:6.1f}s  {t}  {detail}", flush=True)
+            results.append(Result("eda", t, status, secs, detail, log))
         return results
 
     # awx CLI smoke tests: each step runs a command; later steps use earlier ids.
@@ -291,8 +334,10 @@ class Runner:
         play = yaml.safe_load((work / "playbook.yml").read_text())
         play[0]["tasks"] = fixture_tasks(play[0]["tasks"])
         play[0]["vars"] = {"ansible_python_interpreter": "{{ ansible_playbook_python }}"}
+        play[0]["module_defaults"] = {"group/ansible.eda.eda": {"aap_hostname": self.args.host, "aap_username": self.args.username,
+                                                                "aap_password": self.args.password, "aap_validate_certs": False}}
         (work / "fixtures.yml").write_text(yaml.safe_dump(play, sort_keys=False))
-        status, secs, detail, log = self.playbook("terraform-fixtures", work / "fixtures.yml", work, self.args.timeout)
+        status, secs, detail, log = self.playbook("terraform-fixtures", work / "fixtures.yml", work, self.args.timeout, env=self.eda_env())
         print(f"  {status:7} {secs:6.1f}s  fixtures  {detail}", flush=True)
         if status != "pass":
             return [Result("terraform", "fixtures", status, secs, detail, log)]
@@ -340,8 +385,9 @@ class Runner:
 
 def fixture_tasks(tasks):
     """The provider's fixture tasks with awx.awx in place of the certified
-    collections: EDA tasks dropped (out of scope), the platform token
-    attempt replaced by its controller token fallback."""
+    collections, the platform token attempt replaced by its controller
+    token fallback. EDA's tasks lose their rescue, which would hide a
+    failure of awxnext's EDA API."""
     out = []
     for t in tasks:
         if "block" in t:
@@ -349,14 +395,13 @@ def fixture_tasks(tasks):
                 out += fixture_tasks(t.get("rescue", []))
                 continue
             block = fixture_tasks(t["block"])
-            if not block:  # only EDA tasks
+            if any(k.startswith("ansible.eda.") for b in block for k in b):
+                out += block
                 continue
             t = dict(t, block=block)
             if "rescue" in t:
                 t["rescue"] = fixture_tasks(t["rescue"])
         module = next((k for k in t if k.startswith("ansible.")), None)
-        if module and module.startswith("ansible.eda."):
-            continue
         if module and module.startswith(("ansible.controller.", "ansible.platform.")):
             t = {("awx.awx." + k.split(".", 2)[2] if k == module else k): v for k, v in t.items()}
         out.append(t)
@@ -403,7 +448,7 @@ def write_known(results, known):
 
 def markdown(results, known, new, fixed, server):
     out = [f"# awxnext compatibility report", "",
-           f"awxnext {server} · awx.awx and awxkit {AWX_TAG} · terraform-provider-aap {TF_PROVIDER_TAG}", ""]
+           f"awxnext {server} · awx.awx and awxkit {AWX_TAG} · terraform-provider-aap {TF_PROVIDER_TAG} · ansible.eda {EDA_TAG}", ""]
     out += ["| Suite | Passed | Known failures | New failures | Now passing |", "|---|---|---|---|---|"]
     for suite in sorted({r.suite for r in results}):
         rs = [r for r in results if r.suite == suite]
@@ -428,7 +473,7 @@ def main():
     ap.add_argument("--host", default=os.environ.get("CONTROLLER_HOST", "https://localhost:8054"))
     ap.add_argument("--username", default=os.environ.get("CONTROLLER_USERNAME", "admin"))
     ap.add_argument("--password", default=os.environ.get("CONTROLLER_PASSWORD", "compat"))
-    ap.add_argument("--suite", action="append", choices=["collection", "cli", "terraform"], help="default: all")
+    ap.add_argument("--suite", action="append", choices=["collection", "cli", "terraform", "eda"], help="default: all")
     ap.add_argument("--only", action="append", help="run tests whose name contains this (repeatable)")
     ap.add_argument("--timeout", type=int, default=900, help="seconds per playbook")
     ap.add_argument("--report", default="compat-report")
@@ -439,7 +484,7 @@ def main():
         server = json.load(r).get("version", "?")
     runner = Runner(args)
     results = []
-    for suite in args.suite or ["collection", "cli", "terraform"]:
+    for suite in args.suite or ["collection", "cli", "terraform", "eda"]:
         print(f"== {suite}", flush=True)
         results += getattr(runner, f"suite_{suite}")()
 

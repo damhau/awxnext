@@ -109,6 +109,8 @@ func registerEventStreams() {
 				Help: "Most events per minute the stream takes on each node, which may arrive at once. 0: no limit."},
 			{Name: "mapping", Type: api.TJSON, Default: Obj{}, Validate: validateStreamMapping,
 				Help: "For a generic stream, the JSONPaths of its events' id, type, source, subject and time in the payload."},
+			{Name: "additional_data_headers", Type: api.TString, Default: "", MaxLength: 1024,
+				Help: "Request headers each event keeps, separated by commas, such as X-Request-Id: each becomes an attribute of the event, its name in lowercase letters and digits (xrequestid). Authorization, Proxy-Authorization and Cookie are never kept."},
 			{Name: "uuid", Type: api.TString, ReadOnly: true},
 			{Name: "last_sequence", Type: api.TInt, ReadOnly: true, Help: "The number of the stream's last event."},
 			{Name: "last_event_at", Type: api.TDateTime, ReadOnly: true, Nullable: true},
@@ -239,9 +241,10 @@ func receiveEvents(c *Ctx, rw http.ResponseWriter, r *http.Request) {
 		test                bool
 		maxBytes, perMinute int
 		mapping             map[string]any
+		headers             string
 	}
-	err := c.App.DB.QueryRow(c, `SELECT id, stream_type, credential_id, test_mode, max_payload_bytes, rate_limit, mapping
-		FROM event_streams WHERE uuid = $1`, uuid).Scan(&s.id, &s.typ, &s.credential, &s.test, &s.maxBytes, &s.perMinute, &s.mapping)
+	err := c.App.DB.QueryRow(c, `SELECT id, stream_type, credential_id, test_mode, max_payload_bytes, rate_limit, mapping, additional_data_headers
+		FROM event_streams WHERE uuid = $1`, uuid).Scan(&s.id, &s.typ, &s.credential, &s.test, &s.maxBytes, &s.perMinute, &s.mapping, &s.headers)
 	if errors.Is(err, pgx.ErrNoRows) {
 		writeStreamError(w, http.StatusNotFound, "Not found.")
 		return
@@ -309,6 +312,7 @@ func receiveEvents(c *Ctx, rw http.ResponseWriter, r *http.Request) {
 		}
 	}
 	eventstreams.AddTraceContext(events, r.Header)
+	eventstreams.AddHeaders(events, r.Header, strings.Split(s.headers, ","))
 	wait, ok := streamLimiter.Take(s.id, s.perMinute, len(events), time.Now())
 	if !ok {
 		writeStreamError(w, http.StatusRequestEntityTooLarge, fmt.Sprintf("This stream takes at most %d events at once.", s.perMinute))

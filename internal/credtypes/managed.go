@@ -297,6 +297,20 @@ var Managed = []Def{
 		str("ca_certificate", "CA Certificate", "multiline", true, "help_text", "The CA, in PEM, of the issuer's certificate, when the system's CAs don't include it."),
 	}, []string{"issuer", "audience"})},
 
+	// awxnext's own, for EDA's API (M14-10): the database ansible-rulebook
+	// keeps an activation's state in. Not in AWX; EDA has a type of the same
+	// name and inputs. awxnext keeps its rules' state in its own database.
+	{Namespace: "eda_rule_engine", Name: "Event-Driven Ansible Rule Engine", Kind: "cloud",
+		Description: "The PostgreSQL database ansible-rulebook keeps an activation's state in, for EDA's API. awxnext keeps its rules' state in its own database and stores this credential only.",
+		Inputs: inputs([]field{
+			str("postgres_db_host", "Host"),
+			str("postgres_db_port", "Port", "default", "5432"),
+			str("postgres_db_name", "Database"),
+			str("postgres_db_user", "Username"),
+			str("postgres_db_password", "Password", "secret", true),
+			choice("postgres_sslmode", "SSL Mode", "choices", []any{"disable", "allow", "prefer", "require", "verify-ca", "verify-full"}, "default", "prefer"),
+		}, []string{"postgres_db_host", "postgres_db_port", "postgres_db_name", "postgres_db_user"})},
+
 	// External secret lookups (v1 scope: HashiCorp Vault and Azure Key Vault).
 	{Namespace: "hashivault_kv", Name: "HashiCorp Vault Secret Lookup", Kind: "external", Inputs: inputs(append(vaultInputs(),
 		choice("api_version", "API Version", "choices", []any{"v1", "v2"}, "default", "v1", "help_text", "API v1 is for static key/value lookups.  API v2 is for versioned key/value lookups."),

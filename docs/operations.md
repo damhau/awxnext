@@ -1667,6 +1667,76 @@ the jobs and logs the messages that `test/testdata/rulebooks/alertmanager.expect
 written from ansible-rulebook's semantics. awxnext launches one job fewer, for the alert that
 Alertmanager sends again.
 
+## EDA's API
+
+awxnext answers the API of Event-Driven Ansible's controller, `/api/eda/v1/`, so the
+`ansible.eda` collection's modules and the Terraform provider's EDA data source work against
+it. `/api/` lists it as AAP does (`"apis": {"eda": "/api/eda/"}`). It is a view of awxnext's
+own objects, with EDA's field names, filters, pagination (`page`, `page_size` up to 200,
+`count`, `next`, `previous`), errors (`{"field": ["message"]}`, 404 for an unknown page) and
+authentication (basic or a token, as `/api/v2/`). RBAC is awxnext's: a user sees and changes
+what awxnext's roles let them, and an object they can't see answers 403.
+
+| EDA | awxnext |
+|---|---|
+| `organizations/`, `teams/`, `users/`, `users/me/` | organizations, teams, users (EDA's user list shows fewer fields than a user's page, as EDA's does) |
+| `role_definitions/`, `role_user_assignments/`, `role_team_assignments/` | awxnext's roles; EDA's `Organization Auditor` is `Organization Audit` |
+| `credential-types/`, `eda-credentials/`, `credential-input-sources/` | credential types (a new one is `cloud` unless it says), credentials (one of a name per organization, as EDA has it), input sources; `test/` and `copy/` as awxnext's |
+| `decision-environments/` | execution environments: `image_url` is the image, `pull_policy` the pull option |
+| `projects/`, `projects/N/sync/` | git projects; `import_state` from the last sync, `import_error` its explanation, `proxy` and `verify_ssl` as below |
+| `rulebooks/`, `rulebooks/N/sources/` | the rulebooks a project's syncs import ([Importing rulebooks](#importing-rulebooks)), and their sources with EDA's names (`__SOURCE_n` for one without a name) and the rulebook's hash |
+| `event-streams/` | event streams, with EDA's `uuid`, `event_stream_type` (the credential's) and `additional_data_headers` |
+| `activations/` | below |
+| `users/me/awx-tokens/` | controller tokens, kept for each user, never shown |
+
+A project's `proxy` (`scm_proxy` in `/api/v2/`, encrypted) is the HTTP proxy git syncs and
+checks out through, its password shown as `$encrypted$`; `verify_ssl: false` turns off git's
+certificate check. A stream's `additional_data_headers` names request headers its events
+keep: each becomes an attribute of the event, named in lowercase letters and digits
+(`X-Request-Id` is `event.xrequestid` in a rule). `Authorization`, `Proxy-Authorization` and
+`Cookie` are never kept. EDA's senders post to `/api/eda/v1/external_event_stream/<uuid>/post/`,
+which takes the same events as the stream's own URL.
+
+### Activations
+
+An activation runs a copy of one of a project's rulebooks: creating one uploads the rulebook to
+the same project under the activation's name (the activation's ID is that rulebook's), with
+`extra_var` as its variables, and imports it into connectors and rules of its own. The
+project's rulebook, its objects disabled and in shadow mode, is left as its import made it, so
+two activations of one rulebook are independent, and `rulebooks/` doesn't list activations'
+copies. EDA-only settings (`restart_policy`, `log_level`, `restart_on_project_update`,
+`enable_persistence`, the rule engine credential and the controller token) are kept in
+`eda_activations`.
+
+- **Enabled.** Enabling an activation, at its creation or later, enables its connectors with the
+  activation's credentials, decision environment and restart policy, and its rules in `auto`
+  mode, owned by the user who enabled it: the rules then act with that user's rights, as any
+  rule ([Event rules](#event-rules)). Disabling turns both off.
+- **Status.** From its connectors: `running` when they run, `starting` while one starts or
+  restarts, `failed` when one failed, `stopped` when disabled. An activation whose sources are
+  all streams has no connector and is `running` while enabled.
+- **Restart.** `restart/` restarts the connectors and counts in `restart_count`, as does a
+  project sync that changes the rulebook of an activation with `restart_on_project_update`:
+  the activation takes the new rulebook, the others keep theirs.
+- **Copy.** `copy/` makes a disabled activation with the same settings and rulebook.
+- **Source mappings.** `source_mappings` (YAML, kept as given) maps a source of the rulebook, by
+  name and with the hash `rulebooks/N/sources/` gave, to an existing event stream: the rules
+  read that stream instead of the source. A hash that no longer matches is refused.
+- **Delete.** Deleting an activation deletes its rulebook and the connectors, rules and streams
+  made from it; deleting a project deletes its rulebooks and activations.
+
+What EDA has that awxnext doesn't: activations run no `ansible-rulebook`, so there is no
+activation instance, log or `current_job_id` (each connector has its own runs and log), and
+the rule engine credential, `enable_persistence` and `log_level` are kept but change nothing,
+as awxnext keeps rules' state in PostgreSQL. `rules_fired_count` isn't given: a rule's
+decision log has what it did. Rules that don't translate ([Differences from
+ansible-rulebook](#differences-from-ansible-rulebook)) don't run in an activation either:
+`status_message` counts them, and the activation's rulebook shows its report. The controller
+token isn't used: rules launch jobs as their owner.
+
+The `ansible.eda` 2.13.0 collection's integration targets run against awxnext nightly
+(`compat/`, suite `eda`).
+
 ## Settings
 
 The Settings pages group AWX's settings by what they set up rather than by AWX's categories:

@@ -27,6 +27,7 @@ func Install(app *api.App) {
 	installScheduleRoutes(app)
 	installWebhookRoutes(app)
 	installEventStreamRoutes(app)
+	installEDA(app)
 	installCallbackRoutes(app)
 	app.Handle("GET", "/api/v2/metrics/", handleAWXMetrics)
 	app.Handle("GET", "/api/v2/applications/", applications)

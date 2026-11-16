@@ -1,7 +1,8 @@
 name: Compatibility
 
 # AWX's own clients against awxnext (compat/run.py): the awx.awx collection's
-# integration targets, the awx CLI and the Terraform provider. From full.yml
+# integration targets, the awx CLI, the Terraform provider and the ansible.eda
+# collection's integration targets. From full.yml
 # (nightly, a job per suite) and on demand; the report is attached to the run
 # and shown in its summary.
 on:
@@ -14,7 +15,7 @@ on:
   workflow_dispatch:
     inputs:
       suite:
-        description: "collection, cli or terraform (empty: all)"
+        description: "collection, cli, terraform or eda (empty: all)"
         required: false
         default: ""
 

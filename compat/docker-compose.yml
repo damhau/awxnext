@@ -22,6 +22,31 @@ services:
       interval: 2s
       retries: 30
 
+  # ansible.eda, from the release tag compat/run.py tests (EDA_TAG), for
+  # the event source plugins its activations' connectors run.
+  eda-collection:
+    build:
+      context: ..
+      target: all-in-one
+      args:
+        COMMIT: ${AWXNEXT_COMMIT:-}
+    user: "0:0"
+    entrypoint: ["sh", "-c"]
+    command:
+      - >-
+        test -d /collections/ansible_collections/ansible/eda ||
+        git clone -q --depth 1 --branch v2.13.0 -c advice.detachedHead=false
+        https://github.com/ansible/event-driven-ansible /collections/ansible_collections/ansible/eda
+    volumes:
+      - eda-collections:/collections
+
+  # The proxy of ansible.eda's project target: http://eda:testpass@squid:3128.
+  squid:
+    image: ubuntu/squid:6.6-24.04_beta
+    volumes:
+      - ./squid/squid.conf:/etc/squid/squid.conf:ro
+      - ./squid/passwd:/etc/squid/passwd:ro
+
   awxnext:
     build:
       context: ..
@@ -32,6 +57,10 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      eda-collection:
+        condition: service_completed_successfully
+    volumes:
+      - eda-collections:/usr/share/ansible/collections:ro
     environment:
       AWXNEXT_DATABASE_URL: postgres://awxnext:compat@postgres:5432/awxnext?sslmode=disable
       AWXNEXT_SECRET_KEY: compat-only-not-a-secret
@@ -60,3 +89,6 @@ services:
       test: ["CMD", "wget", "-q", "--no-check-certificate", "-O", "/dev/null", "https://localhost:8443/api/v2/ping/"]
       interval: 2s
       retries: 30
+
+volumes:
+  eda-collections:

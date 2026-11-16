@@ -363,6 +363,9 @@ func checkoutProject(ctx context.Context, app *api.App, row jobs.Row) (string, s
 	if credID != nil {
 		src.CredentialID = *credID
 	}
+	if err := gitsync.ProjectHTTP(ctx, app, &src); err != nil {
+		return "", "", err
+	}
 	var log []string
 	sha, dir, err := gitsync.Sync(ctx, app, src, func(s string) { log = append(log, s) })
 	if err != nil {

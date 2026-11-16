@@ -48,6 +48,10 @@ type Options struct {
 	// Variables are the rulebook's variables: vars.x in conditions, and
 	// {{ x }} in the arguments of sources and actions.
 	Variables map[string]any
+	// SourceStreams are the sources fed by an existing event stream
+	// instead, as EDA's source mappings: by the source's SourceName, the
+	// stream's id. Their events reach the ruleset as a webhook's do.
+	SourceStreams map[string]int64
 }
 
 // Plan is what a rulebook becomes. Each object has a key, stable across
@@ -63,6 +67,9 @@ type Plan struct {
 // one per ruleset for its connectors and the events its rules post.
 type Stream struct {
 	Key, Name, Type, Ruleset string
+	// Existing is the id of the stream a source mapping names: the
+	// import uses it rather than making a stream.
+	Existing int64
 }
 
 // Connector runs a source plugin, posting to the stream named by Stream,
@@ -259,6 +266,36 @@ var (
 	durationRe = regexp.MustCompile(`^(\d+)\s+(millisecond|second|minute|hour|day)s?$`)
 )
 
+// SourceInfo is a rulebook's source as EDA lists it.
+type SourceInfo struct {
+	Name, Plugin string
+	Args         map[string]any
+}
+
+// Sources are a rulebook's sources, in order, by their SourceName.
+func Sources(text []byte) ([]SourceInfo, error) {
+	sets, err := parse(text)
+	if err != nil {
+		return nil, err
+	}
+	var out []SourceInfo
+	for _, rs := range sets {
+		for _, s := range rs.Sources {
+			out = append(out, SourceInfo{Name: sourceName(s, len(out)+1), Plugin: s.Plugin, Args: s.Args})
+		}
+	}
+	return out, nil
+}
+
+// sourceName is a source's name as EDA gives it: its own, or __SOURCE_n
+// for the rulebook's nth source.
+func sourceName(s source, n int) string {
+	if s.Name != "" {
+		return s.Name
+	}
+	return fmt.Sprintf("__SOURCE_%d", n)
+}
+
 // Translate translates a rulebook. An error is a rulebook it can't read
 // at all; a piece it can't translate is in the report, with the reason.
 func Translate(text []byte, o Options) (*Plan, error) {
@@ -308,6 +345,8 @@ type translation struct {
 	o    Options
 	plan *Plan
 	sets map[string]*rsCtx
+	// sourceN counts the rulebook's sources, for their SourceName.
+	sourceN int
 }
 
 // rsCtx is a ruleset being translated.
@@ -345,11 +384,21 @@ func (t *translation) sources(rs *ruleset) *rsCtx {
 	rc := &rsCtx{rs: rs, report: rep, ttl: DefaultEventsTTL}
 	kinds := map[string]bool{}
 	for i, s := range rs.Sources {
+		t.sourceN++
 		sr := &SourceReport{Name: s.Name, Plugin: s.Plugin, Status: Translated}
 		if sr.Name == "" {
 			sr.Name = s.Plugin
 		}
 		rep.Sources = append(rep.Sources, sr)
+		if id, ok := t.o.SourceStreams[sourceName(s, t.sourceN)]; ok {
+			kinds[KindWebhook] = true
+			key := fmt.Sprintf("stream:%s/%d", rs.Name, i)
+			t.plan.Streams = append(t.plan.Streams, Stream{Key: key, Name: t.name(rs.Name, sr.Name), Type: StreamGeneric, Ruleset: rs.Name, Existing: id})
+			rc.streams = append(rc.streams, key)
+			sr.Key, sr.As = key, "event_stream:existing"
+			sr.Notes = append(sr.Notes, fmt.Sprintf("Mapped to event stream %d: the stream's events reach the ruleset's rules instead of the source's, as a webhook's do.", id))
+			continue
+		}
 		if s.err != nil {
 			sr.Status, sr.Reasons = NotTranslated, []string{"The source can't be read: " + s.err.Error() + "."}
 			continue

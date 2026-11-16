@@ -6,7 +6,8 @@
 |---|---|---|
 | `collection` | the `awx.awx` integration targets from AWX 24.6.1, each run as a role, and `targets/` here for modules the collection ships no test for (`license`, `subscriptions`: what an upstream AWX without a subscription answers) | a target (module) |
 | `cli` | smoke steps of the `awx` CLI from awxkit 24.6.1: login, CRUD, lookups by name, roles, launch and monitor, stdout, settings, export/import | a step |
-| `terraform` | the acceptance tests of `ansible/terraform-provider-aap` v1.5.0, after its fixture playbook (`awx.awx` stands in for `ansible.controller`/`ansible.platform`; EDA fixtures are dropped) | a Go test |
+| `terraform` | the acceptance tests of `ansible/terraform-provider-aap` v1.5.0, after its fixture playbook (`awx.awx` stands in for `ansible.controller`/`ansible.platform`; its EDA tasks run with `ansible.eda` against awxnext's EDA API) | a Go test |
+| `eda` | the `ansible.eda` integration targets from the collection's v2.13.0 tag, each run as a role against awxnext's EDA API (`/api/eda/v1/`) | a target |
 
 Each run writes `report.md`, `report.json` and one log per test to the report
 directory (`compat-report/` by default).
@@ -14,8 +15,15 @@ directory (`compat-report/` by default).
 ## Running it
 
 You need Docker, [uv](https://docs.astral.sh/uv/), Go and Terraform for the
-`terraform` suite. The sources of the collection and the provider are cloned
+`terraform` suite. The sources of the collections and the provider are cloned
 once into `~/.cache/awxnext-compat`.
+
+For the `eda` suite the stack has two more services: `eda-collection` clones
+`ansible.eda` v2.13.0 into a volume that awxnext reads as
+`/usr/share/ansible/collections`, so its activations' connectors run the
+collection's event source plugins (the `activation` target waits for
+`ansible.eda.range` to run); `squid` is the proxy, with basic auth, that the
+`project` target syncs through (`http://eda:testpass@squid:3128`).
 
 ```sh
 docker compose -f compat/docker-compose.yml up -d --build --wait   # throwaway awxnext

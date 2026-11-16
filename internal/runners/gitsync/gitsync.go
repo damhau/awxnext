@@ -48,6 +48,10 @@ type Source struct {
 	DeleteOnUpdate  bool
 	// Clean (scm_clean) discards changes made on disk to a reused checkout.
 	Clean bool
+	// Proxy is the HTTP proxy git goes through; Insecure skips checking
+	// the server's certificate.
+	Proxy    string
+	Insecure bool
 }
 
 var (
@@ -90,6 +94,7 @@ func Sync(ctx context.Context, app *api.App, src Source, logf func(string)) (str
 		return "", "", err
 	}
 	defer cleanup()
+	env = append(env, httpConfig(src)...)
 	git := func(dir string, args ...string) (string, error) {
 		return run(ctx, dir, env, logf, args...)
 	}
@@ -233,6 +238,27 @@ func run(ctx context.Context, dir string, env []string, logf func(string), args 
 	return out.String(), err
 }
 
+// httpConfig is git's configuration for src's proxy and certificate
+// check, as environment variables: they stay out of git's command line,
+// which other users of the node can read.
+func httpConfig(src Source) []string {
+	var kv [][2]string
+	if src.Proxy != "" {
+		kv = append(kv, [2]string{"http.proxy", src.Proxy})
+	}
+	if src.Insecure {
+		kv = append(kv, [2]string{"http.sslVerify", "false"})
+	}
+	if len(kv) == 0 {
+		return nil
+	}
+	env := []string{fmt.Sprintf("GIT_CONFIG_COUNT=%d", len(kv))}
+	for i, p := range kv {
+		env = append(env, fmt.Sprintf("GIT_CONFIG_KEY_%d=%s", i, p[0]), fmt.Sprintf("GIT_CONFIG_VALUE_%d=%s", i, p[1]))
+	}
+	return env
+}
+
 // gitEnv prepares environment variables for credentials.
 func gitEnv(ctx context.Context, app *api.App, credID int64) ([]string, func(), error) {
 	env := []string{
@@ -318,6 +344,9 @@ func runProjectUpdate(ctx context.Context, rc *jobs.RunContext) jobs.Result {
 		DeleteOnUpdate:  row.Bool("scm_delete_on_update"),
 		Clean:           row.Bool("scm_clean"),
 	}
+	if err := ProjectHTTP(ctx, app, &src); err != nil {
+		return jobs.Result{Status: "error", Explanation: err.Error()}
+	}
 	rc.Out.Line(fmt.Sprintf("Updating project from %s", redact(src.URL)))
 	sha, dir, err := SyncProject(ctx, app, scmType, src, rc.Out.Line)
 	if err != nil {
@@ -366,6 +395,24 @@ func runProjectUpdate(ctx context.Context, rc *jobs.RunContext) jobs.Result {
 	}
 	rc.Out.Line("Project update successful")
 	return jobs.Result{Status: "successful", Update: map[string]any{"scm_revision": sha}}
+}
+
+// ProjectHTTP reads the project's proxy and certificate check into src.
+func ProjectHTTP(ctx context.Context, app *api.App, src *Source) error {
+	var proxy string
+	var verify bool
+	if err := app.DB.QueryRow(ctx, "SELECT scm_proxy, scm_verify_ssl FROM unified_job_templates WHERE id = $1", src.ProjectID).Scan(&proxy, &verify); err != nil {
+		return err
+	}
+	if proxy != "" {
+		plain, err := app.Crypto.Decrypt(proxy)
+		if err != nil {
+			return fmt.Errorf("decrypting the project's proxy: %w", err)
+		}
+		src.Proxy = plain
+	}
+	src.Insecure = !verify
+	return nil
 }
 
 // pruneRevisions keeps the newest checkouts of a project on this node.

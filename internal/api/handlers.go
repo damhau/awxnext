@@ -47,6 +47,8 @@ func (a *App) Router() chi.Router {
 			"custom_logo":             a.Settings.String(c, "CUSTOM_LOGO"),
 			"custom_login_info":       a.Settings.String(c, "CUSTOM_LOGIN_INFO"),
 			"login_redirect_override": a.Settings.String(c, "LOGIN_REDIRECT_OVERRIDE"),
+			// AAP's key, by which the Terraform provider finds EDA's API.
+			"apis": Obj{"eda": "/api/eda/"},
 		})
 	}))
 	// Public with AWX's keys, as in AWX: awxkit reads it before logging in
@@ -954,39 +956,7 @@ func (a *App) handleCopy(c *Ctx, w http.ResponseWriter, r *http.Request, res *Re
 			writeError(w, FieldError("name", "This field is required."))
 			return
 		}
-		copyData := Obj{}
-		for _, f := range res.Fields {
-			if f.ReadOnly || f.Type == TSecret {
-				continue
-			}
-			v := obj[f.Name]
-			if t, ok := v.(time.Time); ok {
-				v = FormatTime(t)
-			}
-			copyData[f.Name] = v
-		}
-		copyData["name"] = name
-		var created Obj
-		err = c.WithTx(func(c *Ctx) error {
-			vals, err := Validate(c, res, copyData, true, nil)
-			if err != nil {
-				return err
-			}
-			// Secrets are copied as stored (already encrypted).
-			for _, f := range res.Fields {
-				if f.Type == TSecret {
-					vals[f.Name] = obj[f.Name]
-				}
-			}
-			created, err = Insert(c, res, vals)
-			if err != nil {
-				return err
-			}
-			if res.AfterCopy != nil {
-				return res.AfterCopy(c, obj, created)
-			}
-			return nil
-		})
+		created, err := Copy(c, res, obj, name)
 		if err != nil {
 			writeError(w, err)
 			return
@@ -1000,6 +970,45 @@ func (a *App) handleCopy(c *Ctx, w http.ResponseWriter, r *http.Request, res *Re
 	default:
 		writeError(w, Detail(405, fmt.Sprintf("Method %q not allowed.", r.Method)))
 	}
+}
+
+// Copy makes a copy of obj named name, in a transaction: its fields but
+// the read-only ones, its secrets as stored, then AfterCopy.
+func Copy(c *Ctx, res *Resource, obj Obj, name string) (Obj, error) {
+	copyData := Obj{}
+	for _, f := range res.Fields {
+		if f.ReadOnly || f.Type == TSecret {
+			continue
+		}
+		v := obj[f.Name]
+		if t, ok := v.(time.Time); ok {
+			v = FormatTime(t)
+		}
+		copyData[f.Name] = v
+	}
+	copyData["name"] = name
+	var created Obj
+	err := c.WithTx(func(c *Ctx) error {
+		vals, err := Validate(c, res, copyData, true, nil)
+		if err != nil {
+			return err
+		}
+		// Secrets are copied as stored (already encrypted).
+		for _, f := range res.Fields {
+			if f.Type == TSecret {
+				vals[f.Name] = obj[f.Name]
+			}
+		}
+		created, err = Insert(c, res, vals)
+		if err != nil {
+			return err
+		}
+		if res.AfterCopy != nil {
+			return res.AfterCopy(c, obj, created)
+		}
+		return nil
+	})
+	return created, err
 }
 
 func (a *App) handleOptions(c *Ctx, w http.ResponseWriter, r *http.Request) {

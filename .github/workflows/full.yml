@@ -109,7 +109,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        suite: [collection, cli, terraform]
+        suite: [collection, cli, terraform, eda]
     uses: ./.github/workflows/compat.yml
     with:
       suite: ${{ matrix.suite }}

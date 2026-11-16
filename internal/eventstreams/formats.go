@@ -89,6 +89,49 @@ func AddTraceContext(events []Event, h http.Header) {
 	}
 }
 
+// coreAttributes are CloudEvents' own attributes, which no extension is.
+var coreAttributes = map[string]bool{"specversion": true, "id": true, "source": true, "type": true, "subject": true,
+	"datacontenttype": true, "dataschema": true, "time": true, "data": true, "database64": true}
+
+// secretHeaders are never kept on events: they carry senders' secrets.
+var secretHeaders = map[string]bool{"Authorization": true, "Proxy-Authorization": true, "Cookie": true}
+
+// HeaderAttribute is the extension a request header of name is kept as:
+// its name in lowercase letters and digits, such as xrequestid for
+// X-Request-Id.
+func HeaderAttribute(name string) string {
+	var b strings.Builder
+	for _, r := range strings.ToLower(name) {
+		if r >= 'a' && r <= 'z' || r >= '0' && r <= '9' {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+// AddHeaders gives events the request's headers of names, as EDA's
+// additional_data_headers: each as an extension (HeaderAttribute), unless
+// it is a secret's or the event has the attribute already.
+func AddHeaders(events []Event, h http.Header, names []string) {
+	for _, n := range names {
+		n = http.CanonicalHeaderKey(strings.TrimSpace(n))
+		attr := HeaderAttribute(n)
+		v := h.Values(n)
+		if attr == "" || len(v) == 0 || secretHeaders[n] || coreAttributes[attr] {
+			continue
+		}
+		for i := range events {
+			if _, ok := events[i].Extensions[attr]; ok {
+				continue
+			}
+			if events[i].Extensions == nil {
+				events[i].Extensions = map[string]any{}
+			}
+			events[i].Extensions[attr] = strings.Join(v, ", ")
+		}
+	}
+}
+
 func mediaType(h http.Header) string {
 	t, _, err := mime.ParseMediaType(h.Get("Content-Type"))
 	if err != nil {

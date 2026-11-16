@@ -1,6 +1,7 @@
 package resources
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -10,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/damhau/awxnext/internal/api"
+	"github.com/damhau/awxnext/internal/crypto"
 	"github.com/damhau/awxnext/internal/jobs"
 	"github.com/damhau/awxnext/internal/projectscan"
 )
@@ -99,6 +101,9 @@ func registerProjects() {
 			{Name: "scm_refspec", Type: api.TString, Default: "", MaxLength: 1024, Label: "Source Control Refspec", Help: "For git projects, an additional refspec to fetch."},
 			{Name: "scm_clean", Type: api.TBool, Default: false, Help: "Discard any local changes before syncing the project. Jobs always work on a copy, so only changes made on the server's disk are discarded."},
 			{Name: "scm_track_submodules", Type: api.TBool, Default: false, Help: "Track submodules latest commits on defined branch."},
+			{Name: "scm_proxy", Type: api.TSecret, Default: "", Validate: validateProxyURL,
+				Help: "The HTTP proxy git goes through, such as http://user:password@proxy.example.com:3128. Empty: the server's HTTPS_PROXY, if any."},
+			{Name: "scm_verify_ssl", Type: api.TBool, Default: true, Help: "Check the git server's TLS certificate."},
 			{Name: "scm_delete_on_update", Type: api.TBool, Default: false, Help: "Delete the project before syncing."},
 			{Name: "credential", Type: api.TFK, Ref: "credentials", Nullable: true},
 			{Name: "timeout", Type: api.TInt, Default: 0, Help: "The amount of time (in seconds) to run before the task is canceled."},
@@ -205,7 +210,7 @@ func registerProjects() {
 			if str(obj["scm_type"]) == "" {
 				return nil
 			}
-			for _, f := range []string{"scm_type", "scm_url", "scm_branch", "scm_refspec", "credential", "scm_track_submodules"} {
+			for _, f := range []string{"scm_type", "scm_url", "scm_branch", "scm_refspec", "credential", "scm_track_submodules", "scm_proxy", "scm_verify_ssl"} {
 				if fmt.Sprint(old[f]) != fmt.Sprint(obj[f]) {
 					if str(obj["local_path"]) == "" {
 						id, _ := api.ID(obj["id"])
@@ -359,4 +364,16 @@ func asList(v any) []string {
 		}
 	}
 	return out
+}
+
+func validateProxyURL(c *Ctx, v any, data Obj) error {
+	s := str(v)
+	if s == "" || s == crypto.Placeholder {
+		return nil
+	}
+	u, err := url.Parse(s)
+	if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") {
+		return errors.New("Enter a proxy URL such as http://proxy.example.com:3128.")
+	}
+	return nil
 }
