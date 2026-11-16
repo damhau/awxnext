@@ -3,7 +3,8 @@
 // inferred schema, the errors the server's check gives, how decisions are
 // shown, and the setup snippets of each kind of sender.
 import type { CellState } from './cells'
-import { asIs, tr } from './i18n'
+import { duration } from './format'
+import { asIs, tr, trn } from './i18n'
 
 /** A value's shape, as GET event_streams/N/schema/ describes it. */
 export interface SchemaNode {
@@ -266,6 +267,12 @@ export function outcomeView(outcome: string): OutcomeView {
       return { cell: 'canceled', label: tr('Timed out'), kind: 'held' }
     case 'canceled':
       return { cell: 'canceled', label: tr('Canceled'), kind: 'held' }
+    case 'expired':
+      return { cell: 'skipped', label: tr('Expired'), kind: 'held' }
+    case 'cleared':
+      return { cell: 'skipped', label: tr('Cleared'), kind: 'held' }
+    case 'ignored':
+      return { cell: 'none', label: tr('Ignored'), kind: 'held' }
     case 'not_matched':
       return { cell: 'none', label: tr('Not matched'), kind: 'missed' }
     case 'refused':
@@ -282,7 +289,7 @@ export function outcomeView(outcome: string): OutcomeView {
 export const OUTCOME_FILTERS: { value: string; label: string; outcomes: string[] }[] = [
   { value: '', label: tr('All'), outcomes: [] },
   { value: 'acted', label: tr('Acted'), outcomes: ['launched', 'notified', 'posted', 'shadow', 'awaiting_approval'] },
-  { value: 'held', label: tr('Held back'), outcomes: ['held', 'throttled', 'deduplicated', 'dropped', 'denied', 'timed_out', 'canceled', 'waiting'] },
+  { value: 'held', label: tr('Held back'), outcomes: ['held', 'throttled', 'deduplicated', 'dropped', 'denied', 'timed_out', 'canceled', 'waiting', 'expired', 'cleared', 'ignored'] },
   { value: 'failed', label: tr('Failed'), outcomes: ['refused', 'failed', 'error'] },
   { value: 'missed', label: tr('Not matched'), outcomes: ['not_matched'] },
 ]
@@ -425,6 +432,10 @@ export interface RuleDraft {
   breaker_notification_template: number | null
   window_action: string
   approval_timeout: number
+  pattern: string
+  conditions: string[]
+  pattern_count: number
+  pattern_window: number
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -457,6 +468,10 @@ export function draftOf(r?: Record<string, any>): RuleDraft {
     breaker_notification_template: r?.breaker_notification_template ?? null,
     window_action: r?.window_action ?? 'hold',
     approval_timeout: r?.approval_timeout ?? 3600,
+    pattern: r?.pattern ?? '',
+    conditions: r?.conditions?.length ? r.conditions : ['', ''],
+    pattern_count: r?.pattern_count || 3,
+    pattern_window: r?.pattern_window || 600,
   }
 }
 
@@ -464,6 +479,7 @@ export function draftOf(r?: Record<string, any>): RuleDraft {
  * that a rule switched from launching to notifying keeps no template. */
 export function ruleBody(d: RuleDraft): Record<string, unknown> {
   const launch = d.action === 'launch'
+  const conditions = hasConditions(d.pattern) ? (d.pattern === 'absence' ? d.conditions.slice(0, 2) : d.conditions) : []
   const vars: Record<string, string> = {}
   for (const [k, v] of d.vars) if (k.trim()) vars[k.trim()] = v
   return {
@@ -475,8 +491,12 @@ export function ruleBody(d: RuleDraft): Record<string, unknown> {
     mode: d.mode,
     filter: d.filter,
     key: d.key,
-    throttle: d.throttle,
-    throttle_window: d.throttle ? d.throttle_window : 0,
+    throttle: d.pattern ? '' : d.throttle,
+    throttle_window: d.throttle && !d.pattern ? d.throttle_window : 0,
+    pattern: d.pattern,
+    conditions,
+    pattern_count: d.pattern === 'count' ? d.pattern_count : 0,
+    pattern_window: d.pattern ? d.pattern_window : 0,
     action: d.action,
     unified_job_template: launch ? d.unified_job_template : null,
     extra_vars: launch ? vars : {},
@@ -502,26 +522,144 @@ export function checkBody(d: RuleDraft, events = 20): Record<string, unknown> {
   const b = ruleBody(d)
   // A variable whose name is still being written is left out, not refused.
   const vars = Object.fromEntries(Object.entries(b.extra_vars as Record<string, string>).filter(([k]) => ident.test(k)))
-  return { streams: b.streams, filter: b.filter, key: b.key, action: b.action, extra_vars: vars, limit: b.limit, message: b.message, event_type: b.event_type, event_data: b.event_data, events }
+  return {
+    streams: b.streams,
+    filter: b.filter,
+    key: b.key,
+    action: b.action,
+    extra_vars: vars,
+    limit: b.limit,
+    message: b.message,
+    event_type: b.event_type,
+    event_data: b.event_data,
+    pattern: b.pattern,
+    conditions: b.conditions,
+    events,
+  }
 }
 
 /** The errors of a save, or of the check, by the editor's fields:
- * extra_vars' "name: message" go to the variable they name. */
+ * extra_vars' "name: message" go to the variable they name, and
+ * conditions' "N: message" to the Nth condition. */
 export function fieldErrors(errors: Record<string, unknown>): Record<string, string> {
   const out: Record<string, string> = {}
+  const add = (k: string, msg: string) => (out[k] = out[k] ? `${out[k]}\n${msg}` : msg)
   for (const [k, v] of Object.entries(errors)) {
     const list = Array.isArray(v) ? v.map(String) : [String(v)]
-    if (k !== 'extra_vars') {
+    if (k !== 'extra_vars' && k !== 'conditions') {
       out[k] = list.join('\n')
       continue
     }
     for (const msg of list) {
-      const m = msg.match(/^([A-Za-z_][A-Za-z0-9_]*): ([\s\S]*)$/)
-      if (m) out[`extra_vars.${m[1]}`] = m[2]
-      else out.extra_vars = out.extra_vars ? `${out.extra_vars}\n${msg}` : msg
+      const m = k === 'extra_vars' ? msg.match(/^([A-Za-z_][A-Za-z0-9_]*): ([\s\S]*)$/) : msg.match(/^(\d+): ([\s\S]*)$/)
+      if (!m) add(k, msg)
+      else if (k === 'extra_vars') out[`extra_vars.${m[1]}`] = m[2]
+      else out[`conditions.${Number(m[1]) - 1}`] = m[2]
     }
   }
   return out
+}
+
+/** The patterns a rule can wait for, per key, within a window. */
+export const PATTERNS: [string, string][] = [
+  ['', tr('None: each event on its own')],
+  ['count', tr('Count: a number of events')],
+  ['all', tr('All of: every condition, in any order')],
+  ['sequence', tr('Sequence: the conditions in order')],
+  ['absence', tr('Absence: an event not followed by another')],
+]
+
+export const PATTERN_LABELS: Record<string, string> = {
+  count: tr('Count'),
+  all: tr('All of'),
+  sequence: tr('Sequence'),
+  absence: tr('Absence'),
+}
+
+/** Whether a pattern has conditions of its own. */
+export function hasConditions(pattern: string): boolean {
+  return pattern === 'all' || pattern === 'sequence' || pattern === 'absence'
+}
+
+/** The label of a pattern's condition, from 0. */
+export function conditionLabel(pattern: string, i: number): string {
+  if (pattern === 'sequence') return tr('Step {n}', { n: i + 1 })
+  if (pattern === 'absence') return i === 0 ? tr('An event matching') : tr('Not followed by one matching')
+  return tr('Condition {n}', { n: i + 1 })
+}
+
+/** The conditions of a draft once its pattern changes: an absence has two,
+ * the others two at least. */
+export function conditionsFor(pattern: string, conditions: string[]): string[] {
+  const out = conditions.length < 2 ? [...conditions, ...Array(2 - conditions.length).fill('')] : conditions
+  return pattern === 'absence' ? out.slice(0, 2) : out
+}
+
+/** One line on what a rule's pattern waits for. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function patternSummary(r: Record<string, any>): string {
+  const window = duration(r.pattern_window)
+  const n = (r.conditions ?? []).length
+  switch (r.pattern) {
+    case 'count':
+      return tr('{n} events of a key within {window}', { n: r.pattern_count, window })
+    case 'all':
+      return tr('All of {n} conditions within {window}, in any order', { n, window })
+    case 'sequence':
+      return tr('{n} steps in order within {window}', { n, window })
+    case 'absence':
+      return tr('Condition 1 not followed by condition 2 within {window}', { window })
+  }
+  return tr('None: acts on each event')
+}
+
+/** A key's window, as decisions' details.pattern and the windows' progress
+ * give it. */
+export interface PatternProgress {
+  kind: string
+  events: number
+  seen?: number
+  needed?: number
+  /** The conditions of an all pattern that the window holds, from 1. */
+  conditions?: number[]
+  until?: string
+}
+
+const maxProgressCells = 30
+
+/** A window's progress as cells: one per event, condition or step it
+ * needs, the ones it has filled, all of them ok once complete. An absence
+ * has one per event waiting. */
+export function progressCells(p: PatternProgress | undefined): CellState[] {
+  if (!p) return []
+  const needed = p.needed ?? 0
+  const done = needed > 0 && (p.seen ?? 0) >= needed
+  const filled: CellState = done ? 'ok' : 'running'
+  switch (p.kind) {
+    case 'count':
+    case 'sequence':
+      if (needed > maxProgressCells) return []
+      return Array.from({ length: needed }, (_, i) => (i < (p.seen ?? 0) ? filled : 'empty'))
+    case 'all': {
+      const have = new Set(p.conditions ?? [])
+      return Array.from({ length: needed }, (_, i) => (have.has(i + 1) ? filled : 'empty'))
+    }
+  }
+  return Array.from({ length: Math.min(p.events, maxProgressCells) }, () => 'running')
+}
+
+/** A window's progress in words: "3 of 5 events". */
+export function progressText(p: PatternProgress): string {
+  const vars = { seen: p.seen ?? 0, needed: p.needed ?? 0 }
+  switch (p.kind) {
+    case 'count':
+      return tr('{seen} of {needed} events', vars)
+    case 'all':
+      return tr('{seen} of {needed} conditions', vars)
+    case 'sequence':
+      return tr('Step {seen} of {needed}', vars)
+  }
+  return trn(p.events, '{n} event waiting for condition 2', '{n} events waiting for condition 2')
 }
 
 /** One line on what a rule does. */

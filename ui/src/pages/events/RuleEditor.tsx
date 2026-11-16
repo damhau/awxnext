@@ -9,8 +9,8 @@ import { Check, Field, FormError, Lookup, MultiLookup, Segmented, SelectField, T
 import { Icon } from '../../components/icons'
 import { Dialog } from '../../components/overlay'
 import { Ago, Cell, Panel } from '../../components/ui'
-import { checkBody, draftOf, fieldErrors, mergeSchemas, ruleBody, splitSeconds, UNITS, type MissDetails, type RuleDraft, type StreamSchema } from '../../lib/eventRules'
-import { tr, trn } from '../../lib/i18n'
+import { checkBody, conditionLabel, conditionsFor, draftOf, fieldErrors, hasConditions, mergeSchemas, PATTERNS, ruleBody, splitSeconds, UNITS, type MissDetails, type RuleDraft, type StreamSchema } from '../../lib/eventRules'
+import { asIs, tr, trn } from '../../lib/i18n'
 import { Backtest } from './backtest'
 import { CelInput } from './CelInput'
 import { MissView } from './decisions'
@@ -27,6 +27,8 @@ interface CheckedEvent {
   matched?: boolean
   reason?: string
   filter?: MissDetails
+  /** The pattern's conditions the event matches, from 0. */
+  conditions?: number[]
   key?: string
   key_error?: string
   action?: Record<string, unknown>
@@ -185,6 +187,15 @@ export function RuleEditor({ rule }: { rule?: Any }) {
       setBusy(false)
     }
   }
+  const setPattern = (p: string) => {
+    set('pattern', p)
+    if (hasConditions(p)) set('conditions', conditionsFor(p, d.conditions))
+  }
+  const setCondition = (i: number, v: string) =>
+    set(
+      'conditions',
+      d.conditions.map((x, j) => (j === i ? v : x)),
+    )
   const setVar = (i: number, k: string, v: string) =>
     set(
       'vars',
@@ -238,21 +249,75 @@ export function RuleEditor({ rule }: { rule?: Any }) {
               schema={schema}
               error={errOf('key')}
               placeholder={tr('event.data.labels.instance')}
-              help={tr('A string the throttle and the circuit breaker count events by. Empty: one key for all.')}
+              help={d.pattern ? tr('A string the pattern’s windows and the circuit breaker count events by. Empty: one window for all.') : tr('A string the throttle and the circuit breaker count events by. Empty: one key for all.')}
             />
-            <SelectField
-              label={tr('Throttle')}
-              value={d.throttle}
-              onChange={(v) => set('throttle', v)}
-              error={saveErrors.throttle}
-              options={[
-                ['', tr('None: act on every event')],
-                ['once_within', tr('Once within: the first event of a key, then none for the window')],
-                ['once_after', tr('Once after: once at the end of the window, for its first event')],
-              ]}
-            />
-            {d.throttle && <DurationInput label={tr('Throttle window')} seconds={d.throttle_window} onChange={(v) => set('throttle_window', v)} error={saveErrors.throttle_window} />}
+            <SelectField label={tr('Pattern')} value={d.pattern} onChange={setPattern} error={saveErrors.pattern} options={PATTERNS} help={tr('What the rule waits for, per key, before it acts once with all the events.')} />
+            {d.pattern === 'count' && (
+              <TextInput label={tr('Events')} type="number" value={d.pattern_count} onChange={(v) => set('pattern_count', Number(v))} error={saveErrors.pattern_count} help={tr('The rule fires on the last one, and counts again from 0.')} />
+            )}
+            {d.pattern && (
+              <DurationInput
+                label={tr('Within')}
+                seconds={d.pattern_window}
+                onChange={(v) => set('pattern_window', v)}
+                error={saveErrors.pattern_window}
+                help={d.pattern === 'absence' ? tr('From the first event: the rule fires at the end if nothing followed it.') : tr('Measured by when awxnext received each event.')}
+              />
+            )}
+            {!d.pattern && (
+              <SelectField
+                label={tr('Throttle')}
+                value={d.throttle}
+                onChange={(v) => set('throttle', v)}
+                error={saveErrors.throttle}
+                options={[
+                  ['', tr('None: act on every event')],
+                  ['once_within', tr('Once within: the first event of a key, then none for the window')],
+                  ['once_after', tr('Once after: once at the end of the window, for its first event')],
+                ]}
+              />
+            )}
+            {!d.pattern && d.throttle && <DurationInput label={tr('Throttle window')} seconds={d.throttle_window} onChange={(v) => set('throttle_window', v)} error={saveErrors.throttle_window} />}
           </div>
+          {hasConditions(d.pattern) && (
+            <Field
+              label={d.pattern === 'sequence' ? tr('Steps') : tr('Conditions')}
+              full
+              error={saveErrors.conditions || check?.errors.conditions}
+              help={
+                d.pattern === 'all'
+                  ? tr('CEL conditions on event, after the filter. The rule fires once an event of each came, in any order.')
+                  : d.pattern === 'sequence'
+                    ? tr('CEL conditions on event, after the filter. The rule fires when an event of each came, in this order.')
+                    : tr('CEL conditions on event, after the filter. The rule fires at the end of the window if no event of the second came after the first.')
+              }
+            >
+              <div className="stack" style={{ gap: 8 }}>
+                {d.conditions.map((c, i) => (
+                  <div key={i} className="cond-row">
+                    <span className="cond-label small muted">{conditionLabel(d.pattern, i)}</span>
+                    <CelInput ariaLabel={conditionLabel(d.pattern, i)} value={c} onChange={(v) => setCondition(i, v)} schema={schema} error={errOf(`conditions.${i}`)} placeholder={tr('event.type == "alert.firing"')} />
+                    {d.pattern !== 'absence' && d.conditions.length > 2 ? (
+                      <button type="button" className="btn ghost icon" aria-label={tr('Remove {name}', { name: conditionLabel(d.pattern, i) })} onClick={() => set('conditions', d.conditions.filter((_, j) => j !== i))}>
+                        <Icon name="x" size={14} />
+                      </button>
+                    ) : (
+                      <span />
+                    )}
+                  </div>
+                ))}
+                {d.pattern !== 'absence' && d.conditions.length < 10 && (
+                  <div>
+                    <button type="button" className="btn sm" onClick={() => set('conditions', [...d.conditions, ''])}>
+                      <Icon name="plus" size={12} />
+                      {d.pattern === 'sequence' ? tr('Add step') : tr('Add condition')}
+                    </button>
+                  </div>
+                )}
+              </div>
+            </Field>
+          )}
+          {d.pattern && <p className="small muted" style={{ margin: 0 }}>{tr('A window keeps its events in the database: it survives a restart. An event received after its window ended counts for nothing. The action gets the first event as event, and all of them as events.')}</p>}
         </section>
 
         <section className="form-section">
@@ -415,7 +480,7 @@ export function RuleEditor({ rule }: { rule?: Any }) {
       </aside>
       {backtest && (
         <Dialog title={tr('Backtest of the draft')} wide onClose={() => setBacktest(false)}>
-          <Backtest path="event_rules/backtest/" draft={() => ruleBody(d)} filter={d.filter} />
+          <Backtest path="event_rules/backtest/" draft={() => ruleBody(d)} filter={d.filter} conditions={d.conditions} />
         </Dialog>
       )}
     </div>
@@ -500,6 +565,11 @@ function DraftPane({ d, check, checking, error }: { d: RuleDraft; check: CheckRe
                   <span className="mono faint small">#{e.sequence}</span>
                   <span className="mono small ellipsis">{e.event_type}</span>
                   {e.matched && e.key !== undefined && <span className="mono small faint ellipsis">{e.key || tr('one key')}</span>}
+                  {e.conditions?.map((c) => (
+                    <span key={c} className="tag" title={conditionLabel(d.pattern, c)}>
+                      {d.pattern === 'sequence' ? tr('step {n}', { n: c + 1 }) : asIs(String(c + 1))}
+                    </span>
+                  ))}
                   {e.test_mode && <span className="tag">{tr('test')}</span>}
                 </summary>
                 <div className="stack" style={{ gap: 6 }}>

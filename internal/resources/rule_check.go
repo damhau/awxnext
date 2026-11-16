@@ -14,11 +14,12 @@ import (
 	"github.com/damhau/awxnext/internal/rules"
 )
 
-// The rule editor's check (roadmap M14-05): a draft's expressions,
-// type-checked against its streams' schema as a save checks them, then run
-// on the streams' latest events, test mode's included, so that a rule is
-// written against the events it will read. It records nothing and acts on
-// nothing: guardrails and throttles are the backtest's.
+// The rule editor's check (roadmap M14-05): a draft's expressions, its
+// pattern's conditions among them, type-checked against its streams'
+// schema as a save checks them, then run on the streams' latest events,
+// test mode's included, so that a rule is written against the events it
+// will read. It records nothing and acts on nothing: guardrails, throttles
+// and patterns' windows are the backtest's.
 
 const (
 	checkEvents    = 20
@@ -32,6 +33,8 @@ type ruleDraft struct {
 	action, filter, key, limit, message, typ, data string
 	vars                                           map[string]string
 	events                                         int
+	// conditions are the pattern's, when it has some.
+	conditions []string
 }
 
 // checkDraft serves POST /event_rules/check/.
@@ -94,6 +97,15 @@ func readRuleDraft(body Obj) (*ruleDraft, error) {
 			for k, e := range v.(map[string]any) {
 				d.vars[k] = str(e)
 			}
+		}
+	}
+	if p := str(body["pattern"]); p != "" && p != rules.PatternCount {
+		list, _ := body["conditions"].([]any)
+		if len(list) > rules.MaxConditions {
+			fe.Add("conditions", fmt.Sprintf("A pattern has at most %d conditions.", rules.MaxConditions))
+		}
+		for _, c := range list {
+			d.conditions = append(d.conditions, str(c))
 		}
 	}
 	if v, ok := body["events"]; ok {
@@ -173,6 +185,14 @@ func checkRuleDraft(c *Ctx, d *ruleDraft) (Obj, error) {
 	}
 	filter := ok(draftExpr{"filter", d.filter, rules.Bool})
 	key := ok(draftExpr{"key", d.key, rules.String})
+	conds := make([]string, len(d.conditions))
+	usable := 0
+	for i, cond := range d.conditions {
+		if ok(draftExpr{fmt.Sprintf("conditions.%d", i), cond, rules.Bool}) {
+			conds[i] = cond
+			usable++
+		}
+	}
 	var mapped []draftExpr
 	for _, m := range d.mappings() {
 		if ok(m) {
@@ -200,6 +220,22 @@ func checkRuleDraft(c *Ctx, d *ruleDraft) (Obj, error) {
 		if !hit {
 			o["reason"], o["filter"] = miss.String(), miss.Details()
 			continue
+		}
+		if usable > 0 {
+			met := []int{}
+			for i, cond := range conds {
+				if cond == "" {
+					continue
+				}
+				if hit, _ := rules.Filter(ctx, cond, vars); hit {
+					met = append(met, i)
+				}
+			}
+			o["conditions"] = met
+			if len(met) == 0 {
+				o["matched"], o["reason"] = false, "The event matches none of the rule's conditions."
+				continue
+			}
 		}
 		matched++
 		if key {

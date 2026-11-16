@@ -227,8 +227,9 @@ func (e *RuleEngine) Release(ctx context.Context, stream int64) {
 }
 
 // Pass runs the batches of the streams this engine holds, fires the
-// once_after windows that are due, and acts on the approvals decided. It
-// says whether a stream has more events to read.
+// once_after windows that are due, moves the patterns' windows that time
+// changes, and acts on the approvals decided. It says whether a stream has
+// more events to read.
 func (e *RuleEngine) Pass(ctx context.Context) (bool, error) {
 	streams, err := e.Acquire(ctx)
 	if err != nil {
@@ -256,6 +257,9 @@ func (e *RuleEngine) Pass(ctx context.Context) (bool, error) {
 	if err := e.FireDue(ctx); err != nil && ctx.Err() == nil {
 		slog.Warn("event rules: firing windows failed", "err", err)
 	}
+	if err := e.FirePatterns(ctx); err != nil && ctx.Err() == nil {
+		slog.Warn("event rules: moving pattern windows failed", "err", err)
+	}
 	if err := e.ResolveApprovals(ctx); err != nil && ctx.Err() == nil {
 		slog.Warn("event rules: resolving approvals failed", "err", err)
 	}
@@ -282,14 +286,14 @@ func (a *afterCommit) run(ctx context.Context, app *api.App) {
 const ruleColumns = `id, name, organization_id, streams, owner_id, filter, key, throttle, throttle_window, action,
 	unified_job_template_id, extra_vars, job_limit, notification_template_id, message, target_stream_id, event_type, event_data,
 	mode, max_concurrent_runs, host_lock, max_group_share, breaker_firings, breaker_window, breaker_notification_template_id,
-	window_action, approval_timeout`
+	window_action, approval_timeout, pattern, conditions, pattern_count, pattern_window`
 
 func scanRule(row pgx.Row) (*eventRule, error) {
 	r := &eventRule{}
 	err := row.Scan(&r.ID, &r.Name, &r.Org, &r.Streams, &r.Owner, &r.Filter, &r.Key, &r.Throttle, &r.Window, &r.Action,
 		&r.Template, &r.ExtraVars, &r.Limit, &r.Notification, &r.Message, &r.Target, &r.EventType, &r.EventData,
 		&r.Mode, &r.MaxRuns, &r.HostLock, &r.GroupShare, &r.BreakerFirings, &r.BreakerWindow, &r.BreakerNotification,
-		&r.WindowAction, &r.ApprovalTimeout)
+		&r.WindowAction, &r.ApprovalTimeout, &r.Pattern, &r.Conditions, &r.PatternCount, &r.PatternWindow)
 	return r, err
 }
 
@@ -354,10 +358,19 @@ func (e *RuleEngine) Step(ctx context.Context, stream int64) (int, error) {
 			}
 			ok, m := rules.Filter(ctx, r.Filter, rules.Vars{Event: val})
 			if !ok {
-				misses = append(misses, miss{rule: r, ev: ev, miss: m, trace: trace})
+				misses = append(misses, miss{rule: r, ev: ev, reason: m.Reason(), details: map[string]any{"filter": m.Details()}, trace: trace})
 				continue
 			}
-			if err := e.decide(ectx, tx, after, r, ev, val); err != nil {
+			var matched []int
+			if r.hasConditions() {
+				var cm []*rules.Miss
+				if matched, cm = rules.Conditions(ctx, r.Conditions, rules.Vars{Event: val}); len(matched) == 0 {
+					reason, details := rules.ConditionsMiss(cm)
+					misses = append(misses, miss{rule: r, ev: ev, reason: reason, details: details, trace: trace})
+					continue
+				}
+			}
+			if err := e.decide(ectx, tx, after, r, ev, val, matched); err != nil {
 				tracing.EndSpan(span, err)
 				return 0, err
 			}
@@ -421,12 +434,13 @@ func extension(ev eventstreams.Stored, name string) string {
 	return v
 }
 
-// miss is an event a rule's filter didn't match.
+// miss is an event a rule's filter, or its conditions, didn't match.
 type miss struct {
-	rule  *eventRule
-	ev    eventstreams.Stored
-	miss  *rules.Miss
-	trace string
+	rule    *eventRule
+	ev      eventstreams.Stored
+	reason  string
+	details map[string]any
+	trace   string
 }
 
 // recordMisses records the batch's events that rules' filters didn't
@@ -442,8 +456,8 @@ func (e *RuleEngine) recordMisses(ctx context.Context, tx pgx.Tx, after *afterCo
 	for i, m := range misses {
 		ruleIDs[i], seqs[i], received[i] = m.rule.ID, m.ev.Sequence, m.ev.Received
 		ids[i], sources[i], types[i] = m.ev.ID, m.ev.Source, m.ev.Type
-		reasons[i], modes[i], traces[i] = m.miss.Reason(), m.rule.Mode, m.trace
-		b, err := json.Marshal(map[string]any{"filter": m.miss.Details()})
+		reasons[i], modes[i], traces[i] = m.reason, m.rule.Mode, m.trace
+		b, err := json.Marshal(m.details)
 		if err != nil {
 			return err
 		}
@@ -492,6 +506,9 @@ type outcome struct {
 	approval     *int64
 	guardrail    string
 	details      map[string]any
+	// extra marks the events of a firing but its last: the circuit
+	// breaker counts the firing once.
+	extra bool
 }
 
 // fired says whether an outcome counts as a firing for the circuit
@@ -508,7 +525,8 @@ func (o outcome) fired() bool {
 func (r *eventRule) shadow() bool { return r.Mode == modeShadow }
 
 // decide records what a rule does with an event it matches, and does it.
-func (e *RuleEngine) decide(ctx context.Context, tx pgx.Tx, after *afterCommit, r *eventRule, ev eventstreams.Stored, val map[string]any) (err error) {
+// matched are the conditions of the rule's pattern the event matched.
+func (e *RuleEngine) decide(ctx context.Context, tx pgx.Tx, after *afterCommit, r *eventRule, ev eventstreams.Stored, val map[string]any, matched []int) (err error) {
 	ctx, span := ruleSpan(ctx, r, ev)
 	defer func() { tracing.EndSpan(span, err) }()
 	vars := rules.Vars{Event: val}
@@ -546,7 +564,13 @@ func (e *RuleEngine) decide(ctx context.Context, tx pgx.Tx, after *afterCommit, 
 		return err
 	}
 	after.matched(r.ID)
-	out, err := e.throttle(ctx, tx, after, r, member{ev: ev, val: val, decision: id, key: key})
+	m := member{ev: ev, val: val, decision: id, key: key}
+	var out outcome
+	if r.Pattern != "" {
+		out, err = e.addToPattern(ctx, tx, after, r, m, matched)
+	} else {
+		out, err = e.throttle(ctx, tx, after, r, m)
+	}
 	if err != nil {
 		return err
 	}
@@ -570,7 +594,7 @@ func saveOutcome(ctx context.Context, db pgx.Tx, after *afterCommit, rule, id in
 	trace.SpanFromContext(ctx).SetAttributes(attribute.String("awxnext.event_rule.outcome", out.name))
 	_, err := db.Exec(ctx, `UPDATE event_rule_decisions SET outcome = $3, reason = $4, key = $5, job_id = $6, window_id = coalesce($7, window_id),
 		mode = $8, guardrail = coalesce(nullif($9, ''), guardrail), fired = fired OR $10, approval_id = coalesce($11, approval_id), details = details || $12::jsonb, modified = now()
-		WHERE id = $1 AND received = $2`, id, received, out.name, out.reason, out.key, out.job, out.window, mode, out.guardrail, out.fired(), out.approval, details)
+		WHERE id = $1 AND received = $2`, id, received, out.name, out.reason, out.key, out.job, out.window, mode, out.guardrail, out.fired() && !out.extra, out.approval, details)
 	if err == nil {
 		after.outcome(rule, out, 1)
 	}
@@ -670,7 +694,7 @@ func (e *RuleEngine) fire(ctx context.Context, db pgx.Tx, after *afterCommit, r 
 	if len(acting) == 0 {
 		return outs, nil
 	}
-	out, err := e.act(ctx, db, after, r, acting, false)
+	out, err := e.act(ctx, db, after, r, acting, false, acting[0].ev.Received)
 	if err != nil {
 		return nil, err
 	}
@@ -829,9 +853,10 @@ func (e *RuleEngine) ownerCtx(ctx context.Context, db pgx.Tx, r *eventRule) (*Ct
 
 // act runs the rule's action for members, the first as event: as the
 // rule's owner, after checking the owner still may. A refusal stops the
-// rule. Its guardrails, windows and mode apply, but, with approved, those
-// that applied when the approval was asked for: the blast radius only.
-func (e *RuleEngine) act(ctx context.Context, db pgx.Tx, after *afterCommit, r *eventRule, members []member, approved bool) (outcome, error) {
+// rule. Its guardrails, windows and mode apply, the maintenance windows at
+// at, but, with approved, those that applied when the approval was asked
+// for: the blast radius only.
+func (e *RuleEngine) act(ctx context.Context, db pgx.Tx, after *afterCommit, r *eventRule, members []member, approved bool, at time.Time) (outcome, error) {
 	c, reason, err := e.ownerCtx(ctx, db, r)
 	if err != nil {
 		return outcome{}, err
@@ -854,7 +879,7 @@ func (e *RuleEngine) act(ctx context.Context, db pgx.Tx, after *afterCommit, r *
 	}
 	defer sp.Rollback(context.Background())
 	c.Tx = sp
-	out, err := e.guard(c, after, r, members, vars, approved)
+	out, err := e.guard(c, after, r, members, vars, approved, at)
 	if err != nil {
 		if ctx.Err() != nil {
 			return outcome{}, err
@@ -883,7 +908,7 @@ func (e *RuleEngine) act(ctx context.Context, db pgx.Tx, after *afterCommit, r *
 // guard plans the action, applies the rule's guardrails and mode, and does
 // what is left to do: hold the action back, record it in shadow mode, ask
 // for approval, or act.
-func (e *RuleEngine) guard(c *Ctx, after *afterCommit, r *eventRule, members []member, vars rules.Vars, approved bool) (outcome, error) {
+func (e *RuleEngine) guard(c *Ctx, after *afterCommit, r *eventRule, members []member, vars rules.Vars, approved bool, at time.Time) (outcome, error) {
 	p, err := e.plan(c, r, members, vars)
 	if err != nil {
 		return outcome{}, err
@@ -892,7 +917,7 @@ func (e *RuleEngine) guard(c *Ctx, after *afterCommit, r *eventRule, members []m
 	approval := !approved && r.Mode == modeApproval
 	var window *hold
 	if !approved {
-		if window, err = g.windows(r, p, members[0].ev.Received); err != nil {
+		if window, err = g.windows(r, p, at); err != nil {
 			return outcome{}, err
 		}
 		if window != nil && !window.approve {
@@ -1081,7 +1106,7 @@ func (e *RuleEngine) resolveApproval(ctx context.Context, approval int64) error 
 			out = outcome{name: "dropped", reason: "The approved events are no longer in the log."}
 		} else {
 			sctx, span := ruleSpan(ctx, r, members[0].ev)
-			out, err = e.act(sctx, tx, after, r, members, true)
+			out, err = e.act(sctx, tx, after, r, members, true, members[0].ev.Received)
 			span.SetAttributes(attribute.String("awxnext.event_rule.outcome", out.name))
 			tracing.EndSpan(span, err)
 			if err != nil {
@@ -1099,9 +1124,15 @@ func (e *RuleEngine) resolveApproval(ctx context.Context, approval int64) error 
 		out.details = map[string]any{}
 	}
 	out.details["approval"] = Obj{"id": approval, "status": status, "by": who}
-	for _, x := range refs {
+	last := map[string]int{}
+	for i, x := range refs {
+		last[x.key] = i
+	}
+	for i, x := range refs {
 		o := out
 		o.key = x.key
+		// The events of a pattern's firing share a key: it counts once.
+		o.extra = last[x.key] != i
 		if err := saveOutcome(ctx, tx, after, x.rule, x.id, x.received, x.mode, o); err != nil {
 			return err
 		}

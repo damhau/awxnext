@@ -23,6 +23,13 @@
 .rule-editor { display: grid; grid-template-columns: minmax(0, 860px) minmax(320px, 520px); gap: 20px; align-items: start; }
 .rule-editor .draft { position: sticky; top: 12px; max-height: calc(100vh - 24px); overflow-y: auto; }
 .var-row { display: grid; grid-template-columns: minmax(100px, 200px) minmax(0, 1fr) auto; gap: 6px; align-items: start; }
+.cond-row { display: grid; grid-template-columns: minmax(90px, 170px) minmax(0, 1fr) 32px; gap: 6px; align-items: start; }
+.cond-label { padding-top: 8px; }
+.window-progress { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.window-progress .cells { display: inline-flex; gap: 2px; flex-wrap: wrap; }
+.pattern-windows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.pattern-windows li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; align-items: center; padding: 6px 0; border-top: 1px solid var(--line-soft); }
+.pattern-windows li:first-child { border-top: none; }
 .action-preview { border: 1px dashed var(--line-strong); border-radius: var(--radius); padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
 .action-preview .kv dd pre { margin: 0; }
 
@@ -53,6 +60,11 @@
   .decision > summary .decision-what { grid-column: 1 / -1; grid-row: 2; }
   .var-row { grid-template-columns: minmax(0, 1fr) auto; }
   .var-row > .cel { grid-column: 1 / -1; grid-row: 2; }
+  .cond-row { grid-template-columns: minmax(0, 1fr) 32px; }
+  .cond-row > .cel { grid-column: 1 / -1; grid-row: 2; }
+  .cond-label { padding-top: 0; }
+  .pattern-windows li { grid-template-columns: minmax(0, 1fr) auto; }
+  .pattern-windows li > .window-progress { grid-column: 1 / -1; grid-row: 2; }
   .breakers li { grid-template-columns: auto minmax(0, 1fr) auto; }
   .breakers li > .small { grid-column: 2 / -1; }
   .backtest-form { grid-template-columns: minmax(0, 1fr); }

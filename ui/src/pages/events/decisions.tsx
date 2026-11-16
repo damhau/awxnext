@@ -4,7 +4,8 @@ import { useList } from '../../api/hooks'
 import type { Any } from '../../api/types'
 import { Pager } from '../../components/table'
 import { Ago, Cell, Empty, ErrorNote, Loading } from '../../components/ui'
-import { GUARDRAIL_LABELS, missParts, MODE_LABELS, OUTCOME_FILTERS, outcomeView, seenText, type MissDetails } from '../../lib/eventRules'
+import { absolute } from '../../lib/format'
+import { conditionLabel, GUARDRAIL_LABELS, missParts, MODE_LABELS, OUTCOME_FILTERS, outcomeView, PATTERN_LABELS, progressCells, progressText, seenText, type MissDetails, type PatternProgress } from '../../lib/eventRules'
 import { asIs, tr, trn } from '../../lib/i18n'
 import { FilterBox } from '../admin/common'
 
@@ -48,18 +49,55 @@ export function MissView({ miss, filter }: { miss: MissDetails | undefined; filt
   )
 }
 
+/** Why an event matched none of a pattern's conditions: each one's part
+ * that failed. */
+export function ConditionsMiss({ misses, conditions, pattern }: { misses: MissDetails[]; conditions?: string[]; pattern?: string }) {
+  return (
+    <div className="stack" style={{ gap: 8 }}>
+      {misses.map((m, i) => (
+        <div key={i} className="stack" style={{ gap: 4 }}>
+          <div className="small muted">{conditionLabel(pattern ?? 'all', i)}</div>
+          <MissView miss={m} filter={conditions?.[i]} />
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/** How far a key's window got: a cell per event, condition or step it
+ * needs, and until when it waits. */
+export function WindowProgress({ p, until = true }: { p: PatternProgress; until?: boolean }) {
+  const cells = progressCells(p)
+  return (
+    <div className="window-progress">
+      {cells.length > 0 && (
+        <span className="cells">
+          {cells.map((c, i) => (
+            <Cell key={i} state={c} />
+          ))}
+        </span>
+      )}
+      <span className="small">{progressText(p)}</span>
+      {until && p.until && <span className="small faint">{tr('until {time}', { time: absolute(p.until) })}</span>}
+    </div>
+  )
+}
+
 const pretty = (v: unknown) => JSON.stringify(v, null, 2)
 
 /** What a decision recorded beyond its outcome. */
-export function DecisionBody({ d, filter }: { d: Any; filter?: string }) {
+export function DecisionBody({ d, filter, conditions }: { d: Any; filter?: string; conditions?: string[] }) {
   const details = (d.details ?? {}) as Record<string, unknown>
-  const { filter: miss, ...rest } = details
+  const { filter: miss, pattern, conditions: condMisses, cleared_by: clearedBy, ...rest } = details
+  const window = pattern as PatternProgress | undefined
+  const cleared = clearedBy as { stream: number; sequence: number } | undefined
   const facts: [string, ReactNode][] = []
   if (d.guardrail) facts.push([tr('Guardrail'), GUARDRAIL_LABELS[d.guardrail] ?? d.guardrail])
   if (d.mode) facts.push([tr('Mode'), MODE_LABELS[d.mode] ?? d.mode])
   if (d.key) facts.push([tr('Key'), <span className="mono">{d.key}</span>])
   if (d.job) facts.push([tr('Job'), <Link to={`/jobs/${d.summary_fields?.job?.type ?? 'job'}/${d.job}`}>#{d.job}</Link>])
   if (d.approval) facts.push([tr('Approval'), <Link to="/approvals">#{d.approval}</Link>])
+  if (cleared) facts.push([tr('Cleared by'), <Link to={`/event-streams/${cleared.stream}/events/${cleared.sequence}`}>#{cleared.sequence}</Link>])
   if (d.event_id) facts.push([tr('Event ID'), <span className="mono">{d.event_id}</span>])
   if (d.node) facts.push([tr('Node'), <span className="mono">{d.node}</span>])
   if (d.trace_id) facts.push([tr('Trace'), <span className="mono">{d.trace_id}</span>])
@@ -67,6 +105,13 @@ export function DecisionBody({ d, filter }: { d: Any; filter?: string }) {
     <div className="decision-body stack" style={{ gap: 10 }}>
       {d.reason && <p style={{ margin: 0 }}>{d.reason}</p>}
       {miss ? <MissView miss={miss as MissDetails} filter={filter} /> : null}
+      {Array.isArray(condMisses) ? <ConditionsMiss misses={condMisses as MissDetails[]} conditions={conditions} /> : null}
+      {window?.kind && window.events > 0 ? (
+        <div className="stack" style={{ gap: 4 }}>
+          <div className="small muted">{tr('The key’s window: {pattern}', { pattern: PATTERN_LABELS[window.kind] ?? window.kind })}</div>
+          <WindowProgress p={window} />
+        </div>
+      ) : null}
       {facts.length > 0 && (
         <dl className="facts">
           {facts.map(([k, v]) => (
@@ -84,7 +129,7 @@ export function DecisionBody({ d, filter }: { d: Any; filter?: string }) {
 
 /** A rule's or an event's decisions, newest first, each opening on what it
  * recorded. */
-export function DecisionList({ path, by, filter, empty }: { path: string; by: 'rule' | 'event'; filter?: string; empty: ReactNode }) {
+export function DecisionList({ path, by, filter, conditions, empty }: { path: string; by: 'rule' | 'event'; filter?: string; conditions?: string[]; empty: ReactNode }) {
   const [kind, setKind] = useState('')
   const [q, setQ] = useState('')
   const [page, setPage] = useState(1)
@@ -152,7 +197,7 @@ export function DecisionList({ path, by, filter, empty }: { path: string; by: 'r
                   <Ago at={d.created ?? d.received} />
                 </span>
               </summary>
-              <DecisionBody d={d} filter={filter} />
+              <DecisionBody d={d} filter={filter} conditions={conditions} />
             </details>
           ))}
         </div>

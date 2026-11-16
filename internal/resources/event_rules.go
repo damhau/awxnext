@@ -23,7 +23,8 @@ import (
 // some streams, a key and a throttle per key, and an action the rule runs
 // as its owner: a launch, a notification, or an event posted to another
 // stream. The evaluator is in rule_engine.go, the guardrails that hold
-// actions back (roadmap M14-03) in rule_guardrails.go.
+// actions back (roadmap M14-03) in rule_guardrails.go, and the patterns a
+// rule can wait for on each key (roadmap M14-07) in rule_patterns.go.
 
 const (
 	actionLaunch = "launch"
@@ -64,6 +65,11 @@ type eventRule struct {
 	Target       *int64
 	EventType    string
 	EventData    string
+
+	Pattern       string
+	Conditions    []string
+	PatternCount  int64
+	PatternWindow int64
 
 	Mode                string
 	MaxRuns             int64
@@ -119,6 +125,14 @@ func ruleFromObj(o Obj) *eventRule {
 	r.BreakerFirings, _ = api.ID(o["breaker_firings"])
 	r.BreakerWindow, _ = api.ID(o["breaker_window"])
 	r.ApprovalTimeout, _ = api.ID(o["approval_timeout"])
+	r.Pattern = str(o["pattern"])
+	r.PatternCount, _ = api.ID(o["pattern_count"])
+	r.PatternWindow, _ = api.ID(o["pattern_window"])
+	if list, ok := o["conditions"].([]any); ok {
+		for _, c := range list {
+			r.Conditions = append(r.Conditions, str(c))
+		}
+	}
 	if m, ok := o["extra_vars"].(map[string]any); ok {
 		for k, v := range m {
 			r.ExtraVars[k] = fmt.Sprint(v)
@@ -169,6 +183,26 @@ func validateRuleVars(c *Ctx, v any, data Obj) error {
 	return nil
 }
 
+func validateRuleConditions(c *Ctx, v any, data Obj) error {
+	list, ok := v.([]any)
+	if !ok {
+		return errors.New("Expected a list of CEL conditions.")
+	}
+	if len(list) > rules.MaxConditions {
+		return fmt.Errorf("A pattern has at most %d conditions.", rules.MaxConditions)
+	}
+	for i, e := range list {
+		s, ok := e.(string)
+		if !ok || strings.TrimSpace(s) == "" {
+			return fmt.Errorf("%d: expected a CEL condition.", i+1)
+		}
+		if len(s) > rules.MaxLength {
+			return fmt.Errorf("%d: ensure this condition has no more than %d characters.", i+1, rules.MaxLength)
+		}
+	}
+	return nil
+}
+
 func exprField(name, help string, required bool) *Field {
 	return &Field{Name: name, Type: api.TText, Required: required, MaxLength: rules.MaxLength, Help: help}
 }
@@ -199,6 +233,14 @@ func registerEventRules() {
 			{Name: "throttle", Type: api.TChoice, Default: "", Choices: labelled("", "None", rules.OnceWithin, "Once within", rules.OnceAfter, "Once after"),
 				Help: "once_within: act on a key's first event, then hold back its events for the window. once_after: wait for the window to end, then act once with the first event of each key."},
 			{Name: "throttle_window", Type: api.TInt, Default: 0, Validate: between(0, maxThrottleWindow), Help: "The throttle's window, in seconds."},
+			{Name: "pattern", Type: api.TChoice, Default: "", Choices: labelled("", "None", rules.PatternCount, "Count", rules.PatternAll, "All of",
+				rules.PatternSequence, "Sequence", rules.PatternAbsence, "Absence"),
+				Help: "What the rule waits for on each key, within pattern_window, before it acts once with every event that matched. count: pattern_count events. all: an event of each condition, in any order. sequence: an event of each condition, in their order. absence: an event of the first condition that no event of the second follows; the rule acts when the window ends. Empty: act on each event."},
+			{Name: "conditions", Type: api.TJSON, Default: []any{}, Validate: validateRuleConditions,
+				Help: "The CEL conditions of an all, sequence or absence pattern, over event: 2 to 10, 2 for an absence. An event must pass the filter as well."},
+			{Name: "pattern_count", Type: api.TInt, Default: 0, Validate: between(0, rules.MaxPatternEvents), Help: "How many events a count pattern waits for."},
+			{Name: "pattern_window", Type: api.TInt, Default: 0, Validate: between(0, maxThrottleWindow),
+				Help: "The pattern's window, in seconds, by the time events were received."},
 			{Name: "action", Type: api.TChoice, Default: actionLaunch,
 				Choices: labelled(actionLaunch, "Launch a template", actionNotify, "Send a notification", actionPost, "Post an event to another stream")},
 			{Name: "unified_job_template", Type: api.TFK, Ref: "unified_job_templates", Nullable: true, Help: "The job or workflow template to launch."},
@@ -237,7 +279,7 @@ func registerEventRules() {
 		BeforeDelete: cancelRuleApprovals,
 		Summary:      ruleSummary,
 		SubLists: []*SubList{readOnlyChildSub("decisions", "event_rule_decisions", "rule_id"),
-			readOnlyChildSub("breakers", "event_rule_breakers", "rule_id")},
+			readOnlyChildSub("breakers", "event_rule_breakers", "rule_id"), readOnlyChildSub("patterns", "event_rule_patterns", "rule_id")},
 		Actions: []*api.Action{{Name: "reset_breaker", Methods: []string{"POST"}, Perm: "change", Handler: resetBreakerView},
 			{Name: "backtest", Methods: []string{"POST"}, Perm: "view", Handler: backtestView}},
 	})
@@ -269,7 +311,7 @@ func registerEventRules() {
 				"not_matched", "Not matched", "launched", "Launched", "notified", "Notified", "posted", "Posted", "throttled", "Throttled",
 				"deduplicated", "Deduplicated", "waiting", "Waiting", "refused", "Refused", "failed", "Failed", "error", "Error", "dropped", "Dropped",
 				"shadow", "Shadow", "held", "Held back", "awaiting_approval", "Awaiting approval", "denied", "Denied", "timed_out", "Timed out",
-				"canceled", "Canceled")},
+				"canceled", "Canceled", rules.Expired, "Expired", rules.Cleared, "Cleared", rules.Ignored, "Ignored")},
 			{Name: "reason", Type: api.TText, ReadOnly: true},
 			{Name: "mode", Type: api.TChoice, ReadOnly: true, Choices: labelled(modeShadow, "Shadow", modeApproval, "Approval", modeAuto, "Auto"),
 				Help: "The rule's mode when it decided."},
@@ -282,7 +324,7 @@ func registerEventRules() {
 			{Name: "window", Column: "window_id", Type: api.TInt, ReadOnly: true, Nullable: true, Help: "The once_after window the event belongs to."},
 			{Name: "job", Type: api.TFK, Ref: "unified_jobs", ReadOnly: true, Nullable: true},
 			{Name: "details", Type: api.TJSON, ReadOnly: true,
-				Help: "What the decision saw: for not_matched, the filter's part that failed (filter.expression, filter.start and filter.end in the filter, filter.error) and the values it read (filter.values)."},
+				Help: "What the decision saw: for not_matched, the filter's part that failed (filter.expression, filter.start and filter.end in the filter, filter.error) and the values it read (filter.values), or each condition's (conditions). For a rule with a pattern, its key's window (pattern: kind, seen of needed, events, until)."},
 			{Name: "trace_id", Type: api.TString, ReadOnly: true, Help: "The OpenTelemetry trace of the event's decisions and of the job launched. Empty: none."},
 		},
 		View: func(c *Ctx, arg ArgFunc) string {
@@ -320,6 +362,34 @@ func registerEventRules() {
 			{Name: "firings", Type: api.TInt, ReadOnly: true, Help: "The firings within the window that tripped it."},
 			{Name: "reset_at", Type: api.TDateTime, ReadOnly: true, Nullable: true},
 			{Name: "reset_by", Type: api.TFK, Ref: "users", ReadOnly: true, Nullable: true},
+		},
+		View: func(c *Ctx, arg ArgFunc) string {
+			return fmt.Sprintf("t.rule_id IN (SELECT t.id FROM event_rules t WHERE %s)", api.ViewPredicate(c, ruleRes, arg))
+		},
+	})
+
+	api.Register(&Resource{
+		Name:         "event_rule_patterns",
+		Type:         "event_rule_pattern",
+		Table:        "event_rule_patterns",
+		Verbose:      "Event Rule Pattern",
+		NoTimestamps: true,
+		NoName:       true,
+		ReadOnly:     true,
+		NoActivity:   true,
+		Ordering:     "deadline",
+		SearchFields: []string{"key"},
+		Fields: []*Field{
+			{Name: "created", Type: api.TDateTime, ReadOnly: true},
+			{Name: "modified", Type: api.TDateTime, ReadOnly: true},
+			{Name: "rule", Type: api.TFK, Ref: "event_rules", ReadOnly: true},
+			{Name: "shadow", Type: api.TBool, ReadOnly: true, Help: "The window of the rule in shadow mode."},
+			{Name: "key", Type: api.TString, ReadOnly: true},
+			{Name: "opened", Type: api.TDateTime, ReadOnly: true, Help: "When the window's first event was received."},
+			{Name: "clock", Type: api.TDateTime, ReadOnly: true, Help: "The newest time the window saw: an event older than the window by it is too late."},
+			{Name: "deadline", Type: api.TDateTime, ReadOnly: true, Help: "When the window next changes with time alone: its absence ends, or its oldest event leaves it."},
+			{Name: "events", Type: api.TJSON, ReadOnly: true, Help: "The events the window holds: their decision, stream, sequence and received time."},
+			{Name: "progress", Type: api.TJSON, ReadOnly: true, Help: "How far the window got: kind, seen of needed, events, and until when it can complete."},
 		},
 		View: func(c *Ctx, arg ArgFunc) string {
 			return fmt.Sprintf("t.rule_id IN (SELECT t.id FROM event_rules t WHERE %s)", api.ViewPredicate(c, ruleRes, arg))
@@ -419,7 +489,8 @@ func saveEventRule(c *Ctx, old, data Obj) error {
 	changed := old == nil
 	for _, f := range []string{"streams", "filter", "key", "throttle", "throttle_window", "action", "unified_job_template",
 		"extra_vars", "limit", "notification_template", "message", "target_stream", "event_type", "event_data",
-		"mode", "max_concurrent_runs", "host_lock", "max_group_share", "breaker_notification_template"} {
+		"mode", "max_concurrent_runs", "host_lock", "max_group_share", "breaker_notification_template",
+		"pattern", "conditions", "pattern_count", "pattern_window"} {
 		if _, ok := data[f]; ok && (old == nil || !sameValue(old[f], data[f])) {
 			changed = true
 		}
@@ -467,21 +538,27 @@ func saveEventRule(c *Ctx, old, data Obj) error {
 // order, numbers of any type.
 func sameValue(a, b any) bool {
 	norm := func(v any) any {
-		switch v.(type) {
-		case []any, []int64:
+		switch x := v.(type) {
+		case []int64:
 			return streamIDs(v)
+		case []any:
+			if ids := streamIDs(x); len(ids) == len(x) {
+				return ids
+			}
 		}
 		return v
 	}
 	return fmt.Sprint(norm(a)) == fmt.Sprint(norm(b))
 }
 
-// checkRuleShape checks what a rule needs for its throttle and action.
+// checkRuleShape checks what a rule needs for its throttle, its pattern
+// and its action.
 func checkRuleShape(r *eventRule) error {
 	fe := api.FieldErrors{}
 	if r.Throttle != "" && r.Window < 1 {
 		fe.Add("throttle_window", "A throttle needs a window of at least one second.")
 	}
+	checkRulePattern(r, fe)
 	if r.Action != actionLaunch {
 		if r.MaxRuns > 0 {
 			fe.Add("max_concurrent_runs", "Only a rule that launches has runs to bound.")
@@ -578,6 +655,11 @@ func checkRuleExprs(s *rules.Schema, r *eventRule) error {
 		}
 	}
 	check("filter", r.Filter, rules.Bool)
+	for i, cond := range r.Conditions {
+		if err := rules.Check(s, cond, rules.Bool); err != nil {
+			fe.Add("conditions", fmt.Sprintf("%d: %s", i+1, err))
+		}
+	}
 	if r.Key != "" {
 		check("key", r.Key, rules.String)
 	}
@@ -689,6 +771,11 @@ func ruleSaved(c *Ctx, old, obj Obj) error {
 			}
 		}
 	}
+	if old != nil && str(old["mode"]) == str(obj["mode"]) && patternChanged(old, obj) {
+		if err := dropPatterns(c, c.DB(), id, "The rule's pattern changed before its window ended."); err != nil {
+			return err
+		}
+	}
 	if !boolv(obj["enabled"]) {
 		if old != nil && boolv(old["enabled"]) {
 			return dropWindows(c, c.DB(), id, "The rule was disabled before its window ended.")
@@ -706,11 +793,16 @@ func ruleSaved(c *Ctx, old, obj Obj) error {
 	return err
 }
 
+// dropWindows drops a rule's once_after window and its patterns' windows:
+// the decisions waiting in them are dropped.
 func dropWindows(ctx context.Context, db api.DBTX, rule int64, reason string) error {
 	_, err := db.Exec(ctx, `WITH w AS (DELETE FROM event_rule_windows WHERE rule_id = $1 RETURNING id)
 		UPDATE event_rule_decisions SET outcome = 'dropped', reason = $2, modified = now()
 		WHERE window_id IN (SELECT id FROM w) AND outcome = 'waiting'`, rule, reason)
-	return err
+	if err != nil {
+		return err
+	}
+	return dropPatterns(ctx, db, rule, reason)
 }
 
 // ruleSummary names a page of rules' streams.

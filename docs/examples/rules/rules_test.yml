@@ -79,3 +79,39 @@ spec:
       type: alert.firing
       data: {labels: {alertname: ServiceDown, instance: db1, job: postgres}}
       expect: {outcome: held, guardrail: circuit_breaker}
+---
+kind: EventRuleTest
+name: Escalate when ServiceDown is not resolved within 15 minutes
+spec:
+  rule: Escalate a ServiceDown that stays down
+  start: "2026-11-02T08:00:00Z"
+  events:
+    - type: alert.firing
+      data: {labels: {alertname: ServiceDown, instance: web1}}
+      expect: {outcome: fired, key: web1, extra_vars: {instance: web1, alerts: 2}}
+    - at: 5m
+      type: alert.firing
+      data: {labels: {alertname: ServiceDown, instance: web1}}
+      expect: fired
+    - at: 6m
+      type: alert.firing
+      data: {labels: {alertname: ServiceDown, instance: web2}}
+      expect: cleared
+    - at: 10m
+      type: alert.resolved
+      data: {labels: {alertname: ServiceDown, instance: web2}}
+      expect: cleared
+    - at: 20m
+      type: alert.resolved
+      data: {labels: {alertname: ServiceDown, instance: web1}}
+      expect: ignored
+---
+kind: EventRuleTest
+name: Still waiting ten minutes in
+spec:
+  rule: Escalate a ServiceDown that stays down
+  until: 10m
+  events:
+    - type: alert.firing
+      data: {labels: {alertname: ServiceDown, instance: web1}}
+      expect: {outcome: waiting, reason: "until 2026-01-01T00:15:00Z"}

@@ -235,7 +235,8 @@ func TestEventRuleBacktest(t *testing.T) {
 // The cleanup job drops the days of decisions past every retention, then
 // each stream's: decisions that didn't match go with their events, the
 // others stay EVENT_RULE_DECISION_RETENTION_DAYS. Expired throttle keys
-// go too.
+// go too, and patterns' windows a day past their deadline, whose waiting
+// decisions are dropped.
 func TestEventRuleDecisionCleanup(t *testing.T) {
 	a := adminClient(t)
 	org := newOrg(t, a)
@@ -252,16 +253,24 @@ func TestEventRuleDecisionCleanup(t *testing.T) {
 		outcome string
 		at      string
 	}{{"not_matched", "now() - interval '3 days'"}, {"shadow", "now() - interval '3 days'"}, {"shadow", "now() - interval '100 days'"},
-		{"not_matched", "now()"}, {"shadow", "'2001-01-01T12:00:00Z'"}} {
+		{"not_matched", "now()"}, {"shadow", "'2001-01-01T12:00:00Z'"}, {"waiting", "now()"}} {
 		if _, err := app.DB.Exec(ctx, `INSERT INTO event_rule_decisions (rule_id, stream_id, sequence, event_id, event_source, event_type, received, outcome)
 			VALUES ($1, $2, $3, 'e', '/s', 't', `+d.at+`, $4)`, rid, am.id, i+1, d.outcome); err != nil {
 			t.Fatal(err)
 		}
 	}
 	app.DB.Exec(ctx, `INSERT INTO event_rule_keys (rule_id, key, held_until) VALUES ($1, 'old', now() - interval '2 days'), ($1, 'new', now() + interval '1 hour')`, rid)
+	if _, err := app.DB.Exec(ctx, `INSERT INTO event_rule_patterns (rule_id, key, opened, clock, deadline, events)
+		SELECT $1, 'stale', now() - interval '3 days', now() - interval '3 days', now() - interval '2 days',
+			jsonb_build_array(jsonb_build_object('decision', d.id, 'received', d.received))
+		FROM event_rule_decisions d WHERE d.rule_id = $1 AND d.sequence = 6`, rid); err != nil {
+		t.Fatal(err)
+	}
+	app.DB.Exec(ctx, `INSERT INTO event_rule_patterns (rule_id, key, opened, clock, deadline) VALUES ($1, 'fresh', now(), now(), now() + interval '1 hour')`, rid)
 	left := func() []string {
 		rows, _ := app.DB.Query(ctx, `SELECT sequence || ' ' || outcome FROM event_rule_decisions WHERE rule_id = $1
-			UNION ALL SELECT 'key ' || key FROM event_rule_keys WHERE rule_id = $1 ORDER BY 1`, rid)
+			UNION ALL SELECT 'key ' || key FROM event_rule_keys WHERE rule_id = $1
+			UNION ALL SELECT 'window ' || key FROM event_rule_patterns WHERE rule_id = $1 ORDER BY 1`, rid)
 		defer rows.Close()
 		var out []string
 		for rows.Next() {
@@ -281,16 +290,17 @@ func TestEventRuleDecisionCleanup(t *testing.T) {
 		}
 		return a.get(fmt.Sprintf("system_jobs/%d/stdout/?format=txt", j.id())).Raw
 	}
-	all := []string{"1 not_matched", "2 shadow", "3 shadow", "4 not_matched", "5 shadow", "key new", "key old"}
+	all := []string{"1 not_matched", "2 shadow", "3 shadow", "4 not_matched", "5 shadow", "6 waiting", "key new", "key old", "window fresh", "window stale"}
 	out := launch(map[string]any{"dry_run": true})
-	if !strings.Contains(out, "event_rule_decisions_20010101 would be dropped") || !strings.Contains(out, "Decisions would delete") {
+	if !strings.Contains(out, "event_rule_decisions_20010101 would be dropped") || !strings.Contains(out, "Decisions would delete") ||
+		!strings.Contains(out, "Pattern windows a day past their deadline would delete: 1") {
 		t.Errorf("dry run output:\n%s", out)
 	}
 	if got := left(); !slices.Equal(got, all) {
 		t.Fatalf("the dry run removed %v", got)
 	}
 	out = launch(map[string]any{})
-	if got, want := left(), []string{"2 shadow", "4 not_matched", "key new"}; !slices.Equal(got, want) {
+	if got, want := left(), []string{"2 shadow", "4 not_matched", "6 dropped", "key new", "window fresh"}; !slices.Equal(got, want) {
 		t.Errorf("after cleanup %v, want %v\n%s", got, want, out)
 	}
 	var exists bool

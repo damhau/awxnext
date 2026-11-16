@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   checkBody,
   completionsAt,
+  conditionsFor,
   draftOf,
   fieldErrors,
   inString,
@@ -12,6 +13,9 @@ import {
   outcomeView,
   parseCelErrors,
   pathBefore,
+  patternSummary,
+  progressCells,
+  progressText,
   ruleBody,
   seenText,
   setupSnippets,
@@ -120,6 +124,13 @@ describe('CEL errors', () => {
       'extra_vars.port': 'no',
     })
   })
+  it('sends each condition’s error to its row, from 0 as the check names them', () => {
+    expect(fieldErrors({ conditions: ['2: undefined field', 'An absence pattern has 2 conditions.'], 'conditions.0': 'bad' })).toEqual({
+      'conditions.1': 'undefined field',
+      conditions: 'An absence pattern has 2 conditions.',
+      'conditions.0': 'bad',
+    })
+  })
 })
 
 describe('decisions', () => {
@@ -148,6 +159,9 @@ describe('decisions', () => {
     expect(outcomeView('held')).toMatchObject({ cell: 'canceled', kind: 'held' })
     expect(outcomeView('not_matched')).toMatchObject({ cell: 'none', kind: 'missed' })
     expect(outcomeView('refused').kind).toBe('failed')
+    expect(outcomeView('expired')).toMatchObject({ cell: 'skipped', kind: 'held' })
+    expect(outcomeView('cleared').kind).toBe('held')
+    expect(outcomeView('ignored')).toMatchObject({ cell: 'none', kind: 'held' })
     expect(outcomeView('something_new')).toMatchObject({ cell: 'empty', label: 'something_new' })
   })
 })
@@ -165,11 +179,50 @@ describe('the rule draft', () => {
   it('starts new rules in shadow mode, with a window ready for a throttle', () => {
     expect(draftOf()).toMatchObject({ mode: 'shadow', enabled: true, throttle: '', throttle_window: 3600, action: 'launch', vars: [] })
   })
+  it('sends a pattern’s fields only, and no throttle with it', () => {
+    const d = { ...draftOf({ throttle: 'once_within', throttle_window: 60, conditions: ['a', 'b', 'c'] }), pattern: 'count', pattern_count: 4 }
+    expect(ruleBody(d)).toMatchObject({ pattern: 'count', pattern_count: 4, pattern_window: 600, conditions: [], throttle: '', throttle_window: 0 })
+    d.pattern = 'sequence'
+    expect(ruleBody(d)).toMatchObject({ conditions: ['a', 'b', 'c'], pattern_count: 0 })
+    d.pattern = 'absence'
+    expect(ruleBody(d).conditions).toEqual(['a', 'b'])
+    expect(checkBody(d)).toMatchObject({ pattern: 'absence', conditions: ['a', 'b'] })
+    d.pattern = ''
+    expect(ruleBody(d)).toMatchObject({ pattern: '', conditions: [], pattern_window: 0, throttle: 'once_within', throttle_window: 60 })
+    expect(draftOf().conditions).toEqual(['', ''])
+  })
+  it('gives each pattern the conditions it takes', () => {
+    expect(conditionsFor('all', ['a'])).toEqual(['a', ''])
+    expect(conditionsFor('absence', ['a', 'b', 'c'])).toEqual(['a', 'b'])
+    expect(conditionsFor('sequence', ['a', 'b', 'c'])).toEqual(['a', 'b', 'c'])
+  })
+  it('says what a pattern waits for', () => {
+    expect(patternSummary({ pattern: 'count', pattern_count: 5, pattern_window: 600 })).toBe('5 events of a key within 10m 00s')
+    expect(patternSummary({ pattern: 'sequence', conditions: ['a', 'b', 'c'], pattern_window: 60 })).toBe('3 steps in order within 1m 00s')
+    expect(patternSummary({ pattern: '' })).toBe('None: acts on each event')
+  })
   it('writes windows in their largest whole unit', () => {
     expect(splitSeconds(7200)).toEqual({ n: 2, unit: 3600 })
     expect(splitSeconds(90)).toEqual({ n: 90, unit: 1 })
     expect(splitSeconds(0)).toEqual({ n: 0, unit: 1 })
     expect(splitSeconds(172800)).toEqual({ n: 2, unit: 86400 })
+  })
+})
+
+describe('pattern progress', () => {
+  it('fills a cell per event, condition or step seen', () => {
+    expect(progressCells({ kind: 'count', events: 2, seen: 2, needed: 4 })).toEqual(['running', 'running', 'empty', 'empty'])
+    expect(progressCells({ kind: 'sequence', events: 3, seen: 3, needed: 3 })).toEqual(['ok', 'ok', 'ok'])
+    expect(progressCells({ kind: 'all', events: 4, seen: 2, needed: 3, conditions: [1, 3] })).toEqual(['running', 'empty', 'running'])
+    expect(progressCells({ kind: 'absence', events: 2 })).toEqual(['running', 'running'])
+    expect(progressCells({ kind: 'count', events: 1, seen: 1, needed: 500 })).toEqual([])
+    expect(progressCells(undefined)).toEqual([])
+  })
+  it('writes the progress', () => {
+    expect(progressText({ kind: 'count', events: 3, seen: 3, needed: 5 })).toBe('3 of 5 events')
+    expect(progressText({ kind: 'all', events: 3, seen: 1, needed: 2 })).toBe('1 of 2 conditions')
+    expect(progressText({ kind: 'sequence', events: 2, seen: 2, needed: 3 })).toBe('Step 2 of 3')
+    expect(progressText({ kind: 'absence', events: 1 })).toBe('1 event waiting for condition 2')
   })
 })
 

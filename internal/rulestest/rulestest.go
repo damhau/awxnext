@@ -16,10 +16,11 @@
 //	      expect: throttled
 //
 // What needs no database is checked as the engine decides: the filter (a
-// miss names the part that failed), the key, the throttle, the circuit
-// breaker, the maintenance windows and change freezes the directory
-// declares, and the action's expressions. The blast radius needs the jobs
-// running, and inventories: it is not checked.
+// miss names the part that failed), the key, the throttle or the pattern,
+// the circuit breaker, the maintenance windows and change freezes the
+// directory declares, and the action's expressions. The blast radius needs
+// the jobs running, and inventories: it is not checked. A test ends at its
+// until, or else once every window has ended.
 package rulestest
 
 import (
@@ -72,6 +73,9 @@ type rule struct {
 	eventType, eventData       string
 	mode, windowAction         string
 	breakerFirings, breakerWin int64
+	pattern                    string
+	conditions                 []string
+	patternCount, patternWin   int64
 }
 
 type window struct {
@@ -135,6 +139,7 @@ func Run(ctx context.Context, dir string) ([]Result, error) {
 		doc    *gitops.Document
 		rule   *rule
 		events []event
+		until  time.Time
 	}
 	var runs []prepared
 	samples := map[*rule][]map[string]any{}
@@ -154,6 +159,11 @@ func Run(ctx context.Context, dir string) ([]Result, error) {
 			problems = append(problems, fmt.Sprintf("%s %s: %v", t.File, t.Name, err))
 			continue
 		}
+		until, err := testEnd(t.Spec, evs)
+		if err != nil {
+			problems = append(problems, fmt.Sprintf("%s %s: %v", t.File, t.Name, err))
+			continue
+		}
 		if formats[r] == nil {
 			formats[r] = map[string]bool{}
 		}
@@ -163,7 +173,7 @@ func Run(ctx context.Context, dir string) ([]Result, error) {
 		for _, ev := range evs {
 			samples[r] = append(samples[r], ev.value)
 		}
-		runs = append(runs, prepared{doc: t, rule: r, events: evs})
+		runs = append(runs, prepared{doc: t, rule: r, events: evs, until: until})
 	}
 	checked := map[*rule]bool{}
 	for _, p := range runs {
@@ -185,7 +195,7 @@ func Run(ctx context.Context, dir string) ([]Result, error) {
 	}
 	results := make([]Result, 0, len(runs))
 	for _, p := range runs {
-		results = append(results, run(ctx, p.doc, p.rule, windows, p.events))
+		results = append(results, run(ctx, p.doc, p.rule, windows, p.events, p.until))
 	}
 	return results, nil
 }
@@ -217,13 +227,45 @@ func Report(w io.Writer, results []Result, verbose bool) int {
 	return failed
 }
 
-func run(ctx context.Context, doc *gitops.Document, r *rule, windows []window, events []event) Result {
+// endOfTime ends a test that doesn't say when: every window ends.
+var endOfTime = time.Date(9999, 1, 1, 0, 0, 0, 0, time.UTC)
+
+// testEnd is when a test ends: until, after its start, or when every
+// window has ended.
+func testEnd(spec map[string]any, evs []event) (time.Time, error) {
+	v, ok := spec["until"]
+	if !ok {
+		return endOfTime, nil
+	}
+	start := DefaultStart
+	if s, ok := spec["start"]; ok {
+		start, _ = stamp(s)
+	}
+	t, err := when(start, v)
+	if err != nil {
+		return t, fmt.Errorf("until: %v", err)
+	}
+	if len(evs) > 0 && t.Before(evs[len(evs)-1].received) {
+		return t, errors.New("until: a test ends after its last event")
+	}
+	return t, nil
+}
+
+func run(ctx context.Context, doc *gitops.Document, r *rule, windows []window, events []event, until time.Time) Result {
 	res := Result{File: doc.File, Name: doc.Name, Events: len(events)}
 	details := map[int]map[string]any{}
-	sim := rules.NewSimulator(rules.SimRule{Filter: r.filter, Key: r.key, Throttle: r.throttle, Window: time.Duration(r.window) * time.Second,
-		BreakerFirings: r.breakerFirings, BreakerWindow: time.Duration(r.breakerWin) * time.Second},
+	sr := rules.SimRule{Filter: r.filter, Key: r.key, Throttle: r.throttle, Window: time.Duration(r.window) * time.Second,
+		BreakerFirings: r.breakerFirings, BreakerWindow: time.Duration(r.breakerWin) * time.Second}
+	if r.pattern != "" {
+		sr.Pattern = rules.Pattern{Kind: r.pattern, Count: int(r.patternCount), Conditions: len(r.conditions),
+			Window: time.Duration(r.patternWin) * time.Second}
+		if r.pattern != rules.PatternCount {
+			sr.Conditions = r.conditions
+		}
+	}
+	sim := rules.NewSimulator(sr,
 		func(ms []rules.Member, at time.Time) rules.Outcome {
-			out := r.act(ctx, windows, ms)
+			out := r.act(ctx, windows, ms, at)
 			for _, m := range ms {
 				details[m.Index] = out.Details
 			}
@@ -232,8 +274,7 @@ func run(ctx context.Context, doc *gitops.Document, r *rule, windows []window, e
 	for _, ev := range events {
 		sim.Add(ctx, rules.SimEvent{Value: ev.value, Received: ev.received})
 	}
-	// A test ends when its events are decided: its last window ends too.
-	sim.Finish(time.Date(9999, 1, 1, 0, 0, 0, 0, time.UTC))
+	sim.Finish(until)
 	for _, w := range windows {
 		if w.groups && len(w.rules) == 0 {
 			res.Notes = append(res.Notes, fmt.Sprintf("window %s covers inventory groups, which only the server knows: not checked", w.name))
@@ -345,8 +386,9 @@ func show(v any) string {
 }
 
 // act evaluates the action's expressions and applies the windows and the
-// mode, as the engine's guard does before the blast radius.
-func (r *rule) act(ctx context.Context, windows []window, ms []rules.Member) rules.Outcome {
+// mode, as the engine's guard does before the blast radius: the windows at
+// the first event's time, or when the rule's pattern fired.
+func (r *rule) act(ctx context.Context, windows []window, ms []rules.Member, firedAt time.Time) rules.Outcome {
 	vars := rules.Vars{Event: ms[0].Event.Value}
 	for _, m := range ms {
 		vars.Events = append(vars.Events, m.Event.Value)
@@ -406,6 +448,9 @@ func (r *rule) act(ctx context.Context, windows []window, ms []rules.Member) rul
 	}
 	approval := r.mode == "approval"
 	at := ms[0].Event.Received
+	if r.pattern != "" {
+		at = firedAt
+	}
 	for _, w := range windows {
 		if !w.covers(r.name) {
 			continue
@@ -457,6 +502,9 @@ func (r *rule) check(s *rules.Schema) error {
 		}
 	}
 	check("filter", r.filter, rules.Bool)
+	for i, c := range r.conditions {
+		check(fmt.Sprintf("conditions[%d]", i), c, rules.Bool)
+	}
 	if r.key != "" {
 		check("key", r.key, rules.String)
 	}
@@ -528,6 +576,23 @@ func loadRule(d *gitops.Document) (*rule, error) {
 	number("throttle_window", &r.window, 0, 7*24*3600)
 	number("breaker_firings", &r.breakerFirings, 0, 10000)
 	number("breaker_window", &r.breakerWin, 1, 7*24*3600)
+	text("pattern", &r.pattern)
+	number("pattern_count", &r.patternCount, 0, rules.MaxPatternEvents)
+	number("pattern_window", &r.patternWin, 0, 7*24*3600)
+	switch v := s["conditions"].(type) {
+	case nil:
+	case []any:
+		for i, c := range v {
+			e, isText := c.(string)
+			if !isText || strings.TrimSpace(e) == "" {
+				errs = append(errs, fmt.Sprintf("conditions[%d]: expected a CEL condition", i))
+				continue
+			}
+			r.conditions = append(r.conditions, e)
+		}
+	default:
+		errs = append(errs, "conditions: expected a list of CEL conditions")
+	}
 	if m, ok := s["extra_vars"].(map[string]any); ok {
 		for k, v := range m {
 			e, isText := v.(string)
@@ -549,6 +614,7 @@ func loadRule(d *gitops.Document) (*rule, error) {
 	if r.throttle != "" && r.window < 1 {
 		errs = append(errs, "throttle_window: a throttle needs a window of at least one second")
 	}
+	errs = append(errs, r.patternProblems()...)
 	switch r.action {
 	case "launch", "notify":
 	case "post_event":
@@ -562,6 +628,43 @@ func loadRule(d *gitops.Document) (*rule, error) {
 		return nil, errors.New(strings.Join(errs, "; "))
 	}
 	return r, nil
+}
+
+// patternProblems checks the rule's pattern as the server does.
+func (r *rule) patternProblems() []string {
+	n := len(r.conditions)
+	var errs []string
+	switch r.pattern {
+	case "":
+		if n > 0 {
+			errs = append(errs, "conditions: only a rule with an all, sequence or absence pattern has conditions")
+		}
+		return errs
+	case rules.PatternCount:
+		if r.patternCount < 2 {
+			errs = append(errs, "pattern_count: a count pattern waits for 2 events at least")
+		}
+		if n > 0 {
+			errs = append(errs, "conditions: a count pattern has no conditions")
+		}
+	case rules.PatternAll, rules.PatternSequence:
+		if n < 2 || n > rules.MaxConditions {
+			errs = append(errs, fmt.Sprintf("conditions: an all or sequence pattern has 2 to %d conditions", rules.MaxConditions))
+		}
+	case rules.PatternAbsence:
+		if n != 2 {
+			errs = append(errs, "conditions: an absence pattern has 2 conditions")
+		}
+	default:
+		return append(errs, fmt.Sprintf("pattern: %q is not none, count, all, sequence or absence", r.pattern))
+	}
+	if r.patternWin < 1 {
+		errs = append(errs, "pattern_window: a pattern needs a window of at least one second")
+	}
+	if r.throttle != "" {
+		errs = append(errs, "throttle: a rule with a pattern takes no throttle")
+	}
+	return errs
 }
 
 func loadWindow(d *gitops.Document) (window, error) {
@@ -742,7 +845,8 @@ func cloudEvents(e map[string]any, i int, mapping map[string]string) ([]eventstr
 }
 
 var outcomes = map[string]bool{rules.NotMatched: true, rules.Fired: true, rules.Approval: true, rules.Held: true,
-	rules.Throttled: true, rules.Deduplicated: true, rules.Waiting: true, rules.Error: true}
+	rules.Throttled: true, rules.Deduplicated: true, rules.Waiting: true, rules.Error: true,
+	rules.Expired: true, rules.Cleared: true, rules.Ignored: true}
 
 // expectations reads what is expected of an entry's n events: one
 // expectation for all, or one each.

@@ -14,7 +14,7 @@ func TestExamplesPass(t *testing.T) {
 		t.Fatal(err)
 	}
 	var out bytes.Buffer
-	if failed := Report(&out, results, true); failed != 0 || len(results) != 4 {
+	if failed := Report(&out, results, true); failed != 0 || len(results) != 6 {
 		t.Fatalf("%d of %d failed:\n%s", failed, len(results), out.String())
 	}
 }

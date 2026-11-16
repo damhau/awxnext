@@ -728,8 +728,11 @@ stream. To create one, post to `/api/v2/event_rules/` with these fields:
 | `organization`, `name` | The rule's organization, and a name unique in it. Organization admins manage the organization's rules; the roles `EventRule Admin`, `EventRule Automate`, `EventRule Approve` and `EventRule Read` give one rule (see [Modes](#modes)). |
 | `streams` | The IDs of the streams the rule reads, at most 20. |
 | `filter` | A [CEL](https://cel.dev) condition on `event`, such as `event.type == "alert.firing"`. |
-| `key` | A CEL expression that gives a string, such as `event.data.labels.instance`. The throttle counts events by key. Empty: one key for all events. |
-| `throttle`, `throttle_window` | `once_within` or `once_after`, and the window in seconds (at most 7 days). Empty: the rule acts on every event. |
+| `key` | A CEL expression that gives a string, such as `event.data.labels.instance`. The throttle, the pattern and the circuit breaker count events by key. Empty: one key for all events. |
+| `throttle`, `throttle_window` | `once_within` or `once_after`, and the window in seconds (at most 7 days). Empty: the rule acts on every event. A rule with a pattern takes no throttle. |
+| `pattern`, `pattern_window` | `count`, `all`, `sequence` or `absence`, and its window in seconds (at most 7 days): see [Patterns](#patterns). Empty: no pattern. |
+| `conditions` | For `all`, `sequence` and `absence`: CEL conditions on `event`, 2 to 10, exactly 2 for `absence`. |
+| `pattern_count` | For `count`: how many events, 2 to 1,000. |
 | `action` | `launch` (the default), `notify` or `post_event`. |
 | `unified_job_template`, `extra_vars`, `limit` | For `launch`: the job or workflow template; each variable's name and the CEL expression of its value; a CEL expression that gives the limit. |
 | `notification_template`, `message` | For `notify`: the notification template, and a CEL expression that gives the message. |
@@ -746,8 +749,8 @@ The answer's `owner`, `stopped_reason` and `last_fired` are read-only.
 
 Every expression sees `event`, the event as a CloudEvent's JSON format has it: `id`, `source`,
 `type`, `subject`, `time`, `data` and the extensions, such as `traceparent`. An action that
-`once_after` fires for several events also sees `events`, all of them in the order they were
-received; `event` is the first.
+`once_after` or a [pattern](#patterns) fires for several events also sees `events`, all of them
+in the order they were received; `event` is the first.
 
 When you save a rule, awxnext compiles each expression and checks its types against the schema
 of each stream's 100 latest events, test mode included. A field that the events don't have is
@@ -776,31 +779,32 @@ stream chosen. To write a rule against a stream's events:
 1. Read the pane **On the latest events**: it runs the draft on the streams' 20 latest events
    and shows which match, with their key and what the action would get. For an event that
    doesn't match, it marks the part of the filter that failed and shows its values.
-1. Set the key, the throttle, the action and its variables, the mode and the guardrails. Under a
-   launch's variables, the preview shows what the template would get from the latest matching
-   event.
+1. Set the key, the throttle or the [pattern](#patterns) and its conditions, the action and its
+   variables, the mode and the guardrails. Each event in the pane shows the conditions it
+   matches. Under a launch's variables, the preview shows what the template would get from the
+   latest matching event.
 1. Optional: to see what the draft would have done over a longer period, select **Backtest the
    draft…** (see [Backtests](#backtests)).
 1. Save. A new rule starts in `shadow` mode: see
    [Moving a rule from shadow to auto](#moving-a-rule-from-shadow-to-auto).
 
-A rule's page shows its settings, its circuit breakers, which you can reset there, and its
-recent decisions. Its **Decisions** tab lists every [decision](#decisions), and its
+A rule's page shows its settings, its patterns' open windows, its circuit breakers, which you can
+reset there, and its recent decisions. Its **Decisions** tab lists every [decision](#decisions), and its
 **Backtest** tab runs a [backtest](#backtests) of the saved rule.
 
 The editor checks a draft with `POST /api/v2/event_rules/check/`. It takes the rule's
-`streams`, `action`, `filter`, `key`, `extra_vars`, `limit`, `message`, `event_type` and
-`event_data`, and `events`, the number of latest events to run the draft on: 20 by default, at
-most 100. It saves nothing and acts on nothing; throttles and guardrails are a backtest's. The
-answer has:
+`streams`, `action`, `filter`, `key`, `pattern`, `conditions`, `extra_vars`, `limit`, `message`,
+`event_type` and `event_data`, and `events`, the number of latest events to run the draft on: 20
+by default, at most 100. It saves nothing and acts on nothing; throttles, patterns' windows and
+guardrails are a backtest's. The answer has:
 
 | Field | What it holds |
 |---|---|
-| `errors` | Each expression's errors, by field: `filter`, `key`, `limit`, `message`, `event_type`, `event_data`, and `extra_vars.<name>` for a variable. |
+| `errors` | Each expression's errors, by field: `filter`, `key`, `limit`, `message`, `event_type`, `event_data`, `extra_vars.<name>` for a variable, and `conditions.<i>` for a condition, from 0. |
 | `schema_events` | How many events the schema was built from. |
 | `checked`, `matched` | How many events the draft ran on, and how many it matched. |
 | `truncated` | `true` when the check stopped at its 10-second limit. |
-| `events` | Each event checked, newest first: its `stream`, `sequence`, `event_id`, `event_type`, `received` and `test_mode`; whether it `matched`; for a miss, the `reason` and the failed part in `filter`, as a [decision](#decisions) has them; for a match, the `key` and the `action`'s values, or `key_error` and `action_errors`. |
+| `events` | Each event checked, newest first: its `stream`, `sequence`, `event_id`, `event_type`, `received` and `test_mode`; whether it `matched`; for a miss, the `reason` and the failed part in `filter`, as a [decision](#decisions) has them; with conditions, the `conditions` it matches, from 0, and an event that matches none doesn't match; for a match, the `key` and the `action`'s values, or `key_error` and `action_errors`. |
 
 With a filter that doesn't compile, the check runs nothing and answers the errors alone. To
 check a draft, you need to see its streams; otherwise awxnext refuses with `403`.
@@ -814,6 +818,89 @@ check a draft, you need to see its streams; otherwise awxnext refuses with `403`
 
 Both follow ansible-rulebook's `throttle`. The window counts from the time each event was
 received.
+
+### Patterns
+
+A pattern makes a rule wait, for each key, for several events within `pattern_window` seconds,
+and then act once for all of them: the action sees the first as `event`, and all of them, in the
+order they were received, as `events`. An event must pass the filter first; `conditions` then
+say which part of the pattern it is. In these examples, the events carry their host in
+`data.host`, or are Alertmanager alerts:
+
+- **`count`** fires when a key has `pattern_count` events within the window. The window
+  slides: an event leaves it `pattern_window` seconds after it was received, and its decision
+  becomes `expired`. After firing, the key counts again from zero. Restart a host after 3 OOM
+  kills within 10 minutes:
+
+  ```json
+  {"filter": "event.type == \"oom.kill\"", "key": "event.data.host",
+   "pattern": "count", "pattern_count": 3, "pattern_window": 600}
+  ```
+
+- **`all`** fires when the key's window holds an event of each condition, in any order. An
+  event can match several conditions. Act when both the disk and the CPU of a host alert within
+  5 minutes:
+
+  ```json
+  {"filter": "event.type.startsWith(\"alert.\")", "key": "event.data.host", "pattern": "all",
+   "conditions": ["event.type == \"alert.disk\"", "event.type == \"alert.cpu\""], "pattern_window": 300}
+  ```
+
+- **`sequence`** fires when events of each condition come in order, the last within the window
+  of the first. An event that matches a step whose step before it hasn't come is `ignored`. Act
+  when a deploy is followed by an error spike and then by a health check failure, within 15
+  minutes:
+
+  ```json
+  {"filter": "true", "key": "event.data.host", "pattern": "sequence", "pattern_window": 900,
+   "conditions": ["event.type == \"deploy.done\"", "event.type == \"errors.spike\"", "event.type == \"health.failed\""]}
+  ```
+
+- **`absence`** waits after an event of the first condition for an event of the second. If none
+  comes within the window, the rule fires when the window ends, from a timer, with the events
+  of the first condition that came in the meantime. An event of the second condition clears
+  the window: its decision and the waiting ones are `cleared`, and the rule doesn't fire. An
+  event of the second condition with nothing waiting is `ignored`. Escalate an alert that isn't
+  resolved within 15 minutes:
+
+  ```json
+  {"filter": "event.data.labels.alertname == \"ServiceDown\"", "key": "event.data.labels.instance",
+   "pattern": "absence", "pattern_window": 900,
+   "conditions": ["event.type == \"alert.firing\"", "event.type == \"alert.resolved\""]}
+  ```
+
+An event that passes the filter and matches none of the conditions is `not_matched`, with each
+condition's failed part in `details.conditions`. An event that joins a window is `waiting`, and
+its reason says how far the window got, such as `2 of 3 events within the window: waiting for 1
+more before 2026-11-16T08:10:00Z.` When the window fires, its events' decisions get the
+action's outcome. Only one of them counts toward the [circuit breaker](#circuit-breaker): a
+window that fires is one firing. A key's window holds 1,000 events at most; past that, an event
+is `deduplicated`.
+
+Windows count by the time awxnext received each event, not by the event's `time`, which a
+sender sets and can get wrong; the filter and the conditions can still read `event.time`. An
+event is late when it was received more than `pattern_window` seconds before the newest event of
+its key that the rule decided: this happens when the rule reads several streams and one of them
+is decided behind the others. A late event is `expired` at once, and counts for nothing.
+
+The windows are rows in PostgreSQL, locked for each event and committed with the decisions, so
+a restart or a failover keeps them, and two streams that send the same key to a rule share its
+window. Each node's engine checks the windows that end every second, and fires or expires them,
+but only once the rules have decided every event of the rule's streams received before the end,
+so a backlog decides before the timer. In `shadow` mode, the rule keeps its windows apart from
+the ones of the other modes, and its decisions are `shadow`; the guardrails, the mode and
+`window_action` apply when a window fires, as for any action. A change of mode, of the pattern,
+its conditions or its window, or of the key, drops the open windows, as does disabling the rule:
+their decisions are `dropped`.
+
+`GET /api/v2/event_rules/N/patterns/` lists the rule's open windows, the next to end first, and
+`/api/v2/event_rule_patterns/` those of every rule you can see. Each has its `key`, whether it
+is the `shadow` mode's, when it `opened`, its `clock` (the latest event it saw), its `deadline`
+(when it next changes with time alone), its `events` (each one's `decision`, `stream`,
+`sequence` and `received`) and its `progress` (`kind`, `events`, `seen` of `needed`, the
+`conditions` an `all` window holds, and `until`). The management job **Cleanup Event Streams**
+removes a window still there a day after its deadline, such as one of a stopped rule, and drops
+its decisions.
 
 ### Actions
 
@@ -1023,18 +1110,24 @@ decision has the event (`stream`, `sequence`, `event_id`, `event_type`, `receive
 that decided, the rule's `mode` then, the `key`, the `outcome` and its `reason`, the `guardrail`
 that held the action back or sent it for approval, the `approval` it waits for, the `job`
 launched, and the `trace_id` of the event's [trace](#metrics-and-traces). `fired` marks the
-decisions that count toward the circuit breaker.
+decisions that count toward the circuit breaker. For a rule with a [pattern](#patterns),
+`details.pattern` holds the key's window when the rule decided: its `kind`, the `events` it
+holds, `seen` of `needed`, and `until` when it ends; a `cleared` decision names the event that
+cleared it in `details.cleared_by`.
 
 | Outcome | Meaning |
 |---|---|
-| `not_matched` | The filter didn't hold for the event, or failed on it. |
+| `not_matched` | The filter didn't hold for the event, or failed on it, or the event matches none of the pattern's conditions. |
 | `launched`, `notified`, `posted` | The rule acted. |
 | `throttled` | `once_within` held the event back. |
-| `waiting`, `deduplicated` | `once_after` keeps the event for its window, or already has one with its key. |
+| `waiting`, `deduplicated` | `once_after` or a pattern keeps the event for its window, or already has one with its key (for a pattern, 1,000 events). |
+| `expired` | The event left its pattern's window before the pattern was complete, or was received after the window moved past it. |
+| `cleared` | An event of an absence's second condition came within the window: the rule doesn't fire. |
+| `ignored` | The event matches a sequence's step whose step before it hasn't come, or an absence's second condition with nothing waiting. |
 | `refused` | The owner may no longer run the rule, which stopped. |
 | `failed` | The action failed, such as a launch the template refused. |
 | `error` | An expression failed on the event, such as a key that is not a string. |
-| `dropped` | The rule was disabled, or changed mode, before its window ended. |
+| `dropped` | The rule was disabled, or changed mode, pattern or key, before its window ended. |
 | `held` | A [guardrail](#guardrails) held the action back: `guardrail` names it. |
 | `shadow` | In `shadow` mode, what the rule would have done. |
 | `awaiting_approval` | The action waits for the workflow approval in `approval`. |
@@ -1063,7 +1156,8 @@ To keep the log small, a `not_matched` decision is kept as long as its event, fo
 `retention_days`. The other decisions are kept for **Days event rule decisions are kept**
 (`EVENT_RULE_DECISION_RETENTION_DAYS`, 90 by default), or longer when their stream keeps its
 events longer; `0` keeps them as long as their events. The management job
-**Cleanup Event Streams** removes them, and the throttle keys that expired more than a day ago.
+**Cleanup Event Streams** removes them, the throttle keys that expired more than a day ago, and
+the pattern windows a day past their deadline.
 The decision log is partitioned by day, like the event log.
 
 ### Backtests
@@ -1090,7 +1184,8 @@ curl -u admin -H 'Content-Type: application/json' https://awxnext.example.com/ap
 | `since`, `until` | The period, in RFC 3339. By default, the last 24 hours. |
 | `max_events` | The most events to read, at most 10,000 (the default). |
 
-The answer has the counts (`events`, `matched`, `fired`), the `outcomes` and the `held` actions
+The answer has the counts (`events`, `matched`, `fired`, and `firings`, the actions, which a
+pattern's window counts once for all its events), the `outcomes` and the `held` actions
 by guardrail, the `keys` and `hosts` that fired most, at most 100 of each, the circuit
 `breakers` that tripped, the filter's `misses` grouped by the part that failed, and the first
 200 `decisions` that matched. `truncated` is `true` when the period held more events than
@@ -1098,7 +1193,9 @@ by guardrail, the `keys` and `hosts` that fired most, at most 100 of each, the c
 
 A backtest approximates what happened. Its `approximations` list says how:
 
-- Throttles, `once_after` windows and circuit breakers start empty at `since`.
+- Throttles, `once_after` windows, patterns' windows and circuit breakers start empty at
+  `since`. A pattern's window still open at `until` stays `waiting`, and an absence fires at
+  its deadline only if that is before `until`.
 - Maintenance windows, change freezes, inventories and templates are today's.
 - The blast radius counts the jobs that the job history shows running at each event's time,
   but the rule's own, and the launches that the backtest simulates. A simulated launch runs as
@@ -1146,7 +1243,9 @@ An event is a CloudEvent's `type`, `data`, and optionally `id`, `source`, `subje
 with optional `headers`: a payload can make several events, and `expect` then takes one
 expectation, or a list of one for each event. `at` is a duration after `start`, or a date and
 time; without `at`, an event is received a second after the one before. `rule` can be left out
-when the directory has one rule.
+when the directory has one rule. `until`, a duration after `start` or a date and time, ends the
+test: a window still open then keeps its events `waiting`. Without `until`, the test ends once
+every window has ended, so an absence fires and an incomplete count, `all` or sequence expires.
 
 `expect` is the outcome alone, or an object with the `outcome` and any of these:
 
@@ -1160,14 +1259,34 @@ when the directory has one rule.
 | `event_type`, `event_data` | For a posted event: its type and data. |
 
 The outcomes are `fired` (the rule acted, or would have in `shadow` mode), `awaiting_approval`,
-`held`, `throttled`, `deduplicated`, `waiting`, `not_matched` and `error`. The test checks the
-filter, the key, both throttles, the circuit breaker, the rule's mode and `window_action`, the
+`held`, `throttled`, `deduplicated`, `waiting`, `expired`, `cleared`, `ignored`, `not_matched`
+and `error`. The test checks the filter, the key, both throttles, the pattern and its conditions,
+the circuit breaker, the rule's mode and `window_action`, the
 maintenance windows and change freezes the directory declares for the rule or for every rule,
 and the action's expressions, which it type-checks against the test's events. The blast radius
 (`max_concurrent_runs`, `host_lock`, `max_group_share`) needs the jobs running on a server, and
 windows that list only inventory groups need the inventory: the test doesn't check them, and an
 expectation of a hold by one of them fails. A `once_after` window still open at the end of a test
-fires.
+fires. This test checks the absence rule in [Patterns](#patterns), declared in git:
+
+```yaml
+kind: EventRuleTest
+name: Escalate when ServiceDown is not resolved within 15 minutes
+spec:
+  rule: Escalate a ServiceDown that stays down
+  events:
+    - type: alert.firing
+      data: {labels: {alertname: ServiceDown, instance: web1}}
+      expect: {outcome: fired, key: web1}  # at the end of the window
+    - at: 6m
+      type: alert.firing
+      data: {labels: {alertname: ServiceDown, instance: web2}}
+      expect: cleared
+    - at: 10m
+      type: alert.resolved
+      data: {labels: {alertname: ServiceDown, instance: web2}}
+      expect: cleared
+```
 
 ```console
 $ awxnext rules test -v rules/

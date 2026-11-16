@@ -8,7 +8,7 @@ import { Ago, ErrorNote, Panel } from '../../components/ui'
 import { absolute } from '../../lib/format'
 import { GUARDRAIL_LABELS, outcomeView, type MissDetails } from '../../lib/eventRules'
 import { tr, trn } from '../../lib/i18n'
-import { DecisionBody, MissView, Outcome } from './decisions'
+import { ConditionsMiss, DecisionBody, MissView, Outcome } from './decisions'
 
 const pad = (n: number) => String(n).padStart(2, '0')
 /** A date as a datetime-local input takes it, in the browser's zone. */
@@ -18,7 +18,7 @@ function localInput(d: Date): string {
 
 /** Runs a backtest, of a saved rule (path event_rules/N/backtest/) or of a
  * draft (event_rules/backtest/ with the draft's fields), and shows it. */
-export function Backtest({ path, draft, filter }: { path: string; draft?: () => Record<string, unknown>; filter?: string }) {
+export function Backtest({ path, draft, filter, conditions }: { path: string; draft?: () => Record<string, unknown>; filter?: string; conditions?: string[] }) {
   const [since, setSince] = useState(() => localInput(new Date(Date.now() - 86400_000)))
   const [until, setUntil] = useState('')
   const [max, setMax] = useState('')
@@ -60,10 +60,10 @@ export function Backtest({ path, draft, filter }: { path: string; draft?: () => 
         </div>
       </form>
       <p className="small muted" style={{ margin: 0 }}>
-        {tr('A backtest runs the rule on the events its streams received in the period, test mode’s excepted, as the engine would have: throttles, circuit breakers, guardrails and mode. It launches nothing and records nothing.')}
+        {tr('A backtest runs the rule on the events its streams received in the period, test mode’s excepted, as the engine would have: throttles, patterns, circuit breakers, guardrails and mode. It launches nothing and records nothing.')}
       </p>
       <ErrorNote error={error} />
-      {result && <BacktestResult r={result} filter={filter} />}
+      {result && <BacktestResult r={result} filter={filter} conditions={conditions} />}
     </div>
   )
 }
@@ -71,7 +71,7 @@ export function Backtest({ path, draft, filter }: { path: string; draft?: () => 
 type KeyRow = { key: string; events: number; fired: number; held: number; throttled: number; deduplicated: number }
 type Miss = { expression: string; count: number; example: Any }
 
-function BacktestResult({ r, filter }: { r: Any; filter?: string }) {
+function BacktestResult({ r, filter, conditions }: { r: Any; filter?: string; conditions?: string[] }) {
   const outcomes = Object.entries((r.outcomes ?? {}) as Record<string, number>).sort((a, b) => b[1] - a[1])
   const held = Object.entries((r.held ?? {}) as Record<string, number>)
   const decisions = (r.decisions ?? []) as Any[]
@@ -96,6 +96,12 @@ function BacktestResult({ r, filter }: { r: Any; filter?: string }) {
           <dt>{tr('Would fire')}</dt>
           <dd>{r.fired}</dd>
         </div>
+        {r.firings !== undefined && r.firings !== r.fired && (
+          <div title={tr('A pattern fires once for all the events of its window.')}>
+            <dt>{tr('Firings')}</dt>
+            <dd>{r.firings}</dd>
+          </div>
+        )}
         <div>
           <dt>{tr('Keys')}</dt>
           <dd>{r.key_count}</dd>
@@ -136,7 +142,7 @@ function BacktestResult({ r, filter }: { r: Any; filter?: string }) {
                     </Link>
                   </span>
                 </div>
-                <MissView miss={m.example.filter as MissDetails} filter={filter} />
+                {m.example.conditions ? <ConditionsMiss misses={m.example.conditions as MissDetails[]} conditions={conditions} /> : <MissView miss={m.example.filter as MissDetails} filter={filter} />}
               </div>
             ))}
           </div>
@@ -201,7 +207,7 @@ function BacktestResult({ r, filter }: { r: Any; filter?: string }) {
                     <Ago at={d.received} />
                   </span>
                 </summary>
-                <DecisionBody d={d} filter={filter} />
+                <DecisionBody d={d} filter={filter} conditions={conditions} />
               </details>
             ))}
           </div>

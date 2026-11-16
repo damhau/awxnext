@@ -11,14 +11,16 @@ type DecisionCleanup struct {
 	Partitions []string
 	Decisions  int64
 	Keys       int64
+	Patterns   int64
 }
 
 // CleanupDecisions removes the rules' decisions their log keeps no longer.
 // A filter that didn't match is kept as long as its event; any other
 // decision as long as its event, and keepDays at least. Decisions on
 // deleted streams go the same way, as if their events were gone. It also
-// removes the throttle keys that expired a day ago. With dryRun it only
-// counts.
+// removes the throttle keys that expired a day ago, and the patterns'
+// windows still there a day after their deadline, whose waiting decisions
+// it drops. With dryRun it only counts.
 func CleanupDecisions(ctx context.Context, db DB, now time.Time, keepDays int, dryRun bool) (DecisionCleanup, error) {
 	var res DecisionCleanup
 	var longest int
@@ -78,5 +80,14 @@ func CleanupDecisions(ctx context.Context, db DB, now time.Time, keepDays int, d
 	res.Keys, err = remove(ctx, db, dryRun, nil, `event_rule_keys`, `t.held_until < $1`,
 		`DELETE FROM event_rule_keys WHERE (rule_id, shadow, key) IN
 			(SELECT t.rule_id, t.shadow, t.key FROM event_rule_keys t WHERE t.held_until < $1 LIMIT `+limit+`)`, now.AddDate(0, 0, -1))
+	if err != nil {
+		return res, err
+	}
+	res.Patterns, err = remove(ctx, db, dryRun, nil, `event_rule_patterns`, `t.deadline < $1`,
+		`WITH t AS (SELECT id, events FROM event_rule_patterns WHERE deadline < $1 LIMIT `+limit+` FOR UPDATE SKIP LOCKED),
+			d AS (UPDATE event_rule_decisions x SET outcome = 'dropped', reason = 'The window was still there a day after its deadline.', modified = now()
+				FROM t, jsonb_array_elements(t.events) e
+				WHERE x.id = (e->>'decision')::bigint AND x.received = (e->>'received')::timestamptz AND x.outcome = 'waiting')
+		DELETE FROM event_rule_patterns WHERE id IN (SELECT id FROM t)`, now.AddDate(0, 0, -1))
 	return res, err
 }

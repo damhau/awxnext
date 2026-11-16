@@ -286,6 +286,7 @@ func (t *task) cleanupEventStreams(ctx context.Context) error {
 	}
 	t.out.Line(fmt.Sprintf("Decisions %s: %d", t.action(), dec.Decisions))
 	t.out.Line(fmt.Sprintf("Expired throttle keys %s: %d", t.action(), dec.Keys))
+	t.out.Line(fmt.Sprintf("Pattern windows a day past their deadline %s: %d", t.action(), dec.Patterns))
 	return err
 }
 

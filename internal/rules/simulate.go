@@ -7,8 +7,8 @@ import (
 )
 
 // The simulator decides events as the rule engine does, in memory: the
-// filter, the key, the throttle and the circuit breaker, without the
-// database. Backtests and `awxnext rules test` run it; the caller's Act
+// filter, the key, the throttle or the pattern, and the circuit breaker,
+// without the database. Backtests and `awxnext rules test` run it; the caller's Act
 // stands for the guardrails and the action.
 
 // SimRule is what the simulator needs of a rule.
@@ -19,6 +19,10 @@ type SimRule struct {
 	// trip its circuit breaker; 0: no breaker.
 	BreakerFirings int64
 	BreakerWindow  time.Duration
+	// Pattern is what the rule waits for on each key, over Conditions;
+	// an empty Kind: none.
+	Pattern    Pattern
+	Conditions []string
 }
 
 // SimEvent is an event as expressions see it (Value), and when it was
@@ -71,7 +75,8 @@ type SimDecision struct {
 	Details   map[string]any
 	// Miss names the part of the filter that failed.
 	Miss *Miss
-	// At is when the action ran: the end of its once_after window.
+	// At is when the action ran: the end of its once_after window, or
+	// when its pattern fired.
 	At time.Time
 }
 
@@ -89,10 +94,15 @@ type Simulator struct {
 	Decisions []SimDecision
 	// Tripped are the keys whose breaker tripped, and when.
 	Tripped map[string]time.Time
+	// Firings is how many times the action ran, or asked for approval:
+	// once for each once_after window and each pattern's firing.
+	Firings int
 
-	held    map[string]time.Time
-	firings map[string][]time.Time
-	window  *simWindow
+	held     map[string]time.Time
+	firings  map[string][]time.Time
+	window   *simWindow
+	patterns map[string]*PatternState
+	waiting  map[int64]Member
 }
 
 type simWindow struct {
@@ -103,7 +113,8 @@ type simWindow struct {
 
 // NewSimulator makes a simulator of a rule.
 func NewSimulator(r SimRule, act Act) *Simulator {
-	return &Simulator{rule: r, act: act, Tripped: map[string]time.Time{}, held: map[string]time.Time{}, firings: map[string][]time.Time{}}
+	return &Simulator{rule: r, act: act, Tripped: map[string]time.Time{}, held: map[string]time.Time{}, firings: map[string][]time.Time{},
+		patterns: map[string]*PatternState{}, waiting: map[int64]Member{}}
 }
 
 // Add decides the next event.
@@ -117,6 +128,15 @@ func (s *Simulator) Add(ctx context.Context, ev SimEvent) {
 		d.Outcome, d.Reason, d.Miss = NotMatched, miss.Reason(), miss
 		return
 	}
+	var matched []int
+	if len(s.rule.Conditions) > 0 {
+		var misses []*Miss
+		if matched, misses = Conditions(ctx, s.rule.Conditions, vars); len(matched) == 0 {
+			d.Outcome = NotMatched
+			d.Reason, d.Details = ConditionsMiss(misses)
+			return
+		}
+	}
 	key := ""
 	if s.rule.Key != "" {
 		k, err := Text(ctx, s.rule.Key, vars)
@@ -128,6 +148,11 @@ func (s *Simulator) Add(ctx context.Context, ev SimEvent) {
 	}
 	d.Key = key
 	m := Member{Index: i, Event: ev, Key: key}
+	if s.rule.Pattern.Kind != "" {
+		s.advance(ev.Received)
+		s.addPattern(m, matched)
+		return
+	}
 	switch s.rule.Throttle {
 	case OnceWithin:
 		if until, held := s.held[key]; held && ev.Received.Before(until) {
@@ -164,11 +189,111 @@ func (s *Simulator) Add(ctx context.Context, ev SimEvent) {
 	}
 }
 
-// Finish fires the once_after window when it ends by until; its events
-// stay waiting otherwise.
+// Finish fires the once_after window when it ends by until, and moves the
+// patterns' windows to until; their events stay waiting otherwise.
 func (s *Simulator) Finish(until time.Time) {
 	if s.window != nil && !s.window.fireAt.After(until) {
 		s.fireWindow()
+	}
+	s.advance(until)
+}
+
+// addPattern adds an event to its key's window, as the engine does.
+func (s *Simulator) addPattern(m Member, matched []int) {
+	p := s.rule.Pattern
+	st := s.patterns[m.Key]
+	if st == nil {
+		st = &PatternState{}
+		s.patterns[m.Key] = st
+	}
+	s.waiting[int64(m.Index)] = m
+	step := p.Add(st, PatternEvent{ID: int64(m.Index), Received: m.Event.Received, Matched: matched})
+	s.settle(m.Key, st, step)
+	if step.Outcome != Fired {
+		if step.Outcome != Waiting {
+			delete(s.waiting, int64(m.Index))
+		}
+		s.set(m.Index, Outcome{Name: step.Outcome, Reason: step.Reason, Details: map[string]any{"pattern": p.Progress(st)}}, m.Key, time.Time{})
+	}
+	if len(st.Events) == 0 {
+		delete(s.patterns, m.Key)
+	}
+}
+
+// advance moves the windows due by now to their deadline, in order, as the
+// engine's timer does.
+func (s *Simulator) advance(now time.Time) {
+	p := s.rule.Pattern
+	for {
+		key, at := "", time.Time{}
+		for k, st := range s.patterns {
+			d := p.Deadline(st)
+			if !d.IsZero() && !d.After(now) && (key == "" || d.Before(at) || d.Equal(at) && k < key) {
+				key, at = k, d
+			}
+		}
+		if key == "" {
+			return
+		}
+		st := s.patterns[key]
+		s.settle(key, st, p.Advance(st, at))
+		if len(st.Events) == 0 {
+			delete(s.patterns, key)
+		}
+	}
+}
+
+// settle gives the events a window let go of their outcome, and fires.
+func (s *Simulator) settle(key string, st *PatternState, step PatternStep) {
+	p := s.rule.Pattern
+	for _, e := range step.Expired {
+		delete(s.waiting, e.ID)
+		s.set(int(e.ID), Outcome{Name: Expired, Reason: p.ExpiredReason(st), Details: map[string]any{"pattern": p.Progress(st)}}, key, time.Time{})
+	}
+	for _, e := range step.Cleared {
+		delete(s.waiting, e.ID)
+		s.set(int(e.ID), Outcome{Name: Cleared, Reason: "An event of condition 2 came before the window ended."}, key, time.Time{})
+	}
+	for _, fire := range [][]PatternEvent{step.Due, step.Fire} {
+		if len(fire) == 0 {
+			continue
+		}
+		members := make([]Member, 0, len(fire))
+		for _, e := range fire {
+			members = append(members, s.waiting[e.ID])
+			delete(s.waiting, e.ID)
+		}
+		s.firePattern(key, members, step.At)
+	}
+}
+
+// firePattern runs the action once for a window's events, unless the key's
+// breaker is open: the firing counts once.
+func (s *Simulator) firePattern(key string, members []Member, at time.Time) {
+	open, n := s.breaker(key, at)
+	if open {
+		if _, ok := s.Tripped[key]; !ok {
+			s.Tripped[key] = at
+		}
+		for _, m := range members {
+			s.set(m.Index, Outcome{Name: Held, Guardrail: "circuit_breaker", Details: map[string]any{"key": key},
+				Reason: "The circuit breaker of the key is open."}, key, at)
+		}
+		return
+	}
+	out := s.act(members, at)
+	s.count(out)
+	for _, m := range members {
+		s.set(m.Index, out, key, at)
+	}
+	if !FiredOutcome(out.Name) {
+		return
+	}
+	s.firings[key] = append(s.firings[key], at)
+	if s.rule.BreakerFirings > 0 && n+1 >= s.rule.BreakerFirings {
+		if _, ok := s.Tripped[key]; !ok {
+			s.Tripped[key] = at
+		}
 	}
 }
 
@@ -200,6 +325,7 @@ func (s *Simulator) fire(members []Member, at time.Time) {
 		return
 	}
 	out := s.act(acting, at)
+	s.count(out)
 	for _, m := range acting {
 		s.set(m.Index, out, m.Key, at)
 		if FiredOutcome(out.Name) {
@@ -234,6 +360,12 @@ func (s *Simulator) breaker(key string, at time.Time) (bool, int64) {
 		}
 	}
 	return n >= s.rule.BreakerFirings, n
+}
+
+func (s *Simulator) count(out Outcome) {
+	if out.Name == Fired || out.Name == Approval {
+		s.Firings++
+	}
 }
 
 func (s *Simulator) set(i int, out Outcome, key string, at time.Time) {

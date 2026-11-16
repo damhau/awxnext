@@ -267,8 +267,15 @@ func runTime(c *Ctx, r *eventRule) (time.Duration, error) {
 }
 
 func simRule(r *eventRule) rules.SimRule {
-	return rules.SimRule{Filter: r.Filter, Key: r.Key, Throttle: r.Throttle, Window: time.Duration(r.Window) * time.Second,
+	sr := rules.SimRule{Filter: r.Filter, Key: r.Key, Throttle: r.Throttle, Window: time.Duration(r.Window) * time.Second,
 		BreakerFirings: r.BreakerFirings, BreakerWindow: time.Duration(r.BreakerWindow) * time.Second}
+	if r.Pattern != "" {
+		sr.Pattern = r.pattern()
+		if r.hasConditions() {
+			sr.Conditions = r.Conditions
+		}
+	}
+	return sr
 }
 
 type keyStats struct {
@@ -366,14 +373,18 @@ func backtest(c *Ctx, r *eventRule, since, until time.Time, limit int) (Obj, err
 // backtestAct applies the guardrails to the action and says what it would
 // do, as guard does in shadow mode. The blast radius looks at the jobs
 // running at at; the windows, as the engine does, at the first event's
-// receipt.
+// receipt, or when the rule's pattern fired.
 func backtestAct(c *Ctx, eng *RuleEngine, g *guards, r *eventRule, members []member, vars rules.Vars, at time.Time,
 	took time.Duration, hosts map[string]int) (rules.Outcome, error) {
 	p, err := eng.plan(c, r, members, vars)
 	if err != nil {
 		return rules.Outcome{}, err
 	}
-	window, err := g.windows(r, p, members[0].ev.Received)
+	windowAt := members[0].ev.Received
+	if r.Pattern != "" {
+		windowAt = at
+	}
+	window, err := g.windows(r, p, windowAt)
 	if err != nil {
 		return rules.Outcome{}, err
 	}
@@ -436,11 +447,17 @@ func backtestResult(r *eventRule, sim *rules.Simulator, events []eventstreams.St
 		ev := events[i]
 		outcomes[d.Outcome]++
 		if d.Outcome == rules.NotMatched {
-			m := misses[d.Miss.Expression]
+			expr, example := conditionsExpr(r), Obj{"stream": ev.Stream, "sequence": ev.Sequence, "event_id": ev.ID,
+				"received": api.FormatTime(ev.Received), "reason": d.Reason, "conditions": d.Details["conditions"]}
+			if d.Miss != nil {
+				expr = d.Miss.Expression
+				example["reason"], example["filter"] = d.Miss.String(), d.Miss.Details()
+				delete(example, "conditions")
+			}
+			m := misses[expr]
 			if m == nil {
-				m = &missStats{Expression: d.Miss.Expression, Example: Obj{"stream": ev.Stream, "sequence": ev.Sequence, "event_id": ev.ID,
-					"received": api.FormatTime(ev.Received), "reason": d.Miss.String(), "filter": d.Miss.Details()}}
-				misses[d.Miss.Expression] = m
+				m = &missStats{Expression: expr, Example: example}
+				misses[expr] = m
 			}
 			m.Count++
 			continue
@@ -521,6 +538,7 @@ func backtestResult(r *eventRule, sim *rules.Simulator, events []eventstreams.St
 	return Obj{
 		"rule": rule, "since": api.FormatTime(since), "until": api.FormatTime(until), "truncated": truncated,
 		"events": len(events), "matched": len(events) - outcomes[rules.NotMatched], "fired": outcomes[rules.Fired] + outcomes[rules.Approval],
+		"firings":  sim.Firings,
 		"outcomes": outcomes, "held": held,
 		"keys": keyList[:min(len(keyList), backtestTop)], "key_count": len(keyList),
 		"hosts": hostList, "host_count": len(hosts),
@@ -528,10 +546,20 @@ func backtestResult(r *eventRule, sim *rules.Simulator, events []eventstreams.St
 		"misses":    missList[:min(len(missList), backtestMisses)],
 		"decisions": listed,
 		"approximations": []string{
-			"Throttles, windows and circuit breakers start empty and closed at the start of the period.",
-			"Maintenance windows, change freezes, inventories and templates are today's; a window is checked at each event's time.",
+			"Throttles, windows, patterns and circuit breakers start empty and closed at the start of the period.",
+			"Maintenance windows, change freezes, inventories and templates are today's; a window is checked at each event's time, or when a pattern fires.",
 			fmt.Sprintf("Running jobs are those the job history shows running at the time, but the rule's own; the launches the backtest simulates run %s each, the average of the template's last finished jobs.", took.Round(time.Second)),
 			"An action that would ask for approval counts as awaiting_approval, and as a firing: the approval is not simulated.",
 		},
 	}
+}
+
+// conditionsExpr is how the misses of a pattern's conditions are grouped:
+// the event matched none of them.
+func conditionsExpr(r *eventRule) string {
+	parts := make([]string, len(r.Conditions))
+	for i, c := range r.Conditions {
+		parts[i] = "(" + c + ")"
+	}
+	return strings.Join(parts, " || ")
 }

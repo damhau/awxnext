@@ -8,13 +8,13 @@ import { AccessTab } from '../../components/access/Access'
 import { Icon } from '../../components/icons'
 import { useConfirm, useToast } from '../../components/overlay'
 import { UsedByPanel } from '../../components/UsedBy'
-import { Ago, Cell, Empty, ErrorNote, KV, Loading, PageHead, Panel, Tab } from '../../components/ui'
+import { Ago, Cell, Empty, ErrorNote, KV, Loading, PageHead, Panel, Tab, Upcoming } from '../../components/ui'
 import { duration, userName } from '../../lib/format'
-import { actionSummary, MODE_LABELS, outcomeView } from '../../lib/eventRules'
+import { actionSummary, conditionLabel, MODE_LABELS, outcomeView, PATTERN_LABELS, patternSummary } from '../../lib/eventRules'
 import { tr, trn } from '../../lib/i18n'
 import { ListPage, useDelete } from '../admin/common'
 import { Backtest } from './backtest'
-import { DecisionList } from './decisions'
+import { DecisionList, WindowProgress } from './decisions'
 import { RuleEditor } from './RuleEditor'
 
 function ModeBadge({ mode }: { mode: string }) {
@@ -181,11 +181,12 @@ export function RuleDetail() {
                 path={`event_rules/${id}/decisions/`}
                 by="rule"
                 filter={r.filter}
+                conditions={r.conditions}
                 empty={<Empty title={tr('No decisions yet')}>{tr('The rule decides on each event of its streams received while it is enabled.')}</Empty>}
               />
             }
           />
-          <Route path="backtest" element={<Backtest path={`event_rules/${id}/backtest/`} filter={r.filter} />} />
+          <Route path="backtest" element={<Backtest path={`event_rules/${id}/backtest/`} filter={r.filter} conditions={r.conditions} />} />
           <Route path="edit" element={<RuleEditor key={r.modified} rule={r} />} />
           <Route path="access" element={<AccessTab resource="event_rules" id={id} name={r.name} />} />
         </Routes>
@@ -228,7 +229,22 @@ function Overview({ r }: { r: Any }) {
               ],
               [tr('Filter'), <pre className="code">{r.filter}</pre>],
               [tr('Key'), r.key ? <span className="mono">{r.key}</span> : <span className="faint">{tr('One key for all events')}</span>],
-              [tr('Throttle'), r.throttle ? tr('{kind}, with a window of {window}', { kind: THROTTLES[r.throttle] ?? r.throttle, window: duration(r.throttle_window) }) : tr('None: acts on every event')],
+              [tr('Pattern'), r.pattern ? tr('{kind}: {summary}', { kind: PATTERN_LABELS[r.pattern] ?? r.pattern, summary: patternSummary(r) }) : false],
+              [
+                r.pattern === 'sequence' ? tr('Steps') : tr('Conditions'),
+                r.pattern && r.conditions?.length ? (
+                  <ol className="steps mono small">
+                    {(r.conditions as string[]).map((c, i) => (
+                      <li key={i} title={conditionLabel(r.pattern, i)}>
+                        {c}
+                      </li>
+                    ))}
+                  </ol>
+                ) : (
+                  false
+                ),
+              ],
+              [tr('Throttle'), r.pattern ? false : r.throttle ? tr('{kind}, with a window of {window}', { kind: THROTTLES[r.throttle] ?? r.throttle, window: duration(r.throttle_window) }) : tr('None: acts on every event')],
               [tr('Action'), target],
               [tr('Variables'), vars.length ? <pre className="code">{vars.map(([k, v]) => `${k}: ${v}`).join('\n')}</pre> : false],
               [tr('Limit'), r.action === 'launch' && r.limit ? <span className="mono">{r.limit}</span> : false],
@@ -240,6 +256,7 @@ function Overview({ r }: { r: Any }) {
             ]}
           />
         </Panel>
+        <PatternWindows r={r} />
         <Panel title={tr('Guardrails')}>
           <KV
             items={[
@@ -301,6 +318,40 @@ function RecentDecisions({ id }: { id: number }) {
               .join(' · ')}
           </div>
         </div>
+      )}
+    </Panel>
+  )
+}
+
+/** The keys' open windows, the next to end first. */
+function PatternWindows({ r }: { r: Any }) {
+  const list = useList<Any>(`event_rules/${r.id}/patterns/`, { order_by: 'deadline', page_size: 50 }, { refetchInterval: 10_000 })
+  const rows = list.data?.results ?? []
+  if (!r.pattern && !rows.length) return null
+  return (
+    <Panel title={tr('Open windows')} actions={list.data && list.data.count > rows.length ? <span className="small faint">{trn(list.data.count, '{n} window', '{n} windows')}</span> : null}>
+      {list.error ? (
+        <ErrorNote error={list.error} />
+      ) : list.isPending ? (
+        <Loading rows={1} />
+      ) : !rows.length ? (
+        <p className="small faint" style={{ margin: 0 }}>
+          {tr('No key has a window open.')}
+        </p>
+      ) : (
+        <ul className="pattern-windows">
+          {rows.map((w) => (
+            <li key={w.id}>
+              <span className="mono ellipsis">
+                {w.key || tr('all events')} {w.shadow && <span className="tag">{tr('shadow')}</span>}
+              </span>
+              <WindowProgress p={w.progress} until={false} />
+              <span className="small muted nowrap" title={tr('When the window next changes by itself: an event leaves it, or an absence fires.')}>
+                <Upcoming at={w.deadline} />
+              </span>
+            </li>
+          ))}
+        </ul>
       )}
     </Panel>
   )
