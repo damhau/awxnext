@@ -266,9 +266,16 @@ func runTime(c *Ctx, r *eventRule) (time.Duration, error) {
 	return time.Duration(secs * float64(time.Second)), nil
 }
 
-func simRule(r *eventRule) rules.SimRule {
+// simRule is what the simulator needs of r, its launches running took.
+func simRule(r *eventRule, took time.Duration) rules.SimRule {
 	sr := rules.SimRule{Filter: r.Filter, Key: r.Key, Throttle: r.Throttle, Window: time.Duration(r.Window) * time.Second,
 		BreakerFirings: r.BreakerFirings, BreakerWindow: time.Duration(r.BreakerWindow) * time.Second}
+	if r.Check == checkEvent {
+		sr.Check = rules.SimCheck{Condition: r.CheckCondition, Window: time.Duration(r.CheckWindow) * time.Second}
+		if r.Action == actionLaunch {
+			sr.Check.RunTime = took
+		}
+	}
 	if r.Pattern != "" {
 		sr.Pattern = r.pattern()
 		if r.hasConditions() {
@@ -351,7 +358,7 @@ func backtest(c *Ctx, r *eventRule, since, until time.Time, limit int) (Obj, err
 		}
 		return out
 	}
-	sim := rules.NewSimulator(simRule(r), act)
+	sim := rules.NewSimulator(simRule(r, took), act)
 	for i, ev := range events {
 		if ctx.Err() != nil {
 			truncated, events = true, events[:i]
@@ -443,9 +450,13 @@ func backtestResult(r *eventRule, sim *rules.Simulator, events []eventstreams.St
 	keys := map[string]*keyStats{}
 	misses := map[string]*missStats{}
 	listed := []Obj{}
+	checks := map[string]int{}
 	for i, d := range sim.Decisions {
 		ev := events[i]
 		outcomes[d.Outcome]++
+		if d.Check != "" {
+			checks[d.Check]++
+		}
 		if d.Outcome == rules.NotMatched {
 			expr, example := conditionsExpr(r), Obj{"stream": ev.Stream, "sequence": ev.Sequence, "event_id": ev.ID,
 				"received": api.FormatTime(ev.Received), "reason": d.Reason, "conditions": d.Details["conditions"]}
@@ -486,6 +497,13 @@ func backtestResult(r *eventRule, sim *rules.Simulator, events []eventstreams.St
 				"outcome": d.Outcome, "key": d.Key, "reason": d.Reason, "guardrail": d.Guardrail, "details": d.Details}
 			if !d.At.IsZero() {
 				o["at"] = api.FormatTime(d.At)
+			}
+			if d.Check != "" {
+				o["check_outcome"] = d.Check
+			}
+			if d.ResolvedBy != nil {
+				by := events[*d.ResolvedBy]
+				o["resolved_by"] = Obj{"stream": by.Stream, "sequence": by.Sequence, "event_type": by.Type, "received": api.FormatTime(by.Received)}
 			}
 			listed = append(listed, o)
 		}
@@ -535,6 +553,29 @@ func backtestResult(r *eventRule, sim *rules.Simulator, events []eventstreams.St
 	if r.ID != 0 {
 		rule = r.ID
 	}
+	approximations := []string{
+		"Throttles, windows, patterns and circuit breakers start empty and closed at the start of the period.",
+		"Maintenance windows, change freezes, inventories and templates are today's; a window is checked at each event's time, or when a pattern fires.",
+		fmt.Sprintf("Running jobs are those the job history shows running at the time, but the rule's own; the launches the backtest simulates run %s each, the average of the template's last finished jobs.", took.Round(time.Second)),
+		"An action that would ask for approval counts as awaiting_approval, and as a firing: the approval is not simulated.",
+	}
+	var checked any
+	switch r.Check {
+	case checkEvent:
+		// The events in the log resolved the keys without the rule's
+		// actions: the rate is how many would have looked fixed anyway.
+		decided := checks[rules.CheckFixed] + checks[rules.CheckNotFixed] + checks[rules.CheckActionFailed]
+		var rate any
+		if decided > 0 {
+			rate = float64(checks[rules.CheckFixed]) / float64(decided)
+		}
+		checked = Obj{"checked": decided, "resolved": checks[rules.CheckFixed], "unresolved": checks[rules.CheckNotFixed],
+			"action_failed": checks[rules.CheckActionFailed], "pending": checks[rules.CheckPending], "resolved_rate": rate}
+		approximations = append(approximations,
+			"A firing's check counts the events of the log that resolved its key within the check's window: the alerts resolved without the rule's actions, or by the actions taken then. An approval counts as given at once, and a key not fixed doesn't escalate.")
+	case checkTemplate:
+		approximations = append(approximations, "Check templates are not run: the backtest leaves the checks out.")
+	}
 	return Obj{
 		"rule": rule, "since": api.FormatTime(since), "until": api.FormatTime(until), "truncated": truncated,
 		"events": len(events), "matched": len(events) - outcomes[rules.NotMatched], "fired": outcomes[rules.Fired] + outcomes[rules.Approval],
@@ -542,15 +583,11 @@ func backtestResult(r *eventRule, sim *rules.Simulator, events []eventstreams.St
 		"outcomes": outcomes, "held": held,
 		"keys": keyList[:min(len(keyList), backtestTop)], "key_count": len(keyList),
 		"hosts": hostList, "host_count": len(hosts),
-		"breakers":  breakers[:min(len(breakers), backtestTop)],
-		"misses":    missList[:min(len(missList), backtestMisses)],
-		"decisions": listed,
-		"approximations": []string{
-			"Throttles, windows, patterns and circuit breakers start empty and closed at the start of the period.",
-			"Maintenance windows, change freezes, inventories and templates are today's; a window is checked at each event's time, or when a pattern fires.",
-			fmt.Sprintf("Running jobs are those the job history shows running at the time, but the rule's own; the launches the backtest simulates run %s each, the average of the template's last finished jobs.", took.Round(time.Second)),
-			"An action that would ask for approval counts as awaiting_approval, and as a firing: the approval is not simulated.",
-		},
+		"breakers":       breakers[:min(len(breakers), backtestTop)],
+		"misses":         missList[:min(len(missList), backtestMisses)],
+		"decisions":      listed,
+		"checks":         checked,
+		"approximations": approximations,
 	}
 }
 

@@ -12,6 +12,7 @@ type DecisionCleanup struct {
 	Decisions  int64
 	Keys       int64
 	Patterns   int64
+	Checks     int64
 }
 
 // CleanupDecisions removes the rules' decisions their log keeps no longer.
@@ -20,7 +21,8 @@ type DecisionCleanup struct {
 // deleted streams go the same way, as if their events were gone. It also
 // removes the throttle keys that expired a day ago, and the patterns'
 // windows still there a day after their deadline, whose waiting decisions
-// it drops. With dryRun it only counts.
+// it drops, and the settled checks of fixes as old as the oldest decisions
+// kept. With dryRun it only counts.
 func CleanupDecisions(ctx context.Context, db DB, now time.Time, keepDays int, dryRun bool) (DecisionCleanup, error) {
 	var res DecisionCleanup
 	var longest int
@@ -89,5 +91,11 @@ func CleanupDecisions(ctx context.Context, db DB, now time.Time, keepDays int, d
 				FROM t, jsonb_array_elements(t.events) e
 				WHERE x.id = (e->>'decision')::bigint AND x.received = (e->>'received')::timestamptz AND x.outcome = 'waiting')
 		DELETE FROM event_rule_patterns WHERE id IN (SELECT id FROM t)`, now.AddDate(0, 0, -1))
+	if err != nil {
+		return res, err
+	}
+	res.Checks, err = remove(ctx, db, dryRun, nil, `event_rule_checks`, `t.state = 'settled' AND t.settled < $1`,
+		`DELETE FROM event_rule_checks WHERE id IN
+			(SELECT t.id FROM event_rule_checks t WHERE t.state = 'settled' AND t.settled < $1 LIMIT `+limit+`)`, now.AddDate(0, 0, -max(longest, keepDays)))
 	return res, err
 }

@@ -6,7 +6,7 @@ import { TextInput } from '../../components/form'
 import { DataTable } from '../../components/table'
 import { Ago, ErrorNote, Panel } from '../../components/ui'
 import { absolute } from '../../lib/format'
-import { GUARDRAIL_LABELS, outcomeView, type MissDetails } from '../../lib/eventRules'
+import { GUARDRAIL_LABELS, outcomeView, rateText, type MissDetails } from '../../lib/eventRules'
 import { tr, trn } from '../../lib/i18n'
 import { ConditionsMiss, DecisionBody, MissView, Outcome } from './decisions'
 
@@ -110,6 +110,12 @@ function BacktestResult({ r, filter, conditions }: { r: Any; filter?: string; co
           <dt>{tr('Hosts')}</dt>
           <dd>{r.host_count}</dd>
         </div>
+        {r.checks?.checked > 0 && (
+          <div title={tr('The firings whose key a resolving event of the log resolved within the check’s time: without the rule’s actions, or by the actions taken then.')}>
+            <dt>{tr('Resolved')}</dt>
+            <dd>{tr('{resolved} of {checked} ({rate})', { resolved: r.checks.resolved, checked: r.checks.checked, rate: rateText(r.checks.resolved_rate) })}</dd>
+          </div>
+        )}
       </dl>
       {r.truncated && <div className="notice warn">{tr('The backtest stopped before the end of the period: it reads at most its number of events, for at most 30 seconds.')}</div>}
       {outcomes.length > 0 && (

@@ -114,6 +114,9 @@ spec:
   mode: auto                       # shadow by default
   host_lock: true
   breaker_firings: 3
+  check: event                     # wait for the alert resolved
+  check_condition: event.type == "alert.resolved"
+  check_window: 600
 ---
 kind: MaintenanceWindow
 name: Saturday freeze
@@ -145,7 +148,8 @@ API or the UI. An event rule runs as the user who last saved the source
 `EventRule Automate` role, or `Organization Admin`.
 An `EventRule` takes the API's fields: a rule that waits for a
 [pattern](operations.md#patterns) sets `pattern`, `pattern_window`, and
-`conditions` or `pattern_count`.
+`conditions` or `pattern_count`. A rule that [checks its fixes](operations.md#checking-fixes)
+with a template names it as `template` does: `check_template: {kind: JobTemplate, name: Check service}`.
 Documents of kind `EventRuleTest` are tests of the rules, which
 `awxnext rules test` runs in your CI ([Testing rules offline](operations.md#testing-rules-offline)):
 a sync skips them.

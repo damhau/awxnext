@@ -78,6 +78,16 @@ const pausePlaybook = `- hosts: all
       run_once: true
 `
 
+// unfixedPlaybook succeeds and tells an event rule's check that the key is
+// not fixed.
+const unfixedPlaybook = `- hosts: all
+  gather_facts: false
+  tasks:
+    - ansible.builtin.set_stats:
+        data: {fixed: false}
+      run_once: true
+`
+
 const factsPlaybook = `- hosts: all
   gather_facts: false
   tasks:
@@ -111,7 +121,7 @@ func newLaunchFixture(t *testing.T) *jobFixture {
 	f := &jobFixture{a: a, org: newOrg(t, a), hosts: []string{"h1", "h2", "h3"}}
 	f.repo = gitRepo(t, map[string]string{
 		"site.yml": sitePlaybook, "fail.yml": failPlaybook, "slow.yml": slowPlaybook, "facts.yml": factsPlaybook, "env.yml": envPlaybook,
-		"pause.yml": pausePlaybook,
+		"pause.yml": pausePlaybook, "unfixed.yml": unfixedPlaybook,
 	})
 	f.project = must(t, a.post("projects/", map[string]any{"name": uniq("proj"), "organization": f.org, "scm_type": "git", "scm_url": f.repo, "allow_override": true}), 201).id()
 	f.waitProject(t)

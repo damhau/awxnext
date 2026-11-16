@@ -301,6 +301,58 @@ export const GUARDRAIL_LABELS: Record<string, string> = {
   max_concurrent_runs: tr('Concurrent runs'),
   host_lock: tr('Host lock'),
   max_group_share: tr('Group share'),
+  check_escalation: tr('Escalated'),
+}
+
+/** How a check's outcome shows. resolved and unresolved are shadow mode's:
+ * whether the key resolved by itself, with no action. */
+export function checkOutcomeView(outcome: string): { cell: CellState; label: string } {
+  switch (outcome) {
+    case 'pending':
+      return { cell: 'running', label: tr('Checking') }
+    case 'fixed':
+      return { cell: 'ok', label: tr('Fixed') }
+    case 'not_fixed':
+      return { cell: 'failed', label: tr('Not fixed') }
+    case 'action_failed':
+      return { cell: 'failed', label: tr('Action failed') }
+    case 'error':
+      return { cell: 'error', label: tr('Check error') }
+    case 'canceled':
+      return { cell: 'canceled', label: tr('Canceled') }
+    case 'resolved':
+      return { cell: 'changed', label: tr('Resolved anyway') }
+    case 'unresolved':
+      return { cell: 'skipped', label: tr('Not resolved') }
+  }
+  return { cell: 'empty', label: outcome }
+}
+
+export const CHECK_STATE_LABELS: Record<string, string> = {
+  acting: tr('Action under way'),
+  watching: tr('Watching'),
+  checking: tr('Check job running'),
+  settled: tr('Settled'),
+}
+
+/** A success rate, from 0 to 1, as a whole percentage; a dash when nothing
+ * was checked. */
+export function rateText(rate: number | null | undefined): string {
+  if (rate === null || rate === undefined || isNaN(rate)) return '—'
+  return tr('{n}%', { n: Math.round(rate * 100) })
+}
+
+/** The counts of a rule's checks, as summary_fields.checks gives them. */
+export interface CheckCounts {
+  days: number
+  checked: number
+  fixed: number
+  not_fixed: number
+  action_failed: number
+  errors: number
+  pending: number
+  success_rate: number | null
+  shadow?: { checked: number; resolved: number; resolved_rate: number | null }
 }
 
 export const STREAM_TYPES: [string, string][] = [
@@ -436,6 +488,12 @@ export interface RuleDraft {
   conditions: string[]
   pattern_count: number
   pattern_window: number
+  check: string
+  check_condition: string
+  check_window: number
+  check_template: number | null
+  check_notification_template: number | null
+  check_approval: boolean
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -472,11 +530,18 @@ export function draftOf(r?: Record<string, any>): RuleDraft {
     conditions: r?.conditions?.length ? r.conditions : ['', ''],
     pattern_count: r?.pattern_count || 3,
     pattern_window: r?.pattern_window || 600,
+    check: r?.check ?? '',
+    check_condition: r?.check_condition ?? '',
+    check_window: r?.check ? (r.check_window ?? 0) : 600,
+    check_template: r?.check_template ?? null,
+    check_notification_template: r?.check_notification_template ?? null,
+    check_approval: r?.check_approval ?? false,
   }
 }
 
-/** The fields of the draft's action only: another action's are cleared, so
- * that a rule switched from launching to notifying keeps no template. */
+/** The fields of the draft's action and check only: another action's are
+ * cleared, so that a rule switched from launching to notifying keeps no
+ * template, and so are another check's. */
 export function ruleBody(d: RuleDraft): Record<string, unknown> {
   const launch = d.action === 'launch'
   const conditions = hasConditions(d.pattern) ? (d.pattern === 'absence' ? d.conditions.slice(0, 2) : d.conditions) : []
@@ -514,6 +579,12 @@ export function ruleBody(d: RuleDraft): Record<string, unknown> {
     breaker_notification_template: d.breaker_notification_template,
     window_action: d.window_action,
     approval_timeout: d.approval_timeout,
+    check: d.check,
+    check_condition: d.check === 'event' ? d.check_condition : '',
+    check_window: d.check ? d.check_window : 0,
+    check_template: d.check === 'template' ? d.check_template : null,
+    check_notification_template: d.check ? d.check_notification_template : null,
+    check_approval: !!d.check && d.check_approval,
   }
 }
 
@@ -534,6 +605,8 @@ export function checkBody(d: RuleDraft, events = 20): Record<string, unknown> {
     event_data: b.event_data,
     pattern: b.pattern,
     conditions: b.conditions,
+    check: b.check,
+    check_condition: b.check_condition,
     events,
   }
 }

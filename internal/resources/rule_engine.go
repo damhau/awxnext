@@ -228,8 +228,8 @@ func (e *RuleEngine) Release(ctx context.Context, stream int64) {
 
 // Pass runs the batches of the streams this engine holds, fires the
 // once_after windows that are due, moves the patterns' windows that time
-// changes, and acts on the approvals decided. It says whether a stream has
-// more events to read.
+// changes, settles the checks of fixes that are due, and acts on the
+// approvals decided. It says whether a stream has more events to read.
 func (e *RuleEngine) Pass(ctx context.Context) (bool, error) {
 	streams, err := e.Acquire(ctx)
 	if err != nil {
@@ -260,6 +260,9 @@ func (e *RuleEngine) Pass(ctx context.Context) (bool, error) {
 	if err := e.FirePatterns(ctx); err != nil && ctx.Err() == nil {
 		slog.Warn("event rules: moving pattern windows failed", "err", err)
 	}
+	if err := e.SettleChecks(ctx); err != nil && ctx.Err() == nil {
+		slog.Warn("event rules: settling checks failed", "err", err)
+	}
 	if err := e.ResolveApprovals(ctx); err != nil && ctx.Err() == nil {
 		slog.Warn("event rules: resolving approvals failed", "err", err)
 	}
@@ -286,14 +289,16 @@ func (a *afterCommit) run(ctx context.Context, app *api.App) {
 const ruleColumns = `id, name, organization_id, streams, owner_id, filter, key, throttle, throttle_window, action,
 	unified_job_template_id, extra_vars, job_limit, notification_template_id, message, target_stream_id, event_type, event_data,
 	mode, max_concurrent_runs, host_lock, max_group_share, breaker_firings, breaker_window, breaker_notification_template_id,
-	window_action, approval_timeout, pattern, conditions, pattern_count, pattern_window`
+	window_action, approval_timeout, pattern, conditions, pattern_count, pattern_window,
+	check_kind, check_condition, check_window, check_template_id, check_notification_template_id, check_approval`
 
 func scanRule(row pgx.Row) (*eventRule, error) {
 	r := &eventRule{}
 	err := row.Scan(&r.ID, &r.Name, &r.Org, &r.Streams, &r.Owner, &r.Filter, &r.Key, &r.Throttle, &r.Window, &r.Action,
 		&r.Template, &r.ExtraVars, &r.Limit, &r.Notification, &r.Message, &r.Target, &r.EventType, &r.EventData,
 		&r.Mode, &r.MaxRuns, &r.HostLock, &r.GroupShare, &r.BreakerFirings, &r.BreakerWindow, &r.BreakerNotification,
-		&r.WindowAction, &r.ApprovalTimeout, &r.Pattern, &r.Conditions, &r.PatternCount, &r.PatternWindow)
+		&r.WindowAction, &r.ApprovalTimeout, &r.Pattern, &r.Conditions, &r.PatternCount, &r.PatternWindow,
+		&r.Check, &r.CheckCondition, &r.CheckWindow, &r.CheckTemplate, &r.CheckNotification, &r.CheckApproval)
 	return r, err
 }
 
@@ -355,6 +360,14 @@ func (e *RuleEngine) Step(ctx context.Context, stream int64) (int, error) {
 		for _, r := range rs {
 			if r.stopped {
 				continue
+			}
+			if r.Check == checkEvent {
+				// A resolving event rarely passes the filter: it is looked at
+				// first.
+				if err := e.resolveChecks(ectx, tx, after, r, ev, val); err != nil {
+					tracing.EndSpan(span, err)
+					return 0, err
+				}
 			}
 			ok, m := rules.Filter(ctx, r.Filter, rules.Vars{Event: val})
 			if !ok {
@@ -509,6 +522,9 @@ type outcome struct {
 	// extra marks the events of a firing but its last: the circuit
 	// breaker counts the firing once.
 	extra bool
+	// prompts are a launch's variables and limit, which its check
+	// template launches with.
+	prompts Obj
 }
 
 // fired says whether an outcome counts as a firing for the circuit
@@ -832,6 +848,9 @@ func stopRule(ctx context.Context, db pgx.Tx, r *eventRule, reason string) error
 	if _, err := db.Exec(ctx, `UPDATE event_rules SET enabled = false, stopped_reason = $2, modified = now() WHERE id = $1`, r.ID, reason); err != nil {
 		return err
 	}
+	if err := cancelChecks(ctx, db, r.ID, "The rule stopped before the check ended."); err != nil {
+		return err
+	}
 	return dropWindows(ctx, db, r.ID, "The rule stopped before its window ended.")
 }
 
@@ -893,16 +912,17 @@ func (e *RuleEngine) act(ctx context.Context, db pgx.Tx, after *afterCommit, r *
 		if errors.Is(err, errRuleEval) {
 			name = "error"
 		}
-		return outcome{name: name, reason: describeError(err)}, nil
-	}
-	if err := sp.Commit(ctx); err != nil {
+		out = outcome{name: name, reason: describeError(err)}
+	} else if err := sp.Commit(ctx); err != nil {
 		return outcome{}, err
 	}
 	switch out.name {
 	case "launched", "notified", "posted":
-		_, err = db.Exec(ctx, "UPDATE event_rules SET last_fired = now() WHERE id = $1", r.ID)
+		if _, err := db.Exec(ctx, "UPDATE event_rules SET last_fired = now() WHERE id = $1", r.ID); err != nil {
+			return outcome{}, err
+		}
 	}
-	return out, err
+	return out, e.openChecks(ctx, db, after, r, members, out)
 }
 
 // guard plans the action, applies the rule's guardrails and mode, and does
@@ -925,6 +945,13 @@ func (e *RuleEngine) guard(c *Ctx, after *afterCommit, r *eventRule, members []m
 		}
 		approval = approval || window != nil
 	}
+	var escalated *hold
+	if !approved && !approval && r.CheckApproval && r.Mode == modeAuto {
+		if escalated, err = escalation(c, c.DB(), r, members); err != nil {
+			return outcome{}, err
+		}
+		approval = escalated != nil
+	}
 	h, err := g.blastRadius(r, p)
 	if err != nil {
 		return outcome{}, err
@@ -934,9 +961,12 @@ func (e *RuleEngine) guard(c *Ctx, after *afterCommit, r *eventRule, members []m
 	}
 	details := map[string]any{"action": p.describe()}
 	guardrail := ""
-	if window != nil {
-		guardrail = window.guardrail
-		for k, v := range window.details {
+	for _, w := range []*hold{window, escalated} {
+		if w == nil {
+			continue
+		}
+		guardrail = w.guardrail
+		for k, v := range w.details {
 			details[k] = v
 		}
 	}
@@ -951,6 +981,8 @@ func (e *RuleEngine) guard(c *Ctx, after *afterCommit, r *eventRule, members []m
 		why := "The rule is in approval mode."
 		if window != nil {
 			why = window.reason
+		} else if escalated != nil {
+			why = escalated.reason
 		}
 		return e.requestApproval(c, after, r, members, p, why, guardrail, details)
 	}
@@ -1396,7 +1428,7 @@ func (e *RuleEngine) execute(c *Ctx, after *afterCommit, r *eventRule, members [
 		if err != nil {
 			return outcome{}, err
 		}
-		return outcome{name: "launched", job: &job}, nil
+		return outcome{name: "launched", job: &job, prompts: p.body}, nil
 	case actionNotify:
 		id, err := createNotification(c, c.DB(), *r.Notification, nil, p.subject, p.message)
 		if err != nil {

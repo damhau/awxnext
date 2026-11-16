@@ -30,6 +30,8 @@ func init() {
 			Help: "awxnext fetches the keys of an OIDC event stream's issuer itself, from the address its credential gives, and refuses loopback (127.0.0.0/8, ::1), link-local (169.254.0.0/16, fe80::/10) and unspecified addresses, and cloud metadata services: they are awxnext's own host. Allow some here, one per entry: an address (127.0.0.1), a network (127.0.0.0/8), or an address and port (127.0.0.1:8443)."},
 		{Key: "EVENT_RULE_DECISION_RETENTION_DAYS", Category: "system", Type: "integer", Default: 90, Validate: atLeastZero, Label: "Days event rule decisions are kept",
 			Help: "Days the cleanup_event_streams management job keeps the decisions of event rules that matched: launched, throttled, held back, and the rest. Each is kept as long as its event at least. A decision whose filter didn't match is kept only as long as its event. 0: as long as their events."},
+		{Key: "EVENT_RULE_SUCCESS_RATE_DAYS", Category: "system", Type: "integer", Default: 30, Validate: successDays, Label: "Days of an event rule's success rate",
+			Help: "The days over which an event rule's success rate counts its checked fixes: the share of those that settled in that time that fixed their key. From 1 to 3650."},
 		{Key: "SUBSCRIPTIONS_USERNAME", Category: "system", Type: "string", Default: "", CompatOnly: true, Help: "No effect in awxnext: there are no Red Hat subscriptions to manage."},
 		{Key: "AUTOMATION_ANALYTICS_GATHER_INTERVAL", Category: "system", Type: "integer", Default: 14400, CompatOnly: true, Help: "No effect in awxnext: nothing is sent to Red Hat analytics."},
 		{Key: "INSIGHTS_TRACKING_STATE", Category: "system", Type: "boolean", Default: false, CompatOnly: true, Help: "No effect in awxnext: nothing is sent to Red Hat analytics."},
@@ -172,6 +174,13 @@ func stringList(v any) []string {
 		out = append(out, fmt.Sprint(x))
 	}
 	return out
+}
+
+func successDays(v any) error {
+	if n, err := strconv.ParseFloat(fmt.Sprint(v), 64); err == nil && (n < 1 || n > 3650) {
+		return errors.New("Ensure this value is between 1 and 3650.")
+	}
+	return nil
 }
 
 func atLeastZero(v any) error {

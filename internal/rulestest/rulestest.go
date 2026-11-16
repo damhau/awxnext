@@ -18,9 +18,11 @@
 // What needs no database is checked as the engine decides: the filter (a
 // miss names the part that failed), the key, the throttle or the pattern,
 // the circuit breaker, the maintenance windows and change freezes the
-// directory declares, and the action's expressions. The blast radius needs
-// the jobs running, and inventories: it is not checked. A test ends at its
-// until, or else once every window has ended.
+// directory declares, the action's expressions, and the check of each fix
+// by a resolving event, the action taking no time. The blast radius needs
+// the jobs running, and inventories, and a check template its job: they
+// are not checked. A test ends at its until, or else once every window has
+// ended.
 package rulestest
 
 import (
@@ -76,6 +78,8 @@ type rule struct {
 	pattern                    string
 	conditions                 []string
 	patternCount, patternWin   int64
+	checkKind, checkCondition  string
+	checkWindow                int64
 }
 
 type window struct {
@@ -96,6 +100,7 @@ type event struct {
 
 type expectation struct {
 	outcome, key, guardrail, reason string
+	check                           string
 	extraVars                       map[string]any
 	limit                           *string
 	message, eventData              any
@@ -263,6 +268,9 @@ func run(ctx context.Context, doc *gitops.Document, r *rule, windows []window, e
 			sr.Conditions = r.conditions
 		}
 	}
+	if r.checkKind == "event" {
+		sr.Check = rules.SimCheck{Condition: r.checkCondition, Window: time.Duration(r.checkWindow) * time.Second}
+	}
 	sim := rules.NewSimulator(sr,
 		func(ms []rules.Member, at time.Time) rules.Outcome {
 			out := r.act(ctx, windows, ms, at)
@@ -285,11 +293,31 @@ func run(ctx context.Context, doc *gitops.Document, r *rule, windows []window, e
 			continue
 		}
 		d := sim.Decisions[i]
+		if ev.expect.check != "" && r.checkKind == "template" {
+			res.Failures = append(res.Failures, ev.label+": the rule's check template runs on the server: awxnext rules test doesn't check it")
+			continue
+		}
+		d.Check = r.checkOutcome(d.Check)
 		if msg := ev.expect.compare(d, details[i]); msg != "" {
 			res.Failures = append(res.Failures, fmt.Sprintf("%s: %s", ev.label, msg))
 		}
 	}
 	return res
+}
+
+// checkOutcome is a simulated check's outcome as the engine records it: in
+// shadow mode, a key resolves by itself or not.
+func (r *rule) checkOutcome(o string) string {
+	if r.mode != "shadow" {
+		return o
+	}
+	switch o {
+	case rules.CheckFixed:
+		return "resolved"
+	case rules.CheckNotFixed:
+		return "unresolved"
+	}
+	return o
 }
 
 // describe is a decision as a failure tells it.
@@ -327,6 +355,13 @@ func (e *expectation) compare(d rules.SimDecision, details map[string]any) strin
 	}
 	if e.guardrail != "" && e.guardrail != d.Guardrail {
 		diffs = append(diffs, fmt.Sprintf("guardrail %q, want %q", d.Guardrail, e.guardrail))
+	}
+	if e.check != "" && e.check != d.Check {
+		got := d.Check
+		if got == "" {
+			got = "none"
+		}
+		diffs = append(diffs, fmt.Sprintf("check %s, want %s", got, e.check))
 	}
 	reason := d.Reason
 	if d.Miss != nil {
@@ -508,6 +543,9 @@ func (r *rule) check(s *rules.Schema) error {
 	if r.key != "" {
 		check("key", r.key, rules.String)
 	}
+	if r.checkKind == "event" {
+		check("check_condition", r.checkCondition, rules.Bool)
+	}
 	switch r.action {
 	case "launch":
 		names := make([]string, 0, len(r.extraVars))
@@ -579,6 +617,9 @@ func loadRule(d *gitops.Document) (*rule, error) {
 	text("pattern", &r.pattern)
 	number("pattern_count", &r.patternCount, 0, rules.MaxPatternEvents)
 	number("pattern_window", &r.patternWin, 0, 7*24*3600)
+	text("check", &r.checkKind)
+	text("check_condition", &r.checkCondition)
+	number("check_window", &r.checkWindow, 0, 7*24*3600)
 	switch v := s["conditions"].(type) {
 	case nil:
 	case []any:
@@ -615,6 +656,19 @@ func loadRule(d *gitops.Document) (*rule, error) {
 		errs = append(errs, "throttle_window: a throttle needs a window of at least one second")
 	}
 	errs = append(errs, r.patternProblems()...)
+	switch r.checkKind {
+	case "":
+	case "event":
+		if strings.TrimSpace(r.checkCondition) == "" {
+			errs = append(errs, "check_condition: an event check needs the condition of the event that resolves the key")
+		}
+		if r.checkWindow < 1 {
+			errs = append(errs, "check_window: an event check waits one second at least for the resolving event")
+		}
+	case "template":
+	default:
+		errs = append(errs, fmt.Sprintf("check: %q is not none, event or template", r.checkKind))
+	}
 	switch r.action {
 	case "launch", "notify":
 	case "post_event":
@@ -888,6 +942,7 @@ func expectation1(v any) (*expectation, error) {
 		e.key, _ = x["key"].(string)
 		e.guardrail, _ = x["guardrail"].(string)
 		e.reason, _ = x["reason"].(string)
+		e.check, _ = x["check"].(string)
 		if m, ok := x["extra_vars"].(map[string]any); ok {
 			e.extraVars = m
 		}
@@ -909,5 +964,11 @@ func expectation1(v any) (*expectation, error) {
 		sort.Strings(names)
 		return nil, fmt.Errorf("outcome %q is not one of %s", e.outcome, strings.Join(names, ", "))
 	}
+	if e.check != "" && !checkOutcomes[e.check] {
+		return nil, fmt.Errorf("check %q is not one of action_failed, fixed, not_fixed, pending, resolved, unresolved", e.check)
+	}
 	return e, nil
 }
+
+var checkOutcomes = map[string]bool{rules.CheckFixed: true, rules.CheckNotFixed: true, rules.CheckActionFailed: true, rules.CheckPending: true,
+	"resolved": true, "unresolved": true}

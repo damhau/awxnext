@@ -131,6 +131,7 @@
     "DEFAULT_PROJECT_UPDATE_TIMEOUT": {"category": "jobs"},
     "DISABLE_LOCAL_AUTH": {"category": "authentication"},
     "EVENT_RULE_DECISION_RETENTION_DAYS": {"category": "system"},
+    "EVENT_RULE_SUCCESS_RATE_DAYS": {"category": "system"},
     "EVENT_STDOUT_MAX_BYTES_DISPLAY": {"category": "jobs", "no_effect": true},
     "EVENT_STREAM_ALLOWED_LOCAL_ADDRESSES": {"category": "system"},
     "EVENT_STREAM_CLIENT_CERT_HEADER": {"category": "system"},

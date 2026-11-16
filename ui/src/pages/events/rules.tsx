@@ -10,8 +10,8 @@ import { useConfirm, useToast } from '../../components/overlay'
 import { UsedByPanel } from '../../components/UsedBy'
 import { Ago, Cell, Empty, ErrorNote, KV, Loading, PageHead, Panel, Tab, Upcoming } from '../../components/ui'
 import { duration, userName } from '../../lib/format'
-import { actionSummary, conditionLabel, MODE_LABELS, outcomeView, PATTERN_LABELS, patternSummary } from '../../lib/eventRules'
-import { tr, trn } from '../../lib/i18n'
+import { actionSummary, CHECK_STATE_LABELS, checkOutcomeView, conditionLabel, MODE_LABELS, outcomeView, PATTERN_LABELS, patternSummary, rateText, type CheckCounts } from '../../lib/eventRules'
+import { asIs, tr, trn } from '../../lib/i18n'
 import { ListPage, useDelete } from '../admin/common'
 import { Backtest } from './backtest'
 import { DecisionList, WindowProgress } from './decisions'
@@ -91,6 +91,20 @@ export function RuleList() {
         },
         { key: 'mode', header: tr('Mode'), sort: 'mode', render: (r) => <ModeBadge mode={r.mode} /> },
         { key: 'state', header: tr('State'), render: (r) => <State r={r} /> },
+        {
+          key: 'success',
+          header: tr('Success rate'),
+          render: (r) => {
+            const c = r.summary_fields.checks as CheckCounts | undefined
+            if (!r.check && !c?.checked) return <span className="faint small">{tr('No check')}</span>
+            return (
+              <div>
+                <span className="mono">{rateText(r.success_rate)}</span>
+                <div className="cell-sub">{trn(c?.checked ?? 0, '{n} fix checked', '{n} fixes checked')}</div>
+              </div>
+            )
+          },
+        },
         { key: 'fired', header: tr('Last fired'), sort: 'last_fired', render: (r) => (r.last_fired ? <Ago at={r.last_fired} /> : <span className="faint small">{tr('Never')}</span>) },
       ]}
       empty={<Empty title={tr('No event rules yet')}>{tr('Write a rule against a stream’s events. It starts in shadow mode: it records what it would do, and does nothing.')}</Empty>}
@@ -251,6 +265,8 @@ function Overview({ r }: { r: Any }) {
               [tr('Message'), r.action === 'notify' && r.message ? <span className="mono">{r.message}</span> : false],
               [tr('Event type'), r.action === 'post_event' ? <span className="mono">{r.event_type}</span> : false],
               [tr('Event data'), r.action === 'post_event' && r.event_data ? <span className="mono">{r.event_data}</span> : false],
+              [tr('Check the fix'), <CheckWhat r={r} />],
+              [tr('Resolving event'), r.check === 'event' ? <pre className="code">{r.check_condition}</pre> : false],
               [tr('Owner'), sf.owner ? <span title={tr('The rule runs with the rights of the user who last saved it.')}>{userName(sf.owner)}</span> : <span className="faint">—</span>],
               [tr('Last fired'), r.last_fired ? <Ago at={r.last_fired} /> : <span className="faint">{tr('Never')}</span>],
             ]}
@@ -266,18 +282,27 @@ function Overview({ r }: { r: Any }) {
               [tr('Concurrent runs'), r.action === 'launch' ? (r.max_concurrent_runs || <span className="faint">{tr('No limit')}</span>) : false],
               [tr('Host lock'), r.action === 'launch' ? (r.host_lock ? tr('On') : tr('Off')) : false],
               [tr('Group share'), r.action === 'launch' ? (r.max_group_share ? tr('{n} %', { n: r.max_group_share }) : <span className="faint">{tr('No limit')}</span>) : false],
+              [
+                tr('A fix that doesn’t work'),
+                r.check
+                  ? [
+                      sf.check_notification_template ? tr('Notifies {name}', { name: sf.check_notification_template.name }) : '',
+                      r.check_approval ? (r.mode === 'auto' ? tr('Asks for approval before the key’s next action') : tr('Asks for approval before the key’s next action, in auto mode')) : '',
+                      r.breaker_firings ? tr('Counts as one more firing for the circuit breaker') : '',
+                    ]
+                      .filter(Boolean)
+                      .join('. ') || <span className="faint">{tr('Only counts against the success rate')}</span>
+                  : false,
+              ],
             ]}
           />
         </Panel>
         <Breakers r={r} />
+        <Checks r={r} />
       </div>
       <div className="narrow stack" style={{ gap: 16 }}>
         <RecentDecisions id={r.id} />
-        <Panel title={tr('Success rate')}>
-          <p className="small faint" style={{ margin: 0 }}>
-            {tr('Not measured yet.')}
-          </p>
-        </Panel>
+        <SuccessRate r={r} />
         <UsedByPanel resource="event_rules" id={r.id} empty={tr('No maintenance window lists this rule.')} />
       </div>
     </div>
@@ -426,6 +451,144 @@ function Breakers({ r }: { r: Any }) {
               )}
             </li>
           ))}
+        </ul>
+      )}
+    </Panel>
+  )
+}
+
+/** What the rule does to check its fixes. */
+function CheckWhat({ r }: { r: Any }) {
+  const sf = r.summary_fields
+  if (r.check === 'event') return <>{tr('Waits {window} for a resolving event of the same key', { window: duration(r.check_window) })}</>
+  if (r.check === 'template') {
+    const t = sf.check_template
+    const name = t ? <Link to={t.type === 'workflow_job_template' || t.unified_job_type === 'workflow_job' ? `/templates/workflow/${t.id}` : `/templates/job/${t.id}`}>{t.name}</Link> : `#${r.check_template}`
+    return (
+      <>
+        {tr('Launches')} {name} {r.check_window ? tr('{window} after the action finished', { window: duration(r.check_window) }) : tr('once the action finished')}
+      </>
+    )
+  }
+  return <span className="faint">{tr('None')}</span>
+}
+
+/** The share of the rule's checked fixes that fixed their key. */
+function SuccessRate({ r }: { r: Any }) {
+  const c = r.summary_fields.checks as CheckCounts | undefined
+  if (!c) return null
+  const shadow = c.shadow
+  const empty = !c.checked && !shadow?.checked
+  const counts: [string, number, 'ok' | 'failed' | 'error' | 'running'][] = [
+    [tr('Fixed'), c.fixed, 'ok'],
+    [tr('Not fixed'), c.not_fixed, 'failed'],
+    [tr('Action failed'), c.action_failed, 'failed'],
+    [tr('Check errors'), c.errors, 'error'],
+    [tr('Under way'), c.pending, 'running'],
+  ]
+  return (
+    <Panel title={tr('Success rate')} actions={<span className="small faint">{trn(c.days, 'last day', 'last {n} days')}</span>}>
+      {empty && !c.pending ? (
+        <p className="small faint" style={{ margin: 0 }}>
+          {r.check ? tr('No check settled in that time.') : tr('The rule doesn’t check its fixes. Edit it to wait for a resolving event, or to run a check template, and it gets a success rate.')}
+        </p>
+      ) : (
+        <div className="stack" style={{ gap: 10 }}>
+          {c.checked > 0 && (
+            <div className="success-rate">
+              <span className="success-value">{rateText(c.success_rate)}</span>
+              <span className="small muted">{trn(c.checked, 'of {n} checked fix fixed its key', 'of {n} checked fixes fixed their key')}</span>
+              <div className="success-bar" role="img" aria-label={tr('{fixed} fixed, {not_fixed} not fixed, {failed} action failed', { fixed: c.fixed, not_fixed: c.not_fixed, failed: c.action_failed })}>
+                {c.fixed > 0 && <div className="fixed" style={{ flexGrow: c.fixed }} />}
+                {c.not_fixed > 0 && <div className="not-fixed" style={{ flexGrow: c.not_fixed }} />}
+                {c.action_failed > 0 && <div className="action-failed" style={{ flexGrow: c.action_failed }} />}
+              </div>
+            </div>
+          )}
+          <ul className="check-counts">
+            {counts
+              .filter(([, n], i) => n > 0 || i < 3)
+              .map(([label, n, cell]) => (
+                <li key={label}>
+                  <Cell state={n ? cell : 'empty'} />
+                  <span>{label}</span>
+                  <span className="mono">{n}</span>
+                </li>
+              ))}
+          </ul>
+          {shadow && shadow.checked > 0 && (
+            <p className="small muted" style={{ margin: 0 }}>
+              {tr('In shadow mode, {resolved} of {checked} keys resolved by themselves ({rate}): fixes would have looked that good with no action.', { resolved: shadow.resolved, checked: shadow.checked, rate: rateText(shadow.resolved_rate) })}
+            </p>
+          )}
+        </div>
+      )}
+    </Panel>
+  )
+}
+
+/** The rule's latest checks, the open ones first. */
+function Checks({ r }: { r: Any }) {
+  const list = useList<Any>(`event_rules/${r.id}/checks/`, { order_by: '-id', page_size: 20 }, { refetchInterval: 10_000 })
+  const rows = list.data?.results ?? []
+  if (!r.check && !rows.length) return null
+  const open = rows.filter((c) => c.state !== 'settled')
+  const shown = [...open, ...rows.filter((c) => c.state === 'settled')]
+  return (
+    <Panel title={tr('Checks')} actions={list.data && list.data.count > rows.length ? <span className="small faint">{trn(list.data.count, '{n} check', '{n} checks')}</span> : null}>
+      {list.error ? (
+        <ErrorNote error={list.error} />
+      ) : list.isPending ? (
+        <Loading rows={1} />
+      ) : !rows.length ? (
+        <p className="small faint" style={{ margin: 0 }}>
+          {tr('The rule hasn’t acted since it checks its fixes.')}
+        </p>
+      ) : (
+        <ul className="checks">
+          {shown.map((c) => {
+            const v = checkOutcomeView(c.outcome)
+            return (
+              <li key={c.id}>
+                <Cell state={v.cell} label={v.label} />
+                <span className="mono ellipsis" title={c.key}>
+                  {c.key || tr('all events')} {c.shadow && <span className="tag">{tr('shadow')}</span>}
+                </span>
+                <span className="small ellipsis">{c.state === 'settled' ? v.label : CHECK_STATE_LABELS[c.state] ?? c.state}</span>
+                <span className="small muted check-reason">
+                  {c.state === 'settled' ? (
+                    c.reason
+                  ) : c.deadline ? (
+                    <>
+                      {c.state === 'watching' ? tr('For the resolving event until') : tr('Launches the check')} <Upcoming at={c.deadline} />
+                    </>
+                  ) : (
+                    ''
+                  )}
+                  {c.escalated && <span className="tag">{tr('escalated')}</span>}
+                </span>
+                <span className="small nowrap">
+                  {c.event?.stream && (
+                    <Link to={`/event-streams/${c.event.stream}/events/${c.event.sequence}`} title={tr('The event that fired the action')}>
+                      {asIs(`#${c.event.sequence}`)}
+                    </Link>
+                  )}
+                  {c.job && (
+                    <>
+                      {' · '}
+                      <Link to={`/jobs/${c.summary_fields?.job?.type ?? 'job'}/${c.job}`}>{tr('action job')}</Link>
+                    </>
+                  )}
+                  {c.check_job && (
+                    <>
+                      {' · '}
+                      <Link to={`/jobs/${c.summary_fields?.check_job?.type ?? 'job'}/${c.check_job}`}>{tr('check job')}</Link>
+                    </>
+                  )}
+                </span>
+              </li>
+            )
+          })}
         </ul>
       )}
     </Panel>

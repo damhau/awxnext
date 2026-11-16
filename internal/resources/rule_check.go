@@ -35,6 +35,8 @@ type ruleDraft struct {
 	events                                         int
 	// conditions are the pattern's, when it has some.
 	conditions []string
+	// resolves is the condition of an event check.
+	resolves string
 }
 
 // checkDraft serves POST /event_rules/check/.
@@ -84,6 +86,9 @@ func readRuleDraft(body Obj) (*ruleDraft, error) {
 	d := &ruleDraft{streams: streamIDs(body["streams"]), action: str(body["action"]), filter: str(body["filter"]), key: str(body["key"]),
 		limit: str(body["limit"]), message: str(body["message"]), typ: str(body["event_type"]), data: str(body["event_data"]),
 		vars: map[string]string{}, events: checkEvents}
+	if str(body["check"]) == checkEvent {
+		d.resolves = str(body["check_condition"])
+	}
 	if d.action == "" {
 		d.action = actionLaunch
 	}
@@ -185,6 +190,7 @@ func checkRuleDraft(c *Ctx, d *ruleDraft) (Obj, error) {
 	}
 	filter := ok(draftExpr{"filter", d.filter, rules.Bool})
 	key := ok(draftExpr{"key", d.key, rules.String})
+	resolves := ok(draftExpr{"check_condition", d.resolves, rules.Bool})
 	conds := make([]string, len(d.conditions))
 	usable := 0
 	for i, cond := range d.conditions {
@@ -211,10 +217,25 @@ func checkRuleDraft(c *Ctx, d *ruleDraft) (Obj, error) {
 		o := Obj{"stream": ev.Stream, "sequence": ev.Sequence, "event_id": ev.ID, "event_type": ev.Type, "source": ev.Source,
 			"subject": ev.Subject, "received": api.FormatTime(ev.Received), "test_mode": ev.TestMode}
 		events = append(events, o)
-		if !filter || ctx.Err() != nil {
+		if ctx.Err() != nil {
 			continue
 		}
 		vars := rules.Vars{Event: rules.Value(ev)}
+		if resolves {
+			// A resolving event is looked at before the filter, as the
+			// engine does: it rarely matches it.
+			if hit, err := rules.Match(ctx, d.resolves, vars); err == nil && hit {
+				o["resolves"] = true
+				if key {
+					if k, err := rules.Text(ctx, d.key, vars); err == nil {
+						o["key"] = k
+					}
+				}
+			}
+		}
+		if !filter {
+			continue
+		}
 		hit, miss := rules.Filter(ctx, d.filter, vars)
 		o["matched"] = hit
 		if !hit {

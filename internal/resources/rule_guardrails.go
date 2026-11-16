@@ -36,6 +36,7 @@ const (
 	guardRuns        = "max_concurrent_runs"
 	guardHostLock    = "host_lock"
 	guardGroupShare  = "group_share"
+	guardEscalation  = "check_escalation"
 
 	// maxHeldHosts bounds the hosts a decision lists.
 	maxHeldHosts = 20
@@ -61,20 +62,25 @@ func (h *hold) outcome() outcome {
 }
 
 // checkRuleGuardrails checks, as a rule is saved, that its owner may use
-// the breaker's notification template.
+// the notification templates of its breaker and of its checks.
 func checkRuleGuardrails(c *Ctx, r *eventRule) error {
-	if r.BreakerNotification == nil {
-		return nil
-	}
-	ok, err := api.HasPermID(c, "notification_templates", *r.BreakerNotification, "change")
-	if errors.Is(err, api.ErrNotFound) {
-		return api.FieldError("breaker_notification_template", fmt.Sprintf("Invalid pk \"%d\" - object does not exist.", *r.BreakerNotification))
-	}
-	if err != nil {
-		return err
-	}
-	if !ok {
-		return api.Detail(403, fmt.Sprintf("%s may not use notification template %d.", c.User.Username, *r.BreakerNotification))
+	for _, n := range []struct {
+		field string
+		id    *int64
+	}{{"breaker_notification_template", r.BreakerNotification}, {"check_notification_template", r.CheckNotification}} {
+		if n.id == nil {
+			continue
+		}
+		ok, err := api.HasPermID(c, "notification_templates", *n.id, "change")
+		if errors.Is(err, api.ErrNotFound) {
+			return api.FieldError(n.field, fmt.Sprintf("Invalid pk \"%d\" - object does not exist.", *n.id))
+		}
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return api.Detail(403, fmt.Sprintf("%s may not use notification template %d.", c.User.Username, *n.id))
+		}
 	}
 	return nil
 }
@@ -96,18 +102,25 @@ func breakerState(ctx context.Context, db api.DBTX, r *eventRule, shadow bool, k
 		return true, 0, nil
 	}
 	// A reset counts the firings decided after it, and a rule entering
-	// shadow mode its shadow firings from then on.
-	err = db.QueryRow(ctx, `SELECT count(*) FROM event_rule_decisions WHERE rule_id = $1 AND key = $2 AND fired AND (mode = 'shadow') = $3
-		AND received > $4 AND received <= $5 AND ($6::timestamptz IS NULL OR created > $6)
-		AND (NOT $3 OR created > coalesce((SELECT shadow_since FROM event_rules WHERE id = $1), '-infinity'))`,
+	// shadow mode its shadow firings from then on. A check that found the
+	// key not fixed counts as one more firing, when it settled.
+	err = db.QueryRow(ctx, `SELECT (SELECT count(*) FROM event_rule_decisions WHERE rule_id = $1 AND key = $2 AND fired AND (mode = 'shadow') = $3
+			AND received > $4 AND received <= $5 AND ($6::timestamptz IS NULL OR created > $6)
+			AND (NOT $3 OR created > coalesce((SELECT shadow_since FROM event_rules WHERE id = $1), '-infinity')))
+		+ (SELECT count(*) FROM event_rule_checks WHERE rule_id = $1 AND key = $2 AND NOT $3 AND state = 'settled'
+			AND outcome IN ('not_fixed', 'action_failed') AND settled > $4 AND ($6::timestamptz IS NULL OR settled > $6))`,
 		r.ID, key, shadow, at.Add(-time.Duration(r.BreakerWindow)*time.Second), at, reset).Scan(&prior)
 	return prior >= r.BreakerFirings, prior, err
 }
 
 func breakerHold(r *eventRule, key string) outcome {
+	what := "the key fired"
+	if r.Check != "" {
+		what = "the key fired, or its fix didn't work,"
+	}
 	return (&hold{guardrail: guardBreaker, details: map[string]any{"key": key},
-		reason: fmt.Sprintf("The circuit breaker of key %q is open: the key fired %d times within %d seconds. Reset it to act again.",
-			key, r.BreakerFirings, r.BreakerWindow)}).outcome()
+		reason: fmt.Sprintf("The circuit breaker of key %q is open: %s %d times within %d seconds. Reset it to act again.",
+			key, what, r.BreakerFirings, r.BreakerWindow)}).outcome()
 }
 
 // tripBreaker opens a key's circuit breaker and, outside shadow mode, sends
@@ -123,9 +136,15 @@ func tripBreaker(ctx context.Context, db pgx.Tx, after *afterCommit, r *eventRul
 	subject := fmt.Sprintf("Event rule %s: the circuit breaker of key %q tripped", r.Name, key)
 	about := map[string]any{"rule": Obj{"id": r.ID, "name": r.Name}, "key": key, "firings": firings, "window": r.BreakerWindow,
 		"reset": api.Lookup("event_rules").URL(r.ID) + "reset_breaker/"}
+	return ruleNotice(ctx, db, after, *r.BreakerNotification, nil, subject, about)
+}
+
+// ruleNotice sends one of a rule's own notifications once committed: about
+// as the body, in text for an email.
+func ruleNotice(ctx context.Context, db pgx.Tx, after *afterCommit, tpl int64, job *int64, subject string, about map[string]any) error {
 	var body any = about
 	var typ string
-	if err := db.QueryRow(ctx, "SELECT notification_type FROM notification_templates WHERE id = $1", *r.BreakerNotification).Scan(&typ); err != nil {
+	if err := db.QueryRow(ctx, "SELECT notification_type FROM notification_templates WHERE id = $1", tpl).Scan(&typ); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil
 		}
@@ -135,7 +154,7 @@ func tripBreaker(ctx context.Context, db pgx.Tx, after *afterCommit, r *eventRul
 		b, _ := json.MarshalIndent(about, "", "  ")
 		body = string(b)
 	}
-	id, err := createNotification(ctx, db, *r.BreakerNotification, nil, subject, body)
+	id, err := createNotification(ctx, db, tpl, job, subject, body)
 	if err != nil {
 		return err
 	}

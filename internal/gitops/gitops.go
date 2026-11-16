@@ -131,7 +131,7 @@ var kinds = map[string]kind{
 	"JobTemplate":          {res: "job_templates"},
 	"WorkflowJobTemplate":  {res: "workflow_job_templates"},
 	"Schedule":             {res: "schedules", identity: scheduleIdentity},
-	"EventRule":            {res: "event_rules"},
+	"EventRule":            {res: "event_rules", relations: map[string]bool{"check_template": true}},
 	"MaintenanceWindow":    {res: "maintenance_windows", relations: map[string]bool{"event_rules": true, "groups": true}},
 	"EventConnector":       {res: "event_connectors"},
 }
@@ -657,6 +657,18 @@ func (r *reconciler) applyDoc(d *Document) error {
 				return err
 			}
 			data["unified_job_template"] = id
+		}
+		data["check_template"] = nil
+		if t, ok := d.Spec["check_template"]; ok && t != nil {
+			ref, err := templateRef(t)
+			if err != nil {
+				return fmt.Errorf("check_template: %w", err)
+			}
+			id, err := r.resolveTemplate(ref)
+			if err != nil {
+				return err
+			}
+			data["check_template"] = id
 		}
 	}
 	if d.Kind == "MaintenanceWindow" {

@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -14,7 +16,7 @@ func TestExamplesPass(t *testing.T) {
 		t.Fatal(err)
 	}
 	var out bytes.Buffer
-	if failed := Report(&out, results, true); failed != 0 || len(results) != 6 {
+	if failed := Report(&out, results, true); failed != 0 || len(results) != 7 {
 		t.Fatalf("%d of %d failed:\n%s", failed, len(results), out.String())
 	}
 }
@@ -60,5 +62,67 @@ func TestBrokenDirectory(t *testing.T) {
 	}
 	if _, err := Run(context.Background(), "testdata/none"); err == nil {
 		t.Error("a missing directory loaded")
+	}
+}
+
+func TestChecks(t *testing.T) {
+	dir := t.TempDir()
+	write := func(name, body string) {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("rules.yml", `kind: EventRule
+name: Watch
+spec:
+  filter: event.type == "alert.firing"
+  key: event.data.host
+  check: event
+  check_condition: event.type == "alert.resolved"
+  check_window: 300
+---
+kind: EventRule
+name: Probe
+spec:
+  filter: event.type == "alert.firing"
+  mode: auto
+  check: template
+  check_template: {kind: JobTemplate, name: Probe}
+`)
+	write("tests.yml", `kind: EventRuleTest
+name: Shadow mode watches the alert resolve
+spec:
+  rule: Watch
+  events:
+    - type: alert.firing
+      data: {host: a}
+      expect: {outcome: fired, check: resolved}
+    - type: alert.firing
+      data: {host: b}
+      expect: {outcome: fired, check: fixed}
+    - at: 1m
+      type: alert.resolved
+      data: {host: a}
+---
+kind: EventRuleTest
+name: A check template needs the server
+spec:
+  rule: Probe
+  events:
+    - type: alert.firing
+      expect: {outcome: fired, check: fixed}
+`)
+	results, err := Run(context.Background(), dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := [][]string{
+		{`event 2 (e2, at +1s): fired as expected, but check unresolved, want fixed`},
+		{`event 1 (e1, at +0s): the rule's check template runs on the server: awxnext rules test doesn't check it`},
+	}
+	for i, r := range results {
+		if strings.Join(r.Failures, "\n") != strings.Join(want[i], "\n") {
+			t.Errorf("test %d failures:\n%s", i+1, strings.Join(r.Failures, "\n"))
+		}
 	}
 }

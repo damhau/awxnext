@@ -16,6 +16,16 @@ import { DEFAULT_MAX_EVENTS, firstFailure, toGrid, toLines, useJobEvents } from 
 import { Matrix } from './Matrix'
 import { Output } from './Output'
 import { number, tr } from '../../lib/i18n'
+import { checkOutcomeView } from '../../lib/eventRules'
+
+/** A check of an event rule's fix, as a job's summary_fields gives it. */
+interface RuleCheck {
+  id: number
+  rule: number
+  key: string
+  outcome: string
+  role: 'action' | 'check'
+}
 
 const templateKind: Record<string, string> = { job: 'job_template', workflow_job: 'workflow_job_template', project_update: 'project', inventory_update: 'inventory_source', system_job: 'system_job_template' }
 
@@ -178,6 +188,20 @@ function JobView({ type, job }: { type: string; job: Job }) {
               </dd>
             </div>
           )}
+          {((sf.event_rule_checks ?? []) as RuleCheck[]).map((c) => {
+            const v = checkOutcomeView(c.outcome)
+            return (
+              <div key={`${c.role}-${c.id}`}>
+                <dt>{c.role === 'check' ? tr('Checks a fix') : tr('Fix')}</dt>
+                <dd className="sans">
+                  <Link to={`/event-rules/${c.rule}`} className="status" title={c.key ? tr('Key {key}', { key: c.key }) : undefined}>
+                    <Cell state={v.cell} />
+                    {v.label}
+                  </Link>
+                </dd>
+              </div>
+            )
+          })}
         </dl>
         <nav className="tabs" role="tablist" style={{ marginTop: 12 }}>
           <Tab to={base} end>

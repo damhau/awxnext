@@ -27,6 +27,8 @@ var (
 		"Outcomes the rules gave their decisions on this node: a decision that waits, for a window or an approval, counts again when it gets its final outcome.", "rule", "outcome")
 	ruleHeld = metrics.Default.NewCounter("awxnext_event_rule_held_total",
 		"Actions a guardrail held back on this node, by guardrail.", "rule", "guardrail")
+	ruleChecks = metrics.Default.NewCounter("awxnext_event_rule_checks_total",
+		"Checks of the rules' fixes settled on this node, by outcome: fixed, not_fixed, action_failed, error, canceled, and resolved or unresolved in shadow mode.", "rule", "outcome")
 )
 
 func idLabel(id int64) string { return strconv.FormatInt(id, 10) }
@@ -72,6 +74,7 @@ type ruleCounts struct {
 	matched  map[int64]int
 	outcomes map[ruleLabel]int
 	held     map[ruleLabel]int
+	checks   map[ruleLabel]int
 }
 
 type ruleLabel struct {
@@ -96,6 +99,13 @@ func (a *afterCommit) outcome(rule int64, out outcome, n int) {
 	}
 }
 
+func (a *afterCommit) checked(rule int64, outcome string) {
+	if a.counts.checks == nil {
+		a.counts.checks = map[ruleLabel]int{}
+	}
+	a.counts.checks[ruleLabel{rule, outcome}]++
+}
+
 func (c *ruleCounts) publish() {
 	for r, n := range c.matched {
 		ruleMatched.With(idLabel(r)).Add(float64(n))
@@ -105,5 +115,8 @@ func (c *ruleCounts) publish() {
 	}
 	for l, n := range c.held {
 		ruleHeld.With(idLabel(l.rule), l.label).Add(float64(n))
+	}
+	for l, n := range c.checks {
+		ruleChecks.With(idLabel(l.rule), l.label).Add(float64(n))
 	}
 }

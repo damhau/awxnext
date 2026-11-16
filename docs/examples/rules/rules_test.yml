@@ -66,18 +66,49 @@ spec:
   events:
     - type: alert.firing
       data: {labels: {alertname: ServiceDown, instance: db1, job: postgres}}
-      expect: fired
+      expect: {outcome: fired, check: fixed}
+    - at: 1m
+      type: alert.resolved
+      data: {labels: {alertname: ServiceDown, instance: db1, job: postgres}}
     - at: 2h
       type: alert.firing
       data: {labels: {alertname: ServiceDown, instance: db1, job: postgres}}
       expect: fired
+    - at: 2h1m
+      type: alert.resolved
+      data: {labels: {alertname: ServiceDown, instance: db1, job: postgres}}
     - at: 4h
       type: alert.firing
       data: {labels: {alertname: ServiceDown, instance: db1, job: postgres}}
       expect: fired
+    - at: 4h1m
+      type: alert.resolved
+      data: {labels: {alertname: ServiceDown, instance: db1, job: postgres}}
     - at: 6h
       type: alert.firing
       data: {labels: {alertname: ServiceDown, instance: db1, job: postgres}}
+      expect: {outcome: held, guardrail: circuit_breaker}
+---
+kind: EventRuleTest
+name: A restart that doesn't fix the service counts toward the breaker
+spec:
+  rule: Restart on ServiceDown
+  start: "2026-11-04T08:00:00Z"
+  events:
+    - type: alert.firing
+      data: {labels: {alertname: ServiceDown, instance: web1, job: nginx}}
+      expect: {outcome: fired, check: fixed}
+    - at: 5m
+      type: alert.resolved
+      data: {labels: {alertname: ServiceDown, instance: web1, job: nginx}}
+      expect: not_matched
+    - at: 2h
+      type: alert.firing
+      data: {labels: {alertname: ServiceDown, instance: web1, job: nginx}}
+      expect: {outcome: fired, check: not_fixed}
+    - at: 4h
+      type: alert.firing
+      data: {labels: {alertname: ServiceDown, instance: web1, job: nginx}}
       expect: {outcome: held, guardrail: circuit_breaker}
 ---
 kind: EventRuleTest

@@ -7,8 +7,8 @@ import (
 )
 
 // The simulator decides events as the rule engine does, in memory: the
-// filter, the key, the throttle or the pattern, and the circuit breaker,
-// without the database. Backtests and `awxnext rules test` run it; the caller's Act
+// filter, the key, the throttle or the pattern, the circuit breaker and
+// the check of each fix by a resolving event, without the database. Backtests and `awxnext rules test` run it; the caller's Act
 // stands for the guardrails and the action.
 
 // SimRule is what the simulator needs of a rule.
@@ -23,6 +23,18 @@ type SimRule struct {
 	// an empty Kind: none.
 	Pattern    Pattern
 	Conditions []string
+	// Check is how the rule checks its fixes by a resolving event; an
+	// empty Condition: no check.
+	Check SimCheck
+}
+
+// SimCheck is a rule's check by a resolving event: one matching Condition
+// on the key, within Window after the action finished, the action taking
+// RunTime.
+type SimCheck struct {
+	Condition string
+	Window    time.Duration
+	RunTime   time.Duration
 }
 
 // SimEvent is an event as expressions see it (Value), and when it was
@@ -53,6 +65,14 @@ const (
 	Failed       = "failed"
 )
 
+// The outcomes of simulated checks.
+const (
+	CheckPending      = "pending"
+	CheckFixed        = "fixed"
+	CheckNotFixed     = "not_fixed"
+	CheckActionFailed = "action_failed"
+)
+
 // Outcome is what the action did, or would do, for members.
 type Outcome struct {
 	Name      string
@@ -78,6 +98,10 @@ type SimDecision struct {
 	// At is when the action ran: the end of its once_after window, or
 	// when its pattern fired.
 	At time.Time
+	// Check is what the check of the action's fix found; empty: no check.
+	Check string
+	// ResolvedBy is the index of the event that resolved the key.
+	ResolvedBy *int
 }
 
 // FiredOutcome says whether an outcome counts as a firing for the circuit
@@ -103,6 +127,13 @@ type Simulator struct {
 	window   *simWindow
 	patterns map[string]*PatternState
 	waiting  map[int64]Member
+	checks   []*simCheck
+}
+
+type simCheck struct {
+	key              string
+	opened, deadline time.Time
+	decisions        []int
 }
 
 type simWindow struct {
@@ -121,8 +152,10 @@ func NewSimulator(r SimRule, act Act) *Simulator {
 func (s *Simulator) Add(ctx context.Context, ev SimEvent) {
 	i := len(s.Decisions)
 	s.Decisions = append(s.Decisions, SimDecision{Index: i})
-	d := &s.Decisions[i]
 	vars := Vars{Event: ev.Value}
+	s.expireChecks(ev.Received, false)
+	s.resolveChecks(ctx, i, ev, vars)
+	d := &s.Decisions[i]
 	ok, miss := Filter(ctx, s.rule.Filter, vars)
 	if !ok {
 		d.Outcome, d.Reason, d.Miss = NotMatched, miss.Reason(), miss
@@ -190,12 +223,114 @@ func (s *Simulator) Add(ctx context.Context, ev SimEvent) {
 }
 
 // Finish fires the once_after window when it ends by until, and moves the
-// patterns' windows to until; their events stay waiting otherwise.
+// patterns' windows to until; their events stay waiting otherwise. The
+// checks whose window ended by until find their key not fixed; the others
+// stay pending.
 func (s *Simulator) Finish(until time.Time) {
 	if s.window != nil && !s.window.fireAt.After(until) {
 		s.fireWindow()
 	}
 	s.advance(until)
+	s.expireChecks(until, true)
+}
+
+// openChecks opens the check of each key an action ran for.
+func (s *Simulator) openChecks(members []Member, out Outcome, at time.Time) {
+	if s.rule.Check.Condition == "" {
+		return
+	}
+	var outcome string
+	switch out.Name {
+	case Fired, Approval:
+		outcome = CheckPending
+	case Failed, Error:
+		outcome = CheckActionFailed
+	default:
+		return
+	}
+	byKey := map[string]*simCheck{}
+	for _, m := range members {
+		c := byKey[m.Key]
+		if c == nil {
+			c = &simCheck{key: m.Key, opened: m.Event.Received, deadline: at.Add(s.rule.Check.RunTime + s.rule.Check.Window)}
+			byKey[m.Key] = c
+			if outcome == CheckPending {
+				s.checks = append(s.checks, c)
+			} else {
+				s.fixFailed(m.Key, at)
+			}
+		}
+		if m.Event.Received.After(c.opened) {
+			c.opened = m.Event.Received
+		}
+		c.decisions = append(c.decisions, m.Index)
+		s.Decisions[m.Index].Check = outcome
+	}
+}
+
+// expireChecks finds the keys of the checks whose window ended before now
+// not fixed; at until too.
+func (s *Simulator) expireChecks(now time.Time, until bool) {
+	open := s.checks[:0]
+	for _, c := range s.checks {
+		if c.deadline.Before(now) || until && c.deadline.Equal(now) {
+			for _, i := range c.decisions {
+				s.Decisions[i].Check = CheckNotFixed
+			}
+			s.fixFailed(c.key, c.deadline)
+			continue
+		}
+		open = append(open, c)
+	}
+	s.checks = open
+}
+
+// resolveChecks settles fixed the open checks of the key an event resolves.
+func (s *Simulator) resolveChecks(ctx context.Context, i int, ev SimEvent, vars Vars) {
+	if len(s.checks) == 0 {
+		return
+	}
+	if ok, err := Match(ctx, s.rule.Check.Condition, vars); err != nil || !ok {
+		return
+	}
+	key := ""
+	if s.rule.Key != "" {
+		k, err := Text(ctx, s.rule.Key, vars)
+		if err != nil {
+			return
+		}
+		key = k
+	}
+	open := s.checks[:0]
+	for _, c := range s.checks {
+		if c.key != key || ev.Received.Before(c.opened) {
+			open = append(open, c)
+			continue
+		}
+		for _, d := range c.decisions {
+			s.Decisions[d].Check, s.Decisions[d].ResolvedBy = CheckFixed, &i
+		}
+	}
+	s.checks = open
+}
+
+// fixFailed counts a fix that didn't work as one more firing of its key,
+// as the engine does, and trips the key's breaker when it reaches it.
+func (s *Simulator) fixFailed(key string, at time.Time) {
+	if s.rule.BreakerFirings <= 0 {
+		return
+	}
+	times := s.firings[key]
+	j := sort.Search(len(times), func(i int) bool { return times[i].After(at) })
+	times = append(times, time.Time{})
+	copy(times[j+1:], times[j:])
+	times[j] = at
+	s.firings[key] = times
+	if open, _ := s.breaker(key, at); open {
+		if _, ok := s.Tripped[key]; !ok {
+			s.Tripped[key] = at
+		}
+	}
 }
 
 // addPattern adds an event to its key's window, as the engine does.
@@ -286,15 +421,15 @@ func (s *Simulator) firePattern(key string, members []Member, at time.Time) {
 	for _, m := range members {
 		s.set(m.Index, out, key, at)
 	}
-	if !FiredOutcome(out.Name) {
-		return
-	}
-	s.firings[key] = append(s.firings[key], at)
-	if s.rule.BreakerFirings > 0 && n+1 >= s.rule.BreakerFirings {
-		if _, ok := s.Tripped[key]; !ok {
-			s.Tripped[key] = at
+	if FiredOutcome(out.Name) {
+		s.firings[key] = append(s.firings[key], at)
+		if s.rule.BreakerFirings > 0 && n+1 >= s.rule.BreakerFirings {
+			if _, ok := s.Tripped[key]; !ok {
+				s.Tripped[key] = at
+			}
 		}
 	}
+	s.openChecks(members, out, at)
 }
 
 func (s *Simulator) fireWindow() {
@@ -337,6 +472,7 @@ func (s *Simulator) fire(members []Member, at time.Time) {
 			}
 		}
 	}
+	s.openChecks(acting, out, at)
 }
 
 // breaker says whether a key's breaker is open for an event received at

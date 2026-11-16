@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   checkBody,
+  checkOutcomeView,
   completionsAt,
   conditionsFor,
   draftOf,
@@ -16,6 +17,7 @@ import {
   patternSummary,
   progressCells,
   progressText,
+  rateText,
   ruleBody,
   seenText,
   setupSnippets,
@@ -206,6 +208,38 @@ describe('the rule draft', () => {
     expect(splitSeconds(90)).toEqual({ n: 90, unit: 1 })
     expect(splitSeconds(0)).toEqual({ n: 0, unit: 1 })
     expect(splitSeconds(172800)).toEqual({ n: 2, unit: 86400 })
+  })
+  it('sends the chosen check’s fields only', () => {
+    const d = draftOf({ check: 'event', check_condition: 'event.type == "resolved"', check_window: 300, check_template: 7, check_notification_template: 3, check_approval: true })
+    expect(ruleBody(d)).toMatchObject({ check: 'event', check_condition: 'event.type == "resolved"', check_window: 300, check_template: null, check_notification_template: 3, check_approval: true })
+    expect(checkBody(d)).toMatchObject({ check: 'event', check_condition: 'event.type == "resolved"' })
+    d.check = 'template'
+    expect(ruleBody(d)).toMatchObject({ check: 'template', check_condition: '', check_window: 300, check_template: 7 })
+    expect(checkBody(d).check_condition).toBe('')
+    d.check = ''
+    expect(ruleBody(d)).toMatchObject({ check: '', check_condition: '', check_window: 0, check_template: null, check_notification_template: null, check_approval: false })
+  })
+  it('gives a new check ten minutes, and keeps a saved check’s window', () => {
+    expect(draftOf()).toMatchObject({ check: '', check_window: 600, check_approval: false })
+    expect(draftOf({ check: 'template', check_window: 0 }).check_window).toBe(0)
+  })
+})
+
+describe('checks', () => {
+  it('shows each check outcome as a cell', () => {
+    expect(checkOutcomeView('fixed')).toEqual({ cell: 'ok', label: 'Fixed' })
+    expect(checkOutcomeView('not_fixed').cell).toBe('failed')
+    expect(checkOutcomeView('action_failed').cell).toBe('failed')
+    expect(checkOutcomeView('pending').cell).toBe('running')
+    expect(checkOutcomeView('resolved').cell).toBe('changed')
+    expect(checkOutcomeView('something_new')).toEqual({ cell: 'empty', label: 'something_new' })
+  })
+  it('writes a success rate as a whole percentage', () => {
+    expect(rateText(0.666)).toBe('67%')
+    expect(rateText(1)).toBe('100%')
+    expect(rateText(0)).toBe('0%')
+    expect(rateText(null)).toBe('—')
+    expect(rateText(undefined)).toBe('—')
   })
 })
 

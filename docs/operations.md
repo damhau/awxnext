@@ -1035,7 +1035,9 @@ hosts are left out.
 When a key fires `breaker_firings` times within `breaker_window` seconds, its circuit breaker
 trips: the rule holds back the key's events, with the guardrail `circuit_breaker`, until a person
 resets it. A firing is an action that ran, failed, waited for approval, or would have run in
-`shadow` mode. The other keys are not affected. `0` turns the breaker off.
+`shadow` mode. A [check](#checking-fixes) that finds the key not fixed, or the action failed,
+counts as one more firing: a failed action counts twice. The other keys are not affected. `0`
+turns the breaker off.
 
 When the breaker trips, awxnext sends a notification with `breaker_notification_template`. A
 `webhook` posts the rule, the `key`, the `firings`, the `window` and the `reset` URL; an `email`
@@ -1101,6 +1103,116 @@ curl -u admin -H 'Content-Type: application/json' https://awxnext.example.com/ap
 }'
 ```
 
+### Checking fixes
+
+A rule can check that its action fixed the problem that fired it: it waits for the event that
+shows the key resolved, such as the alert resolved, or it runs a check template. Each check
+gets an outcome, and the rule gets a success rate.
+
+| Field | What it sets |
+|---|---|
+| `check` | `event`: wait for a resolving event. `template`: launch `check_template`. Empty, the default: no check. |
+| `check_condition` | For `event`: a CEL condition on `event` that a resolving event matches, such as `event.type == "alert.resolved"`. The rule's `key`, evaluated on that event, names the key it resolves. The filter doesn't apply to it. |
+| `check_window` | For `event`: the seconds the rule waits for the resolving event once the action finished, 1 at least. For `template`: the seconds it waits before it launches the check template; `0` launches it at once. |
+| `check_template` | For `template`: the job or workflow template that checks the fix. |
+| `check_notification_template` | Optional: the notification sent when a check finds a key not fixed, or the action failed. |
+| `check_approval` | In `auto` mode: once a check finds a key not fixed, the rule's next action on the key waits for an approval, until a check finds the key fixed. |
+
+A notification or a posted event finishes at once; a launch finishes when its job does. Each
+action opens one check for each key it ran for: a pattern's action, one for its key.
+
+With `check: event`, the check is `fixed` when an event of the rule's streams that matches
+`check_condition` resolves the key after the event that fired the action, while the job runs or
+within `check_window` seconds after it finished. Otherwise, the check is `not_fixed`. The rule
+looks at each event for the conditions of its open checks before it applies its filter, so a
+resolving event that the filter doesn't match still resolves the key. The window ends once the
+rule has read the events received before its end: a backlog doesn't make a check miss a
+resolving event received in time.
+
+With `check: template`, awxnext launches `check_template` as the rule's owner, `check_window`
+seconds after the action finished. For a rule that launches, the check template gets the
+action's `extra_vars` and `limit`, so it must prompt for them, as the action's template does.
+The job decides: `successful` is `fixed`, `failed` is `not_fixed`, and `error` or `canceled`
+gives `error`. A playbook that sets the artifact `fixed` decides by it instead, whatever the
+job's status:
+
+```yaml
+- name: Ask the service for its health
+  ansible.builtin.uri:
+    url: "http://{{ inventory_hostname }}/healthz"
+  register: health
+  failed_when: false
+- name: Report the service as not fixed
+  ansible.builtin.set_stats:
+    data: {fixed: false}
+    per_host: false
+  when: health.status != 200
+```
+
+| Outcome | Meaning |
+|---|---|
+| `pending` | The check is under way: the action runs, the rule waits for the resolving event, or the check job runs. |
+| `fixed` | The resolving event came in time, or the check job succeeded or set `fixed` to `true`. |
+| `not_fixed` | No resolving event came in time, or the check job failed or set `fixed` to `false`. |
+| `action_failed` | The action failed: the template refused the launch, or the action's job failed or ended in error. |
+| `error` | The check couldn't decide: the check job ended in error or was canceled, the check template couldn't launch, or a job was deleted. |
+| `canceled` | The action's job was canceled, or the rule was disabled, stopped, or got another `check` before the check ended. |
+| `resolved`, `unresolved` | In `shadow` mode: whether the key resolved by itself, with no action. |
+
+In `shadow` mode, the rule only watches: an event check waits `check_window` seconds from the
+decision, and a template check doesn't run. Its outcomes, `resolved` and `unresolved`, say how
+many keys would have looked fixed with no action. Compare them with the success rate in
+`auto` mode before you trust the rule's fixes. Shadow checks don't count toward the success
+rate and don't escalate. In `approval` mode, the check starts when the approved action runs.
+
+A check is a row in PostgreSQL: it survives a restart, and the node that holds a stream, or any
+node once the check is due, settles it.
+
+#### Escalation
+
+When a check finds a key `not_fixed`, or the action failed, outside `shadow` mode:
+
+- awxnext sends `check_notification_template`. A `webhook` posts the `rule`, the `key`, the
+  firing `event`, the action's `job`, and the `check` with its `id`, `outcome`, `reason` and
+  `url`; an `email` has them in its body.
+- With `check_approval`, in `auto` mode, the key's next action waits for a workflow approval,
+  as in [approval mode](#approval-mode). Its decision has the guardrail `check_escalation`.
+  Once a check finds the key fixed, the rule acts by itself again.
+- The check counts as one more firing for the [circuit breaker](#circuit-breaker), and can trip
+  it at once.
+
+`escalated` marks the checks that notified or asked for approval.
+
+#### Success rate
+
+A rule's `success_rate` is the share of its checks settled in the last
+**Days of an event rule's success rate** (`EVENT_RULE_SUCCESS_RATE_DAYS`, 30 by default) that
+found the key fixed: `fixed` out of `fixed`, `not_fixed` and `action_failed`. It is `null` when
+no check settled in that time. `summary_fields.checks` holds the counts: `checked`, `fixed`,
+`not_fixed`, `action_failed`, `errors` (`error` and `canceled`, which the rate leaves out),
+`pending`, and the `shadow` checks' `checked`, `resolved` and `resolved_rate`.
+
+`GET /api/v2/event_rules/N/checks/` lists a rule's checks, and `/api/v2/event_rule_checks/` the
+checks of every rule you can see. Each check has its `key`, `kind`, `mode`, the firing `event`
+and the `decisions` it checks, the `action`'s outcome and `job`, the `check_job`, its `state`
+(`acting`, `watching`, `checking` or `settled`), its `outcome` and `reason`, the `deadline`, and
+the event that resolved the key in `resolved_by`. A decision names its check in `check` and the
+check's outcome in `check_outcome`. A job's `summary_fields.event_rule_checks` lists the checks
+it is the action of (`role: action`) or the check job of (`role: check`).
+
+The metric `awxnext_event_rule_checks_total{rule, outcome}` counts the checks by outcome on each
+node. To graph a rule's success rate across nodes:
+
+```promql
+sum by (rule) (increase(awxnext_event_rule_checks_total{outcome="fixed"}[7d]))
+  / sum by (rule) (increase(awxnext_event_rule_checks_total{outcome=~"fixed|not_fixed|action_failed"}[7d]))
+```
+
+In the UI, the rule's page shows its success rate and its latest checks, and the list of rules
+a column of success rates. The editor's **Check the fix** section sets the check, and its
+pane of latest events tags the ones that resolve a key. A decision shows its check's outcome,
+and a job page the fix it made or checked.
+
 ### Decisions
 
 `GET /api/v2/event_rules/N/decisions/` lists what the rule decided for each event it read, newest
@@ -1110,7 +1222,8 @@ decision has the event (`stream`, `sequence`, `event_id`, `event_type`, `receive
 that decided, the rule's `mode` then, the `key`, the `outcome` and its `reason`, the `guardrail`
 that held the action back or sent it for approval, the `approval` it waits for, the `job`
 launched, and the `trace_id` of the event's [trace](#metrics-and-traces). `fired` marks the
-decisions that count toward the circuit breaker. For a rule with a [pattern](#patterns),
+decisions that count toward the circuit breaker. For a rule that [checks its fixes](#checking-fixes),
+`check` names the check of the action and `check_outcome` gives its outcome. For a rule with a [pattern](#patterns),
 `details.pattern` holds the key's window when the rule decided: its `kind`, the `events` it
 holds, `seen` of `needed`, and `until` when it ends; a `cleared` decision names the event that
 cleared it in `details.cleared_by`.
@@ -1157,7 +1270,8 @@ To keep the log small, a `not_matched` decision is kept as long as its event, fo
 (`EVENT_RULE_DECISION_RETENTION_DAYS`, 90 by default), or longer when their stream keeps its
 events longer; `0` keeps them as long as their events. The management job
 **Cleanup Event Streams** removes them, the throttle keys that expired more than a day ago, and
-the pattern windows a day past their deadline.
+the pattern windows a day past their deadline, and the checks of fixes settled before the oldest
+decisions it keeps.
 The decision log is partitioned by day, like the event log.
 
 ### Backtests
@@ -1191,6 +1305,14 @@ by guardrail, the `keys` and `hosts` that fired most, at most 100 of each, the c
 200 `decisions` that matched. `truncated` is `true` when the period held more events than
 `max_events`, or the backtest stopped at its 30-second limit: `until` is then the last event read.
 
+For a rule with an event [check](#checking-fixes), `checks` counts the firings whose key a
+resolving event of the log resolved in time (`resolved`), those it didn't (`unresolved`), the
+`action_failed`, and the `pending` ones whose window was still open at `until`; `resolved_rate`
+is `resolved` out of the three. Those events resolved the keys without the rule's actions, or
+by the actions taken then: in `shadow` mode, the rate is how many fixes would have looked good
+anyway. Each decision that fired has its `check_outcome`, and the event that resolved it in
+`resolved_by`. Check templates don't run in a backtest.
+
 A backtest approximates what happened. Its `approximations` list says how:
 
 - Throttles, `once_after` windows, patterns' windows and circuit breakers start empty at
@@ -1201,6 +1323,9 @@ A backtest approximates what happened. Its `approximations` list says how:
   but the rule's own, and the launches that the backtest simulates. A simulated launch runs as
   long as the template's last finished jobs took on average, or five minutes.
 - An action that would ask for approval counts as `awaiting_approval`, and as a firing.
+- An action's check starts when the action fires, and lasts the template's average run time
+  and `check_window`. A key not fixed counts toward the circuit breaker, and doesn't ask for
+  approval.
 
 To run a backtest, you need to see the rule, its streams, and the template, notification
 template or stream it acts on. Otherwise awxnext refuses with `403`.
@@ -1239,7 +1364,8 @@ spec:
 ```
 
 An event is a CloudEvent's `type`, `data`, and optionally `id`, `source`, `subject`, `time` and
-`extensions`. Or it is a `payload` as a stream of `format` receives it, such as `alertmanager`,
+`extensions`. An event without `expect` is only read, such as an alert resolved that settles a
+check. Or it is a `payload` as a stream of `format` receives it, such as `alertmanager`,
 with optional `headers`: a payload can make several events, and `expect` then takes one
 expectation, or a list of one for each event. `at` is a duration after `start`, or a date and
 time; without `at`, an event is received a second after the one before. `rule` can be left out
@@ -1257,6 +1383,7 @@ every window has ended, so an absence fires and an incomplete count, `all` or se
 | `extra_vars`, `limit` | For a launch: the variables listed, and the limit. |
 | `message` | For a notification: the message. |
 | `event_type`, `event_data` | For a posted event: its type and data. |
+| `check` | For a rule with an event [check](#checking-fixes): the check's outcome, `fixed`, `not_fixed`, `action_failed` or `pending`, or in `shadow` mode `resolved` or `unresolved`. The test's later events resolve the key. Without `until`, a check that no event resolved is `not_fixed`; with `until`, one whose window is still open then is `pending`. |
 
 The outcomes are `fired` (the rule acted, or would have in `shadow` mode), `awaiting_approval`,
 `held`, `throttled`, `deduplicated`, `waiting`, `expired`, `cleared`, `ignored`, `not_matched`
@@ -1266,7 +1393,9 @@ maintenance windows and change freezes the directory declares for the rule or fo
 and the action's expressions, which it type-checks against the test's events. The blast radius
 (`max_concurrent_runs`, `host_lock`, `max_group_share`) needs the jobs running on a server, and
 windows that list only inventory groups need the inventory: the test doesn't check them, and an
-expectation of a hold by one of them fails. A `once_after` window still open at the end of a test
+expectation of a hold by one of them fails. A check template runs on the server too: an
+expectation of its `check` fails. A check that finds a key not fixed counts toward the circuit
+breaker, as on the server. A `once_after` window still open at the end of a test
 fires. This test checks the absence rule in [Patterns](#patterns), declared in git:
 
 ```yaml
@@ -1314,6 +1443,7 @@ never by key or event value:
 | `awxnext_event_rule_matched_total{rule}` | Events the rule's filter held for. |
 | `awxnext_event_rule_decisions_total{rule, outcome}` | Decisions by outcome. A decision that waits for a window or an approval counts again when it gets its final outcome, such as `launched` or `failed`. |
 | `awxnext_event_rule_held_total{rule, guardrail}` | Actions a guardrail held back. |
+| `awxnext_event_rule_checks_total{rule, outcome}` | [Checks of fixes](#checking-fixes) settled, by outcome. |
 
 With tracing on (`OTEL_EXPORTER_OTLP_ENDPOINT`), each event the rules decide has a trace: a span
 `event_stream event`, with a span `event_rule decide` for each rule that matched it, and the

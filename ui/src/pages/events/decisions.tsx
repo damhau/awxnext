@@ -5,7 +5,7 @@ import type { Any } from '../../api/types'
 import { Pager } from '../../components/table'
 import { Ago, Cell, Empty, ErrorNote, Loading } from '../../components/ui'
 import { absolute } from '../../lib/format'
-import { conditionLabel, GUARDRAIL_LABELS, missParts, MODE_LABELS, OUTCOME_FILTERS, outcomeView, PATTERN_LABELS, progressCells, progressText, seenText, type MissDetails, type PatternProgress } from '../../lib/eventRules'
+import { checkOutcomeView, conditionLabel, GUARDRAIL_LABELS, missParts, MODE_LABELS, OUTCOME_FILTERS, outcomeView, PATTERN_LABELS, progressCells, progressText, seenText, type MissDetails, type PatternProgress } from '../../lib/eventRules'
 import { asIs, tr, trn } from '../../lib/i18n'
 import { FilterBox } from '../admin/common'
 
@@ -97,6 +97,16 @@ export function DecisionBody({ d, filter, conditions }: { d: Any; filter?: strin
   if (d.key) facts.push([tr('Key'), <span className="mono">{d.key}</span>])
   if (d.job) facts.push([tr('Job'), <Link to={`/jobs/${d.summary_fields?.job?.type ?? 'job'}/${d.job}`}>#{d.job}</Link>])
   if (d.approval) facts.push([tr('Approval'), <Link to="/approvals">#{d.approval}</Link>])
+  if (d.check_outcome) {
+    const v = checkOutcomeView(d.check_outcome)
+    facts.push([
+      tr('Fix'),
+      <Link to={`/event-rules/${d.rule}`} className="status" title={tr('Check {id}', { id: d.check })}>
+        <Cell state={v.cell} />
+        {v.label}
+      </Link>,
+    ])
+  }
   if (cleared) facts.push([tr('Cleared by'), <Link to={`/event-streams/${cleared.stream}/events/${cleared.sequence}`}>#{cleared.sequence}</Link>])
   if (d.event_id) facts.push([tr('Event ID'), <span className="mono">{d.event_id}</span>])
   if (d.node) facts.push([tr('Node'), <span className="mono">{d.node}</span>])
@@ -190,6 +200,7 @@ export function DecisionList({ path, by, filter, conditions, empty }: { path: st
                     </Link>
                   )}
                   <span className="mono faint small"> {d.event_type}</span>
+                  {d.check_outcome && <span className="tag decision-check">{checkOutcomeView(d.check_outcome).label}</span>}
                 </span>
                 <span className="decision-key mono small ellipsis">{d.key || ''}</span>
                 <span className="decision-reason small muted ellipsis">{d.reason}</span>

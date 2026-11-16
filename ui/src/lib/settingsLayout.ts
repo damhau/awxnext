@@ -276,6 +276,11 @@ export const settingsPages: SettingsPage[] = [
             unit: tr('days'),
             none: [0, tr('As long as their events')],
           }),
+          row('EVENT_RULE_SUCCESS_RATE_DAYS', {
+            label: tr('Measure rules\' success rate over'),
+            help: tr('A rule\'s success rate counts the checks of its fixes that settled in this time: the share that fixed their key.'),
+            unit: tr('days'),
+          }),
         ],
       },
       { id: 'named-url', title: tr('Named URLs'), rows: [row('NAMED_URL_FORMATS', { label: tr('Named URL formats') }), row('NAMED_URL_GRAPH_NODES', { label: tr('Named URL graph') })] },

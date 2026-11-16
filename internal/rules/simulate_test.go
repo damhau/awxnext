@@ -76,3 +76,43 @@ func TestSimulatorOnceWithinAndBreaker(t *testing.T) {
 		t.Errorf("tripped %v", sim.Tripped)
 	}
 }
+
+func TestSimulatorChecks(t *testing.T) {
+	start := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	fail := map[string]bool{"c": true}
+	sim := NewSimulator(SimRule{Filter: `event.type == "firing"`, Key: `event.host`, BreakerFirings: 2, BreakerWindow: time.Hour,
+		Check: SimCheck{Condition: `event.type == "resolved"`, Window: 5 * time.Minute, RunTime: time.Minute}},
+		func(ms []Member, at time.Time) Outcome {
+			if fail[ms[0].Key] {
+				return Outcome{Name: Failed}
+			}
+			return Outcome{Name: Fired}
+		})
+	ev := func(after time.Duration, typ, host string) {
+		sim.Add(context.Background(), SimEvent{Received: start.Add(after), Value: map[string]any{"type": typ, "host": host}})
+	}
+	ev(0, "firing", "a")
+	ev(0, "firing", "b")
+	ev(0, "firing", "c")
+	ev(2*time.Minute, "resolved", "a")
+	ev(7*time.Minute, "resolved", "b")
+	ev(8*time.Minute, "firing", "b")
+	ev(9*time.Minute, "firing", "d")
+	sim.Finish(start.Add(10 * time.Minute))
+	want := []string{CheckFixed, CheckNotFixed, CheckActionFailed, "", "", "", CheckPending}
+	for i, d := range sim.Decisions {
+		if d.Check != want[i] {
+			t.Errorf("decision %d: check %q, want %q", i, d.Check, want[i])
+		}
+	}
+	if r := sim.Decisions[0].ResolvedBy; r == nil || *r != 3 {
+		t.Errorf("resolved by %v", r)
+	}
+	// b fired, and its fix didn't work: the breaker counts two firings.
+	if d := sim.Decisions[5]; d.Outcome != Held || d.Guardrail != "circuit_breaker" {
+		t.Errorf("b's second firing: %+v", d)
+	}
+	if at, ok := sim.Tripped["b"]; !ok || !at.Equal(start.Add(6*time.Minute)) {
+		t.Errorf("tripped %v", sim.Tripped)
+	}
+}

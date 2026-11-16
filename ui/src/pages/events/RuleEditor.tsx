@@ -33,6 +33,8 @@ interface CheckedEvent {
   key_error?: string
   action?: Record<string, unknown>
   action_errors?: Record<string, string>
+  /** The event matches the draft's check condition. */
+  resolves?: boolean
 }
 
 interface CheckResult {
@@ -44,7 +46,7 @@ interface CheckResult {
   events: CheckedEvent[]
 }
 
-type RefKey = 'organization' | 'unified_job_template' | 'notification_template' | 'target_stream' | 'breaker_notification_template'
+type RefKey = 'organization' | 'unified_job_template' | 'notification_template' | 'target_stream' | 'breaker_notification_template' | 'check_template' | 'check_notification_template'
 
 /** A number of seconds, as a number of a unit. */
 function DurationInput({ label, seconds, onChange, help, error, optional }: { label: ReactNode; seconds: number; onChange: (s: number) => void; help?: ReactNode; error?: string; optional?: boolean }) {
@@ -96,6 +98,8 @@ export function RuleEditor({ rule }: { rule?: Any }) {
     notification_template: asRef(rule?.notification_template, sf.notification_template),
     target_stream: asRef(rule?.target_stream, sf.target_stream),
     breaker_notification_template: asRef(rule?.breaker_notification_template, sf.breaker_notification_template),
+    check_template: asRef(rule?.check_template, sf.check_template),
+    check_notification_template: asRef(rule?.check_notification_template, sf.check_notification_template),
   }))
   const [streams, setStreams] = useState<Ref[]>(() => (rule?.streams ?? []).map((id: number) => (sf.streams as Ref[] | undefined)?.find((s) => s.id === id) ?? { id, name: `#${id}` }))
   const [saveErrors, setSaveErrors] = useState<Record<string, string>>({})
@@ -408,6 +412,79 @@ export function RuleEditor({ rule }: { rule?: Any }) {
         </section>
 
         <section className="form-section">
+          <h2>{tr('Check the fix')}</h2>
+          <Segmented
+            legend={<span className="sr-only">{tr('Check the fix')}</span>}
+            value={d.check}
+            onChange={(v) => set('check', v)}
+            options={[
+              ['', tr('No check')],
+              ['event', tr('Wait for a resolving event')],
+              ['template', tr('Run a check template')],
+            ]}
+          />
+          <p className="small muted" style={{ margin: 0 }}>
+            {d.check === 'event'
+              ? tr('Once the action finished, the rule waits for an event that resolves the same key, such as the alert resolved. None within the time: not fixed. In shadow mode, it only records whether the key resolved by itself.')
+              : d.check === 'template'
+                ? tr('Once the action finished, the rule launches the check template, and its job decides: successful is fixed, failed is not fixed. Shadow mode launches nothing.')
+                : tr('The rule acts and records no outcome. A check tells whether the action fixed the problem, and gives the rule a success rate.')}
+          </p>
+          {d.check === 'event' && (
+            <div className="form-grid">
+              <CelInput
+                label={tr('Resolving event')}
+                value={d.check_condition}
+                onChange={(v) => set('check_condition', v)}
+                schema={schema}
+                error={errOf('check_condition')}
+                placeholder={tr('event.type == "alert.resolved"')}
+                help={tr('A CEL condition on event. The rule’s key, evaluated on it, names the key it resolves. The filter doesn’t apply to it.')}
+              />
+              <DurationInput label={tr('Wait for it')} seconds={d.check_window} onChange={(v) => set('check_window', v)} error={saveErrors.check_window} help={tr('From when the action finished.')} />
+            </div>
+          )}
+          {d.check === 'template' && (
+            <div className="form-grid">
+              <Lookup
+                label={tr('Check template')}
+                resource="unified_job_templates/"
+                params={{ type__in: 'job_template,workflow_job_template' }}
+                value={refs.check_template}
+                onChange={(v) => setRef('check_template', v)}
+                error={saveErrors.check_template}
+                meta={(r) => <span className="faint small">{r.type === 'workflow_job_template' ? tr('workflow') : tr('job')}</span>}
+                help={tr('Launched with the action’s variables and limit. A job that sets the fixed artifact, with set_stats, decides by it instead.')}
+              />
+              <DurationInput label={tr('Launch it after')} seconds={d.check_window} onChange={(v) => set('check_window', v)} error={saveErrors.check_window} help={tr('From when the action finished. 0: at once.')} />
+            </div>
+          )}
+          {d.check && (
+            <>
+              <div className="form-grid">
+                <Lookup
+                  label={tr('Tell when a fix doesn’t work')}
+                  optional
+                  resource="notification_templates/"
+                  value={refs.check_notification_template}
+                  onChange={(v) => setRef('check_notification_template', v)}
+                  error={saveErrors.check_notification_template}
+                  help={tr('When a check finds the key not fixed, or the action failed.')}
+                />
+              </div>
+              <Check
+                label={tr('Ask for approval before acting again on a key a fix didn’t fix')}
+                checked={d.check_approval}
+                onChange={(v) => set('check_approval', v)}
+                help={d.mode === 'auto' ? tr('Until a check finds the key fixed. Each failed fix also counts as a firing for the circuit breaker.') : tr('In auto mode only. Each failed fix also counts as a firing for the circuit breaker.')}
+              />
+              {saveErrors.check_approval && <div className="form-error">{saveErrors.check_approval}</div>}
+            </>
+          )}
+          {saveErrors.check && <div className="form-error">{saveErrors.check}</div>}
+        </section>
+
+        <section className="form-section">
           <h2>{tr('Guardrails')}</h2>
           <div className="form-grid">
             <TextInput
@@ -564,12 +641,13 @@ function DraftPane({ d, check, checking, error }: { d: RuleDraft; check: CheckRe
                   <Cell state={e.matched === undefined ? 'empty' : e.matched ? 'changed' : 'none'} label={e.matched === undefined ? tr('Not checked') : e.matched ? tr('Matches') : tr('No match')} />
                   <span className="mono faint small">#{e.sequence}</span>
                   <span className="mono small ellipsis">{e.event_type}</span>
-                  {e.matched && e.key !== undefined && <span className="mono small faint ellipsis">{e.key || tr('one key')}</span>}
+                  {(e.matched || e.resolves) && e.key !== undefined && <span className="mono small faint ellipsis">{e.key || tr('one key')}</span>}
                   {e.conditions?.map((c) => (
                     <span key={c} className="tag" title={conditionLabel(d.pattern, c)}>
                       {d.pattern === 'sequence' ? tr('step {n}', { n: c + 1 }) : asIs(String(c + 1))}
                     </span>
                   ))}
+                  {e.resolves && <span className="tag">{tr('resolves')}</span>}
                   {e.test_mode && <span className="tag">{tr('test')}</span>}
                 </summary>
                 <div className="stack" style={{ gap: 6 }}>
@@ -579,6 +657,7 @@ function DraftPane({ d, check, checking, error }: { d: RuleDraft; check: CheckRe
                       {tr('Open')}
                     </Link>
                   </div>
+                  {e.resolves && <div className="small">{e.key ? tr('It resolves the key {key}: a check of that key would find it fixed.', { key: e.key }) : tr('It resolves the rule’s one key: a check would find it fixed.')}</div>}
                   {e.matched === false && (
                     <>
                       {e.reason && <div className="small">{e.reason}</div>}

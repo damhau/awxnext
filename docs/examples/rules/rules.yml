@@ -14,6 +14,9 @@ spec:
   host_lock: true
   breaker_firings: 3
   breaker_window: 86400
+  check: event
+  check_condition: event.type == "alert.resolved"
+  check_window: 600
 ---
 kind: MaintenanceWindow
 name: Saturday freeze

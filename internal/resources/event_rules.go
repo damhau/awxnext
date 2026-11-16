@@ -81,6 +81,13 @@ type eventRule struct {
 	WindowAction        string
 	ApprovalTimeout     int64
 
+	Check             string
+	CheckCondition    string
+	CheckWindow       int64
+	CheckTemplate     *int64
+	CheckNotification *int64
+	CheckApproval     bool
+
 	// stopped is set when the evaluator stops the rule within a batch.
 	stopped bool
 }
@@ -116,6 +123,8 @@ func ruleFromObj(o Obj) *eventRule {
 		Message: str(o["message"]), Target: optID(o["target_stream"]), EventType: str(o["event_type"]), EventData: str(o["event_data"]),
 		ExtraVars: map[string]string{}, Mode: str(o["mode"]), HostLock: boolv(o["host_lock"]),
 		BreakerNotification: optID(o["breaker_notification_template"]), WindowAction: str(o["window_action"]),
+		Check: str(o["check"]), CheckCondition: str(o["check_condition"]), CheckTemplate: optID(o["check_template"]),
+		CheckNotification: optID(o["check_notification_template"]), CheckApproval: boolv(o["check_approval"]),
 	}
 	r.ID, _ = api.ID(o["id"])
 	r.Org, _ = api.ID(o["organization"])
@@ -128,6 +137,7 @@ func ruleFromObj(o Obj) *eventRule {
 	r.Pattern = str(o["pattern"])
 	r.PatternCount, _ = api.ID(o["pattern_count"])
 	r.PatternWindow, _ = api.ID(o["pattern_window"])
+	r.CheckWindow, _ = api.ID(o["check_window"])
 	if list, ok := o["conditions"].([]any); ok {
 		for _, c := range list {
 			r.Conditions = append(r.Conditions, str(c))
@@ -266,6 +276,19 @@ func registerEventRules() {
 				Help: "What the rule does with an action inside a maintenance window or a change freeze: hold it back, or ask for an approval."},
 			{Name: "approval_timeout", Type: api.TInt, Default: 3600, Validate: between(0, maxThrottleWindow),
 				Help: "Seconds the rule's approvals wait before they time out. 0: no limit."},
+			{Name: "check", Column: "check_kind", Type: api.TChoice, Default: "", Choices: labelled("", "None", checkEvent, "A resolving event", checkTemplate, "A check template"),
+				Help: "How the rule checks that its action fixed the problem. event: it waits, once the action finished, for an event matching check_condition with the same key, such as the alert resolved. template: it launches check_template once the action finished, and the job's result decides. Empty: no check."},
+			exprField("check_condition", "A CEL condition on event: the event that shows a key fixed, such as event.type == \"alert.resolved\". The rule's key, evaluated on it, names the key. The filter doesn't apply to it.", false),
+			{Name: "check_window", Type: api.TInt, Default: 0, Validate: between(0, maxThrottleWindow),
+				Help: "Seconds the check waits once the action finished: for the resolving event, or before it launches the check template."},
+			{Name: "check_template", Type: api.TFK, Ref: "unified_job_templates", Nullable: true,
+				Help: "The job or workflow template that checks a fix, launched with the action's variables and limit: a successful job means fixed, a failed one not fixed, unless the job sets the fixed artifact (set_stats) to true or false."},
+			{Name: "check_notification_template", Type: api.TFK, Ref: "notification_templates", Nullable: true,
+				Help: "The notification sent when a check finds a key not fixed, or the action failed."},
+			{Name: "check_approval", Type: api.TBool, Default: false,
+				Help: "Once a check finds a key not fixed, the rule's next actions for the key wait for an approval, until one fixes it. In auto mode only."},
+			{Name: "success_rate", Type: api.TFloat, ReadOnly: true, Virtual: true, Nullable: true,
+				Help: "The share of the rule's checked actions that fixed their key, from 0 to 1, over the last EVENT_RULE_SUCCESS_RATE_DAYS days: fixed out of fixed, not fixed and action failed. Empty: no check settled. summary_fields.checks has the counts."},
 			{Name: "stopped_reason", Type: api.TText, ReadOnly: true, Help: "Why the rule stopped by itself, such as its owner losing a right."},
 			{Name: "last_fired", Type: api.TDateTime, ReadOnly: true, Nullable: true, Help: "When the rule last acted."},
 		},
@@ -279,7 +302,8 @@ func registerEventRules() {
 		BeforeDelete: cancelRuleApprovals,
 		Summary:      ruleSummary,
 		SubLists: []*SubList{readOnlyChildSub("decisions", "event_rule_decisions", "rule_id"),
-			readOnlyChildSub("breakers", "event_rule_breakers", "rule_id"), readOnlyChildSub("patterns", "event_rule_patterns", "rule_id")},
+			readOnlyChildSub("breakers", "event_rule_breakers", "rule_id"), readOnlyChildSub("patterns", "event_rule_patterns", "rule_id"),
+			readOnlyChildSub("checks", "event_rule_checks", "rule_id")},
 		Actions: []*api.Action{{Name: "reset_breaker", Methods: []string{"POST"}, Perm: "change", Handler: resetBreakerView},
 			{Name: "backtest", Methods: []string{"POST"}, Perm: "view", Handler: backtestView}},
 	})
@@ -317,12 +341,15 @@ func registerEventRules() {
 				Help: "The rule's mode when it decided."},
 			{Name: "guardrail", Type: api.TChoice, ReadOnly: true, Choices: labelled("", "None", guardBreaker, "Circuit breaker",
 				guardMaintenance, "Maintenance window", guardFreeze, "Change freeze", guardRuns, "Concurrent runs", guardHostLock, "Host lock",
-				guardGroupShare, "Group share"), Help: "What held the action back, or made it wait for approval."},
+				guardGroupShare, "Group share", guardEscalation, "Escalated"), Help: "What held the action back, or made it wait for approval."},
 			{Name: "fired", Type: api.TBool, ReadOnly: true, Help: "The action ran, asked for approval, or would have run in shadow mode: the circuit breaker counts it."},
 			{Name: "approval", Column: "approval_id", Type: api.TFK, Ref: "workflow_approvals", ReadOnly: true, Nullable: true,
 				Help: "The workflow approval the action waits for."},
 			{Name: "window", Column: "window_id", Type: api.TInt, ReadOnly: true, Nullable: true, Help: "The once_after window the event belongs to."},
 			{Name: "job", Type: api.TFK, Ref: "unified_jobs", ReadOnly: true, Nullable: true},
+			{Name: "check", Column: "check_id", Type: api.TInt, ReadOnly: true, Nullable: true, Help: "The check of the action's fix: an event_rule_checks id."},
+			{Name: "check_outcome", Type: api.TChoice, ReadOnly: true, Choices: checkOutcomeChoices(true),
+				Help: "What the check of the action's fix found: pending until it settles. Empty: the action isn't checked."},
 			{Name: "details", Type: api.TJSON, ReadOnly: true,
 				Help: "What the decision saw: for not_matched, the filter's part that failed (filter.expression, filter.start and filter.end in the filter, filter.error) and the values it read (filter.values), or each condition's (conditions). For a rule with a pattern, its key's window (pattern: kind, seen of needed, events, until)."},
 			{Name: "trace_id", Type: api.TString, ReadOnly: true, Help: "The OpenTelemetry trace of the event's decisions and of the job launched. Empty: none."},
@@ -395,6 +422,7 @@ func registerEventRules() {
 			return fmt.Sprintf("t.rule_id IN (SELECT t.id FROM event_rules t WHERE %s)", api.ViewPredicate(c, ruleRes, arg))
 		},
 	})
+	registerRuleChecks(ruleRes)
 
 	streams.Actions = append(streams.Actions, &api.Action{Name: "schema", Methods: []string{"GET"}, Perm: "view", Handler: streamSchemaView})
 	streams.AfterDelete = func(c *Ctx, obj Obj) error {
@@ -490,7 +518,8 @@ func saveEventRule(c *Ctx, old, data Obj) error {
 	for _, f := range []string{"streams", "filter", "key", "throttle", "throttle_window", "action", "unified_job_template",
 		"extra_vars", "limit", "notification_template", "message", "target_stream", "event_type", "event_data",
 		"mode", "max_concurrent_runs", "host_lock", "max_group_share", "breaker_notification_template",
-		"pattern", "conditions", "pattern_count", "pattern_window"} {
+		"pattern", "conditions", "pattern_count", "pattern_window",
+		"check", "check_condition", "check_window", "check_template", "check_notification_template", "check_approval"} {
 		if _, ok := data[f]; ok && (old == nil || !sameValue(old[f], data[f])) {
 			changed = true
 		}
@@ -559,6 +588,7 @@ func checkRuleShape(r *eventRule) error {
 		fe.Add("throttle_window", "A throttle needs a window of at least one second.")
 	}
 	checkRulePattern(r, fe)
+	checkRuleCheck(r, fe)
 	if r.Action != actionLaunch {
 		if r.MaxRuns > 0 {
 			fe.Add("max_concurrent_runs", "Only a rule that launches has runs to bound.")
@@ -602,37 +632,24 @@ func checkRuleTargets(c *Ctx, r *eventRule) error {
 	if n != len(r.Streams) {
 		return api.FieldError("streams", "An event stream of the list does not exist.")
 	}
+	if err := checkCheckTemplate(c, r); err != nil {
+		return err
+	}
 	if r.Action != actionLaunch {
 		return nil
 	}
-	var typ string
-	var askVars, askLimit, survey bool
-	err := c.DB().QueryRow(c, `SELECT type, ask_variables_on_launch, ask_limit_on_launch, survey_enabled FROM unified_job_templates WHERE id = $1`,
-		*r.Template).Scan(&typ, &askVars, &askLimit, &survey)
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+	missing, noLimit, ok, err := templatePrompts(c, *r.Template, r)
+	if err != nil {
 		return err
 	}
-	if typ != "job_template" && typ != "workflow_job_template" {
+	if !ok {
 		return api.FieldError("unified_job_template", "A rule launches job templates and workflow templates.")
 	}
 	fe := api.FieldErrors{}
-	if len(r.ExtraVars) > 0 && !askVars {
-		known := map[string]bool{}
-		if survey {
-			known = surveyVariables(templateSurvey(c, *r.Template))
-		}
-		var missing []string
-		for k := range r.ExtraVars {
-			if !known[k] {
-				missing = append(missing, k)
-			}
-		}
-		if len(missing) > 0 {
-			sort.Strings(missing)
-			fe.Add("extra_vars", fmt.Sprintf("The template does not prompt for %s: turn on its Prompt on launch for variables, or ask for them in its survey.", strings.Join(missing, ", ")))
-		}
+	if len(missing) > 0 {
+		fe.Add("extra_vars", fmt.Sprintf("The template does not prompt for %s: turn on its Prompt on launch for variables, or ask for them in its survey.", strings.Join(missing, ", ")))
 	}
-	if r.Limit != "" && !askLimit {
+	if noLimit {
 		fe.Add("limit", "The template does not prompt for a limit: turn on its Prompt on launch for the limit.")
 	}
 	if err := fe.Err(); err != nil {
@@ -643,6 +660,35 @@ func checkRuleTargets(c *Ctx, r *eventRule) error {
 		names[k] = true
 	}
 	return refuseAnsibleVars(c, "extra_vars", names)
+}
+
+// templatePrompts says which of the rule's variables a template doesn't
+// prompt for, whether it doesn't prompt for the rule's limit, and whether
+// it is a job or workflow template at all.
+func templatePrompts(c *Ctx, tpl int64, r *eventRule) (missing []string, noLimit, ok bool, err error) {
+	var typ string
+	var askVars, askLimit, survey bool
+	err = c.DB().QueryRow(c, `SELECT type, ask_variables_on_launch, ask_limit_on_launch, survey_enabled FROM unified_job_templates WHERE id = $1`,
+		tpl).Scan(&typ, &askVars, &askLimit, &survey)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return nil, false, false, err
+	}
+	if typ != "job_template" && typ != "workflow_job_template" {
+		return nil, false, false, nil
+	}
+	if len(r.ExtraVars) > 0 && !askVars {
+		known := map[string]bool{}
+		if survey {
+			known = surveyVariables(templateSurvey(c, tpl))
+		}
+		for k := range r.ExtraVars {
+			if !known[k] {
+				missing = append(missing, k)
+			}
+		}
+		sort.Strings(missing)
+	}
+	return missing, r.Limit != "" && !askLimit, true, nil
 }
 
 // checkRuleExprs compiles and type-checks a rule's expressions against the
@@ -662,6 +708,9 @@ func checkRuleExprs(s *rules.Schema, r *eventRule) error {
 	}
 	if r.Key != "" {
 		check("key", r.Key, rules.String)
+	}
+	if r.Check == checkEvent {
+		check("check_condition", r.CheckCondition, rules.Bool)
 	}
 	switch r.Action {
 	case actionLaunch:
@@ -727,6 +776,15 @@ func ruleRefusal(c *Ctx, r *eventRule) (string, error) {
 		}
 		return "", nil
 	}
+	if r.Check == checkTemplate {
+		if r.CheckTemplate == nil {
+			return "The rule's check template was deleted.", nil
+		}
+		ok, err := ujtPerm(c, *r.CheckTemplate, "execute")
+		if reason, err := check(ok, err, fmt.Sprintf("check template %d", *r.CheckTemplate)); reason != "" || err != nil {
+			return reason, err
+		}
+	}
 	switch r.Action {
 	case actionLaunch:
 		if r.Template == nil {
@@ -756,6 +814,11 @@ func ruleRefusal(c *Ctx, r *eventRule) (string, error) {
 // its open window.
 func ruleSaved(c *Ctx, old, obj Obj) error {
 	id, _ := api.ID(obj["id"])
+	if old != nil && (str(old["check"]) != str(obj["check"]) || boolv(old["enabled"]) && !boolv(obj["enabled"])) {
+		if err := cancelChecks(c, c.DB(), id, "The rule was disabled, or its check changed, before the check ended."); err != nil {
+			return err
+		}
+	}
 	if old != nil && str(old["mode"]) != str(obj["mode"]) {
 		if err := dropWindows(c, c.DB(), id, "The rule changed mode before its window ended."); err != nil {
 			return err
@@ -840,7 +903,7 @@ func ruleSummary(c *Ctx, objs []Obj) error {
 		}
 		o["summary_fields"].(Obj)["streams"] = list
 	}
-	return nil
+	return checkSummary(c, objs)
 }
 
 // ruleJobSummary shows, on jobs a rule launched, the event that launched
@@ -873,10 +936,21 @@ func ruleJobSummary(c *Ctx, objs []Obj) error {
 	if err := rows.Err(); err != nil {
 		return err
 	}
+	ruled := make([]int64, 0, len(byID))
+	for id := range byID {
+		ruled = append(ruled, id)
+	}
+	checks, err := jobChecks(c, ruled)
+	if err != nil {
+		return err
+	}
 	for _, o := range objs {
 		id, _ := api.ID(o["id"])
 		if ev, ok := byID[id]; ok {
 			o["summary_fields"].(Obj)["stream_event"] = ev
+		}
+		if list, ok := checks[id]; ok {
+			o["summary_fields"].(Obj)["event_rule_checks"] = list
 		}
 	}
 	return nil
