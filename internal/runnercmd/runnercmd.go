@@ -80,42 +80,11 @@ func Command(s Spec) ([]string, func(), error) {
 		}
 		return append([]string{bin}, s.workerArgs(s.WorkDir)...), noop, nil
 	case "podman", "docker":
-		if s.Image == "" {
-			return nil, noop, errors.New("no execution environment image")
+		args, cleanup, err := s.containerRun()
+		if err != nil {
+			return nil, noop, err
 		}
-		args := []string{s.Runtime}
-		var runArgs []string
-		cleanup := noop
-		if s.RegistryUser != "" {
-			dir, err := os.MkdirTemp("", "awxnext-auth-")
-			if err != nil {
-				return nil, noop, err
-			}
-			cleanup = func() { os.RemoveAll(dir) }
-			auth := base64.StdEncoding.EncodeToString([]byte(s.RegistryUser + ":" + s.RegistryPassword))
-			cfg, _ := json.Marshal(map[string]any{"auths": map[string]any{s.RegistryHost: map[string]string{"auth": auth}}})
-			if s.Runtime == "docker" {
-				// docker reads registry auth from <config dir>/config.json.
-				if err := os.WriteFile(filepath.Join(dir, "config.json"), cfg, 0o600); err != nil {
-					cleanup()
-					return nil, noop, err
-				}
-				args = append(args, "--config", dir)
-			} else {
-				if err := os.WriteFile(filepath.Join(dir, "auth.json"), cfg, 0o600); err != nil {
-					cleanup()
-					return nil, noop, err
-				}
-				runArgs = append(runArgs, "--authfile", filepath.Join(dir, "auth.json"))
-			}
-		}
-		args = append(args, "run")
-		args = append(args, runArgs...)
-		pull := s.Pull
-		if pull == "" {
-			pull = "missing"
-		}
-		args = append(args, "--rm", "-i", "--pull="+pull, "--name", s.Name, "--env", "HOME=/runner")
+		args = append(args, "--env", "HOME=/runner")
 		if s.Runtime == "podman" {
 			args = append(args, "--userns=keep-id")
 		}
@@ -136,6 +105,65 @@ func Command(s Spec) ([]string, func(), error) {
 		return args, cleanup, nil
 	}
 	return nil, noop, fmt.Errorf("unknown container runtime %q", s.Runtime)
+}
+
+// Run is the command that runs argv in s's image, or on the node with the
+// "none" runtime. Unlike a job's worker, it keeps the image's home and user.
+func Run(s Spec, argv []string) ([]string, func(), error) {
+	noop := func() {}
+	switch s.Runtime {
+	case "none", "process", "":
+		return argv, noop, nil
+	case "podman", "docker":
+		args, cleanup, err := s.containerRun()
+		if err != nil {
+			return nil, noop, err
+		}
+		return append(append(args, s.Image), argv...), cleanup, nil
+	}
+	return nil, noop, fmt.Errorf("unknown container runtime %q", s.Runtime)
+}
+
+// containerRun is the start of a podman or docker run of s's image, up to
+// the container's name.
+func (s Spec) containerRun() ([]string, func(), error) {
+	noop := func() {}
+	if s.Image == "" {
+		return nil, noop, errors.New("no execution environment image")
+	}
+	args := []string{s.Runtime}
+	var runArgs []string
+	cleanup := noop
+	if s.RegistryUser != "" {
+		dir, err := os.MkdirTemp("", "awxnext-auth-")
+		if err != nil {
+			return nil, noop, err
+		}
+		cleanup = func() { os.RemoveAll(dir) }
+		auth := base64.StdEncoding.EncodeToString([]byte(s.RegistryUser + ":" + s.RegistryPassword))
+		cfg, _ := json.Marshal(map[string]any{"auths": map[string]any{s.RegistryHost: map[string]string{"auth": auth}}})
+		if s.Runtime == "docker" {
+			// docker reads registry auth from <config dir>/config.json.
+			if err := os.WriteFile(filepath.Join(dir, "config.json"), cfg, 0o600); err != nil {
+				cleanup()
+				return nil, noop, err
+			}
+			args = append(args, "--config", dir)
+		} else {
+			if err := os.WriteFile(filepath.Join(dir, "auth.json"), cfg, 0o600); err != nil {
+				cleanup()
+				return nil, noop, err
+			}
+			runArgs = append(runArgs, "--authfile", filepath.Join(dir, "auth.json"))
+		}
+	}
+	args = append(args, "run")
+	args = append(args, runArgs...)
+	pull := s.Pull
+	if pull == "" {
+		pull = "missing"
+	}
+	return append(args, "--rm", "-i", "--pull="+pull, "--name", s.Name), cleanup, nil
 }
 
 // Kill stops a worker started from s.

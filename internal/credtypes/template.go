@@ -15,8 +15,8 @@ import (
 
 // Injector templates are Jinja2, rendered with gonja the way AWX renders them
 // in its sandboxed environment: input fields by id, tower.filename (or
-// awx.filename) for the unnamed file injector and tower.filename.NAME for
-// named ones. Templates cannot include or import others, range() is capped
+// awx.filename, or eda.filename as EDA writes it) for the unnamed file
+// injector and tower.filename.NAME for named ones. Templates cannot include or import others, range() is capped
 // as in Jinja's sandbox, and output is bounded.
 const (
 	maxRange  = 100_000 // jinja2.sandbox.MAX_RANGE
@@ -106,7 +106,7 @@ func Render(tmpl string, vars map[string]any, files map[string]string) (string, 
 		}
 		ns["filename"] = named
 	}
-	ctx["tower"], ctx["awx"] = ns, ns
+	ctx["tower"], ctx["awx"], ctx["eda"] = ns, ns, ns
 	return execute(tmpl, ctx, false)
 }
 
@@ -128,7 +128,7 @@ func Check(tmpl string, fields []string, files map[string]bool) error {
 		}
 		ns["filename"] = named
 	}
-	ctx["tower"], ctx["awx"] = ns, ns
+	ctx["tower"], ctx["awx"], ctx["eda"] = ns, ns, ns
 	_, err := execute(tmpl, ctx, true)
 	return err
 }

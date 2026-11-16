@@ -158,7 +158,7 @@ func StartJobs(ctx context.Context, app *api.App) (*jobs.Manager, error) {
 	system.Register()
 	resources.RegisterJobTypes()
 	m := jobs.New(app)
-	m.TickHooks = append(m.TickHooks, resources.ScheduleTick, resources.WorkflowTick, resources.InstanceTick)
+	m.TickHooks = append(m.TickHooks, resources.ScheduleTick, resources.WorkflowTick, resources.InstanceTick, resources.ConnectorTick)
 	m.MaintainHooks = append(m.MaintainHooks, resources.MaintainEventStreams)
 	m.Rejoin = func(ctx context.Context, node string) error { return resources.Rejoin(ctx, app, node) }
 	m.StartedHooks = append(m.StartedHooks, resources.JobStartedNotifications, resources.WebhookStatusStarted)
@@ -167,6 +167,8 @@ func StartJobs(ctx context.Context, app *api.App) (*jobs.Manager, error) {
 	m.Start(ctx)
 	resources.Rules = resources.NewRuleEngine(app, app.Cfg.NodeName)
 	go resources.Rules.Run(ctx)
+	resources.Connectors = resources.NewConnectorSupervisor(app, app.Cfg.NodeName)
+	go resources.Connectors.Run(ctx)
 	if agent.Default != nil {
 		agent.Default.Start(ctx)
 	}

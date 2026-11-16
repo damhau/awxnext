@@ -92,6 +92,7 @@ function useNav(): { label: string; items: NavItem[] }[] {
       label: tr('Events'),
       items: [
         { to: '/event-streams', label: tr('Event streams'), icon: 'stream' },
+        { to: '/event-connectors', label: tr('Event connectors'), icon: 'plug' },
         { to: '/event-rules', label: tr('Event rules'), icon: 'bolt' },
         { to: '/maintenance-windows', label: tr('Maintenance windows'), icon: 'window' },
       ],

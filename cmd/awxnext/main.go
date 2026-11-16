@@ -23,6 +23,7 @@ import (
 	"github.com/damhau/awxnext/internal/importer"
 	"github.com/damhau/awxnext/internal/jobexec"
 	"github.com/damhau/awxnext/internal/kms"
+	"github.com/damhau/awxnext/internal/resources"
 	"github.com/damhau/awxnext/internal/runners/ansible"
 	"github.com/damhau/awxnext/internal/server"
 	"github.com/damhau/awxnext/internal/tracing"
@@ -187,6 +188,8 @@ func serve(ctx context.Context, cfg *config.Config) error {
 		return err
 	}
 	defer jm.Wait()
+	// A connector stopped with the node is placed on another one at once.
+	defer resources.Connectors.Wait()
 	srv := &http.Server{
 		Addr:              cfg.Listen,
 		Handler:           server.Handler(app),

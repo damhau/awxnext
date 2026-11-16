@@ -58,6 +58,7 @@ const typeLabels: Record<string, string> = {
   eventstream: tr('Event stream'),
   eventrule: tr('Event rule'),
   maintenancewindow: tr('Maintenance window'),
+  eventconnector: tr('Event connector'),
 }
 
 export function typeName(ct: string | null | undefined): string {
@@ -96,6 +97,8 @@ export function objectPath(ct: string | null | undefined, id: number | string): 
       return `/event-rules/${id}`
     case 'maintenancewindow':
       return `/maintenance-windows/${id}`
+    case 'eventconnector':
+      return `/event-connectors/${id}`
   }
   return null
 }
@@ -116,6 +119,7 @@ export const grantable: { resource: string; ct: string; label: string; plural: s
   { resource: 'event_streams', ct: 'eventstream', label: tr('Event stream'), plural: tr('Event streams') },
   { resource: 'event_rules', ct: 'eventrule', label: tr('Event rule'), plural: tr('Event rules') },
   { resource: 'maintenance_windows', ct: 'maintenancewindow', label: tr('Maintenance window'), plural: tr('Maintenance windows') },
+  { resource: 'event_connectors', ct: 'eventconnector', label: tr('Event connector'), plural: tr('Event connectors') },
 ]
 
 export interface RoleDef {
@@ -171,6 +175,7 @@ export function roleShort(name: string, ct?: string | null): string {
     eventstream: ['EventStream '],
     eventrule: ['EventRule '],
     maintenancewindow: ['MaintenanceWindow '],
+    eventconnector: ['EventConnector '],
   }
   for (const p of prefixes[t] ?? []) if (name.startsWith(p)) return name.slice(p.length)
   return name

@@ -38,6 +38,7 @@ const kinds: Record<string, [string, string]> = {
   event_stream: [tr('event stream'), tr('event streams')],
   event_rule: [tr('event rule'), tr('event rules')],
   maintenance_window: [tr('maintenance window'), tr('maintenance windows')],
+  event_connector: [tr('event connector'), tr('event connectors')],
 }
 
 export function kindOf(d: Dependent, n = 1): string {
@@ -66,6 +67,7 @@ const how: Record<string, string> = {
   DEFAULT_EXECUTION_ENVIRONMENT: tr('as the global default'),
   streams: tr('reads its events'),
   target_stream: tr('posts events to it'),
+  event_stream: tr('posts events to it'),
   event_rules: tr('holds its actions back'),
 }
 
@@ -108,6 +110,8 @@ export function linkTo(d: Dependent): string | null {
       return `/event-rules/${d.id}`
     case 'maintenance_window':
       return `/maintenance-windows/${d.id}`
+    case 'event_connector':
+      return `/event-connectors/${d.id}`
   }
   return null
 }

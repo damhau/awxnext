@@ -51,6 +51,7 @@ var dependencies = map[string][]dependency{
 			JOIN organizations o ON o.id = x.organization_id WHERE x.credential_id = $1`},
 		{"credential", "cleared", `SELECT 'instance_groups', g.id, g.name FROM instance_groups g WHERE g.credential_id = $1`},
 		{"credential", "cleared", `SELECT 'event_streams', s.id, s.name FROM event_streams s WHERE s.credential_id = $1`},
+		{"credentials", "cleared", `SELECT 'event_connectors', c.id, c.name FROM event_connectors c WHERE c.credentials @> jsonb_build_array($1::bigint)`},
 	},
 	"projects": {
 		{"source_project", "deleted", `SELECT ` + ujtResource + `, t.id, t.name FROM unified_job_templates t WHERE t.source_project_id = $1`},
@@ -63,6 +64,7 @@ var dependencies = map[string][]dependency{
 	"event_streams": {
 		{"streams", "cleared", `SELECT 'event_rules', r.id, r.name FROM event_rules r WHERE r.streams @> jsonb_build_array($1::bigint)`},
 		{"target_stream", "cleared", `SELECT 'event_rules', r.id, r.name FROM event_rules r WHERE r.target_stream_id = $1`},
+		{"event_stream", "deleted", `SELECT 'event_connectors', c.id, c.name FROM event_connectors c WHERE c.event_stream_id = $1`},
 	},
 	"event_rules": {
 		{"event_rules", "cleared", `SELECT 'maintenance_windows', w.id, w.name FROM maintenance_windows w WHERE w.event_rules @> jsonb_build_array($1::bigint)`},
@@ -77,6 +79,10 @@ var dependencies = map[string][]dependency{
 		{"node_execution_environment", "cleared", `SELECT 'workflow_job_templates', t.id, t.name FROM workflow_job_template_nodes n
 			JOIN unified_job_templates t ON t.id = n.workflow_job_template_id WHERE n.execution_environment_id = $1`},
 		{"execution_environment", "cleared", `SELECT 'schedules', s.id, s.name FROM schedules s WHERE s.execution_environment_id = $1`},
+		{"execution_environment", "cleared", `SELECT 'event_connectors', c.id, c.name FROM event_connectors c WHERE c.execution_environment_id = $1`},
+	},
+	"instance_groups": {
+		{"instance_group", "cleared", `SELECT 'event_connectors', c.id, c.name FROM event_connectors c WHERE c.instance_group_id = $1`},
 	},
 }
 

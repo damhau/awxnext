@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
+	"github.com/damhau/awxnext/internal/connectors"
 	"github.com/damhau/awxnext/internal/runnercmd"
 )
 
@@ -236,33 +237,56 @@ func (cfg *Config) runUnit(ctx context.Context, client *http.Client, url string)
 		return done(-1, "invalid work ident")
 	}
 	rs := runnerSpec(*cfg, spec)
-	switch {
-	case (rs.Runtime == "none" || rs.Runtime == "") && cfg.ExactWorkDir:
-		rs.WorkDir = cfg.WorkDir
-		if err := os.MkdirAll(rs.WorkDir, 0o700); err != nil {
+	connector := spec.Kind == KindConnector
+	var site []byte
+	if connector {
+		rs.Name = "awxnext_connector_" + spec.Ident
+		s, err := connectors.SiteFor(url, cfg.CACert, cfg.InsecureSkipVerify)
+		if err != nil {
 			return done(-1, err.Error())
 		}
-	case rs.Runtime == "none" || rs.Runtime == "":
-		rs.WorkDir = filepath.Join(cfg.WorkDir, spec.Ident)
-		os.RemoveAll(rs.WorkDir)
-		if err := os.MkdirAll(rs.WorkDir, 0o700); err != nil {
-			return done(-1, err.Error())
+		site = s.Line()
+	} else {
+		switch {
+		case (rs.Runtime == "none" || rs.Runtime == "") && cfg.ExactWorkDir:
+			rs.WorkDir = cfg.WorkDir
+			if err := os.MkdirAll(rs.WorkDir, 0o700); err != nil {
+				return done(-1, err.Error())
+			}
+		case rs.Runtime == "none" || rs.Runtime == "":
+			rs.WorkDir = filepath.Join(cfg.WorkDir, spec.Ident)
+			os.RemoveAll(rs.WorkDir)
+			if err := os.MkdirAll(rs.WorkDir, 0o700); err != nil {
+				return done(-1, err.Error())
+			}
+			defer os.RemoveAll(rs.WorkDir)
 		}
-		defer os.RemoveAll(rs.WorkDir)
 	}
-	args, cleanup, err := runnercmd.Command(rs)
+	var args []string
+	var cleanup func()
+	if connector {
+		args, cleanup, err = runnercmd.Run(rs, connectors.Argv(spec.Python))
+	} else {
+		args, cleanup, err = runnercmd.Command(rs)
+	}
 	if err != nil {
 		return done(-1, err.Error())
 	}
 	defer cleanup()
 	cmd := exec.Command(args[0], args[1:]...)
 	cmd.Env = runnercmd.Env()
+	if connector {
+		cmd.Env = connectors.Env()
+	}
 	stdin, _ := cmd.StdinPipe()
 	stdout, _ := cmd.StdoutPipe()
 	var stderr tailBuffer
 	cmd.Stderr = &stderr
 	if err := cmd.Start(); err != nil {
 		return done(-1, fmt.Sprintf("starting %s: %v", args[0], err))
+	}
+	if site != nil {
+		stdin.Write(site)
 	}
 	var killed atomic.Bool
 	go func() {

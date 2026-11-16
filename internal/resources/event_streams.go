@@ -255,18 +255,31 @@ func receiveEvents(c *Ctx, rw http.ResponseWriter, r *http.Request) {
 		writeStreamError(w, http.StatusBadRequest, "The request's body could not be read.")
 		return
 	}
-	if s.credential == nil {
+	connector, byConnector, err := connectorPoster(c, r, s.id)
+	if err != nil {
+		unavailable(w, "reading the stream's connectors", err)
+		return
+	}
+	switch {
+	case byConnector && connector == 0:
 		writeStreamError(w, http.StatusUnauthorized, "Authentication failed.")
 		return
-	}
-	cred, err := ResolveCredential(c, c.App, *s.credential)
-	if err != nil {
-		unavailable(w, "reading the stream's credential", err)
+	case byConnector:
+		// Connectors post CloudEvents batches, whatever the stream's type.
+		s.typ = eventstreams.TypeCloudEvents
+	case s.credential == nil:
+		writeStreamError(w, http.StatusUnauthorized, "Authentication failed.")
 		return
-	}
-	if err := eventstreams.Verify(c, streamPolicy(c), &eventstreams.Credential{Namespace: cred.Namespace, Inputs: cred.Inputs}, r, body); err != nil {
-		writeEventsError(w, err)
-		return
+	default:
+		cred, err := ResolveCredential(c, c.App, *s.credential)
+		if err != nil {
+			unavailable(w, "reading the stream's credential", err)
+			return
+		}
+		if err := eventstreams.Verify(c, streamPolicy(c), &eventstreams.Credential{Namespace: cred.Namespace, Inputs: cred.Inputs}, r, body); err != nil {
+			writeEventsError(w, err)
+			return
+		}
 	}
 	mapping := map[string]string{}
 	for k, v := range s.mapping {
@@ -276,6 +289,13 @@ func receiveEvents(c *Ctx, rw http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeEventsError(w, err)
 		return
+	}
+	if byConnector {
+		// The source names the connector, whatever it says: duplicates are
+		// found per connector.
+		for i := range events {
+			events[i].Source = "/api/v2/event_connectors/" + strconv.FormatInt(connector, 10) + "/"
+		}
 	}
 	eventstreams.AddTraceContext(events, r.Header)
 	wait, ok := streamLimiter.Take(s.id, s.perMinute, len(events), time.Now())

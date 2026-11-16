@@ -53,6 +53,7 @@ const paths: Record<string, string> = {
   stream: 'M1.5 5c2-1.5 3.5-1.5 5 0s3 1.5 5 0 2.5-1 3 -.5M1.5 8c2-1.5 3.5-1.5 5 0s3 1.5 5 0 2.5-1 3-.5M1.5 11c2-1.5 3.5-1.5 5 0s3 1.5 5 0 2.5-1 3-.5',
   bolt: 'M9 1.5 3.5 9H8l-1 5.5L12.5 7H8z',
   window: 'M2.5 3.5h11v9h-11zM2.5 6h11M6 8.5l1.5 1.5L10.5 7.5',
+  plug: 'M6 1.5v3M10 1.5v3M4.5 4.5h7v3a3.5 3.5 0 0 1-7 0zM8 11v3.5',
 }
 
 export type IconName = keyof typeof paths

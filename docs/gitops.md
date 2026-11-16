@@ -124,11 +124,21 @@ spec:
   event_rules: [Restart on ServiceDown]   # rules, by name
   groups:                                 # inventory groups, by inventory and name
     - {inventory: Production, name: web}
+---
+kind: EventConnector
+name: orders
+spec:
+  event_stream: orders             # an event stream, by name
+  source: ansible.eda.kafka
+  args: {host: kafka.example.com, port: 9093, topic: orders, group_id: awxnext}
+  credentials: [Kafka orders]      # credentials, by name
+  execution_environment: Decision environment
+  restart_policy: always
 ```
 
 Kinds are applied in dependency order (Label, Team, Project, Inventory,
 InventorySource, NotificationTemplate, JobTemplate, WorkflowJobTemplate,
-Schedule, EventRule, MaintenanceWindow) and pruned in reverse. Credentials are referenced, never declared:
+Schedule, EventRule, MaintenanceWindow, EventConnector) and pruned in reverse. Credentials are referenced, never declared:
 secrets stay out of git. Event streams are referenced too: create them in the
 API or the UI. An event rule runs as the user who last saved the source
 ([Event rules](operations.md#owner-and-rights)): a rule in `auto` mode takes that user's

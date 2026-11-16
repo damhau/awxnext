@@ -58,3 +58,11 @@
   .backtest-form { grid-template-columns: minmax(0, 1fr); }
   .outcome-filter label { padding: 6px 9px; }
 }
+
+.connector-yaml { margin: 0; max-height: 260px; overflow: auto; }
+.connector-why { overflow-wrap: anywhere; }
+.connector-runs .event > summary { grid-template-columns: 120px minmax(0, 0.8fr) minmax(0, 1.6fr) auto auto; }
+@media (max-width: 600px) {
+  .connector-runs .event > summary { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .connector-runs .event > summary .run-why, .connector-runs .event > summary .run-rc { display: none; }
+}

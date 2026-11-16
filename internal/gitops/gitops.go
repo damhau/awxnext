@@ -6,7 +6,8 @@
 // YAML inventory content), InventorySource, JobTemplate,
 // WorkflowJobTemplate (with nodes), NotificationTemplate, Schedule, Team,
 // EventRule (its streams by name), MaintenanceWindow (its rules by name, its
-// groups by inventory and name).
+// groups by inventory and name), EventConnector (its stream and credentials
+// by name).
 //
 //	kind: JobTemplate
 //	name: Deploy web
@@ -118,7 +119,7 @@ type kind struct {
 }
 
 // order is the apply order (dependencies first); pruning runs in reverse.
-var order = []string{"Label", "Team", "Project", "Inventory", "InventorySource", "NotificationTemplate", "JobTemplate", "WorkflowJobTemplate", "Schedule", "EventRule", "MaintenanceWindow"}
+var order = []string{"Label", "Team", "Project", "Inventory", "InventorySource", "NotificationTemplate", "JobTemplate", "WorkflowJobTemplate", "Schedule", "EventRule", "MaintenanceWindow", "EventConnector"}
 
 var kinds = map[string]kind{
 	"Label":                {res: "labels"},
@@ -132,6 +133,7 @@ var kinds = map[string]kind{
 	"Schedule":             {res: "schedules", identity: scheduleIdentity},
 	"EventRule":            {res: "event_rules"},
 	"MaintenanceWindow":    {res: "maintenance_windows", relations: map[string]bool{"event_rules": true, "groups": true}},
+	"EventConnector":       {res: "event_connectors"},
 }
 
 var errDryRun = errors.New("dry run")
@@ -667,6 +669,13 @@ func (r *reconciler) applyDoc(d *Document) error {
 			return err
 		}
 		data["event_rules"], data["groups"] = rules, groups
+	}
+	if d.Kind == "EventConnector" {
+		creds, err := r.listRefs("credentials", d.Spec["credentials"])
+		if err != nil {
+			return err
+		}
+		data["credentials"] = creds
 	}
 	identity, args := "", []any{}
 	if k.identity != nil {

@@ -13,6 +13,7 @@ describe('activity entries of roles', () => {
     expect(assignmentTarget('role_definition', { content_type: 'awx.jobtemplate', object_id: 7, object_name: 'Deploy' })).toBe('on job template Deploy')
     expect(assignmentTarget('role_definition', { content_type: 'shared.team', object_id: 2 })).toBe('on team #2')
     expect(assignmentTarget('role_definition', { content_type: 'awx.maintenancewindow', object_id: 3, object_name: 'Patch night' })).toBe('on maintenance window Patch night')
+    expect(assignmentTarget('role_definition', { content_type: 'awx.eventconnector', object_id: 4, object_name: 'orders' })).toBe('on event connector orders')
     expect(assignmentTarget('role_definition', { content_type: null, object_id: null })).toBe('everywhere')
     expect(assignmentTarget('role', {})).toBe('')
   })

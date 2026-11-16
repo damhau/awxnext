@@ -23,6 +23,7 @@ func init() {
 	registerEventStreams()
 	registerEventRules()
 	registerMaintenanceWindows()
+	registerEventConnectors()
 	registerRoles()
 	registerActivity()
 	registerRelatedLists()

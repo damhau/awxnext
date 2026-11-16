@@ -31,10 +31,12 @@ type KubeCredential struct {
 
 // PodRequest describes a job pod for a container group.
 type PodRequest struct {
-	JobID      int64
-	Spec       WorkSpec
-	PodSpec    string // instance group pod_spec_override (YAML or JSON)
-	Credential *KubeCredential
+	JobID int64
+	// ConnectorID is set, and JobID not, for an event connector's pod.
+	ConnectorID int64
+	Spec        WorkSpec
+	PodSpec     string // instance group pod_spec_override (YAML or JSON)
+	Credential  *KubeCredential
 	// ServiceURL is how the pod reaches the control plane.
 	ServiceURL string
 	ShimImage  string
@@ -148,13 +150,18 @@ func BuildPod(req PodRequest, unitURL, token string) (map[string]any, string, er
 	}
 	meta["namespace"] = ns
 	delete(meta, "name")
-	meta["generateName"] = fmt.Sprintf("automation-job-%d-", req.JobID)
 	labels, _ := meta["labels"].(map[string]any)
 	if labels == nil {
 		labels = map[string]any{}
 	}
 	labels["ansible-awx"] = req.InstallID
-	labels["ansible-awx-job-id"] = fmt.Sprint(req.JobID)
+	if req.ConnectorID != 0 {
+		meta["generateName"] = fmt.Sprintf("event-connector-%d-", req.ConnectorID)
+		labels["awxnext-event-connector-id"] = fmt.Sprint(req.ConnectorID)
+	} else {
+		meta["generateName"] = fmt.Sprintf("automation-job-%d-", req.JobID)
+		labels["ansible-awx-job-id"] = fmt.Sprint(req.JobID)
+	}
 	meta["labels"] = labels
 	pod["metadata"] = meta
 
@@ -178,7 +185,12 @@ func BuildPod(req PodRequest, unitURL, token string) (map[string]any, string, er
 	delete(worker, "args")
 	worker["command"] = []any{"/awxnext-shim/awxnext", "shim", "--url", unitURL}
 	env, _ := worker["env"].([]any)
-	env = append(env, map[string]any{"name": "AWXNEXT_SHIM_TOKEN", "value": token}, map[string]any{"name": "HOME", "value": "/runner"})
+	env = append(env, map[string]any{"name": "AWXNEXT_SHIM_TOKEN", "value": token})
+	if req.ConnectorID == 0 {
+		// A connector keeps the image's home, where a decision environment
+		// has its collections.
+		env = append(env, map[string]any{"name": "HOME", "value": "/runner"})
+	}
 	worker["env"] = env
 	mounts, _ := worker["volumeMounts"].([]any)
 	mounts = append(mounts, map[string]any{"name": "awxnext-shim", "mountPath": "/awxnext-shim"})

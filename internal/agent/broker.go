@@ -45,7 +45,15 @@ type WorkSpec struct {
 	RegistryPassword string   `json:"registry_password,omitempty"`
 	KeepaliveSeconds int      `json:"keepalive_seconds,omitempty"`
 	ShowPaths        []string `json:"show_paths,omitempty"`
+	// Kind is KindConnector for an event connector's runner, empty for a
+	// job's ansible-runner worker.
+	Kind string `json:"kind,omitempty"`
+	// Python is a connector's interpreter, empty to pick one.
+	Python string `json:"python,omitempty"`
 }
+
+// KindConnector is the kind of an event connector's work unit.
+const KindConnector = "connector"
 
 type message struct {
 	Type string `json:"type"`
@@ -402,6 +410,7 @@ type unit struct {
 	done            chan struct{}
 	diag            string
 	err             error
+	rc              int
 	cancelOnce      sync.Once
 	cancel          chan struct{}
 }
@@ -442,9 +451,16 @@ func (u *unit) Kill() {
 	})
 }
 
+// ExitCode is the worker's exit code once Wait returned: -1 when it did
+// not say, as when the connection to it was lost.
+func (u *unit) ExitCode() int {
+	<-u.done
+	return u.rc
+}
+
 func (u *unit) finish(rc int, diag string, err error) {
 	u.finishOnce.Do(func() {
-		u.diag, u.err = diag, err
+		u.diag, u.err, u.rc = diag, err, rc
 		u.stdoutW.Close()
 		u.stdinR.CloseWithError(errors.New("worker finished"))
 		close(u.done)

@@ -22,13 +22,14 @@ var typePerms = map[string][]string{
 	"eventstream":          {"view", "change", "delete"},
 	"eventrule":            {"view", "change", "delete", "approve", "automate"},
 	"maintenancewindow":    {"view", "change", "delete"},
+	"eventconnector":       {"view", "change", "delete"},
 }
 
 // Types that can live in a folder.
 var folderChildTypes = []string{"credential", "project", "inventory", "jobtemplate", "workflowjobtemplate", "notificationtemplate"}
 
 // Types that can be created inside an organization (add_<type> is granted on the org).
-var orgChildTypes = []string{"team", "credential", "project", "inventory", "workflowjobtemplate", "notificationtemplate", "executionenvironment", "folder", "eventstream", "eventrule", "maintenancewindow"}
+var orgChildTypes = []string{"team", "credential", "project", "inventory", "workflowjobtemplate", "notificationtemplate", "executionenvironment", "folder", "eventstream", "eventrule", "maintenancewindow", "eventconnector"}
 
 func perms(ct string, actions ...string) []string {
 	out := make([]string, 0, len(actions))
@@ -142,6 +143,8 @@ func buildManaged() []ManagedRole {
 		{"EventRule Read", "May view the event rule and its decisions", "eventrule", perms("eventrule", "view"), "read_role"},
 		{"MaintenanceWindow Admin", "Has all permissions to a single maintenance window", "maintenancewindow", all("maintenancewindow"), "admin_role"},
 		{"MaintenanceWindow Read", "May view the maintenance window", "maintenancewindow", perms("maintenancewindow", "view"), "read_role"},
+		{"EventConnector Admin", "Has all permissions to a single event connector", "eventconnector", all("eventconnector"), "admin_role"},
+		{"EventConnector Read", "May view the event connector, its runs and their logs", "eventconnector", perms("eventconnector", "view"), "read_role"},
 
 		{"Folder Admin", "Has all permissions to a folder, its subfolders and every object inside", "folder", folderAdmin(), "admin_role"},
 		{"Folder Execute", "May run any job or workflow template in the folder", "folder", concat([]string{"view_folder"}, perms("jobtemplate", "view", "execute"), perms("workflowjobtemplate", "view", "execute")), "execute_role"},

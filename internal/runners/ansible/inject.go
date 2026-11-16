@@ -156,22 +156,7 @@ func applyInjectors(r *Run, rc *resources.ResolvedCredential, inj *Injection) er
 	if injectors == nil {
 		return nil
 	}
-	// As in AWX, unset text fields stay undefined (they render empty, and
-	// default() applies), unset booleans are false, and private keys end
-	// with a newline.
-	vars := map[string]any{}
-	for _, f := range rc.Schema.Fields {
-		if v, ok := rc.Inputs[f.ID]; ok {
-			vars[f.ID] = v
-		} else if f.Default != nil {
-			vars[f.ID] = f.Default
-		} else if f.Type == "boolean" {
-			vars[f.ID] = false
-		}
-		if s, ok := vars[f.ID].(string); ok && f.Format == "ssh_private_key" && s != "" && !strings.HasSuffix(s, "\n") {
-			vars[f.ID] = s + "\n"
-		}
-	}
+	vars := credtypes.Vars(rc.Schema, rc.Inputs)
 	files := map[string]string{}
 	if fm, ok := injectors["file"].(map[string]any); ok {
 		keys := make([]string, 0, len(fm))
@@ -208,7 +193,7 @@ func applyInjectors(r *Run, rc *resources.ResolvedCredential, inj *Injection) er
 	}
 	if xm, ok := injectors["extra_vars"].(map[string]any); ok {
 		for k, v := range xm {
-			rendered, err := renderAny(v, vars, files)
+			rendered, err := credtypes.RenderAny(v, vars, files)
 			if err != nil {
 				return err
 			}
@@ -216,39 +201,6 @@ func applyInjectors(r *Run, rc *resources.ResolvedCredential, inj *Injection) er
 		}
 	}
 	return nil
-}
-
-func renderAny(v any, vars map[string]any, files map[string]string) (any, error) {
-	switch x := v.(type) {
-	case string:
-		return credtypes.Render(x, vars, files)
-	case map[string]any:
-		// Keys are templates too, as in AWX.
-		out := map[string]any{}
-		for k, e := range x {
-			key, err := credtypes.Render(k, vars, files)
-			if err != nil {
-				return nil, err
-			}
-			r, err := renderAny(e, vars, files)
-			if err != nil {
-				return nil, err
-			}
-			out[key] = r
-		}
-		return out, nil
-	case []any:
-		out := make([]any, len(x))
-		for i, e := range x {
-			r, err := renderAny(e, vars, files)
-			if err != nil {
-				return nil, err
-			}
-			out[i] = r
-		}
-		return out, nil
-	}
-	return v, nil
 }
 
 // ShellQuote joins args for ansible-runner's env/cmdline (parsed with shlex).

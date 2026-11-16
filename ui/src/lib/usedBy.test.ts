@@ -27,6 +27,7 @@ describe('used by', () => {
     expect(linkTo(d('event_stream', 2, 'credential'))).toBe('/event-streams/2')
     expect(howUsed(d('maintenance_window', 7, 'event_rules'))).toBe('holds its actions back')
     expect(linkTo(d('maintenance_window', 7, 'event_rules'))).toBe('/maintenance-windows/7')
+    expect(linkTo(d('event_connector', 8, 'event_stream'))).toBe('/event-connectors/8')
   })
   it('counts by kind', () => {
     expect(countKinds([d('job_template', 1, 'inventory'), d('job_template', 2, 'inventory'), d('schedule', 3, 'inventory')])).toBe('2 job templates and 1 schedule')

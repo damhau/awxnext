@@ -563,6 +563,160 @@ A stream created on the page starts in test mode, so that you can set up its sen
 [write rules against its events](#writing-a-rule-against-real-events) before any rule acts on
 them.
 
+## Event connectors
+
+An event connector reads events from a system that doesn't post them, such as a Kafka topic, and
+posts them to an event stream (roadmap M14-06). It runs an
+[`ansible.eda`](https://github.com/ansible/event-driven-ansible) source plugin, or any plugin
+with the same interface (`async def main(queue, args)`), without `ansible-rulebook` or Java. A
+connector runs where jobs run, in an image that has the plugin's collection and the Python
+packages it imports, such as a decision environment.
+
+To create a connector, post to `/api/v2/event_connectors/` with these fields:
+
+| Field | What it sets |
+|---|---|
+| `organization`, `name` | The connector's organization, and a name unique in it. Organization admins manage the organization's connectors; the roles `EventConnector Admin` and `EventConnector Read` give one connector. |
+| `event_stream` | The stream of the organization that the connector posts to. Setting it takes the right to change the stream (`EventStream Admin`): the connector posts with a token of its own, not the stream's credential. |
+| `source` | The plugin, by its full name, such as `ansible.eda.kafka`. `eda.builtin.` names are looked up in `ansible.eda`. |
+| `args` | The plugin's arguments, as a rulebook's source gives them. |
+| `filters` | Event filters applied in order, as a rulebook's: `[{"ansible.eda.json_filter": {"exclude_keys": ["password"]}}]`. |
+| `credentials` | The IDs of credentials whose injectors configure the plugin ([Credentials](#a-connectors-credentials)). Adding one takes the right to use it. |
+| `execution_environment` | The image the connector runs in, such as a decision environment. Empty: the default execution environment. |
+| `instance_group` | Where the connector runs: an instance group of execution or hybrid nodes, or a container group. Empty: the `default` group. Setting it takes the right to use the group. |
+| `python` | The Python interpreter. Empty: the interpreter of `ansible-rulebook` if the image has it, else `python3`. |
+| `enabled` | Whether the connector runs. `false` stops it. |
+| `restart_policy`, `restart_delay`, `max_restarts` | When it starts again after it stops ([Restarts](#restarts)). |
+| `buffer_size` | The events it holds while awxnext is unreachable, 1000 by default. |
+
+A connector's events have its URL as their `source` (`/api/v2/event_connectors/N/`), the
+plugin's name as their `type`, and the plugin's event, with its `meta`, as their `data`. A rule
+selects them with `event.type == "ansible.eda.kafka"`, for example.
+
+### Where a connector runs
+
+The leader places each enabled connector on one node at a time, the node of its group that runs
+the fewest connectors:
+
+- **An execution node:** a control node starts it through the node's agent, in the agent's
+  runtime: podman or docker in the connector's image, or `none`, the node's own Python.
+- **A hybrid node:** the node runs it itself, in `AWXNEXT_CONTAINER_RUNTIME`, as its jobs. With
+  `none`, the Helm chart's setting, the node's Python must find the collection
+  (`ANSIBLE_COLLECTIONS_PATH`): on Kubernetes, put connectors in a container group instead.
+- **A container group:** a control node starts a pod, `event-connector-<id>-...`, labelled
+  `awxnext-event-connector-id`, from the group's pod spec with the connector's image.
+
+awxnext sends the runner, a Python script that uses only the standard library, each time the
+connector starts, as it sends its job helper to pods: you install nothing but the collection.
+The runner needs Python 3.9 or later. It posts to awxnext at:
+
+- On an execution node, the URL its agent connects to.
+- On a hybrid node with `none`, `AWXNEXT_INTERNAL_URL`, else the node's own `AWXNEXT_LISTEN`
+  address.
+- In a container on a hybrid node, or in a pod, `AWXNEXT_SERVICE_URL`, else `AWXNEXT_BASE_URL`.
+
+Each placement has its own token. When the connector moves, stops, is turned off or changed,
+awxnext revokes the token: a runner left on a node that awxnext lost gets `401` from the stream
+and exits, so that two copies never post at once. When the execution node of a connector stops
+being ready, or its control node sends no heartbeat for 2 minutes, the leader moves the
+connector to another node, whatever its restart policy. A control node that stops hands its
+connectors back as it shuts down: the leader places them on another node at once, and passes
+over the stopped node until it sends a heartbeat again.
+
+### Restarts
+
+| `restart_policy` | The connector starts again when |
+|---|---|
+| `on-failure` (default) | Its plugin fails, or its runner exits with an error. |
+| `always` | It stops for any reason, the plugin's end included. |
+| `never` | Never: it stays `completed` or `failed`. |
+
+The first restart waits `restart_delay` seconds, 5 by default; each restart in a row doubles the
+wait, up to 64 times the delay. After `max_restarts` restarts in a row (0 for no limit), the
+connector stays `failed`. A run of 10 minutes resets the count. To start a stopped connector
+again, post to `/api/v2/event_connectors/N/restart/`. A change to a running connector's
+configuration restarts it with the new configuration.
+
+### Buffering through an outage
+
+The plugin's events go to a queue of `buffer_size` events. The runner posts them to the stream
+in batches of up to 100, as a CloudEvents batch, and takes them off the queue once awxnext has
+answered `202`. While awxnext is unreachable or answers `429` or `5xx`, the runner keeps the
+events and posts them again, after `Retry-After` or a backoff from 1 to 30 seconds. When the
+queue is full, the plugin waits: the Kafka source stops reading, and its consumer group's
+offset keeps the rest of the topic. Each event's ID is its `meta.uuid`, which the Kafka source
+derives from the message's topic, partition and offset, so an event posted twice is stored once.
+The stream drops events it refuses (`400`, `413`) one at a time; `stats.rejected` counts them.
+
+### A connector's credentials
+
+A connector takes credentials of any type with injectors, built-in or custom:
+
+- `env` injectors set the plugin's environment, inside the runner: never on a command line.
+- `extra_vars` injectors become the plugin's arguments, unless `args` sets them.
+- `file` injectors write files that only the runner's user can read. Name them with
+  `{{ eda.filename }}` (or `{{ tower.filename }}`), as EDA's controller does.
+
+The runner never logs its arguments, its environment or its token.
+
+### Kafka example
+
+To read a Kafka topic over SASL and TLS into a stream:
+
+1. Create a credential type for the broker's login:
+
+   ```sh
+   awx credential_types create --name "Kafka SASL" --kind cloud \
+     --inputs '{"fields": [{"id": "username", "label": "Username"},
+       {"id": "password", "label": "Password", "secret": true},
+       {"id": "ca", "label": "CA certificate", "multiline": true}]}' \
+     --injectors '{"extra_vars": {"sasl_plain_username": "{{ username }}",
+       "sasl_plain_password": "{{ password }}", "cafile": "{{ eda.filename }}"},
+       "file": {"template": "{{ ca }}"}}'
+   ```
+
+2. Create a credential of that type with the login and the CA certificate.
+3. Create an execution environment for an image with `ansible.eda` and the packages its Kafka
+   source imports: `aiokafka`, `aiohttp`, `fastavro` and `PyYAML`. The decision environment
+   `quay.io/ansible/ansible-rulebook:v1.3.2` lacks `fastavro`; to add it, build on it:
+
+   ```dockerfile
+   FROM quay.io/ansible/ansible-rulebook:v1.3.2
+   RUN python3.12 -m pip install --user fastavro==1.13.1
+   ```
+
+4. Create the connector:
+
+   ```sh
+   curl -u admin -H 'Content-Type: application/json' https://awxnext.example.com/api/v2/event_connectors/ -d '{
+     "name": "orders", "organization": 1, "event_stream": 4,
+     "source": "ansible.eda.kafka",
+     "args": {"host": "kafka.example.com", "port": 9093, "topic": "orders", "group_id": "awxnext",
+              "offset": "earliest", "security_protocol": "SASL_SSL", "sasl_mechanism": "SCRAM-SHA-512"},
+     "filters": [{"ansible.eda.json_filter": {"exclude_keys": ["card_number"]}}],
+     "credentials": [12], "execution_environment": 3, "instance_group": 2}'
+   ```
+
+5. Check `status` on `/api/v2/event_connectors/N/`: `starting`, then `running`. Its events are at
+   `/api/v2/event_streams/4/events/`.
+
+### Status and log
+
+| `status` | Meaning |
+|---|---|
+| `pending` | Waiting for a node; `status_explanation` says why, such as no node of its group being up. |
+| `starting`, `running` | Placed on `execution_node`, watched by `controller_node`. |
+| `restarting` | Stopped; starts again at `next_start`. |
+| `stopped` | Turned off. |
+| `completed`, `failed` | Ended and not restarted; `status_explanation` says why. |
+
+`stats` is what the runner last reported, every 5 seconds: events `sent`, `buffered`,
+`dropped` and `rejected`, `retries`, and whether awxnext is `unreachable`. Each run, the last 20
+of each connector, is at `/api/v2/event_connectors/N/runs/`, with its node, exit code (`1`: the
+plugin failed; `2`: the runner couldn't start it, such as a plugin not found; `3`: awxnext
+refused its token), its explanation and the last 64 KiB of its log. A connector has version
+history, `used_by`, and GitOps documents of kind `EventConnector` ([GitOps](gitops.md)).
+
 ## Event rules
 
 An event rule reads the events of one or more streams, and acts on the events its filter holds
