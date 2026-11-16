@@ -392,6 +392,16 @@ suppressions:
   expires: '2026-12-10'
   created: '2026-11-10'
   source: triage
+- id: 0a68653d6c83
+  reason: 'secubot triage: false positive (high confidence, single pass). gosec G101
+    matches on variable or key names that contain "credential". Line 117 is a filter
+    map for API query parameters: `map[string]string{"source_credential": "source_credential",
+    "target_credential": "target_credential"}`. It maps field names to column names
+    and holds no secret value. No password, token or key is present, so there is no
+    hardcoded credential.'
+  expires: '2026-12-16'
+  created: '2026-11-16'
+  source: triage
 - id: 3807c904b3c2
   reason: 'secubot triage: false positive (high confidence, single pass). This exec.Command
     does run in production. The event-connector supervisor calls it from start() when
@@ -456,6 +466,46 @@ suppressions:
     so the rule''s description does not match this line. The `ctx` here is not request-scoped.
     It is the lifetime context of the background rule engine worker: RuleEngine.Run(ctx)
     at rule_engine.go:86, which leads to run, Pass, '
+  expires: '2026-12-16'
+  created: '2026-11-16'
+  source: triage
+- id: 8fb96c8684ac
+  reason: 'secubot triage: false positive (high confidence, single pass). gosec G101
+    flags string literals whose variable or key names contain words like "credential",
+    and that is what happened here. Line 55 of internal/resources/eda_credentials.go
+    starts a `filters` map that translates EDA API query-parameter names into awxnext
+    filter field names. Examples are "name" → "name__istartswith" and "credential_type_id"
+    → "credential_type", and the map continues on lines 55–5'
+  expires: '2026-12-16'
+  created: '2026-11-16'
+  source: triage
+- id: a49b7410071d
+  reason: 'secubot triage: false positive (high confidence, single pass). gosec G101
+    flagged the constant `edaTokenCols = "id, name, description, user_id, created,
+    modified"` because its identifier contains "Token". The value is just a list of
+    SQL column names used in SELECT statements (e.g. line 564). It holds no secret,
+    password, key or token. The constant is reachable from the EDA token HTTP handlers,
+    but it exposes no credential, so CWE-798 does not apply. The scann'
+  expires: '2026-12-16'
+  created: '2026-11-16'
+  source: triage
+- id: cedb7cb68129
+  reason: 'secubot triage: false positive (high confidence, single pass). The flagged
+    line, internal/resources/eda_credentials.go:111, declares `edaInputSourceNames`.
+    This is a map from API field names to DB/resource field names: "source_credential",
+    "target_credential", "input_field_name", "description" and "metadata", each mapped
+    to itself. gosec G101 flags it only because the variable name and values contain
+    the word "credential". None of the strings is a password, t'
+  expires: '2026-12-16'
+  created: '2026-11-16'
+  source: triage
+- id: d1c44586b8c1
+  reason: 'secubot triage: false positive (high confidence, single pass). gosec G101
+    flagged this line only because the variable name `edaCredentialNames` contains
+    "Credential". At internal/resources/eda_credentials.go:49-50, that variable is
+    a map from API field names to DB column names: name→name, description→description,
+    inputs→inputs, credential_type_id→credential_type, organization_id→organization.
+    It holds no password, token, key or other secret. The code in edaCr'
   expires: '2026-12-16'
   created: '2026-11-16'
   source: triage
