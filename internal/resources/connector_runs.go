@@ -22,6 +22,7 @@ import (
 
 	"github.com/damhau/awxnext/internal/agent"
 	"github.com/damhau/awxnext/internal/api"
+	"github.com/damhau/awxnext/internal/config"
 	"github.com/damhau/awxnext/internal/connectors"
 	"github.com/damhau/awxnext/internal/credtypes"
 	"github.com/damhau/awxnext/internal/jobexec"
@@ -543,11 +544,15 @@ func asConnectorWorker(w agent.Worker) (connectorWorker, error) {
 	return cw, nil
 }
 
-// connectorSiteURL is how a connector on this node reaches awxnext: the
-// node itself for a process, the service URL from a container, which
-// loopback does not reach.
+// connectorSiteURL is how a connector on this node reaches awxnext.
 func (s *ConnectorSupervisor) connectorSiteURL(runtime string) string {
-	cfg := s.app.Cfg
+	return SiteURL(s.app.Cfg, runtime)
+}
+
+// SiteURL is how a process on this node, run in runtime, reaches awxnext:
+// the node itself for a process, the service URL from a container, which
+// loopback does not reach.
+func SiteURL(cfg *config.Config, runtime string) string {
 	if runtime == "none" || runtime == "process" || runtime == "" {
 		if cfg.InternalURL != "" {
 			return cfg.InternalURL

@@ -1737,6 +1737,128 @@ token isn't used: rules launch jobs as their owner.
 The `ansible.eda` 2.13.0 collection's integration targets run against awxnext nightly
 (`compat/`, suite `eda`).
 
+## Collection hub
+
+awxnext serves Ansible collections on Galaxy's v3 API, in the URLs of galaxy_ng (Automation
+Hub), so `ansible-galaxy` and `ansible-builder` install from it unchanged. It keeps collections
+only: build execution environments with `ansible-builder` and push them to your own registry.
+
+Collections belong to namespaces (`/api/v2/collection_namespaces/`), each owned by an
+organization. A namespace's name is unique in awxnext and is the first part of its collections'
+names (`acme` in `acme.tools`): lowercase letters, digits and single underscores, starting with
+a letter, up to 64 characters. A namespace that has collections can't be renamed or deleted.
+Publishing through the API comes with roadmap M13-02.
+
+### Who sees a collection
+
+You see and install a namespace's collections when you can see the namespace: as a member,
+admin or auditor of its organization, a system administrator or auditor, or with the
+`CollectionNamespace Read` or `CollectionNamespace Admin` role on it. Anyone else gets `404`, on
+the collection, its versions and its download alike, and lists leave it out: a client then goes
+on to its next server, and the namespaces of other organizations stay unknown. Every call but
+the API's root needs a user: a personal token (`/api/v2/tokens/`, `read` scope is enough), sent
+as `Authorization: Token <token>`, which is what `ansible-galaxy` sends, or `Bearer <token>`;
+basic authentication while `AUTH_BASIC_ENABLED` is on; or a session.
+
+### URLs
+
+| What | Path |
+|---|---|
+| Server for `ansible-galaxy` (the published repository) | `/api/galaxy/content/published/`, or `/api/galaxy/` |
+| Collections | `/api/galaxy/v3/plugin/ansible/content/published/collections/index/` |
+| A collection, its versions | `.../index/<namespace>/<name>/`, `.../index/<namespace>/<name>/versions/` |
+| A version | `.../index/<namespace>/<name>/versions/<version>/` |
+| Its artifact | `/api/galaxy/v3/plugin/ansible/content/published/collections/artifacts/<namespace>-<name>-<version>.tar.gz` |
+
+Older clients' paths, `/api/galaxy/content/published/v3/collections/...` and
+`/api/galaxy/v3/collections/...`, answer the same. Lists are paginated as Pulp's: `limit` (10 by
+default, at most 100) and `offset`, with `meta.count`, `links` and `data`; versions come highest
+first. A version's `download_url` starts with the address the client reached awxnext at, which
+`ansible-galaxy` also sends its token to.
+
+### ansible-galaxy
+
+To install from awxnext before Galaxy, list it in `ansible.cfg`:
+
+```ini
+[galaxy]
+server_list = awxnext, galaxy
+
+[galaxy_server.awxnext]
+url = https://awxnext.example.com/api/galaxy/content/published/
+token = <a personal token>
+
+[galaxy_server.galaxy]
+url = https://galaxy.ansible.com/
+```
+
+Or set the same in the environment: `ANSIBLE_GALAXY_SERVER_LIST=awxnext,galaxy`,
+`ANSIBLE_GALAXY_SERVER_AWXNEXT_URL` and `ANSIBLE_GALAXY_SERVER_AWXNEXT_TOKEN`. `ansible-galaxy`
+asks every server for a collection's versions and takes the highest that matches, whichever
+server has it: to make sure a private collection comes from awxnext, give its server in
+`requirements.yml`:
+
+```yaml
+collections:
+  - name: acme.tools
+    version: ">=1.0.0,<2.0.0"
+    source: https://awxnext.example.com/api/galaxy/content/published/
+```
+
+### ansible-builder
+
+`ansible-builder` installs an execution environment's collections with `ansible-galaxy`, so it
+takes the same configuration. To keep the token out of the image, pass it as a build argument of
+the stage that installs collections:
+
+```yaml
+# execution-environment.yml
+version: 3
+dependencies:
+  galaxy: requirements.yml
+additional_build_files:
+  - src: ansible.cfg   # server_list and url as above, without the token
+    dest: configs
+additional_build_steps:
+  prepend_galaxy:
+    - COPY _build/configs/ansible.cfg /etc/ansible/ansible.cfg
+    - ARG ANSIBLE_GALAXY_SERVER_AWXNEXT_TOKEN
+```
+
+```sh
+ansible-builder build --tag registry.example.com/acme-ee:1.0 \
+  --build-arg ANSIBLE_GALAXY_SERVER_AWXNEXT_TOKEN="$TOKEN"
+```
+
+### Jobs
+
+A job installs its project's `collections/requirements.yml` from its organization's Galaxy
+credentials, in order. To install from the hub, add the managed **Collection Hub** credential to
+the organization's Galaxy credentials (`POST /api/v2/organizations/<id>/galaxy_credentials/`).
+It holds no token: each install gets a read token of its own, for the namespaces of the
+project's organization, deleted when the install ends. Should that fail, it expires 5 minutes
+after the install's timeout (`DEFAULT_PROJECT_UPDATE_TIMEOUT`, an hour without one). An install
+the requirements cache answers gets no token.
+
+The install reaches awxnext where it runs:
+
+| Where the job runs | The hub's address |
+|---|---|
+| A process on awxnext's node | `AWXNEXT_INTERNAL_URL`, else the listen address on loopback |
+| A container on awxnext's node, or a container group's pod | `AWXNEXT_SERVICE_URL`, else `AWXNEXT_BASE_URL` |
+| An execution node | `AWXNEXT_BASE_URL`, which its agent connects to |
+
+### Storage
+
+Collection artifacts are kept in the database by default. To keep them in object storage, set
+the `HUB_STORAGE_*` settings (Settings, System, or `/api/v2/settings/system/`), as the
+[job event archives'](#job-event-archives): `HUB_STORAGE` (`database`, `s3`, `azure_blob`), the
+bucket or container, the endpoint, the region and the credential. Objects are named
+`<prefix><INSTALL_UUID>/<sha256>/<namespace>-<name>-<version>.tar.gz` (`HUB_STORAGE_PREFIX`,
+`collections/` by default). Artifacts stored before a change stay where they are; a deleted
+version's object is deleted at the next maintenance (every 10 minutes). A backup holds the
+database only: keep the bucket's own backups or versioning.
+
 ## Settings
 
 The Settings pages group AWX's settings by what they set up rather than by AWX's categories:

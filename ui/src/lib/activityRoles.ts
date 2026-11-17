@@ -16,6 +16,7 @@ const objectTypes: Record<string, string> = {
   eventrule: 'event rule',
   maintenancewindow: 'maintenance window',
   eventconnector: 'event connector',
+  collectionnamespace: 'collection namespace',
 }
 
 /** "Execute role on job template Deploy" from a role's summary, '' without a role field. */

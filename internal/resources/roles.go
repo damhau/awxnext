@@ -151,6 +151,8 @@ func ctLabel(ct string) string {
 		return "Maintenance Window"
 	case "eventconnector":
 		return "Event Connector"
+	case "collectionnamespace":
+		return "Collection Namespace"
 	}
 	return strings.ToUpper(ct[:1]) + ct[1:]
 }

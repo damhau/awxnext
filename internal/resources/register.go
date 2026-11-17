@@ -25,6 +25,7 @@ func init() {
 	registerMaintenanceWindows()
 	registerEventConnectors()
 	registerRulebooks()
+	registerCollectionNamespaces()
 	registerRoles()
 	registerActivity()
 	registerRelatedLists()

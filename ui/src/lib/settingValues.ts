@@ -26,7 +26,7 @@ export type Kind =
   | 'text'
   | 'json'
   | 'oidc-mapping'
-  | 'archive-credential'
+  | 'storage-credential'
   // Organization and team maps, and their kin (awxMaps.ts).
   | 'awx-maps'
   | 'ldap-flags'

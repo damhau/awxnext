@@ -1548,9 +1548,11 @@ and galaxy.ansible.com collections are mirrored from a requirements file.
 Galaxy's v3 API under `/api/galaxy/`, read side, with galaxy_ng's
 repository URLs. Namespaces belong to organizations, read as awxnext's RBAC
 allows; `Authorization: Token` is accepted, as `ansible-galaxy` sends it.
-Files are kept where event archives are (the database, S3 or Azure Blob). A
-managed Galaxy credential lets project syncs install from it, with a token
-minted per sync.
+Files are kept as event archives are (the database, S3 or Azure Blob), under
+settings of their own (`HUB_STORAGE_*`). A managed Galaxy credential lets
+project syncs install from it, with a token minted per sync. A collection a
+user can't read answers `404`, as if it weren't there: namespace names are
+global, and Galaxy clients then go on to their next server.
 
 **Done when:** the real `ansible-galaxy` installs and downloads from it, a
 project sync installs through the managed credential, and a user without

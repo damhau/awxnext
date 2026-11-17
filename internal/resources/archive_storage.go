@@ -12,10 +12,16 @@ import (
 // JOB_EVENTS_ARCHIVE_* settings, signed in with the credential they name or
 // from the environment.
 func archiveStore(app *api.App) func(ctx context.Context, kind string) (blob.Store, error) {
+	return blobStore(app, "JOB_EVENTS_ARCHIVE", "job event archive")
+}
+
+// blobStore opens object storage of a kind from the settings <prefix>_BUCKET,
+// _ENDPOINT, _REGION and _CREDENTIAL.
+func blobStore(app *api.App, prefix, what string) func(ctx context.Context, kind string) (blob.Store, error) {
 	return func(ctx context.Context, kind string) (blob.Store, error) {
 		s := app.Settings
 		var cred *ResolvedCredential
-		if id, ok := api.ID(s.Get(ctx, "JOB_EVENTS_ARCHIVE_CREDENTIAL")); ok && id > 0 {
+		if id, ok := api.ID(s.Get(ctx, prefix+"_CREDENTIAL")); ok && id > 0 {
 			var err error
 			if cred, err = ResolveCredential(ctx, app, id); err != nil {
 				return nil, err
@@ -28,13 +34,13 @@ func archiveStore(app *api.App) func(ctx context.Context, kind string) (blob.Sto
 			v, _ := cred.Inputs[k].(string)
 			return v
 		}
-		bucket, endpoint := s.String(ctx, "JOB_EVENTS_ARCHIVE_BUCKET"), s.String(ctx, "JOB_EVENTS_ARCHIVE_ENDPOINT")
+		bucket, endpoint := s.String(ctx, prefix+"_BUCKET"), s.String(ctx, prefix+"_ENDPOINT")
 		switch kind {
 		case "s3":
 			if cred != nil && cred.Namespace != "aws" {
 				return nil, fmt.Errorf("credential %q is not an Amazon Web Services credential", cred.Name)
 			}
-			return blob.NewS3(ctx, blob.S3Config{Bucket: bucket, Endpoint: endpoint, Region: s.String(ctx, "JOB_EVENTS_ARCHIVE_REGION"),
+			return blob.NewS3(ctx, blob.S3Config{Bucket: bucket, Endpoint: endpoint, Region: s.String(ctx, prefix+"_REGION"),
 				AccessKey: in("username"), SecretKey: in("password"), SessionToken: in("security_token")})
 		case "azure_blob":
 			if cred != nil && cred.Namespace != "azure_rm" {
@@ -42,6 +48,6 @@ func archiveStore(app *api.App) func(ctx context.Context, kind string) (blob.Sto
 			}
 			return blob.NewAzure(ctx, blob.AzureConfig{Container: bucket, URL: endpoint, Tenant: in("tenant"), Client: in("client"), Secret: in("secret")})
 		}
-		return nil, fmt.Errorf("unknown job event archive storage %q", kind)
+		return nil, fmt.Errorf("unknown %s storage %q", what, kind)
 	}
 }

@@ -49,7 +49,7 @@ import {
   type SamlTeamAttr,
 } from '../../lib/awxMaps'
 import { aggregatorTarget, testOutcome } from '../../lib/logging'
-import { archiveCredentialParams } from '../../lib/jobSettings'
+import { storageCredentialParams, storageOfCredential } from '../../lib/jobSettings'
 import {
   addItems,
   amountText,
@@ -800,8 +800,8 @@ function SettingControl({ k, row, ctx }: { k: string; row: Row; ctx: Ctx }) {
       return <ReadOnlyValue value={value} />
     case 'oidc-mapping':
       return <MappingEditor value={(value as Rule[]) ?? []} onChange={onChange} editable={!disabled} groupsClaim={String(ctx.values.OIDC_GROUPS_CLAIM ?? 'groups')} />
-    case 'archive-credential':
-      return <ObjectControl id={id} resource="credentials/" params={archiveCredentialParams(ctx.values.JOB_EVENTS_ARCHIVE_STORAGE)} value={value as number | null} onChange={onChange} disabled={disabled} />
+    case 'storage-credential':
+      return <ObjectControl id={id} resource="credentials/" params={storageCredentialParams(ctx.values[storageOfCredential[k]])} value={value as number | null} onChange={onChange} disabled={disabled} />
     case 'secret':
       return <SecretControl id={id} value={value} saved={ctx.saved[k]} onChange={onChange} disabled={disabled} lines={row.lines} />
     case 'switch': {

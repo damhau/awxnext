@@ -225,6 +225,12 @@ var authenticate Authenticator = func(r *http.Request, w http.ResponseWriter) (*
 // SetAuthenticator installs the request authenticator.
 func SetAuthenticator(f Authenticator) { authenticate = f }
 
+// Authenticate resolves the principal of a request as /api/v2/ does, for
+// anonymous routes that also take other credentials.
+func Authenticate(r *http.Request, w http.ResponseWriter) (*Principal, error) {
+	return authenticate(r, w)
+}
+
 func (a *App) newCtx(r *http.Request, p *Principal) *Ctx {
 	if p == nil {
 		p = &Principal{}

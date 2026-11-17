@@ -235,7 +235,7 @@ export const settingsPages: SettingsPage[] = [
   {
     slug: 'system',
     title: tr('System'),
-    blurb: tr('The service\'s address, the activity stream, what organization admins may do, proxies, and event streams.'),
+    blurb: tr('The service\'s address, the activity stream, what organization admins may do, proxies, event streams, and the collection hub\'s storage.'),
     categories: ['system', 'named-url'],
     sections: [
       { id: 'service', title: tr('Service'), rows: [
@@ -281,6 +281,19 @@ export const settingsPages: SettingsPage[] = [
             help: tr('A rule\'s success rate counts the checks of its fixes that settled in this time: the share that fixed their key.'),
             unit: tr('days'),
           }),
+        ],
+      },
+      {
+        id: 'collection-hub',
+        title: tr('Collection hub'),
+        intro: tr('ansible-galaxy and ansible-builder install collections from awxnext at /api/galaxy/. Their artifacts are kept in the database, or in object storage.'),
+        rows: [
+          row('HUB_STORAGE', { label: tr('Artifacts kept in'), options: [['database', tr('Database')], ['s3', tr('Amazon S3 or S3-compatible')], ['azure_blob', asIs('Azure Blob Storage')]] }),
+          row('HUB_STORAGE_BUCKET', { label: tr('Hub bucket or container') }),
+          row('HUB_STORAGE_ENDPOINT', { label: tr('Hub endpoint') }),
+          row('HUB_STORAGE_REGION', { label: tr('Hub region') }),
+          row('HUB_STORAGE_PREFIX', { label: tr('Hub key prefix') }),
+          row('HUB_STORAGE_CREDENTIAL', { label: tr('Hub credential'), control: 'storage-credential' }),
         ],
       },
       { id: 'named-url', title: tr('Named URLs'), rows: [row('NAMED_URL_FORMATS', { label: tr('Named URL formats') }), row('NAMED_URL_GRAPH_NODES', { label: tr('Named URL graph') })] },
@@ -729,7 +742,7 @@ export const settingsPages: SettingsPage[] = [
           row('JOB_EVENTS_ARCHIVE_ENDPOINT', { label: tr('Archive endpoint') }),
           row('JOB_EVENTS_ARCHIVE_REGION', { label: tr('Archive region') }),
           row('JOB_EVENTS_ARCHIVE_PREFIX', { label: tr('Archive key prefix') }),
-          row('JOB_EVENTS_ARCHIVE_CREDENTIAL', { label: tr('Archive credential'), control: 'archive-credential' }),
+          row('JOB_EVENTS_ARCHIVE_CREDENTIAL', { label: tr('Archive credential'), control: 'storage-credential' }),
         ],
       },
     ],

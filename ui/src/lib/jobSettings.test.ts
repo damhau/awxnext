@@ -1,10 +1,15 @@
 import { describe, expect, it } from 'vitest'
-import { archiveCredentialParams } from './jobSettings'
+import { storageCredentialParams, storageOfCredential } from './jobSettings'
 
 describe('jobs settings', () => {
   it('offers the credentials of the storage', () => {
-    expect(archiveCredentialParams('s3')).toEqual({ credential_type__namespace: 'aws' })
-    expect(archiveCredentialParams('azure_blob')).toEqual({ credential_type__namespace: 'azure_rm' })
-    expect(archiveCredentialParams('database')).toEqual({ credential_type__namespace__in: 'aws,azure_rm' })
+    expect(storageCredentialParams('s3')).toEqual({ credential_type__namespace: 'aws' })
+    expect(storageCredentialParams('azure_blob')).toEqual({ credential_type__namespace: 'azure_rm' })
+    expect(storageCredentialParams('database')).toEqual({ credential_type__namespace__in: 'aws,azure_rm' })
+  })
+
+  it('knows the storage of each credential setting', () => {
+    expect(storageOfCredential.JOB_EVENTS_ARCHIVE_CREDENTIAL).toBe('JOB_EVENTS_ARCHIVE_STORAGE')
+    expect(storageOfCredential.HUB_STORAGE_CREDENTIAL).toBe('HUB_STORAGE')
   })
 })

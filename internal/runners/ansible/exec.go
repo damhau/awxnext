@@ -107,6 +107,15 @@ func NewRunFor(ctx context.Context, app *api.App, ident string, row jobs.Row) (*
 	return r, nil
 }
 
+// serverURL is how the run reaches awxnext: as a connector on this node
+// does, or from an execution node at the base URL, which agents connect to.
+func (r *Run) serverURL(app *api.App) string {
+	if r.agentNode != "" {
+		return app.Cfg.BaseURL
+	}
+	return resources.SiteURL(app.Cfg, r.runtime)
+}
+
 func (r *Run) useRemote(runtime, root string) {
 	if r.WorkDir != "" && r.jobDir == "" {
 		os.RemoveAll(r.WorkDir)

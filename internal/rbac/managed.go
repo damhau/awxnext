@@ -23,13 +23,14 @@ var typePerms = map[string][]string{
 	"eventrule":            {"view", "change", "delete", "approve", "automate"},
 	"maintenancewindow":    {"view", "change", "delete"},
 	"eventconnector":       {"view", "change", "delete"},
+	"collectionnamespace":  {"view", "change", "delete"},
 }
 
 // Types that can live in a folder.
 var folderChildTypes = []string{"credential", "project", "inventory", "jobtemplate", "workflowjobtemplate", "notificationtemplate"}
 
 // Types that can be created inside an organization (add_<type> is granted on the org).
-var orgChildTypes = []string{"team", "credential", "project", "inventory", "workflowjobtemplate", "notificationtemplate", "executionenvironment", "folder", "eventstream", "eventrule", "maintenancewindow", "eventconnector"}
+var orgChildTypes = []string{"team", "credential", "project", "inventory", "workflowjobtemplate", "notificationtemplate", "executionenvironment", "folder", "eventstream", "eventrule", "maintenancewindow", "eventconnector", "collectionnamespace"}
 
 func perms(ct string, actions ...string) []string {
 	out := make([]string, 0, len(actions))
@@ -89,7 +90,7 @@ func buildManaged() []ManagedRole {
 	}
 	r := []ManagedRole{
 		{"Organization Admin", "Has all permissions to a single organization and all objects inside of it", "organization", concat(orgAdmin), "admin_role"},
-		{"Organization Member", "Is a member of the organization", "organization", []string{"view_organization", "member_organization", "view_team", "view_executionenvironment", "view_folder"}, "member_role"},
+		{"Organization Member", "Is a member of the organization", "organization", []string{"view_organization", "member_organization", "view_team", "view_executionenvironment", "view_folder", "view_collectionnamespace"}, "member_role"},
 		{"Organization Audit", "Has permission to view all objects inside of a single organization", "organization", concat([]string{"audit_organization"}, viewAll()), "auditor_role"},
 		{"Organization Read", "May view settings for the organization", "organization", []string{"view_organization"}, "read_role"},
 		{"Organization Execute", "May run any executable resources in the organization", "organization", concat([]string{"view_organization"}, perms("jobtemplate", "view", "execute"), perms("workflowjobtemplate", "view", "execute")), "execute_role"},
@@ -145,6 +146,8 @@ func buildManaged() []ManagedRole {
 		{"MaintenanceWindow Read", "May view the maintenance window", "maintenancewindow", perms("maintenancewindow", "view"), "read_role"},
 		{"EventConnector Admin", "Has all permissions to a single event connector", "eventconnector", all("eventconnector"), "admin_role"},
 		{"EventConnector Read", "May view the event connector, its runs and their logs", "eventconnector", perms("eventconnector", "view"), "read_role"},
+		{"CollectionNamespace Admin", "Has all permissions to a single collection namespace", "collectionnamespace", all("collectionnamespace"), "admin_role"},
+		{"CollectionNamespace Read", "May view and install the collections of the namespace", "collectionnamespace", perms("collectionnamespace", "view"), "read_role"},
 
 		{"Folder Admin", "Has all permissions to a folder, its subfolders and every object inside", "folder", folderAdmin(), "admin_role"},
 		{"Folder Execute", "May run any job or workflow template in the folder", "folder", concat([]string{"view_folder"}, perms("jobtemplate", "view", "execute"), perms("workflowjobtemplate", "view", "execute")), "execute_role"},

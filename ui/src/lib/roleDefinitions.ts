@@ -35,6 +35,7 @@ export function modelLabel(model: string, many = false): string {
     eventrule: [tr('Event rule'), tr('Event rules')],
     maintenancewindow: [tr('Maintenance window'), tr('Maintenance windows')],
     eventconnector: [tr('Event connector'), tr('Event connectors')],
+    collectionnamespace: [tr('Collection namespace'), tr('Collection namespaces')],
   }
   const n = names[m]
   return n ? n[many ? 1 : 0] : m

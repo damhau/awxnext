@@ -28,6 +28,7 @@ func Install(app *api.App) {
 	installWebhookRoutes(app)
 	installEventStreamRoutes(app)
 	installEDA(app)
+	installHub(app)
 	installCallbackRoutes(app)
 	app.Handle("GET", "/api/v2/metrics/", handleAWXMetrics)
 	app.Handle("GET", "/api/v2/applications/", applications)
@@ -75,6 +76,13 @@ func Bootstrap(ctx context.Context, app *api.App) error {
 	if _, err := app.DB.Exec(ctx, `INSERT INTO credentials (name, credential_type_id, inputs, managed)
 		SELECT 'Ansible Galaxy', id, '{"url": "https://galaxy.ansible.com/"}', true FROM credential_types
 		WHERE namespace = 'galaxy_api_token' AND managed AND NOT EXISTS (SELECT 1 FROM credentials WHERE managed)`); err != nil {
+		return err
+	}
+	if _, err := app.DB.Exec(ctx, `INSERT INTO credentials (name, description, credential_type_id, inputs, managed)
+		SELECT $1, $2, id, jsonb_build_object('url', $3::text), true FROM credential_types
+		WHERE namespace = 'galaxy_api_token' AND managed AND NOT EXISTS (SELECT 1 FROM credentials WHERE managed AND name = $1)
+		ON CONFLICT DO NOTHING`,
+		HubCredentialName, "awxnext's collection hub, its published repository: each install gets a read token of its own.", HubCredentialPath); err != nil {
 		return err
 	}
 	if !app.Settings.IsSet(ctx, "INSTALL_UUID") {

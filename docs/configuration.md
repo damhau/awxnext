@@ -131,6 +131,12 @@ clients and imports keep working.
 | `EVENT_STREAM_ALLOWED_LOCAL_ADDRESSES` | list | `[]` | awxnext fetches the keys of an OIDC event stream's issuer itself, from the address its credential gives, and refuses loopback (127.0.0.0/8, ::1), link-local (169.254.0.0/16, fe80::/10) and unspecified addresses, and cloud metadata services: they are awxnext's own host. Allow some here, one per entry: an address (127.0.0.1), a network (127.0.0.0/8), or an address and port (127.0.0.1:8443). |
 | `EVENT_RULE_DECISION_RETENTION_DAYS` | integer | `90` | Days the cleanup_event_streams management job keeps the decisions of event rules that matched: launched, throttled, held back, and the rest. Each is kept as long as its event at least. A decision whose filter didn't match is kept only as long as its event. 0: as long as their events. |
 | `EVENT_RULE_SUCCESS_RATE_DAYS` | integer | `30` | The days over which an event rule's success rate counts its checked fixes: the share of those that settled in that time that fixed their key. From 1 to 3650. |
+| `HUB_STORAGE` | choice | `"database"` | Where the collection hub keeps the artifacts of new collection versions. Those already stored stay readable where they are. |
+| `HUB_STORAGE_BUCKET` | string | `""` | The S3 bucket or the Azure Blob Storage container of the collection hub's artifacts. It must exist. |
+| `HUB_STORAGE_PREFIX` | string | `"collections/"` | Prepended to the artifacts' keys, followed by the install's INSTALL_UUID, so installs can share a bucket. |
+| `HUB_STORAGE_ENDPOINT` | string | `""` | For S3, an S3-compatible service (https://minio.example.com:9000), empty for AWS. For Azure, the account's blob endpoint (https://<account>.blob.core.windows.net/). |
+| `HUB_STORAGE_REGION` | string | `""` | The S3 region; empty for the environment's (AWS_REGION), else us-east-1. |
+| `HUB_STORAGE_CREDENTIAL` | integer | null | An Amazon Web Services (access key) or Microsoft Azure Resource Manager (client ID and secret) credential. Empty: the environment's (AWS's default chain; AZURE_STORAGE_CONNECTION_STRING, or Azure's default chain: environment, workload identity, managed identity). |
 | `SUBSCRIPTIONS_USERNAME` | string | `""` | *No effect.* there are no Red Hat subscriptions to manage. |
 | `AUTOMATION_ANALYTICS_GATHER_INTERVAL` | integer | `14400` | *No effect.* nothing is sent to Red Hat analytics. |
 | `INSIGHTS_TRACKING_STATE` | boolean | `false` | *No effect.* nothing is sent to Red Hat analytics. |
@@ -705,6 +711,12 @@ clients and imports keep working.
 | `EVENT_STREAM_ALLOWED_LOCAL_ADDRESSES` | list | `[]` | awxnext fetches the keys of an OIDC event stream's issuer itself, from the address its credential gives, and refuses loopback (127.0.0.0/8, ::1), link-local (169.254.0.0/16, fe80::/10) and unspecified addresses, and cloud metadata services: they are awxnext's own host. Allow some here, one per entry: an address (127.0.0.1), a network (127.0.0.0/8), or an address and port (127.0.0.1:8443). |
 | `EVENT_RULE_DECISION_RETENTION_DAYS` | integer | `90` | Days the cleanup_event_streams management job keeps the decisions of event rules that matched: launched, throttled, held back, and the rest. Each is kept as long as its event at least. A decision whose filter didn't match is kept only as long as its event. 0: as long as their events. |
 | `EVENT_RULE_SUCCESS_RATE_DAYS` | integer | `30` | The days over which an event rule's success rate counts its checked fixes: the share of those that settled in that time that fixed their key. From 1 to 3650. |
+| `HUB_STORAGE` | choice | `"database"` | Where the collection hub keeps the artifacts of new collection versions. Those already stored stay readable where they are. |
+| `HUB_STORAGE_BUCKET` | string | `""` | The S3 bucket or the Azure Blob Storage container of the collection hub's artifacts. It must exist. |
+| `HUB_STORAGE_PREFIX` | string | `"collections/"` | Prepended to the artifacts' keys, followed by the install's INSTALL_UUID, so installs can share a bucket. |
+| `HUB_STORAGE_ENDPOINT` | string | `""` | For S3, an S3-compatible service (https://minio.example.com:9000), empty for AWS. For Azure, the account's blob endpoint (https://<account>.blob.core.windows.net/). |
+| `HUB_STORAGE_REGION` | string | `""` | The S3 region; empty for the environment's (AWS_REGION), else us-east-1. |
+| `HUB_STORAGE_CREDENTIAL` | integer | null | An Amazon Web Services (access key) or Microsoft Azure Resource Manager (client ID and secret) credential. Empty: the environment's (AWS's default chain; AZURE_STORAGE_CONNECTION_STRING, or Azure's default chain: environment, workload identity, managed identity). |
 | `SUBSCRIPTIONS_USERNAME` | string | `""` | *No effect.* there are no Red Hat subscriptions to manage. |
 | `AUTOMATION_ANALYTICS_GATHER_INTERVAL` | integer | `14400` | *No effect.* nothing is sent to Red Hat analytics. |
 | `INSIGHTS_TRACKING_STATE` | boolean | `false` | *No effect.* nothing is sent to Red Hat analytics. |

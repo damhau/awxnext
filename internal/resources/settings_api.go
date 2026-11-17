@@ -92,7 +92,13 @@ func installSettings(app *api.App) {
 			}
 		}
 		if cat == "jobs" || cat == "all" {
-			if err := checkArchiveCredential(c, data); err != nil {
+			if err := checkStorageCredential(c, data, "JOB_EVENTS_ARCHIVE_CREDENTIAL"); err != nil {
+				api.WriteError(w, err)
+				return
+			}
+		}
+		if cat == "system" || cat == "all" {
+			if err := checkStorageCredential(c, data, "HUB_STORAGE_CREDENTIAL"); err != nil {
 				api.WriteError(w, err)
 				return
 			}
@@ -247,20 +253,21 @@ func checkLogging(c *Ctx, data Obj) error {
 	return nil
 }
 
-// checkArchiveCredential: the job event archive credential is an Amazon Web
-// Services or Microsoft Azure Resource Manager credential.
-func checkArchiveCredential(c *Ctx, data Obj) error {
-	v, ok := data["JOB_EVENTS_ARCHIVE_CREDENTIAL"]
+// checkStorageCredential: the credential of object storage (job event
+// archives, the collection hub) is an Amazon Web Services or Microsoft
+// Azure Resource Manager credential.
+func checkStorageCredential(c *Ctx, data Obj, key string) error {
+	v, ok := data[key]
 	if !ok || v == nil {
 		return nil
 	}
 	id, _ := api.ID(v)
 	var ns *string
 	if err := c.DB().QueryRow(c, "SELECT ct.namespace FROM credentials cr JOIN credential_types ct ON ct.id = cr.credential_type_id WHERE cr.id = $1", id).Scan(&ns); err != nil {
-		return api.FieldError("JOB_EVENTS_ARCHIVE_CREDENTIAL", fmt.Sprintf("Invalid pk \"%d\" - object does not exist.", id))
+		return api.FieldError(key, fmt.Sprintf("Invalid pk \"%d\" - object does not exist.", id))
 	}
 	if ns == nil || (*ns != "aws" && *ns != "azure_rm") {
-		return api.FieldError("JOB_EVENTS_ARCHIVE_CREDENTIAL", "Choose an Amazon Web Services or Microsoft Azure Resource Manager credential.")
+		return api.FieldError(key, "Choose an Amazon Web Services or Microsoft Azure Resource Manager credential.")
 	}
 	return nil
 }

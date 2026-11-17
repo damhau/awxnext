@@ -79,27 +79,36 @@ func findRequirements(dir string) (roles, collections []string) {
 
 var requirementLocks sync.Map
 
+// hubServer is a Galaxy server of awxnext's own collection hub, whose URL
+// and token each run completes: where the run reaches awxnext, and a token
+// minted for it.
+type hubServer struct {
+	prefix, path string
+}
+
 // galaxyEnv configures ansible-galaxy with the organization's Galaxy credentials, in order.
-func galaxyEnv(ctx context.Context, app *api.App, org int64) (map[string]string, string, error) {
+func galaxyEnv(ctx context.Context, app *api.App, org int64) (map[string]string, string, []hubServer, error) {
 	env := map[string]string{}
+	var hub []hubServer
 	var extra map[string]any
 	app.Settings.Decode(ctx, "GALAXY_TASK_ENV", &extra)
 	for k, v := range extra {
 		env[k] = fmt.Sprint(v)
 	}
-	rows, err := app.DB.Query(ctx, `SELECT credential_id, c.modified FROM organization_galaxy_credentials g JOIN credentials c ON c.id = g.credential_id
+	rows, err := app.DB.Query(ctx, `SELECT credential_id, c.modified, c.managed FROM organization_galaxy_credentials g JOIN credentials c ON c.id = g.credential_id
 		WHERE g.organization_id = $1 ORDER BY g.position, g.credential_id`, org)
 	if err != nil {
-		return nil, "", err
+		return nil, "", nil, err
 	}
 	type cred struct {
-		id  int64
-		mod time.Time
+		id      int64
+		mod     time.Time
+		managed bool
 	}
 	var creds []cred
 	for rows.Next() {
 		var c cred
-		rows.Scan(&c.id, &c.mod)
+		rows.Scan(&c.id, &c.mod, &c.managed)
 		creds = append(creds, c)
 	}
 	rows.Close()
@@ -108,11 +117,14 @@ func galaxyEnv(ctx context.Context, app *api.App, org int64) (map[string]string,
 	for i, c := range creds {
 		rc, err := resources.ResolveCredential(ctx, app, c.id)
 		if err != nil {
-			return nil, "", err
+			return nil, "", nil, err
 		}
 		name := fmt.Sprintf("server%d", i)
 		up := strings.ToUpper(name)
 		url, _ := rc.Inputs["url"].(string)
+		if c.managed && strings.HasPrefix(url, "/api/galaxy/") {
+			hub = append(hub, hubServer{"ANSIBLE_GALAXY_SERVER_" + up, url})
+		}
 		env["ANSIBLE_GALAXY_SERVER_"+up+"_URL"] = url
 		if v, _ := rc.Inputs["auth_url"].(string); v != "" {
 			env["ANSIBLE_GALAXY_SERVER_"+up+"_AUTH_URL"] = v
@@ -126,8 +138,11 @@ func galaxyEnv(ctx context.Context, app *api.App, org int64) (map[string]string,
 	if len(names) > 0 {
 		env["ANSIBLE_GALAXY_SERVER_LIST"] = strings.Join(names, ",")
 	}
-	return env, fingerprint.String(), nil
+	return env, fingerprint.String(), hub, nil
 }
+
+// hubTokenMargin is how long a hub token outlives the install's timeout.
+const hubTokenMargin = 5 * time.Minute
 
 // InstallRequirements installs a project checkout's roles and collections in
 // the execution environment of row, reusing a cache keyed by the requirement
@@ -146,7 +161,7 @@ func InstallRequirements(ctx context.Context, app *api.App, out *jobs.Output, ro
 	}
 	var org int64
 	app.DB.QueryRow(ctx, "SELECT coalesce(organization_id, 0) FROM unified_job_templates WHERE id = $1", projectID).Scan(&org)
-	env, fingerprint, err := galaxyEnv(ctx, app, org)
+	env, fingerprint, hub, err := galaxyEnv(ctx, app, org)
 	if err != nil {
 		return nil, err
 	}
@@ -213,6 +228,25 @@ func InstallRequirements(ctx context.Context, app *api.App, out *jobs.Output, ro
 		script = append(script, fmt.Sprintf("ansible-galaxy collection install -r %s -p %s --force%s",
 			ShellQuote([]string{run.Path("project/" + f)}), ShellQuote([]string{dest + "/collections"}), flags))
 	}
+	if t := app.Settings.Int(ctx, "DEFAULT_PROJECT_UPDATE_TIMEOUT"); t > 0 {
+		run.Timeout = time.Duration(t) * time.Second
+	}
+	if len(hub) > 0 {
+		ttl := run.Timeout
+		if ttl <= 0 {
+			ttl = time.Hour
+		}
+		token, revoke, err := resources.MintHubToken(ctx, app, org, row.ID(), ttl+hubTokenMargin)
+		if err != nil {
+			return nil, err
+		}
+		defer revoke()
+		site := strings.TrimRight(run.serverURL(app), "/")
+		for _, s := range hub {
+			env[s.prefix+"_URL"] = site + s.path
+			env[s.prefix+"_TOKEN"] = token
+		}
+	}
 	if err := run.WriteJSON("env/envvars", env); err != nil {
 		return nil, err
 	}
@@ -220,9 +254,6 @@ func InstallRequirements(ctx context.Context, app *api.App, out *jobs.Output, ro
 	run.Kwargs = map[string]any{"ident": ident, "binary": "sh", "cmdline": ShellQuote([]string{"-c", strings.Join(script, "\n")})}
 	if err := setImage(ctx, app, run, row); err != nil {
 		return nil, err
-	}
-	if t := app.Settings.Int(ctx, "DEFAULT_PROJECT_UPDATE_TIMEOUT"); t > 0 {
-		run.Timeout = time.Duration(t) * time.Second
 	}
 	out.Line("Installing project requirements: " + strings.Join(append(append([]string{}, roles...), colls...), ", "))
 	oc, err := run.Execute(ctx, app, out)
