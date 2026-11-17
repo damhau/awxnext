@@ -11,6 +11,7 @@ import { Now } from './pages/Now'
 import { adminRoutes } from './pages/admin'
 import { automationRoutes } from './pages/automation'
 import { eventRoutes } from './pages/events'
+import { hubRoutes } from './pages/hub'
 import { jobRoutes } from './pages/jobs'
 import { resourceRoutes } from './pages/resources'
 import { templateRoutes } from './pages/templates'
@@ -71,6 +72,7 @@ const routes = createRoutesFromElements(
       {jobRoutes()}
       {automationRoutes()}
       {eventRoutes()}
+      {hubRoutes()}
       {resourceRoutes()}
       {adminRoutes()}
       <Route path="api/docs" element={<Suspense fallback={<Loading />}><ApiDocs /></Suspense>} />

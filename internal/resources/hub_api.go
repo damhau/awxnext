@@ -43,6 +43,7 @@ func installHub(app *api.App) {
 		app.HandleAnonymous("GET", base+"/{namespace}/{name}/", galaxy(galaxyCollection))
 		app.HandleAnonymous("GET", base+"/{namespace}/{name}/versions/", galaxy(galaxyVersions))
 		app.HandleAnonymous("GET", base+"/{namespace}/{name}/versions/{version}/", galaxy(galaxyVersion))
+		app.HandleAnonymous("GET", base+"/{namespace}/{name}/versions/{version}/docs-blob/", galaxy(galaxyDocsBlob))
 	}
 	// The API's paths take a trailing slash; ansible-galaxy names the file
 	// it saves after the download URL's last segment, which has none.

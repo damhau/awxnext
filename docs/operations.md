@@ -1908,6 +1908,68 @@ lists them, each with the range it asks for, and `effect`: `blocks` when the del
 leave it unmet, `none` when another version meets it. Versions in `staging` and `rejected` are
 deleted freely.
 
+A collection's `used_by` also lists the execution environments whose image holds it, as their
+last contents read reports, with the version they hold and `effect` `none`: deleting the
+collection doesn't change an image.
+
+### Module and plugin docs
+
+After each upload's import, and after a sync mirrors a version, awxnext reads the version's
+README (the file `galaxy.yml` names, up to 512 KiB) and the docs of its modules, plugins and
+roles with `ansible-doc --json`, as galaxy-importer does. A background worker on each node reads
+one version at a time, the newest first, in a private temporary directory removed afterwards,
+and gives up after 10 minutes. Versions uploaded before awxnext read docs are read too.
+
+`ansible-doc` imports some of the collection's Python code, so it runs where jobs run. The
+`HUB_COLLECTION_DOCS` setting (Settings, System) chooses where:
+
+| Value | Where `ansible-doc` runs |
+|---|---|
+| `isolated` (default) | In the organization's default execution environment (`AWXNEXT_DEFAULT_EE_IMAGE` without one), with podman or docker and no network; or, with runtime `none`, as a job user of its own. A node with neither, such as the Helm chart's replicas, reads no docs. |
+| `server_user` | Also as the server's own user, on a node with neither. Set it only when you trust uploaders as you trust the server. |
+| `off` | Nowhere: no docs are read. |
+
+A version whose docs can't be read still installs; its docs say why. They are on
+`/api/v2/collection_versions/<id>/docs/`: `state` (`pending`, `reading`, `read`, `none` when
+they weren't read, `failed`), the last read's `message`, the README, and `contents`, the type,
+name and short description of each module and plugin. `?type=module&name=greet` gives one's
+full docs, as `ansible-doc --json` reports them. Approvers read a version's docs again with
+`POST /api/v2/collection_versions/<id>/read_docs/`. galaxy_ng's `docs-blob/`
+(`.../index/<namespace>/<name>/versions/<version>/docs-blob/`) answers with the same docs, and
+the README as escaped text in a `<pre>` rather than rendered HTML.
+
+### The hub in the UI
+
+**Collection hub** in the navigation has these pages:
+
+- **Collections**: the collections you can see, each with its latest version, where it is, and
+  its tags. Search by words, or with `namespace:`, `tag:`, `repository:`, `signed:` and
+  `deprecated:`; the chips under the search filter by repository and signature, and a tag
+  filters by it. A collection's page has these tabs:
+  - **Overview**: the README; the `ansible-galaxy` command and the `requirements.yml` entry that
+    install the chosen version, by default the newest published one; its details and
+    dependencies; and what uses it: the projects whose requirements name it, the collection
+    versions that depend on it, and the execution environments whose image holds it.
+  - **Docs**: its modules, plugins and roles, and each one's parameters, notes, examples and
+    return values.
+  - **Versions**: every version you can see; approvers review, sign or publish them from here, and
+    owners delete them.
+- **Namespaces**: each namespace's collections, its owners, uploaders, approvers and readers,
+  its uploads with their import logs, and its roles.
+- **Collection approvals**: what waits in `staging`, and what was rejected. A version's review
+  page shows its import log and its files compared with the previous version's, or another
+  version's, and publishes or rejects it.
+- **Remotes**: the remotes and their last sync. A remote's page shows its requirements, the URL
+  to install from its repository, and its syncs. System administrators create, change, delete
+  and sync remotes.
+- **Signing keys**: the keys, the active one first, and the keyring's URLs. System
+  administrators rotate the key here.
+
+The comparison is `/api/v2/collection_versions/<id>/diff/`, against the highest version below it
+that you can see, or `?against=<id>`: each file `added`, `removed` or `changed`, with a unified
+diff of text files. A binary file, a file over 256 KiB, and what comes after 2 MiB of diffs in
+all are listed without their diff (`omitted`).
+
 ### Signing collections
 
 Approval signs the version's `MANIFEST.json` with awxnext's active signing key: a detached,

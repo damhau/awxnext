@@ -299,6 +299,16 @@ export const settingsPages: SettingsPage[] = [
             help: tr('ansible-galaxy collection publish is refused for a larger artifact.'),
             unit: 'size',
           }),
+          row('HUB_COLLECTION_DOCS', {
+            label: tr('Read module and plugin docs'),
+            help: tr('ansible-doc reads them after each import. It imports some of the collection\'s Python code, so it runs where jobs run: in the organization\'s default execution environment, or as a job user.'),
+            options: [
+              ['isolated', tr('In a container or as a job user')],
+              ['server_user', tr('Also as the server\'s user')],
+              ['off', tr('Off')],
+            ],
+            consequence: tr('Also as the server\'s user: on a node without containers or job users, an uploader\'s code then runs with the server\'s privileges.'),
+          }),
           row('HUB_REMOTE_ALLOWED_LOCAL_ADDRESSES', {
             label: tr('Local addresses remotes may be at'),
             help: tr('Loopback and link-local addresses and cloud metadata services are refused: they are awxnext\'s own host. One per entry: an address, a network, or an address and port, such as 127.0.0.1:8080 for a Galaxy server or a proxy beside awxnext.'),

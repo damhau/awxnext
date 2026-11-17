@@ -37,6 +37,9 @@ type Spec struct {
 	// ShowPaths are host paths mounted into the execution environment
 	// container (AWX_ISOLATION_SHOW_PATHS); see Mount.
 	ShowPaths []string
+	// Network is the container's network mode (none), the runtime's default
+	// when empty.
+	Network string
 }
 
 // Mount parses an AWX_ISOLATION_SHOW_PATHS entry, HOST-DIR[:CONTAINER-DIR[:OPTIONS]],
@@ -163,7 +166,11 @@ func (s Spec) containerRun() ([]string, func(), error) {
 	if pull == "" {
 		pull = "missing"
 	}
-	return append(args, "--rm", "-i", "--pull="+pull, "--name", s.Name), cleanup, nil
+	args = append(args, "--rm", "-i", "--pull="+pull)
+	if s.Network != "" {
+		args = append(args, "--network="+s.Network)
+	}
+	return append(args, "--name", s.Name), cleanup, nil
 }
 
 // Kill stops a worker started from s.

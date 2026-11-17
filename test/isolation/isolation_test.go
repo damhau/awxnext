@@ -4,20 +4,27 @@
 package isolation
 
 import (
+	"archive/tar"
 	"bytes"
+	"compress/gzip"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/damhau/awxnext/internal/hubsign"
+	"github.com/damhau/awxnext/internal/jobexec"
 )
 
 type api struct {
@@ -274,5 +281,115 @@ func TestGPGVerifiesAsJobUser(t *testing.T) {
 	out := a.stdout(fmt.Sprintf("ad_hoc_commands/%d/", cmd))
 	if c["status"] != "successful" || !strings.Contains(out, "VALIDSIG "+key.Fingerprint) {
 		t.Fatalf("gpg as a job user: %v\n%s", c["status"], out)
+	}
+}
+
+// collectionTarball is a collection artifact holding files, with the
+// MANIFEST.json and FILES.json ansible-galaxy writes.
+func collectionTarball(t *testing.T, ns, name string, files map[string]string) []byte {
+	t.Helper()
+	files["README.md"] = "# " + ns + "." + name + "\n"
+	files["meta/runtime.yml"] = "requires_ansible: '>=2.15.0'\n"
+	var names []string
+	for n := range files {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	sum := func(b []byte) string {
+		s := sha256.Sum256(b)
+		return hex.EncodeToString(s[:])
+	}
+	entries := []map[string]any{{"name": ".", "ftype": "dir", "chksum_type": nil, "chksum_sha256": nil, "format": 1}}
+	for _, n := range names {
+		entries = append(entries, map[string]any{"name": n, "ftype": "file", "chksum_type": "sha256", "chksum_sha256": sum([]byte(files[n])), "format": 1})
+	}
+	filesJSON, _ := json.Marshal(map[string]any{"files": entries, "format": 1})
+	manifest, _ := json.Marshal(map[string]any{
+		"collection_info": map[string]any{"namespace": ns, "name": name, "version": "1.0.0", "authors": []string{"awxnext tests"},
+			"readme": "README.md", "tags": []string{}, "description": "", "license": []string{"GPL-3.0-or-later"}, "dependencies": map[string]any{}},
+		"file_manifest_file": map[string]any{"name": "FILES.json", "ftype": "file", "chksum_type": "sha256", "chksum_sha256": sum(filesJSON), "format": 1},
+		"format":             1,
+	})
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gz)
+	add := func(name string, data []byte) {
+		tw.WriteHeader(&tar.Header{Name: name, Mode: 0o644, Size: int64(len(data)), Typeflag: tar.TypeReg, ModTime: time.Now()})
+		tw.Write(data)
+	}
+	add("MANIFEST.json", manifest)
+	add("FILES.json", filesJSON)
+	for _, n := range names {
+		add(n, []byte(files[n]))
+	}
+	tw.Close()
+	gz.Close()
+	return buf.Bytes()
+}
+
+// The docs of a collection's modules are read by ansible-doc as a job
+// user: the code ansible-doc imports from the collection (a doc fragment)
+// doesn't run as the server's user.
+func TestCollectionDocsAsJobUser(t *testing.T) {
+	base := os.Getenv("AWXNEXT_TEST_ISOLATION_URL")
+	if base == "" {
+		t.Skip("AWXNEXT_TEST_ISOLATION_URL is not set (CI's compose job)")
+	}
+	a := &api{t: t, base: strings.TrimRight(base, "/"), pass: os.Getenv("AWXNEXT_TEST_ISOLATION_PASSWORD")}
+	suffix := fmt.Sprint(time.Now().UnixNano())
+	org := a.create("organizations/", map[string]any{"name": "docs-" + suffix})
+	ns := "docs" + suffix
+	a.create("collection_namespaces/", map[string]any{"name": ns, "organization": org, "auto_approve": true})
+	data := collectionTarball(t, ns, "kit", map[string]string{
+		"plugins/modules/hello.py":       fmt.Sprintf("DOCUMENTATION = r'''\nmodule: hello\nshort_description: Says hello\ndescription: Says hello.\nextends_documentation_fragment:\n  - %s.kit.where\n'''\n", ns),
+		"plugins/doc_fragments/where.py": "import os\nclass ModuleDocFragment(object):\n    DOCUMENTATION = r'''\noptions:\n  uid:\n    description: '%d'\n    type: int\n''' % os.getuid()\n",
+	})
+	var body bytes.Buffer
+	mw := multipart.NewWriter(&body)
+	sum := sha256.Sum256(data)
+	mw.WriteField("sha256", hex.EncodeToString(sum[:]))
+	fw, _ := mw.CreateFormFile("file", ns+"-kit-1.0.0.tar.gz")
+	fw.Write(data)
+	mw.Close()
+	req, _ := http.NewRequest("POST", a.base+"/api/galaxy/v3/artifacts/collections/", &body)
+	req.SetBasicAuth("admin", a.pass)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	if res.StatusCode != 202 {
+		t.Fatalf("upload: %d %s", res.StatusCode, raw)
+	}
+	_, versions, _ := a.call("GET", "collection_versions/?search="+ns, nil)
+	if versions["count"] != float64(1) {
+		t.Fatalf("versions: %v", versions)
+	}
+	id := int64(versions["results"].([]any)[0].(map[string]any)["id"].(float64))
+	deadline := time.Now().Add(5 * time.Minute)
+	var docs map[string]any
+	for {
+		_, docs, _ = a.call("GET", fmt.Sprintf("collection_versions/%d/docs/", id), nil)
+		if st := docs["state"]; st != "pending" && st != "reading" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("docs: %v", docs)
+		}
+		time.Sleep(time.Second)
+	}
+	if docs["state"] != "read" || !strings.Contains(fmt.Sprint(docs["message"]), "as job user "+jobexec.Prefix) {
+		t.Fatalf("docs: %v", docs)
+	}
+	_, hello, raw2 := a.call("GET", fmt.Sprintf("collection_versions/%d/docs/?type=module&name=hello", id), nil)
+	doc, _ := hello["doc"].(map[string]any)
+	inner, _ := doc["doc"].(map[string]any)
+	options, _ := inner["options"].(map[string]any)
+	uidOpt, _ := options["uid"].(map[string]any)
+	var uid int
+	if _, err := fmt.Sscan(fmt.Sprint(uidOpt["description"]), &uid); err != nil || uid < jobexec.MinUID {
+		t.Fatalf("the fragment ran as uid %v: %s", uidOpt["description"], raw2)
 	}
 }

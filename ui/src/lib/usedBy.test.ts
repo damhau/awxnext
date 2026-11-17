@@ -29,6 +29,16 @@ describe('used by', () => {
     expect(linkTo(d('maintenance_window', 7, 'event_rules'))).toBe('/maintenance-windows/7')
     expect(linkTo(d('event_connector', 8, 'event_stream'))).toBe('/event-connectors/8')
   })
+  it('says what needs a collection, and in which range', () => {
+    const project = { ...d('project', 4, 'collection_requirements'), effect: 'blocks' as const, requirement: '>=1.0.0' }
+    expect(howUsed(project)).toBe('in its collection requirements (>=1.0.0)')
+    const version = { ...d('collection_version', 12, 'dependencies'), effect: 'none' as const, requirement: '*' }
+    expect(howUsed(version)).toBe('as a dependency (*)')
+    expect(linkTo(version)).toBe('/collection-versions/12')
+    const ee = { ...d('execution_environment', 3, 'contents', 'cleared', 'ee'), effect: 'none' as const, requirement: '1.2.0' }
+    expect(howUsed(ee)).toBe('holds it in its image (1.2.0)')
+    expect(deleteEffects({ count: 3, hidden: 0, results: [project, version, ee] })).toEqual({ deleted: [], cleared: [], hidden: 0 })
+  })
   it('counts by kind', () => {
     expect(countKinds([d('job_template', 1, 'inventory'), d('job_template', 2, 'inventory'), d('schedule', 3, 'inventory')])).toBe('2 job templates and 1 schedule')
     expect(countKinds([d('inventory', 1, 'input_inventories')])).toBe('1 inventory')

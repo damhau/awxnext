@@ -4,6 +4,10 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sort"
+	"strconv"
+	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 
@@ -56,6 +60,17 @@ func requireNamespacePerm(c *Ctx, nsID int64, perm string) error {
 	return nil
 }
 
+// versionVisible is the condition on versions (alias v) the user sees, as
+// collection_versions' View.
+func versionVisible(c *Ctx, arg ArgFunc, v string) string {
+	if c.User.Superuser || c.User.Auditor {
+		return "TRUE"
+	}
+	return fmt.Sprintf(`(%[1]s.collection_id IN (SELECT c.id FROM collections c WHERE c.namespace_id IN %[2]s)
+		OR (`+publishedSQL+` AND %[1]s.collection_id IN (SELECT c.id FROM collections c WHERE c.namespace_id IN %[4]s)))`,
+		v, namespacesWhere(c, arg, curatorPredicate), v+".id", namespacesWhere(c, arg, viewNamespaces))
+}
+
 func versionNamespace(c *Ctx, collection any) int64 {
 	var ns int64
 	c.DB().QueryRow(c, "SELECT namespace_id FROM collections WHERE id = $1", collection).Scan(&ns)
@@ -68,6 +83,10 @@ func registerCollections() {
 		rel["collections"] = fmt.Sprintf("/api/v2/collections/?namespace=%v", obj["id"])
 		rel["collection_imports"] = fmt.Sprintf("/api/v2/collection_imports/?namespace=%v", obj["id"])
 	}
+	namespaces.Capabilities = func(c *Ctx, _ Obj, p map[string]bool) map[string]bool {
+		su := c.User.Superuser
+		return map[string]bool{"upload": su || p["upload_collectionnamespace"], "approve": su || p["approve_collectionnamespace"]}
+	}
 
 	collections := api.Register(&Resource{
 		Name:          "collections",
@@ -78,7 +97,6 @@ func registerCollections() {
 		NoName:        true,
 		NoTimestamps:  true,
 		NoCreate:      true,
-		SearchFields:  []string{"name"},
 		SummaryFields: []string{"id", "name", "deprecated"},
 		Fields: []*Field{
 			{Name: "created", Type: api.TDateTime, ReadOnly: true},
@@ -111,6 +129,43 @@ func registerCollections() {
 		Related: func(c *Ctx, obj Obj, rel map[string]any) {
 			rel["versions"] = fmt.Sprintf("/api/v2/collection_versions/?collection=%v", obj["id"])
 		},
+		ParamFilters: map[string]func(c *Ctx, value string, arg ArgFunc) (string, error){
+			"search": func(c *Ctx, value string, arg ArgFunc) (string, error) {
+				var preds []string
+				for _, term := range strings.Fields(value) {
+					p := arg("%" + api.LikeEscape(term) + "%")
+					preds = append(preds, fmt.Sprintf(`(t.name ILIKE %[1]s OR (SELECT n.name || '.' || t.name FROM collection_namespaces n WHERE n.id = t.namespace_id) ILIKE %[1]s
+						OR EXISTS (SELECT 1 FROM collection_versions v WHERE v.collection_id = t.id AND v.metadata->>'description' ILIKE %[1]s AND %[2]s))`,
+						p, versionVisible(c, arg, "v")))
+				}
+				if len(preds) == 0 {
+					return "TRUE", nil
+				}
+				return strings.Join(preds, " AND "), nil
+			},
+			"tag": func(c *Ctx, value string, arg ArgFunc) (string, error) {
+				return "EXISTS (SELECT 1 FROM collection_versions v WHERE v.collection_id = t.id AND v.metadata->'tags' ? " + arg(value) +
+					" AND " + versionVisible(c, arg, "v") + ")", nil
+			},
+			"repository": func(c *Ctx, value string, arg ArgFunc) (string, error) {
+				return `EXISTS (SELECT 1 FROM collection_versions v JOIN collection_repository_contents rc ON rc.version_id = v.id
+					JOIN collection_repositories r ON r.id = rc.repository_id WHERE v.collection_id = t.id AND r.name = ` + arg(value) +
+					" AND " + versionVisible(c, arg, "v") + ")", nil
+			},
+			"signed": func(c *Ctx, value string, arg ArgFunc) (string, error) {
+				b, err := strconv.ParseBool(value)
+				if err != nil {
+					return "", errors.New("true or false")
+				}
+				pred := `EXISTS (SELECT 1 FROM collection_versions v WHERE v.collection_id = t.id AND ` + versionVisible(c, arg, "v") + `
+					AND EXISTS (SELECT 1 FROM collection_version_signatures s WHERE s.collection_version_id = v.id))`
+				if !b {
+					pred = "NOT " + pred
+				}
+				return pred, nil
+			},
+		},
+		Summary: collectionSummaries,
 		Actions: []*api.Action{{Name: "used_by", Methods: []string{"GET"}, Handler: func(c *Ctx, w http.ResponseWriter, r *http.Request, obj Obj) {
 			id, _ := api.ID(obj["id"])
 			rows, err := c.DB().Query(c, "SELECT id FROM collection_versions WHERE collection_id = $1", id)
@@ -127,7 +182,7 @@ func registerCollections() {
 			for _, v := range ids {
 				all[v] = true
 			}
-			usedByCollection(c, w, id, all)
+			usedByCollection(c, w, id, all, true)
 		}}},
 	})
 	collections.CanDelete = func(c *Ctx, obj Obj) error {
@@ -262,8 +317,11 @@ func registerCollections() {
 		{Name: "used_by", Methods: []string{"GET"}, Handler: func(c *Ctx, w http.ResponseWriter, r *http.Request, obj Obj) {
 			id, _ := api.ID(obj["id"])
 			coll, _ := api.ID(obj["collection"])
-			usedByCollection(c, w, coll, map[int64]bool{id: true})
+			usedByCollection(c, w, coll, map[int64]bool{id: true}, false)
 		}},
+		{Name: "docs", Methods: []string{"GET"}, Handler: versionDocs},
+		{Name: "read_docs", Methods: []string{"POST"}, Perm: "approve", Handler: readVersionDocs},
+		{Name: "diff", Methods: []string{"GET"}, Handler: versionDiff},
 	}
 
 	api.Register(&Resource{
@@ -299,6 +357,57 @@ func registerCollections() {
 		},
 		View: importVisible,
 	})
+}
+
+// collectionSummaries adds each collection's namespace, its number of
+// versions and its latest version the user sees: its description, tags,
+// repositories and whether it is signed.
+func collectionSummaries(c *Ctx, objs []Obj) error {
+	for _, o := range objs {
+		sf, ok := o["summary_fields"].(Obj)
+		if !ok {
+			sf = Obj{}
+			o["summary_fields"] = sf
+		}
+		id, _ := api.ID(o["id"])
+		args := []any{id}
+		arg := func(v any) string {
+			args = append(args, v)
+			return fmt.Sprintf("$%d", len(args))
+		}
+		rows, err := c.DB().Query(c, `SELECT v.id, v.version, coalesce(v.metadata->>'description', ''), coalesce(v.metadata->'tags', '[]'::jsonb), v.created,
+			EXISTS (SELECT 1 FROM collection_version_signatures s WHERE s.collection_version_id = v.id),
+			coalesce((SELECT array_agg(r.name ORDER BY r.id) FROM collection_repository_contents rc JOIN collection_repositories r ON r.id = rc.repository_id
+				WHERE rc.version_id = v.id), '{}')
+			FROM collection_versions v WHERE v.collection_id = $1 AND `+versionVisible(c, arg, "v"), args...)
+		if err != nil {
+			return err
+		}
+		type latest struct {
+			obj     Obj
+			version string
+		}
+		all, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (latest, error) {
+			var vid int64
+			var version, desc string
+			var tags []any
+			var created time.Time
+			var signed bool
+			var repos []string
+			err := row.Scan(&vid, &version, &desc, &tags, &created, &signed, &repos)
+			return latest{Obj{"id": vid, "version": version, "description": desc, "tags": tags, "created": created,
+				"signed": signed, "repositories": repos}, version}, err
+		})
+		if err != nil {
+			return err
+		}
+		sort.Slice(all, func(i, j int) bool { return compareSemver(all[i].version, all[j].version) > 0 })
+		sf["version_count"] = len(all)
+		if len(all) > 0 {
+			sf["latest_version"] = all[0].obj
+		}
+	}
+	return nil
 }
 
 // versionSummaries adds each version's namespace, repositories, latest

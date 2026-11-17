@@ -261,6 +261,9 @@ func runImport(c *Ctx, data []byte, filename, clientSum string) (int64, error) {
 	_, err := c.DB().Exec(c, `UPDATE collection_imports SET state = $2, finished = now(), modified = now(), messages = $3, error = $4,
 		namespace_id = nullif($5, 0), namespace_name = $6, collection_name = $7, version = $8, collection_version_id = nullif($9, 0) WHERE id = $1`,
 		id, state, messages, errJSON, out.nsID, ns, name, version, out.versionID)
+	if out.versionID != 0 {
+		kickDocs()
+	}
 	return id, err
 }
 
@@ -345,6 +348,7 @@ func importUpload(c *Ctx, log *ImportLog, data []byte, filename, clientSum strin
 	} else {
 		log.info("Staged %s.%s %s: it waits for an approver of namespace %s.", a.Namespace, a.Name, a.Version, a.Namespace)
 	}
+	log.info("The docs of its modules and plugins are read next, with ansible-doc, in the background.")
 	return r
 }
 
@@ -730,16 +734,23 @@ func refuseIfNeeded(c *Ctx, collID int64, deleting map[int64]bool, what string) 
 	return api.BadRequest(fmt.Sprintf("%s can't be deleted: nothing else published meets what needs it: %s.", what, strings.Join(names, ", ")))
 }
 
-// usedByCollection answers used_by for versions of a collection.
-func usedByCollection(c *Ctx, w http.ResponseWriter, collID int64, deleting map[int64]bool) {
+// usedByCollection lists what needs the versions of a collection being
+// deleted, and the execution environments whose images hold them: one of
+// them, or with whole, any version of the collection.
+func usedByCollection(c *Ctx, w http.ResponseWriter, collID int64, deleting map[int64]bool, whole bool) {
 	deps, err := collectionDependents(c, collID, deleting)
+	if err != nil {
+		api.WriteError(w, err)
+		return
+	}
+	ees, err := collectionEEs(c, collID, deleting, whole)
 	if err != nil {
 		api.WriteError(w, err)
 		return
 	}
 	out := []Obj{}
 	hidden := 0
-	for _, d := range deps {
+	for _, d := range append(deps, ees...) {
 		if ok, _ := api.CanView(c, api.Lookup(d.resource), d.id); !ok {
 			hidden++
 			continue
@@ -752,6 +763,33 @@ func usedByCollection(c *Ctx, w http.ResponseWriter, collID int64, deleting map[
 			"requirement": d.spec, "effect": effect})
 	}
 	api.WriteJSON(w, 200, Obj{"count": len(out), "hidden": hidden, "results": out})
+}
+
+// collectionEEs are the execution environments whose last read contents
+// hold the collection (M7-07), with the version they hold.
+func collectionEEs(c *Ctx, collID int64, versions map[int64]bool, whole bool) ([]collectionDependent, error) {
+	var fullname string
+	if err := c.DB().QueryRow(c, `SELECT t.name || '.' || c.name FROM collections c JOIN collection_namespaces t ON t.id = c.namespace_id
+		WHERE c.id = $1`, collID).Scan(&fullname); err != nil {
+		return nil, err
+	}
+	ids := make([]int64, 0, len(versions))
+	for id := range versions {
+		ids = append(ids, id)
+	}
+	rows, err := c.DB().Query(c, `SELECT e.id, e.name, coalesce(x->>'version', '') FROM execution_environments e
+		JOIN execution_environment_contents ec ON ec.execution_environment_id = e.id, jsonb_array_elements(ec.contents->'collections') x
+		WHERE ec.status = 'successful' AND x->>'name' = $1
+			AND ($3 OR x->>'version' IN (SELECT version FROM collection_versions WHERE id = ANY($2)))
+		ORDER BY e.name, e.id`, fullname, ids, whole)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (collectionDependent, error) {
+		d := collectionDependent{resource: "execution_environments", typ: "execution_environment", field: "contents"}
+		err := row.Scan(&d.id, &d.name, &d.spec)
+		return d, err
+	})
 }
 
 // HubPublishedState is a digest of what an organization's jobs install

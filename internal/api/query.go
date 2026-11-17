@@ -520,6 +520,9 @@ func (q *query) orderBy(res *Resource, params url.Values) (string, error) {
 	return " ORDER BY " + strings.Join(parts, ", "), nil
 }
 
+// LikeEscape escapes LIKE's wildcards in s.
+func LikeEscape(s string) string { return likeEscape(s) }
+
 func likeEscape(s string) string {
 	r := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
 	return r.Replace(s)

@@ -169,6 +169,8 @@ func StartJobs(ctx context.Context, app *api.App) (*jobs.Manager, error) {
 	go resources.Rules.Run(ctx)
 	resources.Connectors = resources.NewConnectorSupervisor(app, app.Cfg.NodeName)
 	go resources.Connectors.Run(ctx)
+	resources.Docs = resources.NewCollectionDocs(app, app.Cfg.NodeName)
+	go resources.Docs.Run(ctx)
 	if agent.Default != nil {
 		agent.Default.Start(ctx)
 	}

@@ -8,8 +8,13 @@ export interface Dependent {
   id: number | null
   name: string
   field: string
-  /** Deleted with the object, or loses it (the reference is cleared). */
-  effect: 'deleted' | 'cleared'
+  /** Deleted with the object, or loses it (the reference is cleared). A
+   * collection's: only the versions being deleted meet its requirement
+   * (blocks), or others do too (none). */
+  effect: 'deleted' | 'cleared' | 'blocks' | 'none'
+  /** The version range a collection's dependent asks for, or the version
+   * an execution environment holds. */
+  requirement?: string
 }
 
 export interface UsedBy {
@@ -39,6 +44,7 @@ const kinds: Record<string, [string, string]> = {
   event_rule: [tr('event rule'), tr('event rules')],
   maintenance_window: [tr('maintenance window'), tr('maintenance windows')],
   event_connector: [tr('event connector'), tr('event connectors')],
+  collection_version: [tr('collection version'), tr('collection versions')],
 }
 
 export function kindOf(d: Dependent, n = 1): string {
@@ -70,11 +76,15 @@ const how: Record<string, string> = {
   target_stream: tr('posts events to it'),
   event_stream: tr('posts events to it'),
   event_rules: tr('holds its actions back'),
+  collection_requirements: tr('in its collection requirements'),
+  dependencies: tr('as a dependency'),
+  contents: tr('holds it in its image'),
 }
 
 /** "as its inventory", "runs it in a step" */
 export function howUsed(d: Dependent): string {
-  return how[d.field] ?? tr('as {field}', { field: d.field.replace(/_/g, ' ') })
+  const h = how[d.field] ?? tr('as {field}', { field: d.field.replace(/_/g, ' ') })
+  return d.requirement ? `${h} (${d.requirement})` : h
 }
 
 /** Where a dependent is shown in the UI. */
@@ -113,6 +123,8 @@ export function linkTo(d: Dependent): string | null {
       return `/maintenance-windows/${d.id}`
     case 'event_connector':
       return `/event-connectors/${d.id}`
+    case 'collection_version':
+      return `/collection-versions/${d.id}`
   }
   return null
 }

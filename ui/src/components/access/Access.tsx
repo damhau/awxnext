@@ -100,6 +100,8 @@ export function objectPath(ct: string | null | undefined, id: number | string): 
       return `/maintenance-windows/${id}`
     case 'eventconnector':
       return `/event-connectors/${id}`
+    case 'collectionnamespace':
+      return `/collection-namespaces/${id}`
   }
   return null
 }

@@ -77,6 +77,7 @@ type NavItem = { to: string; label: string; icon: IconName; end?: boolean; count
 
 function useNav(): { label: string; items: NavItem[] }[] {
   const approvals = useList('workflow_approvals/', { status: 'pending', page_size: 1 }, { queryKey: ['workflow_approvals', 'pending-count'], refetchInterval: 60_000 })
+  const staged = useList('collection_versions/', { repository: 'staging', page_size: 1 }, { queryKey: ['collection_versions', 'staged-count'], refetchInterval: 60_000 })
   return [
     {
       label: tr('Automation'),
@@ -105,6 +106,16 @@ function useNav(): { label: string; items: NavItem[] }[] {
         { to: '/projects', label: tr('Projects'), icon: 'project' },
         { to: '/credentials', label: tr('Credentials'), icon: 'key' },
         { to: '/execution-environments', label: tr('Execution environments'), icon: 'box' },
+      ],
+    },
+    {
+      label: tr('Collection hub'),
+      items: [
+        { to: '/collections', label: tr('Collections'), icon: 'box' },
+        { to: '/collection-namespaces', label: tr('Namespaces'), icon: 'folder' },
+        { to: '/collection-approvals', label: tr('Collection approvals'), icon: 'approve', count: staged.data?.count || undefined },
+        { to: '/collection-remotes', label: tr('Remotes'), icon: 'download' },
+        { to: '/collection-signing-keys', label: tr('Signing keys'), icon: 'shield' },
       ],
     },
     {

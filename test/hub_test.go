@@ -34,6 +34,17 @@ func galaxyName(prefix string) string {
 // file's checksum, which ansible-galaxy checks when it installs.
 func collectionTarball(t *testing.T, ns, name, version string, deps map[string]string, files map[string]string) []byte {
 	t.Helper()
+	dependencies := map[string]any{}
+	for k, v := range deps {
+		dependencies[k] = v
+	}
+	return collectionTarballInfo(t, ns, name, version, map[string]any{"dependencies": dependencies}, files)
+}
+
+// collectionTarballInfo is collectionTarball with collection_info's keys
+// in info.
+func collectionTarballInfo(t *testing.T, ns, name, version string, info map[string]any, files map[string]string) []byte {
+	t.Helper()
 	if files == nil {
 		files = map[string]string{}
 	}
@@ -62,14 +73,14 @@ func collectionTarball(t *testing.T, ns, name, version string, deps map[string]s
 	}
 	filesJSON, _ := json.Marshal(map[string]any{"files": entries, "format": 1})
 	filesSum := sha256.Sum256(filesJSON)
-	dependencies := map[string]any{}
-	for k, v := range deps {
-		dependencies[k] = v
+	collInfo := map[string]any{"namespace": ns, "name": name, "version": version, "authors": []string{"awxnext tests"},
+		"readme": "README.md", "tags": []string{"test"}, "description": "A test collection", "license": []string{"GPL-3.0-or-later"},
+		"license_file": nil, "dependencies": map[string]any{}, "repository": nil, "documentation": nil, "homepage": nil, "issues": nil}
+	for k, v := range info {
+		collInfo[k] = v
 	}
 	manifest, _ := json.Marshal(map[string]any{
-		"collection_info": map[string]any{"namespace": ns, "name": name, "version": version, "authors": []string{"awxnext tests"},
-			"readme": "README.md", "tags": []string{"test"}, "description": "A test collection", "license": []string{"GPL-3.0-or-later"},
-			"license_file": nil, "dependencies": dependencies, "repository": nil, "documentation": nil, "homepage": nil, "issues": nil},
+		"collection_info":    collInfo,
 		"file_manifest_file": map[string]any{"name": "FILES.json", "ftype": "file", "chksum_type": "sha256", "chksum_sha256": hex.EncodeToString(filesSum[:]), "format": 1},
 		"format":             1,
 	})

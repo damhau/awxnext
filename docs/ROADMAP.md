@@ -2019,6 +2019,15 @@ Taken on 2026-11-15:
 
     #157 to #162 are rewritten for this design, and M14-07 to M14-10 (#168
     to #171) are added.
+20. The hub reads a collection's docs (M13-05, on 2026-11-17) with
+    `ansible-doc`, as galaxy-importer does, which imports some of the
+    collection's Python code. So it runs after the import, in the
+    background, where jobs run: in the organization's execution environment
+    with no network, or as a job user. It runs as the server's user only
+    when `HUB_COLLECTION_DOCS` is `server_user`, so the Helm chart's
+    replicas read no docs by default. A version whose docs can't be read
+    still installs. galaxy_ng's `docs-blob/` is served from the same docs,
+    with the README as text rather than rendered HTML.
 
 ## On GitHub
 

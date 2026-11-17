@@ -243,6 +243,7 @@ func (m *hubMirror) addArtifact(ctx context.Context, data []byte, sigs []string,
 			return out, err
 		}
 		out.stored, out.added = true, true
+		kickDocs()
 		out.signatures, err = m.addSignatures(ctx, m.app.DB, id, keep)
 		return out, err
 	}
