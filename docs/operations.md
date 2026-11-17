@@ -1916,9 +1916,9 @@ collection doesn't change an image.
 
 After each upload's import, and after a sync mirrors a version, awxnext reads the version's
 README (the file `galaxy.yml` names, up to 512 KiB) and the docs of its modules, plugins and
-roles with `ansible-doc --json`, as galaxy-importer does. A background worker on each node reads
-one version at a time, the newest first, in a private temporary directory removed afterwards,
-and gives up after 10 minutes. Versions uploaded before awxnext read docs are read too.
+roles with `ansible-doc --metadata-dump`, as galaxy-importer does. A background worker on each
+node reads one version at a time, the newest first, in a private temporary directory removed
+afterwards, and gives up after 10 minutes. Versions uploaded before awxnext read docs are read too.
 
 `ansible-doc` imports some of the collection's Python code, so it runs where jobs run. The
 `HUB_COLLECTION_DOCS` setting (Settings, System) chooses where:
@@ -1933,8 +1933,8 @@ A version whose docs can't be read still installs; its docs say why. They are on
 `/api/v2/collection_versions/<id>/docs/`: `state` (`pending`, `reading`, `read`, `none` when
 they weren't read, `failed`), the last read's `message`, the README, and `contents`, the type,
 name and short description of each module and plugin. `?type=module&name=greet` gives one's
-full docs, as `ansible-doc --json` reports them. Approvers read a version's docs again with
-`POST /api/v2/collection_versions/<id>/read_docs/`. galaxy_ng's `docs-blob/`
+full docs, as `ansible-doc --metadata-dump` reports them. Approvers read a version's docs again
+with `POST /api/v2/collection_versions/<id>/read_docs/`. galaxy_ng's `docs-blob/`
 (`.../index/<namespace>/<name>/versions/<version>/docs-blob/`) answers with the same docs, and
 the README as escaped text in a `<pre>` rather than rendered HTML.
 
