@@ -114,6 +114,10 @@ func registerProjects() {
 			{Name: "local_path", Type: api.TString, Default: "", MaxLength: 1024, Help: "Local path (relative to PROJECTS_ROOT) containing playbooks and related files for this project."},
 			{Name: "default_environment", Type: api.TFK, Ref: "execution_environments", Nullable: true, Help: "The default execution environment for jobs run using this project."},
 			{Name: "signature_validation_credential", Type: api.TFK, Ref: "credentials", Nullable: true, Help: "An optional credential used for validating files in the project against unexpected changes."},
+			{Name: "collection_signature_validation_credential", Type: api.TFK, Ref: "credentials", Nullable: true,
+				Help: "A GPG Public Key credential: jobs install the project's collections only with valid signatures from its keys."},
+			{Name: "collection_signature_count", Type: api.TInt, Default: 1, Validate: validateSignatureCount,
+				Help: "How many valid signatures each collection needs, with a collection signature validation credential."},
 			{Name: "playbook_files", Type: api.TJSON, ReadOnly: true, Hidden: true, NoFilter: true},
 			{Name: "inventory_files", Type: api.TJSON, ReadOnly: true, Hidden: true, NoFilter: true},
 			folderField(),
@@ -179,6 +183,9 @@ func registerProjects() {
 				return err
 			}
 			if err := requireCredentialKind(c, "signature_validation_credential", data["signature_validation_credential"], "cryptography"); err != nil {
+				return err
+			}
+			if err := requireCollectionSignatureCredential(c, old, data); err != nil {
 				return err
 			}
 			if old == nil || data["scm_type"] != nil {

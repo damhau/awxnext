@@ -422,6 +422,11 @@ func moveCollectionVersion(c *Ctx, versionID int64, src, dest string) error {
 	if src == dest {
 		return api.BadRequest("The version is already in " + dest + ".")
 	}
+	if dest == hubPublished {
+		if err := ensureSigningKey(c, c.App); err != nil {
+			return err
+		}
+	}
 	return c.WithTx(func(c *Ctx) error {
 		srcID, err := hubRepository(c, src)
 		if err != nil {
@@ -449,6 +454,11 @@ func moveCollectionVersion(c *Ctx, versionID int64, src, dest string) error {
 		}
 		if _, err := c.DB().Exec(c, "UPDATE collections SET modified = now() WHERE id = $1", collID); err != nil {
 			return err
+		}
+		if dest == hubPublished {
+			if err := signPublished(c, c.App, c.DB(), versionID, c.User.UserID); err != nil {
+				return err
+			}
 		}
 		return api.Activity(c, "update", api.Lookup("collection_versions"), Obj{"id": versionID},
 			Obj{"repository": []string{src, dest}}, nil, nil, "")
@@ -745,12 +755,13 @@ func usedByCollection(c *Ctx, w http.ResponseWriter, collID int64, deleting map[
 }
 
 // HubPublishedState is a digest of the published versions of an
-// organization's namespaces, which its jobs install from: the
-// requirements cache is keyed by it, so an approval, a rejection or a
-// deletion is seen by the next install.
+// organization's namespaces and of their signatures, which its jobs
+// install from: the requirements cache is keyed by it, so an approval, a
+// rejection, a deletion or a signature is seen by the next install.
 func HubPublishedState(ctx context.Context, app *api.App, org int64) (string, error) {
 	var state string
-	err := app.DB.QueryRow(ctx, `SELECT coalesce(md5(string_agg(v.id::text, ',' ORDER BY v.id)), '') FROM collection_versions v
+	err := app.DB.QueryRow(ctx, `SELECT coalesce(md5(string_agg(v.id::text || ':' || coalesce((SELECT string_agg(s.id::text, '.' ORDER BY s.id)
+		FROM collection_version_signatures s WHERE s.collection_version_id = v.id), ''), ',' ORDER BY v.id)), '') FROM collection_versions v
 		JOIN collections c ON c.id = v.collection_id JOIN collection_namespaces t ON t.id = c.namespace_id
 		JOIN collection_repository_contents rc ON rc.version_id = v.id JOIN collection_repositories r ON r.id = rc.repository_id
 		WHERE t.organization_id = $1 AND r.name = $2`, org, hubPublished).Scan(&state)

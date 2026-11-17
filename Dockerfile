@@ -35,13 +35,15 @@ COPY --from=ghcr.io/astral-sh/uv:0.13.5 /uv /usr/local/bin/uv
 # client tools (pg_dump, pg_restore) for awxnext backup and restore, from the
 # PostgreSQL project's repository: Debian's are version 15. The key's download
 # retries: a dropped HTTP/2 stream failed full.yml's chart test (run 43817781351).
+# gpg stays when gnupg goes: ansible-galaxy verifies collection signatures with
+# it in project syncs.
 RUN apt-get update \
 	&& apt-get upgrade -y \
 	&& apt-get install -y --no-install-recommends git openssh-client sshpass ca-certificates curl gnupg libcap2-bin \
 	&& curl -fsSL --retry 5 --retry-all-errors https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmor -o /usr/share/keyrings/pgdg.gpg \
 	&& echo "deb [signed-by=/usr/share/keyrings/pgdg.gpg] http://apt.postgresql.org/pub/repos/apt bookworm-pgdg main" > /etc/apt/sources.list.d/pgdg.list \
 	&& apt-get update \
-	&& apt-get install -y --no-install-recommends postgresql-client-16 \
+	&& apt-get install -y --no-install-recommends postgresql-client-16 gpg \
 	&& apt-get purge -y curl gnupg && apt-get autoremove -y \
 	&& rm -rf /var/lib/apt/lists/*
 RUN uv pip install --system --no-cache ansible-core==2.20.10 ansible-runner==2.4.3

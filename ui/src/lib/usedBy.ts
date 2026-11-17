@@ -54,6 +54,7 @@ const how: Record<string, string> = {
   credential: tr('as its credential'),
   webhook_credential: tr('as its webhook credential'),
   signature_validation_credential: tr('to check signatures'),
+  collection_signature_validation_credential: tr('to check collection signatures'),
   node_credentials: tr('as a step’s credential'),
   input_sources: tr('to look up a field'),
   galaxy_credentials: tr('as a Galaxy credential'),

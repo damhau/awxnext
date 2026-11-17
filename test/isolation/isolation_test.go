@@ -5,6 +5,7 @@ package isolation
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -15,6 +16,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/damhau/awxnext/internal/hubsign"
 )
 
 type api struct {
@@ -229,5 +232,47 @@ func TestCanceledJobLeavesNoProcess(t *testing.T) {
 		if time.Now().After(deadline) {
 			t.Fatalf("processes of other job users after the cancel:\n%s", out)
 		}
+	}
+}
+
+// gpg is in the image and verifies, as a job user with a home of its own,
+// a signature and keyring made as the hub makes them: project syncs check
+// collection signatures with it.
+func TestGPGVerifiesAsJobUser(t *testing.T) {
+	base := os.Getenv("AWXNEXT_TEST_ISOLATION_URL")
+	if base == "" {
+		t.Skip("AWXNEXT_TEST_ISOLATION_URL is not set (CI's compose job)")
+	}
+	a := &api{t: t, base: strings.TrimRight(base, "/"), pass: os.Getenv("AWXNEXT_TEST_ISOLATION_PASSWORD")}
+	key, err := hubsign.Generate("isolation", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest := []byte(`{"collection_info": {"namespace": "isolation"}}`)
+	sig, err := hubsign.Sign(key.PrivateKey, manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	keyring, err := hubsign.Keyring(key.PublicKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b64 := base64.StdEncoding.EncodeToString
+	script := strings.Join([]string{
+		`export GNUPGHOME=$(mktemp -d)`,
+		fmt.Sprintf(`echo %s | base64 -d > $GNUPGHOME/hub.gpg`, b64(keyring)),
+		fmt.Sprintf(`echo %s | base64 -d > $GNUPGHOME/MANIFEST.json`, b64(manifest)),
+		fmt.Sprintf(`echo %s | base64 -d | gpg --status-fd 1 --verify --batch --no-tty --no-default-keyring --keyring=$GNUPGHOME/hub.gpg - $GNUPGHOME/MANIFEST.json`, b64([]byte(sig))),
+	}, "\n")
+	suffix := fmt.Sprint(time.Now().UnixNano())
+	org := a.create("organizations/", map[string]any{"name": "gpg-" + suffix})
+	inv := a.create("inventories/", map[string]any{"name": "gpg-" + suffix, "organization": org,
+		"variables": "ansible_connection: local\nansible_python_interpreter: '{{ ansible_playbook_python }}'\n"})
+	a.create("hosts/", map[string]any{"name": "localhost", "inventory": inv})
+	cmd := a.create("ad_hoc_commands/", map[string]any{"inventory": inv, "module_name": "shell", "module_args": script})
+	c := a.wait(fmt.Sprintf("ad_hoc_commands/%d/", cmd), 3*time.Minute)
+	out := a.stdout(fmt.Sprintf("ad_hoc_commands/%d/", cmd))
+	if c["status"] != "successful" || !strings.Contains(out, "VALIDSIG "+key.Fingerprint) {
+		t.Fatalf("gpg as a job user: %v\n%s", c["status"], out)
 	}
 }

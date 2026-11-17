@@ -56,6 +56,9 @@ type CollectionArtifact struct {
 	Info     map[string]any
 	Manifest map[string]any
 	Files    map[string]any
+	// ManifestJSON is MANIFEST.json as the artifact holds it: what its
+	// signatures sign.
+	ManifestJSON []byte
 }
 
 // ImportMessage is a line of an import's log, as galaxy_ng's.
@@ -235,7 +238,7 @@ func checkCollectionArtifact(data []byte, log *ImportLog) (*CollectionArtifact, 
 	}
 	log.info("Layout: %d members, %s decompressed, none outside the collection.", len(members), humanBytes(cr.n))
 
-	a := &CollectionArtifact{}
+	a := &CollectionArtifact{ManifestJSON: manifest}
 	if err := json.Unmarshal(manifest, &a.Manifest); err != nil {
 		return nil, importErr("invalid_artifact", "MANIFEST.json: %v.", err)
 	}
@@ -508,6 +511,15 @@ func storeCollectionVersion(ctx context.Context, app *api.App, a *CollectionArti
 			return 0, fmt.Errorf("storing the artifact: %w", err)
 		}
 	}
+	var repo string
+	if err := app.DB.QueryRow(ctx, "SELECT name FROM collection_repositories WHERE id = $1", repoID).Scan(&repo); err != nil {
+		return 0, err
+	}
+	if repo == hubPublished {
+		if err := ensureSigningKey(ctx, app); err != nil {
+			return 0, err
+		}
+	}
 	var id int64
 	err := pgx.BeginFunc(ctx, app.DB, func(tx pgx.Tx) error {
 		var collID int64
@@ -519,9 +531,9 @@ func storeCollectionVersion(ctx context.Context, app *api.App, a *CollectionArti
 		manifest, _ := json.Marshal(a.Manifest)
 		files, _ := json.Marshal(a.Files)
 		err := tx.QueryRow(ctx, `INSERT INTO collection_versions (collection_id, version, requires_ansible, metadata, manifest, files,
-			filename, sha256, size, storage, location, created_by_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, nullif($12, 0))
+			filename, sha256, size, storage, location, created_by_id, manifest_json) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, nullif($12, 0), $13)
 			ON CONFLICT (collection_id, version) DO NOTHING RETURNING id`,
-			collID, a.Version, a.RequiresAnsible, info, manifest, files, filename, digest, int64(len(data)), kind, location, by).Scan(&id)
+			collID, a.Version, a.RequiresAnsible, info, manifest, files, filename, digest, int64(len(data)), kind, location, by, a.ManifestJSON).Scan(&id)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return versionExists(a)
 		}
@@ -537,8 +549,13 @@ func storeCollectionVersion(ctx context.Context, app *api.App, a *CollectionArti
 		if err != nil {
 			return err
 		}
-		_, err = tx.Exec(ctx, "INSERT INTO collection_repository_contents (repository_id, version_id) VALUES ($1, $2)", repoID, id)
-		return err
+		if _, err := tx.Exec(ctx, "INSERT INTO collection_repository_contents (repository_id, version_id) VALUES ($1, $2)", repoID, id); err != nil {
+			return err
+		}
+		if repo == hubPublished {
+			return signPublished(ctx, app, tx, id, by)
+		}
+		return nil
 	})
 	return id, err
 }

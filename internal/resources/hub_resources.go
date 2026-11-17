@@ -301,8 +301,8 @@ func registerCollections() {
 	})
 }
 
-// versionSummaries adds each version's namespace, repositories and
-// latest import to its summary fields.
+// versionSummaries adds each version's namespace, repositories, latest
+// import and signatures to its summary fields.
 func versionSummaries(c *Ctx, objs []Obj) error {
 	for _, o := range objs {
 		sf, ok := o["summary_fields"].(Obj)
@@ -328,6 +328,9 @@ func versionSummaries(c *Ctx, objs []Obj) error {
 			return err
 		}
 		sf["repositories"] = repos
+		if sf["signatures"], err = signatureSummaries(c, id); err != nil {
+			return err
+		}
 		var impID int64
 		var state string
 		err = c.DB().QueryRow(c, "SELECT id, state FROM collection_imports WHERE collection_version_id = $1 ORDER BY id DESC LIMIT 1", id).Scan(&impID, &state)

@@ -1832,7 +1832,8 @@ ansible-galaxy collection publish acme-tools-1.0.0.tar.gz --server awxnext
 
 `ansible-galaxy` waits for the import and prints its warnings and errors; `--no-wait` returns at
 once. Whatever the upload's path names, the version lands in `staging`, or in `published` when
-its namespace's `auto_approve` is on. The namespace must exist: an upload doesn't create it.
+its namespace's `auto_approve` is on, and then [signed](#signing-collections). The namespace
+must exist: an upload doesn't create it.
 
 The import runs while the upload is answered, so the first poll finds it finished. Its log
 (`messages`, each with its `level` and `time`) gives each check's result, and `error` why it
@@ -1867,9 +1868,10 @@ curl -X POST -H "Authorization: Bearer $TOKEN" https://awxnext.example.com/api/v
 Or with galaxy_ng's move, `POST .../move/staging/published/` (or `.../staging/rejected/`): it
 answers `202` with galaxy_ng's task ids, `null`, as the move is done. A version moves between
 `staging`, `published` and `rejected`, in any direction: rejecting a published version
-withdraws it. `/api/v2/collection_versions/?repository=staging&namespace=<id>` is the queue;
-each version's `summary_fields` give its repositories and its import, and `reviewed_by` who last
-moved it. The next requirements install of a job sees the change: the cache is keyed by the
+withdraws it. Approval [signs](#signing-collections) the version.
+`/api/v2/collection_versions/?repository=staging&namespace=<id>` is the queue; each version's
+`summary_fields` give its repositories, its import and its signatures, and `reviewed_by` who
+last moved it. The next requirements install of a job sees the change: the cache is keyed by the
 published versions of its organization's namespaces.
 
 The roles on a namespace, assignable to users and teams:
@@ -1901,6 +1903,120 @@ lists them, each with the range it asks for, and `effect`: `blocks` when the del
 leave it unmet, `none` when another version meets it. Versions in `staging` and `rejected` are
 deleted freely.
 
+### Signing collections
+
+Approval signs the version's `MANIFEST.json` with awxnext's active signing key: a detached,
+armored GPG signature, as galaxy_ng's signing service makes. `ansible-galaxy` checks that
+signature, then `MANIFEST.json`'s checksum of `FILES.json`, then `FILES.json`'s checksum of each
+file, so one signature covers the whole collection. A version published by an upload to a
+namespace with `auto_approve` is signed the same way.
+
+awxnext makes its first key (RSA 3072, user ID `awxnext collection hub`) when it first signs.
+The private key is wrapped by the [master key](#master-key), as credentials' secrets are, and
+never leaves awxnext: `/api/v2/collection_signing_keys/` shows each key's fingerprint, public key
+and state, not its private key.
+
+A version's signatures are in its v3 detail, in galaxy_ng's shape: `signatures`, each with
+`signature`, `pubkey_fingerprint`, `signing_service` (`ansible-default` for awxnext's own,
+`null` for an uploaded one) and `pulp_created`. They are also on
+`/api/v2/collection_versions/<id>/signatures/`, with who signed (`signer`, the key's user ID),
+with which key (`pubkey_fingerprint`, and `signing_key` for awxnext's), and who had it signed
+(`created_by`: the approver, or the uploader).
+
+#### The public key
+
+Anyone can download the public keys of awxnext's keys, the active one first:
+
+| File | Format | For |
+|---|---|---|
+| `/api/galaxy/keyring.asc` | Armored | `gpg --import`, a GPG Public Key credential |
+| `/api/galaxy/keyring.gpg` | gpg's keyring | `ansible-galaxy --keyring` |
+
+To install and verify with the signature checked:
+
+```sh
+curl -fsSO https://awxnext.example.com/api/galaxy/keyring.gpg
+ansible-galaxy collection install acme.tools --keyring keyring.gpg --required-valid-signature-count +1
+ansible-galaxy collection verify acme.tools --keyring keyring.gpg
+```
+
+Or set `gpg_keyring` and `required_valid_signature_count` in the `[galaxy]` section of
+`ansible.cfg`. Keep the `+`: without it, a collection that has no signature at all passes.
+`install` refuses an artifact whose `MANIFEST.json` the signatures don't match ("Not installing
+acme.tools because GnuPG signature verification failed."); `verify` reports a changed
+`MANIFEST.json` as a failed signature and a changed file as modified content. `ansible-galaxy`
+runs `gpg`, which must be installed; give it a `GNUPGHOME` of its own if `~/.gnupg` isn't
+writable. `ansible-galaxy` keeps a version's details, signatures included, a day in its response
+cache: after a signature is added or deleted, pass `--clear-response-cache` once.
+
+#### Signing a version by hand
+
+`POST /api/v2/collection_versions/<id>/sign/` signs a published version with the active key, if
+that key hasn't: for versions published before awxnext signed, or after a rotation that didn't
+sign them. It takes the Approve role, as approval does.
+
+#### Uploading signatures
+
+A namespace's approvers add signatures made elsewhere, by a release team's key for example. Sign
+the `MANIFEST.json` of the artifact, as published, and post the signature with the signer's
+public key:
+
+```sh
+tar -xzf acme-tools-1.0.0.tar.gz MANIFEST.json
+gpg --armor --detach-sign --local-user releases@example.com MANIFEST.json
+gpg --armor --export releases@example.com > releases.asc
+jq -n --rawfile signature MANIFEST.json.asc --rawfile public_key releases.asc '{$signature, $public_key}' |
+  curl -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" --data @-     https://awxnext.example.com/api/v2/collection_versions/42/signatures/
+```
+
+awxnext checks the signature against the version's `MANIFEST.json` with that public key, and
+records the key's fingerprint and user ID, and who uploaded it. A version takes one signature
+per key. A signature with a binary notation is refused: OpenPGP.js and go-crypto add one by
+default (a salt), and `ansible-galaxy` can't read gpg's report of it; sign with `gpg`. Approvers
+also delete signatures (`DELETE /api/v2/collection_version_signatures/<id>/`), uploaded or not.
+
+The hub's keyrings hold awxnext's keys only: a client counts an uploaded signature when its own
+keyring has the signer's key, which you hand out as you choose (each signature's `public_key`
+holds it). galaxy_ng's own signature upload, through Pulp, isn't served.
+
+#### Rotating the key
+
+A system administrator makes a new key:
+
+```sh
+curl -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json"   -d '{"name": "awxnext collection hub 2027", "email": "hub@example.com"}'   https://awxnext.example.com/api/v2/collection_signing_keys/
+```
+
+The new key becomes the active one and signs approvals from then on. With `sign_published`
+(`true` by default) it also signs every published version at once, beside their older
+signatures. The old key is retired (`retired` gives when): its signatures are still served, and
+its public key stays in the keyrings, so clients that know only the old key go on installing.
+Once they have the new one, delete the old key (`DELETE /api/v2/collection_signing_keys/<id>/`):
+its signatures go with it. The active key can't be deleted. A key's name and email are set when
+it is made; its description can change.
+
+#### Requiring signatures in projects
+
+A project installs its collections only with valid signatures when it has a
+`collection_signature_validation_credential`: a GPG Public Key credential, which you need the
+Use role on. Paste `keyring.asc` in it, with other signers' keys if you want them to count.
+`collection_signature_count` (1 to 10, 1 by default) is how many valid signatures each
+collection needs. AWX has no such setting: the two fields are awxnext's, beside AWX's
+`signature_validation_credential`, which checks the project's own files (ansible-sign).
+
+Each job's requirements install then runs `ansible-galaxy collection install` with the
+credential's keys as its keyring, `--required-valid-signature-count +<count>` and `--no-cache`,
+whatever `GALAXY_TASK_ENV` or the project's `ansible.cfg` say, and with a `GNUPGHOME` in the
+install's private directory. A collection with fewer valid signatures fails the install, and the
+job with it (`Project requirements: installing requirements failed`); the output says which
+collection and why. The requirement covers every collection the project installs, from any
+Galaxy server: a collection its server serves no signature for fails it. Roles aren't checked. The requirements cache is keyed by the requirement and by the hub's signatures, so an
+install cached without the requirement, or before a signature was deleted, doesn't count.
+
+`gpg` must be in the job's execution environment. The all-in-one image and `awx-ee` have it;
+add the `gpg` (Debian, Ubuntu) or `gnupg2` (Fedora, RHEL) package to others. An execution node's jobs run its own `gpg` unless they run in a
+container.
+
 ### ansible-builder
 
 `ansible-builder` installs an execution environment's collections with `ansible-galaxy`, so it
@@ -1926,6 +2042,18 @@ ansible-builder build --tag registry.example.com/acme-ee:1.0 \
   --build-arg ANSIBLE_GALAXY_SERVER_AWXNEXT_TOKEN="$TOKEN"
 ```
 
+To build only with signed collections, give `ansible-builder` the hub's keyring and the count, as
+for `ansible-galaxy`; the base image needs `gpg`:
+
+```sh
+curl -fsSO https://awxnext.example.com/api/galaxy/keyring.gpg
+ansible-builder build --tag registry.example.com/acme-ee:1.0 \
+  --galaxy-keyring keyring.gpg --galaxy-required-valid-signature-count +1 \
+  --build-arg ANSIBLE_GALAXY_SERVER_AWXNEXT_TOKEN="$TOKEN"
+```
+
+awxnext builds no images: run `ansible-builder` where you build the others.
+
 ### Jobs
 
 A job installs its project's `collections/requirements.yml` from its organization's Galaxy
@@ -1935,8 +2063,9 @@ It holds no token: each install gets a read token of its own, for the namespaces
 project's organization, deleted when the install ends. Should that fail, it expires 5 minutes
 after the install's timeout (`DEFAULT_PROJECT_UPDATE_TIMEOUT`, an hour without one). An install
 the requirements cache answers gets no token. With the Collection Hub credential, the cache's
-key includes the published versions of the organization's namespaces: an approval, a rejection
-or a deletion makes the next job install again.
+key includes the published versions of the organization's namespaces and their signatures: an
+approval, a rejection, a deletion or a signature makes the next job install again. A project can
+[require signatures](#requiring-signatures-in-projects).
 
 The install reaches awxnext where it runs:
 

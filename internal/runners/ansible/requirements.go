@@ -128,9 +128,19 @@ func InstallRequirements(ctx context.Context, app *api.App, out *jobs.Output, ro
 		return nil, err
 	}
 	ignoreCerts := app.Settings.Bool(ctx, "GALAXY_IGNORE_CERTS")
+	var signatures *resources.SignatureRequirement
+	if len(colls) > 0 {
+		if signatures, err = resources.CollectionSignatureRequirement(ctx, app, projectID); err != nil {
+			return nil, err
+		}
+	}
 
 	h := sha256.New()
 	fmt.Fprintf(h, "v1|%s|%v|", fingerprint, ignoreCerts)
+	if signatures != nil {
+		// An install made without the requirement doesn't meet it.
+		fmt.Fprintf(h, "sig:%s|", signatures.Digest())
+	}
 	if len(hub) > 0 {
 		state, err := resources.HubPublishedState(ctx, app, org)
 		if err != nil {
@@ -193,9 +203,29 @@ func InstallRequirements(ctx context.Context, app *api.App, out *jobs.Output, ro
 		script = append(script, fmt.Sprintf("ansible-galaxy role install -r %s -p %s --force%s",
 			ShellQuote([]string{run.Path("project/" + f)}), ShellQuote([]string{dest + "/roles"}), flags))
 	}
+	collFlags := flags
+	if signatures != nil {
+		gnupg := run.Path("gnupg")
+		if err := run.WriteFile("gnupg/collections.gpg", signatures.Keyring, 0o600); err != nil {
+			return nil, err
+		}
+		// gpg refuses a home others can read, and the private data dir
+		// may come to the worker with other modes.
+		script = append(script, "chmod 700 "+ShellQuote([]string{gnupg}))
+		env["GNUPGHOME"] = gnupg
+		// The requirement wins over GALAXY_TASK_ENV and ansible.cfg, as the
+		// flags below do. Ignored status codes can stay: they only keep a
+		// failed signature from being reported, and the count is of valid
+		// ones.
+		env["ANSIBLE_GALAXY_DISABLE_GPG_VERIFY"] = "False"
+		// --no-cache: ansible-galaxy keeps a version's signatures for a day
+		// otherwise, and would still count one deleted since.
+		collFlags += fmt.Sprintf(" --keyring %s --required-valid-signature-count +%d --no-cache",
+			ShellQuote([]string{gnupg + "/collections.gpg"}), signatures.Count)
+	}
 	for _, f := range colls {
 		script = append(script, fmt.Sprintf("ansible-galaxy collection install -r %s -p %s --force%s",
-			ShellQuote([]string{run.Path("project/" + f)}), ShellQuote([]string{dest + "/collections"}), flags))
+			ShellQuote([]string{run.Path("project/" + f)}), ShellQuote([]string{dest + "/collections"}), collFlags))
 	}
 	if t := app.Settings.Int(ctx, "DEFAULT_PROJECT_UPDATE_TIMEOUT"); t > 0 {
 		run.Timeout = time.Duration(t) * time.Second
@@ -225,6 +255,13 @@ func InstallRequirements(ctx context.Context, app *api.App, out *jobs.Output, ro
 		return nil, err
 	}
 	out.Line("Installing project requirements: " + strings.Join(append(append([]string{}, roles...), colls...), ", "))
+	if signatures != nil {
+		need := fmt.Sprintf("%d valid signatures", signatures.Count)
+		if signatures.Count == 1 {
+			need = "a valid signature"
+		}
+		out.Line(fmt.Sprintf("Collections are installed only with %s from the keys of credential %s.", need, signatures.Credential))
+	}
 	oc, err := run.Execute(ctx, app, out)
 	if err != nil {
 		return nil, err

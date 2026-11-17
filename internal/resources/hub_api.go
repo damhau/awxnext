@@ -48,6 +48,7 @@ func installHub(app *api.App) {
 	// it saves after the download URL's last segment, which has none.
 	app.HandleAnonymous("GET", galaxyPlugin+"{repo}/collections/artifacts/{filename}/", galaxy(galaxyDownload))
 	installHubPublishing(app)
+	installHubKeyring(app)
 }
 
 func galaxyError(w http.ResponseWriter, status int, code, detail string) {
@@ -421,6 +422,11 @@ func galaxyVersion(g *galaxyCall) {
 	if meta["dependencies"] == nil {
 		meta["dependencies"] = Obj{}
 	}
+	signatures, err := versionSignatures(g, g.DB(), v.id)
+	if err != nil {
+		g.fail(err)
+		return
+	}
 	api.WriteJSON(g.w, 200, Obj{
 		"version":          v.version,
 		"href":             galaxyPath(g.repo, hc.namespace, hc.name, "versions", v.version),
@@ -433,7 +439,7 @@ func galaxyVersion(g *galaxyCall) {
 		"download_url":     requestBase(g.r) + galaxyPlugin + url.PathEscape(g.repo) + "/collections/artifacts/" + url.PathEscape(v.filename),
 		"name":             hc.name,
 		"namespace":        Obj{"name": hc.namespace, "metadata_sha256": nil},
-		"signatures":       []any{},
+		"signatures":       signatures,
 		"metadata":         meta,
 		"git_url":          nil,
 		"git_commit_sha":   nil,
@@ -465,20 +471,10 @@ func galaxyDownload(g *galaxyCall) {
 		galaxyNotFound(g.w)
 		return
 	}
-	var data []byte
-	if v.storage == "database" {
-		err = g.DB().QueryRow(g, "SELECT data FROM collection_version_data WHERE version_id = $1", v.id).Scan(&data)
-		if errors.Is(err, pgx.ErrNoRows) {
-			galaxyNotFound(g.w)
-			return
-		}
-	} else {
-		store, serr := hubStore(g.App)(g, v.storage)
-		if serr != nil {
-			g.fail(serr)
-			return
-		}
-		data, err = store.Get(g, v.place)
+	data, err := loadArtifact(g, g.App, g.DB(), v.id, v.storage, v.place)
+	if errors.Is(err, pgx.ErrNoRows) {
+		galaxyNotFound(g.w)
+		return
 	}
 	if err != nil {
 		g.fail(err)

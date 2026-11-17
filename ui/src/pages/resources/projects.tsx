@@ -37,6 +37,8 @@ export interface Project extends Base {
   allow_override: boolean
   credential: number | null
   signature_validation_credential: number | null
+  collection_signature_validation_credential: number | null
+  collection_signature_count: number
   default_environment: number | null
   local_path: string
   timeout: number
@@ -242,6 +244,8 @@ function ProjectFormInner({ p }: { p?: Project }) {
     scm_refspec: p?.scm_refspec ?? '',
     credential: refOf(p?.summary_fields.credential, p?.credential),
     signature_validation_credential: refOf(p?.summary_fields.signature_validation_credential, p?.signature_validation_credential),
+    collection_signature_validation_credential: refOf(p?.summary_fields.collection_signature_validation_credential, p?.collection_signature_validation_credential),
+    collection_signature_count: p?.collection_signature_count ?? 1,
     default_environment: refOf(p?.summary_fields.default_environment, p?.default_environment),
     scm_clean: p?.scm_clean ?? false,
     scm_delete_on_update: p?.scm_delete_on_update ?? false,
@@ -270,6 +274,8 @@ function ProjectFormInner({ p }: { p?: Project }) {
       scm_type: v.scm_type,
       default_environment: v.default_environment?.id ?? null,
       timeout: Number(v.timeout) || 0,
+      collection_signature_validation_credential: v.collection_signature_validation_credential?.id ?? null,
+      collection_signature_count: Number(v.collection_signature_count) || 1,
     }
     Object.assign(
       body,
@@ -417,6 +423,31 @@ function ProjectFormInner({ p }: { p?: Project }) {
           )}
           <div className="form-grid">
             <TextInput label={tr('Sync timeout (seconds)')} type="number" value={v.timeout} onChange={(x) => f.set('timeout', Number(x))} help={tr('0 means no timeout.')} />
+          </div>
+        </div>
+        <div className="form-section">
+          <h2>{tr('Collection signatures')}</h2>
+          <div className="form-grid">
+            <Lookup
+              label={tr('Collection signature keys')}
+              optional
+              resource="credentials/"
+              params={{ credential_type__kind: 'cryptography' }}
+              value={v.collection_signature_validation_credential}
+              onChange={(x) => f.set('collection_signature_validation_credential', x)}
+              error={f.errors.collection_signature_validation_credential}
+              help={tr('A GPG public key credential. Jobs then install the project’s collections only with valid signatures from its keys.')}
+            />
+            {v.collection_signature_validation_credential && (
+              <TextInput
+                label={tr('Signatures required')}
+                type="number"
+                value={v.collection_signature_count}
+                onChange={(x) => f.set('collection_signature_count', Number(x))}
+                error={f.errors.collection_signature_count}
+                help={tr('Valid signatures each collection needs, from 1 to 10.')}
+              />
+            )}
           </div>
         </div>
         <FormError error={error} />

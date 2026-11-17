@@ -309,7 +309,12 @@ func newAnsibleGalaxy(t *testing.T, serverURL, token string) *ansibleGalaxy {
 	if err := os.WriteFile(cfg, []byte(ini), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	env := append(os.Environ(), "ANSIBLE_CONFIG="+cfg, "ANSIBLE_HOME="+filepath.Join(dir, "home"),
+	// gpg, when ansible-galaxy checks signatures, never reaches ~/.gnupg.
+	gnupg := filepath.Join(dir, "gnupg")
+	if err := os.Mkdir(gnupg, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	env := append(os.Environ(), "GNUPGHOME="+gnupg, "ANSIBLE_CONFIG="+cfg, "ANSIBLE_HOME="+filepath.Join(dir, "home"),
 		"ANSIBLE_GALAXY_CACHE_DIR="+filepath.Join(dir, "cache"), "ANSIBLE_GALAXY_TOKEN_PATH="+filepath.Join(dir, "galaxy_token"),
 		"ANSIBLE_COLLECTIONS_PATH="+filepath.Join(dir, "collections"), "ANSIBLE_LOCAL_TEMP="+filepath.Join(dir, "tmp"),
 		"ANSIBLE_GALAXY_DISPLAY_PROGRESS=false")

@@ -39,6 +39,8 @@ var dependencies = map[string][]dependency{
 		{"webhook_credential", "cleared", `SELECT ` + ujtResource + `, t.id, t.name FROM unified_job_templates t WHERE t.webhook_credential_id = $1`},
 		{"signature_validation_credential", "cleared", `SELECT ` + ujtResource + `, t.id, t.name FROM unified_job_templates t
 			WHERE t.signature_validation_credential_id = $1`},
+		{"collection_signature_validation_credential", "cleared", `SELECT ` + ujtResource + `, t.id, t.name FROM unified_job_templates t
+			WHERE t.collection_signature_validation_credential_id = $1`},
 		{"node_credentials", "cleared", `SELECT 'workflow_job_templates', t.id, t.name FROM workflow_job_template_node_credentials x
 			JOIN workflow_job_template_nodes n ON n.id = x.node_id JOIN unified_job_templates t ON t.id = n.workflow_job_template_id
 			WHERE x.credential_id = $1`},

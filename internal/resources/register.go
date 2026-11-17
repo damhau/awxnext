@@ -27,6 +27,7 @@ func init() {
 	registerRulebooks()
 	registerCollectionNamespaces()
 	registerCollections()
+	registerCollectionSigning()
 	registerRoles()
 	registerActivity()
 	registerRelatedLists()
