@@ -33,7 +33,7 @@ be matched.
 | [M7 UI completeness](#m7-ui-completeness) | Every API feature reachable from the UI; the remaining UI goals | 17 |
 | [M8 Settings that make sense](#m8-settings-that-make-sense) | Settings laid out by task, without JSON or AWX's jargon; the settings API unchanged | 10 |
 | [M9 Security](#m9-security) | Known vulnerabilities found by CI and fixed through reviewed PRs | 5 |
-| [M10 Small fixes](#m10-small-fixes) | The importer tested on a real AWX, parity.md matching the code, the deployed image scanned, the AWS lookup tested on moto, M14-10's leftovers, a job's first lines live | 6 |
+| [M10 Small fixes](#m10-small-fixes) | The importer tested on a real AWX, parity.md matching the code, the deployed image scanned, the AWS lookup tested on moto, M14-10's leftovers, a job's first lines live, M13's leftovers | 8 |
 | [M11 Notifications](#m11-notifications) | Email tested on a real mail server, Slack as in AWX, a Teams type, notifications when a result changes | 4 |
 | [M12 Beyond AWX](#m12-beyond-awx) | What changed before a failure, secrets kept out of job output, an MCP server, drifted hosts | 4 |
 | [M13 Collection hub](#m13-collection-hub) | A private Galaxy in awxnext: publish, approve, sign, mirror and install collections | 5 |
@@ -1410,6 +1410,38 @@ page still doesn't refetch its whole output.
 **Done when:** a Vitest test covers a stream that starts at counter 2 and
 checks that the missing line is fetched, and in the browser a relaunched
 job's live output shows its first line without a reload.
+
+### M10-07 Read collections' module docs in a pod on Kubernetes
+**Labels:** feature, deploy · **Size:** M · [#178](https://github.com/damhau/awxnext/issues/178)
+
+Left over from M13-05 (added on 2026-11-17). The hub runs `ansible-doc`
+only where jobs run isolated (Decision 20). The Helm chart's replicas run
+jobs neither in containers nor as job users, so on Kubernetes no version's
+docs are read. A node that can't run `ansible-doc` isolated reads the docs
+in a pod instead, as a container group runs a job. The pod uses the
+organization's execution environment, has the same limits, and is deleted
+afterwards. A NetworkPolicy shipped by the chart denies it egress, where the
+cluster enforces NetworkPolicy.
+
+**Done when:** in the kind test, a collection uploaded to the chart's
+install has its module docs read in a pod and served on its `docs/`. The pod
+is gone afterwards, and the chart's NetworkPolicy selects it.
+
+### M10-08 Re-check a remote's versions when its signature credential is set
+**Labels:** security · **Size:** S · [#179](https://github.com/damhau/awxnext/issues/179)
+
+Left over from M13-04 (added on 2026-11-17). Versions mirrored before a
+remote's `signature_validation_credential` was set, or before it changed,
+stay in its repository unverified: they are installable, and they meet
+requirements. A sync with a credential checks the versions already in the
+repository as it checks new ones. It drops the signatures the keys don't
+verify, and takes out of the repository each version left with none, listed
+with the skipped versions.
+
+**Done when:** `TestHubRemoteSync` mirrors a version without a credential,
+then sets a credential that doesn't verify it. The next sync takes the
+version out of the repository, lists it, and fails when it was its
+requirement's only version.
 
 ---
 
