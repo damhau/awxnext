@@ -26,6 +26,7 @@ func init() {
 	registerEventConnectors()
 	registerRulebooks()
 	registerCollectionNamespaces()
+	registerCollections()
 	registerRoles()
 	registerActivity()
 	registerRelatedLists()

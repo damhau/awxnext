@@ -56,6 +56,8 @@ func registerCollectionNamespaces() {
 			{Name: "company", Type: api.TString, Default: "", MaxLength: 64},
 			{Name: "email", Type: api.TString, Default: "", MaxLength: 256},
 			{Name: "avatar_url", Type: api.TString, Default: "", MaxLength: 256},
+			{Name: "auto_approve", Type: api.TBool, Default: false,
+				Help: "Uploads to the namespace are published at once, without waiting for an approver."},
 		},
 		BeforeSave: saveCollectionNamespace,
 		BeforeDelete: func(c *Ctx, obj Obj) error {
@@ -109,13 +111,14 @@ func MintHubToken(ctx context.Context, app *api.App, org, job int64, ttl time.Du
 	return token, revoke, nil
 }
 
-// MaintainHub deletes expired hub tokens and the stored artifacts of
-// deleted collection versions.
+// MaintainHub deletes expired hub tokens, old imports and the stored
+// artifacts of deleted collection versions.
 func MaintainHub(ctx context.Context, m *jobs.Manager) {
 	db := m.DB()
 	if _, err := db.Exec(ctx, "DELETE FROM hub_tokens WHERE expires < now()"); err != nil && ctx.Err() == nil {
 		slog.Warn("deleting expired collection hub tokens", "err", err)
 	}
+	maintainImports(ctx, db)
 	rows, err := db.Query(ctx, "SELECT id, storage, location FROM collection_object_deletions ORDER BY id LIMIT 1000")
 	if err != nil {
 		return

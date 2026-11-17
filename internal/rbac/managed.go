@@ -23,7 +23,7 @@ var typePerms = map[string][]string{
 	"eventrule":            {"view", "change", "delete", "approve", "automate"},
 	"maintenancewindow":    {"view", "change", "delete"},
 	"eventconnector":       {"view", "change", "delete"},
-	"collectionnamespace":  {"view", "change", "delete"},
+	"collectionnamespace":  {"view", "change", "delete", "upload", "approve"},
 }
 
 // Types that can live in a folder.
@@ -101,7 +101,7 @@ func buildManaged() []ManagedRole {
 		{"Organization NotificationTemplate Admin", "Can manage all notifications of the organization", "organization", concat([]string{"view_organization", "add_notificationtemplate"}, all("notificationtemplate")), "notification_admin_role"},
 		{"Organization JobTemplate Admin", "Can manage all job templates of the organization", "organization", concat([]string{"view_organization"}, all("jobtemplate")), "job_template_admin_role"},
 		{"Organization ExecutionEnvironment Admin", "Can manage all execution environments of the organization", "organization", concat([]string{"view_organization", "add_executionenvironment"}, all("executionenvironment")), "execution_environment_admin_role"},
-		{"Organization Approval", "Can approve or deny a workflow approval node", "organization", concat([]string{"view_organization"}, perms("workflowjobtemplate", "view", "approve"), perms("eventrule", "view", "approve")), "approval_role"},
+		{"Organization Approval", "Can approve or deny a workflow approval node", "organization", concat([]string{"view_organization"}, perms("workflowjobtemplate", "view", "approve"), perms("eventrule", "view", "approve"), perms("collectionnamespace", "view", "approve")), "approval_role"},
 
 		{"Team Admin", "Can manage a single team and its membership", "team", all("team"), "admin_role"},
 		{"Team Member", "Inherits permissions assigned to this team", "team", []string{"view_team", "member_team"}, "member_role"},
@@ -146,7 +146,11 @@ func buildManaged() []ManagedRole {
 		{"MaintenanceWindow Read", "May view the maintenance window", "maintenancewindow", perms("maintenancewindow", "view"), "read_role"},
 		{"EventConnector Admin", "Has all permissions to a single event connector", "eventconnector", all("eventconnector"), "admin_role"},
 		{"EventConnector Read", "May view the event connector, its runs and their logs", "eventconnector", perms("eventconnector", "view"), "read_role"},
-		{"CollectionNamespace Admin", "Has all permissions to a single collection namespace", "collectionnamespace", all("collectionnamespace"), "admin_role"},
+		// Admin is the namespace's owner. Upload and Approve are apart, so
+		// that whoever publishes a collection needn't be who approves it.
+		{"CollectionNamespace Admin", "Owns the collection namespace: may change it, and upload, approve, deprecate and delete its collections", "collectionnamespace", all("collectionnamespace"), "admin_role"},
+		{"CollectionNamespace Upload", "May publish collections to the namespace, and see them before approval", "collectionnamespace", perms("collectionnamespace", "view", "upload"), "upload_role"},
+		{"CollectionNamespace Approve", "May approve or reject the collections uploaded to the namespace", "collectionnamespace", perms("collectionnamespace", "view", "approve"), "approval_role"},
 		{"CollectionNamespace Read", "May view and install the collections of the namespace", "collectionnamespace", perms("collectionnamespace", "view"), "read_role"},
 
 		{"Folder Admin", "Has all permissions to a folder, its subfolders and every object inside", "folder", folderAdmin(), "admin_role"},

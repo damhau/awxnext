@@ -16,8 +16,8 @@ import (
 
 	"github.com/damhau/awxnext/internal/api"
 	"github.com/damhau/awxnext/internal/jobs"
+	"github.com/damhau/awxnext/internal/projectscan"
 	"github.com/damhau/awxnext/internal/resources"
-	"gopkg.in/yaml.v3"
 )
 
 // Requirements are the directories holding a project's installed roles and
@@ -37,44 +37,6 @@ func (r *Requirements) Mount(run *Run) {
 	if r.Roles != "" {
 		run.Mounts = append(run.Mounts, Mount{Prefix: "requirements_roles", Path: r.Roles})
 	}
-}
-
-// findRequirements lists requirement files of a project checkout, like AWX:
-// roles/requirements.yml, collections/requirements.yml and a top-level
-// requirements.yml holding roles, collections or both.
-func findRequirements(dir string) (roles, collections []string) {
-	first := func(names ...string) string {
-		for _, n := range names {
-			if st, err := os.Stat(filepath.Join(dir, n)); err == nil && st.Mode().IsRegular() {
-				return n
-			}
-		}
-		return ""
-	}
-	if f := first("roles/requirements.yml", "roles/requirements.yaml"); f != "" {
-		roles = append(roles, f)
-	}
-	if f := first("collections/requirements.yml", "collections/requirements.yaml"); f != "" {
-		collections = append(collections, f)
-	}
-	if f := first("requirements.yml", "requirements.yaml"); f != "" {
-		b, _ := os.ReadFile(filepath.Join(dir, f))
-		var doc any
-		if yaml.Unmarshal(b, &doc) == nil {
-			switch d := doc.(type) {
-			case []any:
-				roles = append(roles, f)
-			case map[string]any:
-				if _, ok := d["roles"]; ok {
-					roles = append(roles, f)
-				}
-				if _, ok := d["collections"]; ok {
-					collections = append(collections, f)
-				}
-			}
-		}
-	}
-	return
 }
 
 var requirementLocks sync.Map
@@ -149,7 +111,7 @@ const hubTokenMargin = 5 * time.Minute
 // files' content and the Galaxy configuration. It returns nil when the project
 // has no requirements.
 func InstallRequirements(ctx context.Context, app *api.App, out *jobs.Output, row jobs.Row, projectID int64, projectDir string) (*Requirements, error) {
-	roles, colls := findRequirements(projectDir)
+	roles, colls := projectscan.RequirementFiles(projectDir)
 	if !app.Settings.Bool(ctx, "AWX_ROLES_ENABLED") {
 		roles = nil
 	}
@@ -169,6 +131,13 @@ func InstallRequirements(ctx context.Context, app *api.App, out *jobs.Output, ro
 
 	h := sha256.New()
 	fmt.Fprintf(h, "v1|%s|%v|", fingerprint, ignoreCerts)
+	if len(hub) > 0 {
+		state, err := resources.HubPublishedState(ctx, app, org)
+		if err != nil {
+			return nil, err
+		}
+		fmt.Fprintf(h, "hub:%s|", state)
+	}
 	for _, set := range [][]string{roles, colls} {
 		for _, f := range set {
 			b, err := os.ReadFile(filepath.Join(projectDir, f))

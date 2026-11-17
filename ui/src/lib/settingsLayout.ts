@@ -286,7 +286,7 @@ export const settingsPages: SettingsPage[] = [
       {
         id: 'collection-hub',
         title: tr('Collection hub'),
-        intro: tr('ansible-galaxy and ansible-builder install collections from awxnext at /api/galaxy/. Their artifacts are kept in the database, or in object storage.'),
+        intro: tr('ansible-galaxy publishes collections to awxnext and installs them from it at /api/galaxy/, as ansible-builder does. Their artifacts are kept in the database, or in object storage.'),
         rows: [
           row('HUB_STORAGE', { label: tr('Artifacts kept in'), options: [['database', tr('Database')], ['s3', tr('Amazon S3 or S3-compatible')], ['azure_blob', asIs('Azure Blob Storage')]] }),
           row('HUB_STORAGE_BUCKET', { label: tr('Hub bucket or container') }),
@@ -294,6 +294,11 @@ export const settingsPages: SettingsPage[] = [
           row('HUB_STORAGE_REGION', { label: tr('Hub region') }),
           row('HUB_STORAGE_PREFIX', { label: tr('Hub key prefix') }),
           row('HUB_STORAGE_CREDENTIAL', { label: tr('Hub credential'), control: 'storage-credential' }),
+          row('HUB_MAX_UPLOAD_SIZE', {
+            label: tr('Largest collection upload'),
+            help: tr('ansible-galaxy collection publish is refused for a larger artifact.'),
+            unit: 'size',
+          }),
         ],
       },
       { id: 'named-url', title: tr('Named URLs'), rows: [row('NAMED_URL_FORMATS', { label: tr('Named URL formats') }), row('NAMED_URL_GRAPH_NODES', { label: tr('Named URL graph') })] },

@@ -136,6 +136,7 @@ clients and imports keep working.
 | `HUB_STORAGE_PREFIX` | string | `"collections/"` | Prepended to the artifacts' keys, followed by the install's INSTALL_UUID, so installs can share a bucket. |
 | `HUB_STORAGE_ENDPOINT` | string | `""` | For S3, an S3-compatible service (https://minio.example.com:9000), empty for AWS. For Azure, the account's blob endpoint (https://<account>.blob.core.windows.net/). |
 | `HUB_STORAGE_REGION` | string | `""` | The S3 region; empty for the environment's (AWS_REGION), else us-east-1. |
+| `HUB_MAX_UPLOAD_SIZE` | integer | `104857600` | The largest collection artifact, in bytes, the hub takes from ansible-galaxy collection publish. |
 | `HUB_STORAGE_CREDENTIAL` | integer | null | An Amazon Web Services (access key) or Microsoft Azure Resource Manager (client ID and secret) credential. Empty: the environment's (AWS's default chain; AZURE_STORAGE_CONNECTION_STRING, or Azure's default chain: environment, workload identity, managed identity). |
 | `SUBSCRIPTIONS_USERNAME` | string | `""` | *No effect.* there are no Red Hat subscriptions to manage. |
 | `AUTOMATION_ANALYTICS_GATHER_INTERVAL` | integer | `14400` | *No effect.* nothing is sent to Red Hat analytics. |
@@ -716,6 +717,7 @@ clients and imports keep working.
 | `HUB_STORAGE_PREFIX` | string | `"collections/"` | Prepended to the artifacts' keys, followed by the install's INSTALL_UUID, so installs can share a bucket. |
 | `HUB_STORAGE_ENDPOINT` | string | `""` | For S3, an S3-compatible service (https://minio.example.com:9000), empty for AWS. For Azure, the account's blob endpoint (https://<account>.blob.core.windows.net/). |
 | `HUB_STORAGE_REGION` | string | `""` | The S3 region; empty for the environment's (AWS_REGION), else us-east-1. |
+| `HUB_MAX_UPLOAD_SIZE` | integer | `104857600` | The largest collection artifact, in bytes, the hub takes from ansible-galaxy collection publish. |
 | `HUB_STORAGE_CREDENTIAL` | integer | null | An Amazon Web Services (access key) or Microsoft Azure Resource Manager (client ID and secret) credential. Empty: the environment's (AWS's default chain; AZURE_STORAGE_CONNECTION_STRING, or Azure's default chain: environment, workload identity, managed identity). |
 | `SUBSCRIPTIONS_USERNAME` | string | `""` | *No effect.* there are no Red Hat subscriptions to manage. |
 | `AUTOMATION_ANALYTICS_GATHER_INTERVAL` | integer | `14400` | *No effect.* nothing is sent to Red Hat analytics. |

@@ -13,7 +13,7 @@ import (
 // carries it (AWX's to_permissions, reversed).
 var legacyRoleOfAction = map[string]string{"view": "read_role", "change": "admin_role", "execute": "execute_role", "use": "use_role",
 	"update": "update_role", "adhoc": "adhoc_role", "approve": "approval_role", "member": "member_role", "audit": "auditor_role",
-	"automate": "automate_role"}
+	"automate": "automate_role", "upload": "upload_role"}
 
 // orgRoleOfAdd maps an organization's add_ permissions to its AWX role field
 // (AWX's org_role_to_permission, reversed).

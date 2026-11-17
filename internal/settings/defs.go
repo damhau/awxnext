@@ -43,6 +43,8 @@ func init() {
 			Help: "For S3, an S3-compatible service (https://minio.example.com:9000), empty for AWS. For Azure, the account's blob endpoint (https://<account>.blob.core.windows.net/)."},
 		{Key: "HUB_STORAGE_REGION", Category: "system", Type: "string", Default: "", Label: "Collection Hub Region",
 			Help: "The S3 region; empty for the environment's (AWS_REGION), else us-east-1."},
+		{Key: "HUB_MAX_UPLOAD_SIZE", Category: "system", Type: "integer", Default: 100 << 20, Validate: atLeastOneKiB, Label: "Collection Hub Maximum Upload Size",
+			Help: "The largest collection artifact, in bytes, the hub takes from ansible-galaxy collection publish."},
 		{Key: "HUB_STORAGE_CREDENTIAL", Category: "system", Type: "integer", Default: nil, Nullable: true, Label: "Collection Hub Credential",
 			Help: "An Amazon Web Services (access key) or Microsoft Azure Resource Manager (client ID and secret) credential. Empty: the environment's (AWS's default chain; AZURE_STORAGE_CONNECTION_STRING, or Azure's default chain: environment, workload identity, managed identity)."},
 		{Key: "SUBSCRIPTIONS_USERNAME", Category: "system", Type: "string", Default: "", CompatOnly: true, Help: "No effect in awxnext: there are no Red Hat subscriptions to manage."},
@@ -192,6 +194,13 @@ func stringList(v any) []string {
 func successDays(v any) error {
 	if n, err := strconv.ParseFloat(fmt.Sprint(v), 64); err == nil && (n < 1 || n > 3650) {
 		return errors.New("Ensure this value is between 1 and 3650.")
+	}
+	return nil
+}
+
+func atLeastOneKiB(v any) error {
+	if n, err := strconv.ParseFloat(fmt.Sprint(v), 64); err == nil && n < 1024 {
+		return errors.New("Ensure this value is greater than or equal to 1024.")
 	}
 	return nil
 }

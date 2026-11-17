@@ -52,6 +52,7 @@ export function actionLabel(p: Perm): string {
     execute: tr('Launch'),
     update: tr('Sync'),
     adhoc: tr('Run commands'),
+    upload: tr('Upload'),
     approve: tr('Approve'),
     automate: tr('Automate'),
     member: tr('Be a member'),
@@ -60,7 +61,7 @@ export function actionLabel(p: Perm): string {
   return labels[p.action] ?? p.action
 }
 
-const actionOrder = ['view', 'use', 'execute', 'update', 'adhoc', 'approve', 'automate', 'member', 'change', 'add', 'delete']
+const actionOrder = ['view', 'use', 'execute', 'update', 'adhoc', 'upload', 'approve', 'automate', 'member', 'change', 'add', 'delete']
 
 /** The allowed permissions by kind of object: the role's own type first. */
 export function groupPerms(allowed: string[], contentType: string): { model: string; perms: Perm[] }[] {

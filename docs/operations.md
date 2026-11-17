@@ -1747,7 +1747,9 @@ Collections belong to namespaces (`/api/v2/collection_namespaces/`), each owned 
 organization. A namespace's name is unique in awxnext and is the first part of its collections'
 names (`acme` in `acme.tools`): lowercase letters, digits and single underscores, starting with
 a letter, up to 64 characters. A namespace that has collections can't be renamed or deleted.
-Publishing through the API comes with roadmap M13-02.
+An organization's administrators create its namespaces; their collections are
+[published](#publishing-a-collection) with `ansible-galaxy collection publish`, and wait in
+`staging` until an approver of the namespace publishes them.
 
 ### Who sees a collection
 
@@ -1760,6 +1762,14 @@ the API's root needs a user: a personal token (`/api/v2/tokens/`, `read` scope i
 as `Authorization: Token <token>`, which is what `ansible-galaxy` sends, or `Bearer <token>`;
 basic authentication while `AUTH_BASIC_ENABLED` is on; or a session.
 
+That is the `published` repository. The `staging` repository (uploads waiting for approval) and
+the `rejected` one are read only by the namespace's curators: whoever may upload, approve or
+change there (the `CollectionNamespace Upload`, `Approve` and `Admin` roles, the organization's
+administrators), the organization's auditors, and system administrators and auditors. A
+namespace's readers and its organization's members get `404` there, and jobs' read tokens read
+`published` only. The curators install from `/api/galaxy/content/staging/` to try a version
+before approving it.
+
 ### URLs
 
 | What | Path |
@@ -1769,6 +1779,10 @@ basic authentication while `AUTH_BASIC_ENABLED` is on; or a session.
 | A collection, its versions | `.../index/<namespace>/<name>/`, `.../index/<namespace>/<name>/versions/` |
 | A version | `.../index/<namespace>/<name>/versions/<version>/` |
 | Its artifact | `/api/galaxy/v3/plugin/ansible/content/published/collections/artifacts/<namespace>-<name>-<version>.tar.gz` |
+| Upload (`POST`) | `/api/galaxy/v3/artifacts/collections/`, `/api/galaxy/content/<repository>/v3/artifacts/collections/` or `/api/galaxy/v3/plugin/ansible/content/<repository>/collections/artifacts/` |
+| An upload's import | `/api/galaxy/v3/imports/collections/<id>/` |
+| Approve or reject (`POST`) | `/api/galaxy/v3/collections/<namespace>/<name>/versions/<version>/move/<from>/<to>/` |
+| Deprecate (`PATCH`), delete (`DELETE`) | a collection's or a version's path above |
 
 Older clients' paths, `/api/galaxy/content/published/v3/collections/...` and
 `/api/galaxy/v3/collections/...`, answer the same. Lists are paginated as Pulp's: `limit` (10 by
@@ -1805,6 +1819,88 @@ collections:
     source: https://awxnext.example.com/api/galaxy/content/published/
 ```
 
+### Publishing a collection
+
+To publish, you need the `CollectionNamespace Upload` or `Admin` role on the namespace, or to
+administer its organization, and a personal token with the `write` scope. Build the collection
+and publish it to awxnext's server:
+
+```sh
+ansible-galaxy collection build acme/tools/
+ansible-galaxy collection publish acme-tools-1.0.0.tar.gz --server awxnext
+```
+
+`ansible-galaxy` waits for the import and prints its warnings and errors; `--no-wait` returns at
+once. Whatever the upload's path names, the version lands in `staging`, or in `published` when
+its namespace's `auto_approve` is on. The namespace must exist: an upload doesn't create it.
+
+The import runs while the upload is answered, so the first poll finds it finished. Its log
+(`messages`, each with its `level` and `time`) gives each check's result, and `error` why it
+failed, with a code:
+
+| Check | On failure |
+|---|---|
+| The artifact's SHA-256 is the one `ansible-galaxy` sent (a warning when none came) | `checksum_mismatch` |
+| A gzip'd tarball, at most `HUB_MAX_UPLOAD_SIZE` (100 MiB; `413` above it), 1 GiB once decompressed, 50,000 members | `invalid_artifact` |
+| No member outside the collection: no absolute path, no `..`, no link pointing out, no device or FIFO, no member twice | `invalid_artifact` |
+| `MANIFEST.json` and `FILES.json` at the root; `MANIFEST.json`'s SHA-256 of `FILES.json`, and `FILES.json`'s of each file, match; every file is listed | `checksum_mismatch`, `invalid_artifact` |
+| The metadata: namespace, name, a semantic version, authors, the readme in the artifact, tags, licenses, dependencies as `namespace.name: <range>` (warnings when `requires_ansible` or a license is missing) | `invalid_metadata` |
+| The namespace exists and you can see it | `namespace_not_found` |
+| You may upload to it | `permission_denied` |
+| The version isn't there yet, in any repository: a version is uploaded once | `duplicate_version` |
+
+The tarball is read in memory; nothing of it is written to disk. Imports are also on
+`/api/v2/collection_imports/`, for the uploader and the namespace's curators. Failed imports,
+and those whose version was deleted, are deleted after 30 days.
+
+### Approving a collection
+
+A namespace's approvers (the `CollectionNamespace Approve` or `Admin` role, the organization's
+administrators and its Approval role) approve what waits in `staging`, or reject it, on
+`/api/v2/`:
+
+```sh
+curl -X POST -H "Authorization: Bearer $TOKEN" https://awxnext.example.com/api/v2/collection_versions/42/approve/
+curl -X POST -H "Authorization: Bearer $TOKEN" https://awxnext.example.com/api/v2/collection_versions/42/reject/
+```
+
+Or with galaxy_ng's move, `POST .../move/staging/published/` (or `.../staging/rejected/`): it
+answers `202` with galaxy_ng's task ids, `null`, as the move is done. A version moves between
+`staging`, `published` and `rejected`, in any direction: rejecting a published version
+withdraws it. `/api/v2/collection_versions/?repository=staging&namespace=<id>` is the queue;
+each version's `summary_fields` give its repositories and its import, and `reviewed_by` who last
+moved it. The next requirements install of a job sees the change: the cache is keyed by the
+published versions of its organization's namespaces.
+
+The roles on a namespace, assignable to users and teams:
+
+| Role | Gives |
+|---|---|
+| `CollectionNamespace Admin` | The owner: change the namespace (`auto_approve` too), upload, approve, deprecate, delete |
+| `CollectionNamespace Upload` | Upload, and read `staging` and `rejected` |
+| `CollectionNamespace Approve` | Approve and reject, and read `staging` and `rejected` |
+| `CollectionNamespace Read` | Read and install what is published |
+
+Upload and Approve are apart so that whoever publishes a collection needn't be who approves it.
+An organization's administrators hold all of them on its namespaces, its members only Read.
+
+### Deprecating and deleting
+
+A namespace's owners deprecate a collection, as galaxy_ng does: `PATCH` its path with
+`{"deprecated": true}` (`false` to undo), or `/api/v2/collections/<id>/`. A deprecated
+collection still installs, without a warning from `ansible-galaxy`: the flag is in its entry for
+whoever lists the hub's collections. awxnext answers with the collection, at once, where
+galaxy_ng answers with a task.
+
+They also delete a version (`DELETE` its path, or `/api/v2/collection_versions/<id>/`) or a
+whole collection, answered `204`. A published version can't be deleted while it is the only one
+that meets what needs it: a requirement of a project of the namespace's organization, read from
+its requirement files at each sync, or a dependency of another published collection version.
+`used_by` (`/api/v2/collection_versions/<id>/used_by/`, `/api/v2/collections/<id>/used_by/`)
+lists them, each with the range it asks for, and `effect`: `blocks` when the deletion would
+leave it unmet, `none` when another version meets it. Versions in `staging` and `rejected` are
+deleted freely.
+
 ### ansible-builder
 
 `ansible-builder` installs an execution environment's collections with `ansible-galaxy`, so it
@@ -1838,7 +1934,9 @@ the organization's Galaxy credentials (`POST /api/v2/organizations/<id>/galaxy_c
 It holds no token: each install gets a read token of its own, for the namespaces of the
 project's organization, deleted when the install ends. Should that fail, it expires 5 minutes
 after the install's timeout (`DEFAULT_PROJECT_UPDATE_TIMEOUT`, an hour without one). An install
-the requirements cache answers gets no token.
+the requirements cache answers gets no token. With the Collection Hub credential, the cache's
+key includes the published versions of the organization's namespaces: an approval, a rejection
+or a deletion makes the next job install again.
 
 The install reaches awxnext where it runs:
 

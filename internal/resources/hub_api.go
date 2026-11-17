@@ -47,6 +47,7 @@ func installHub(app *api.App) {
 	// The API's paths take a trailing slash; ansible-galaxy names the file
 	// it saves after the download URL's last segment, which has none.
 	app.HandleAnonymous("GET", galaxyPlugin+"{repo}/collections/artifacts/{filename}/", galaxy(galaxyDownload))
+	installHubPublishing(app)
 }
 
 func galaxyError(w http.ResponseWriter, status int, code, detail string) {
@@ -89,12 +90,16 @@ func (g *galaxyCall) arg(v any) string {
 	return fmt.Sprintf("$%d", len(g.args))
 }
 
-// visible is the condition on namespaces (alias t) the caller may read.
+// visible is the condition on namespaces (alias t) whose collections in
+// the repository the caller may read. Sync tokens read published only.
 func (g *galaxyCall) visible() string {
 	if g.tokenOrg > 0 {
+		if curatedOnly(g.repo) {
+			return "FALSE"
+		}
 		return "t.organization_id = " + g.arg(g.tokenOrg)
 	}
-	return api.ViewPredicate(g.Ctx, api.Lookup("collection_namespaces"), g.arg)
+	return namespaceReadable(g.Ctx, g.repo, g.arg)
 }
 
 // galaxy authenticates a hub request: a sync token, else what /api/v2/

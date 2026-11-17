@@ -11,9 +11,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"path"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"gopkg.in/yaml.v3"
@@ -24,15 +27,26 @@ import (
 const (
 	maxManifestBytes = 4 << 20
 	maxRuntimeBytes  = 1 << 20
-	// Bounds the work of reading a collection's artifact: past this many
-	// uncompressed bytes, what it lacks is missing.
-	maxArtifactScan = 1 << 30
+	// galaxy-importer's limit.
+	maxCollectionTags = 20
+	// Links followed from a FILES.json entry to the file it names.
+	maxLinkHops = 40
+)
+
+// Bound the work of reading a collection's artifact: its size once
+// decompressed, and its members. Tests lower them.
+var (
+	maxArtifactBytes   int64 = 1 << 30
+	maxArtifactMembers       = 50000
 )
 
 // semverRe is semver.org's: ansible-galaxy requires semantic versions.
 var semverRe = regexp.MustCompile(`^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)` +
 	`(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?` +
 	`(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$`)
+
+// tagRe is galaxy-importer's rule for tags.
+var tagRe = regexp.MustCompile(`^[a-z0-9_]{1,64}$`)
 
 // CollectionArtifact is what the hub reads from a collection's tarball.
 type CollectionArtifact struct {
@@ -44,67 +58,201 @@ type CollectionArtifact struct {
 	Files    map[string]any
 }
 
-// ReadCollectionArtifact reads the MANIFEST.json, FILES.json and
-// meta/runtime.yml of a collection tarball, as ansible-galaxy builds it.
-// Nothing is written to disk.
+// ImportMessage is a line of an import's log, as galaxy_ng's.
+type ImportMessage struct {
+	Level   string  `json:"level"`
+	Message string  `json:"message"`
+	Time    float64 `json:"time"`
+}
+
+// ImportLog collects the messages of an import, each check's result.
+type ImportLog struct{ Messages []ImportMessage }
+
+func (l *ImportLog) add(level, format string, args ...any) {
+	if l == nil {
+		return
+	}
+	l.Messages = append(l.Messages, ImportMessage{Level: level, Message: fmt.Sprintf(format, args...),
+		Time: float64(time.Now().UnixMicro()) / 1e6})
+}
+
+func (l *ImportLog) info(format string, args ...any) { l.add("INFO", format, args...) }
+func (l *ImportLog) warn(format string, args ...any) { l.add("WARNING", format, args...) }
+
+// ImportError is why an import failed, with a code as galaxy_ng's.
+type ImportError struct{ Code, Message string }
+
+func (e *ImportError) Error() string { return e.Message }
+
+func importErr(code, format string, args ...any) error {
+	return &ImportError{Code: code, Message: fmt.Sprintf(format, args...)}
+}
+
+// artifactMember is a member of a collection's tarball: a regular file
+// with its checksum, a directory, or a link to another member.
+type artifactMember struct {
+	typ  byte
+	sum  string
+	link string
+}
+
+type countingReader struct {
+	r io.Reader
+	n int64
+}
+
+func (c *countingReader) Read(p []byte) (int, error) {
+	n, err := c.r.Read(p)
+	c.n += int64(n)
+	return n, err
+}
+
+// memberPath is where a member's name puts it in the collection; false
+// when that would be outside it.
+func memberPath(name string) (string, bool) {
+	for strings.HasPrefix(name, "./") {
+		name = name[2:]
+	}
+	if name == "" || strings.HasPrefix(name, "/") || strings.ContainsAny(name, "\\\x00") {
+		return "", false
+	}
+	for _, part := range strings.Split(name, "/") {
+		if part == ".." {
+			return "", false
+		}
+	}
+	return path.Clean(name), true
+}
+
+// ReadCollectionArtifact reads and checks a collection tarball, as
+// ansible-galaxy builds it. Nothing is written to disk.
 func ReadCollectionArtifact(data []byte) (*CollectionArtifact, error) {
+	return checkCollectionArtifact(data, nil)
+}
+
+// checkCollectionArtifact reads every member of a collection tarball and
+// checks its layout, MANIFEST.json and FILES.json with their checksums,
+// and the metadata, logging each check.
+func checkCollectionArtifact(data []byte, log *ImportLog) (*CollectionArtifact, error) {
 	gz, err := gzip.NewReader(bytes.NewReader(data))
 	if err != nil {
-		return nil, errors.New("the artifact is not a gzip'd tarball")
+		return nil, importErr("invalid_artifact", "The artifact is not a gzip'd tarball.")
 	}
 	defer gz.Close()
-	tr := tar.NewReader(io.LimitReader(gz, maxArtifactScan))
-	var manifest, files []byte
-	var runtime []byte
-	for manifest == nil || files == nil || runtime == nil {
+	cr := &countingReader{r: io.LimitReader(gz, maxArtifactBytes+1)}
+	tr := tar.NewReader(cr)
+	tooLarge := func() error {
+		return importErr("invalid_artifact", "The artifact is larger than %s decompressed.", humanBytes(maxArtifactBytes))
+	}
+	members := map[string]*artifactMember{}
+	var manifest, files, runtime []byte
+	for count := 0; ; count++ {
 		h, err := tr.Next()
 		if err == io.EOF {
 			break
 		}
 		if err != nil {
-			return nil, fmt.Errorf("reading the artifact: %w", err)
+			if cr.n > maxArtifactBytes {
+				return nil, tooLarge()
+			}
+			return nil, importErr("invalid_artifact", "Reading the artifact: %v.", err)
 		}
-		if h.Typeflag != tar.TypeReg {
+		if count >= maxArtifactMembers {
+			return nil, importErr("invalid_artifact", "The artifact has more than %d members.", maxArtifactMembers)
+		}
+		if h.Typeflag == tar.TypeXGlobalHeader {
 			continue
 		}
-		var dst *[]byte
-		limit := int64(maxManifestBytes)
-		switch strings.TrimPrefix(h.Name, "./") {
-		case "MANIFEST.json":
-			dst = &manifest
-		case "FILES.json":
-			dst = &files
-		case "meta/runtime.yml":
-			dst, limit = &runtime, maxRuntimeBytes
+		p, ok := memberPath(h.Name)
+		if !ok {
+			return nil, importErr("invalid_artifact", "The member %q is outside the collection.", h.Name)
+		}
+		if p == "." {
+			continue
+		}
+		if prev := members[p]; prev != nil && (prev.typ != tar.TypeDir || h.Typeflag != tar.TypeDir) {
+			return nil, importErr("invalid_artifact", "%s is twice in the artifact.", p)
+		}
+		m := &artifactMember{typ: h.Typeflag}
+		switch h.Typeflag {
+		case tar.TypeDir:
+		case tar.TypeSymlink:
+			if path.IsAbs(h.Linkname) {
+				return nil, importErr("invalid_artifact", "%s links outside the collection.", p)
+			}
+			m.link = path.Join(path.Dir(p), h.Linkname)
+			if m.link == ".." || strings.HasPrefix(m.link, "../") {
+				return nil, importErr("invalid_artifact", "%s links outside the collection.", p)
+			}
+		case tar.TypeLink:
+			target, ok := memberPath(h.Linkname)
+			if !ok || members[target] == nil || members[target].typ != tar.TypeReg {
+				return nil, importErr("invalid_artifact", "%s is a hard link to %q, which is no file of the artifact before it.", p, h.Linkname)
+			}
+			m.typ, m.sum = tar.TypeReg, members[target].sum
+		case tar.TypeReg:
+			var dst *[]byte
+			limit := int64(maxManifestBytes)
+			switch p {
+			case "MANIFEST.json":
+				dst = &manifest
+			case "FILES.json":
+				dst = &files
+			case "meta/runtime.yml":
+				dst, limit = &runtime, maxRuntimeBytes
+			}
+			sum := sha256.New()
+			if dst != nil {
+				b, err := io.ReadAll(io.LimitReader(tr, limit+1))
+				if err != nil {
+					return nil, importErr("invalid_artifact", "Reading %s: %v.", p, err)
+				}
+				if int64(len(b)) > limit {
+					return nil, importErr("invalid_artifact", "%s is larger than %s.", p, humanBytes(limit))
+				}
+				*dst = b
+				sum.Write(b)
+			} else if _, err := io.Copy(sum, tr); err != nil {
+				if cr.n > maxArtifactBytes {
+					return nil, tooLarge()
+				}
+				return nil, importErr("invalid_artifact", "Reading %s: %v.", p, err)
+			}
+			m.sum = hex.EncodeToString(sum.Sum(nil))
 		default:
-			continue
+			return nil, importErr("invalid_artifact", "%s is a device, a FIFO or another kind of file a collection can't hold.", p)
 		}
-		b, err := io.ReadAll(io.LimitReader(tr, limit+1))
-		if err != nil {
-			return nil, fmt.Errorf("reading %s: %w", h.Name, err)
-		}
-		if int64(len(b)) > limit {
-			return nil, fmt.Errorf("%s is larger than %d bytes", h.Name, limit)
-		}
-		*dst = b
+		members[p] = m
 	}
-	if manifest == nil {
-		return nil, errors.New("the artifact has no MANIFEST.json")
+	if cr.n > maxArtifactBytes {
+		return nil, tooLarge()
 	}
+	switch {
+	case manifest == nil:
+		return nil, importErr("invalid_artifact", "The artifact has no MANIFEST.json at its root.")
+	case files == nil:
+		return nil, importErr("invalid_artifact", "The artifact has no FILES.json at its root.")
+	}
+	log.info("Layout: %d members, %s decompressed, none outside the collection.", len(members), humanBytes(cr.n))
+
 	a := &CollectionArtifact{}
 	if err := json.Unmarshal(manifest, &a.Manifest); err != nil {
-		return nil, fmt.Errorf("MANIFEST.json: %w", err)
+		return nil, importErr("invalid_artifact", "MANIFEST.json: %v.", err)
 	}
 	a.Info, _ = a.Manifest["collection_info"].(map[string]any)
 	if a.Info == nil {
-		return nil, errors.New("MANIFEST.json has no collection_info")
+		return nil, importErr("invalid_artifact", "MANIFEST.json has no collection_info.")
 	}
 	delete(a.Manifest, "collection_info")
-	if files != nil {
-		if err := json.Unmarshal(files, &a.Files); err != nil {
-			return nil, fmt.Errorf("FILES.json: %w", err)
-		}
+	if err := json.Unmarshal(files, &a.Files); err != nil {
+		return nil, importErr("invalid_artifact", "FILES.json: %v.", err)
 	}
+	n, err := checkFileManifest(a, files, members)
+	if err != nil {
+		return nil, err
+	}
+	log.info("Checksums: MANIFEST.json's of FILES.json, and FILES.json's of each of the %d files, match.", n)
+
 	if runtime != nil {
 		var meta struct {
 			RequiresAnsible string `yaml:"requires_ansible"`
@@ -113,28 +261,203 @@ func ReadCollectionArtifact(data []byte) (*CollectionArtifact, error) {
 			a.RequiresAnsible = meta.RequiresAnsible
 		}
 	}
-	a.Namespace, a.Name, a.Version = str(a.Info["namespace"]), str(a.Info["name"]), str(a.Info["version"])
-	switch {
-	case !validGalaxyName(a.Namespace):
-		return nil, fmt.Errorf("invalid namespace %q", a.Namespace)
-	case !validGalaxyName(a.Name):
-		return nil, fmt.Errorf("invalid collection name %q", a.Name)
-	case !semverRe.MatchString(a.Version):
-		return nil, fmt.Errorf("version %q is not a semantic version", a.Version)
-	}
-	if deps, ok := a.Info["dependencies"]; ok && deps != nil {
-		if _, ok := deps.(map[string]any); !ok {
-			return nil, errors.New("collection_info's dependencies is not a mapping")
-		}
-	} else {
-		a.Info["dependencies"] = map[string]any{}
+	if err := checkCollectionInfo(a, members, log); err != nil {
+		return nil, err
 	}
 	return a, nil
 }
 
-// ImportCollection stores a collection tarball as a version of its
-// collection, in its namespace, and adds it to a repository. The namespace
-// must exist. It returns the version's id.
+// checkFileManifest checks MANIFEST.json's checksum of FILES.json, and
+// that FILES.json lists every file of the artifact with its checksum. It
+// returns how many files it checked.
+func checkFileManifest(a *CollectionArtifact, files []byte, members map[string]*artifactMember) (int, error) {
+	fmf, _ := a.Manifest["file_manifest_file"].(map[string]any)
+	want, _ := fmf["chksum_sha256"].(string)
+	if want == "" {
+		return 0, importErr("checksum_mismatch", "MANIFEST.json gives no SHA-256 checksum of FILES.json (file_manifest_file).")
+	}
+	sum := sha256.Sum256(files)
+	if got := hex.EncodeToString(sum[:]); !strings.EqualFold(got, want) {
+		return 0, importErr("checksum_mismatch", "FILES.json's SHA-256 is %s, MANIFEST.json says %s.", got, want)
+	}
+	var fm struct {
+		Files []struct {
+			Name       string  `json:"name"`
+			Ftype      string  `json:"ftype"`
+			ChksumType *string `json:"chksum_type"`
+			Chksum     *string `json:"chksum_sha256"`
+		} `json:"files"`
+	}
+	if err := json.Unmarshal(files, &fm); err != nil {
+		return 0, importErr("invalid_artifact", "FILES.json: %v.", err)
+	}
+	listed := map[string]bool{"MANIFEST.json": true, "FILES.json": true}
+	checked := 0
+	for _, f := range fm.Files {
+		if f.Name == "." {
+			continue
+		}
+		p, ok := memberPath(f.Name)
+		if !ok {
+			return 0, importErr("invalid_artifact", "FILES.json lists %q, outside the collection.", f.Name)
+		}
+		listed[p] = true
+		if f.Ftype != "file" {
+			continue
+		}
+		if members[p] == nil {
+			return 0, importErr("checksum_mismatch", "FILES.json lists %s, which the artifact lacks.", p)
+		}
+		if f.ChksumType == nil || *f.ChksumType != "sha256" || f.Chksum == nil {
+			return 0, importErr("checksum_mismatch", "FILES.json gives %s no SHA-256 checksum.", p)
+		}
+		got, err := memberSum(members, p)
+		if err != nil {
+			return 0, err
+		}
+		if !strings.EqualFold(got, *f.Chksum) {
+			return 0, importErr("checksum_mismatch", "%s: its SHA-256 is %s, FILES.json says %s.", p, got, *f.Chksum)
+		}
+		checked++
+	}
+	for p, m := range members {
+		if m.typ != tar.TypeDir && !listed[p] {
+			return 0, importErr("invalid_artifact", "%s is in the artifact but not in FILES.json.", p)
+		}
+	}
+	return checked, nil
+}
+
+// memberSum is the checksum of the file a member is, or links to.
+func memberSum(members map[string]*artifactMember, p string) (string, error) {
+	for range maxLinkHops {
+		m := members[p]
+		switch {
+		case m == nil:
+			return "", importErr("invalid_artifact", "%s links to a file the artifact lacks.", p)
+		case m.typ == tar.TypeReg:
+			return m.sum, nil
+		case m.typ != tar.TypeSymlink:
+			return "", importErr("checksum_mismatch", "FILES.json lists %s as a file, which it isn't.", p)
+		}
+		p = m.link
+	}
+	return "", importErr("invalid_artifact", "%s: too many links.", p)
+}
+
+// checkCollectionInfo checks MANIFEST.json's collection_info as
+// galaxy-importer does.
+func checkCollectionInfo(a *CollectionArtifact, members map[string]*artifactMember, log *ImportLog) error {
+	a.Namespace, a.Name, a.Version = str(a.Info["namespace"]), str(a.Info["name"]), str(a.Info["version"])
+	bad := func(format string, args ...any) error { return importErr("invalid_metadata", format, args...) }
+	switch {
+	case !validGalaxyName(a.Namespace):
+		return bad("Invalid namespace %q: lowercase letters, digits and single underscores, starting with a letter.", a.Namespace)
+	case !validGalaxyName(a.Name):
+		return bad("Invalid collection name %q: lowercase letters, digits and single underscores, starting with a letter.", a.Name)
+	case !semverRe.MatchString(a.Version):
+		return bad("Version %q is not a semantic version.", a.Version)
+	}
+	if list, ok := a.Info["authors"].([]any); !ok || len(list) == 0 || !allStrings(list) {
+		return bad("collection_info's authors is not a list of names.")
+	}
+	readme, _ := a.Info["readme"].(string)
+	if readme == "" {
+		return bad("collection_info names no readme.")
+	}
+	if p, ok := memberPath(readme); !ok || members[p] == nil {
+		return bad("The readme, %s, is not in the artifact.", readme)
+	}
+	if tags, ok := a.Info["tags"]; ok && tags != nil {
+		list, ok := tags.([]any)
+		if !ok {
+			return bad("collection_info's tags is not a list.")
+		}
+		if len(list) > maxCollectionTags {
+			return bad("The collection has %d tags, more than %d.", len(list), maxCollectionTags)
+		}
+		for _, t := range list {
+			if s, ok := t.(string); !ok || !tagRe.MatchString(s) {
+				return bad("Invalid tag %v: lowercase letters, digits and underscores.", t)
+			}
+		}
+	}
+	license, _ := a.Info["license"].([]any)
+	if !allStrings(license) {
+		return bad("collection_info's license is not a list of SPDX identifiers.")
+	}
+	if lf, _ := a.Info["license_file"].(string); len(license) == 0 && lf == "" {
+		log.warn("collection_info gives no license or license_file.")
+	}
+	deps := map[string]any{}
+	if v, ok := a.Info["dependencies"]; ok && v != nil {
+		m, ok := v.(map[string]any)
+		if !ok {
+			return bad("collection_info's dependencies is not a mapping.")
+		}
+		deps = m
+	}
+	a.Info["dependencies"] = deps
+	for name, spec := range deps {
+		ns, coll, _ := strings.Cut(name, ".")
+		if !validGalaxyName(ns) || !validGalaxyName(coll) {
+			return bad("Dependency %q is not a collection's full name (namespace.name).", name)
+		}
+		if name == a.Namespace+"."+a.Name {
+			return bad("The collection depends on itself.")
+		}
+		s, ok := spec.(string)
+		if !ok || !validVersionSpec(s) {
+			return bad("Dependency %s: %v is not a version range such as >=1.0.0,<2.0.0.", name, spec)
+		}
+	}
+	if a.RequiresAnsible == "" {
+		log.warn("meta/runtime.yml gives no requires_ansible.")
+	}
+	needs := "no other collection"
+	if len(deps) > 0 {
+		var list []string
+		for name, spec := range deps {
+			list = append(list, name+" "+str(spec))
+		}
+		sort.Strings(list)
+		needs = strings.Join(list, ", ")
+	}
+	log.info("Metadata: %s.%s %s, requires Ansible %s, depends on %s.", a.Namespace, a.Name, a.Version, orNone(a.RequiresAnsible), needs)
+	return nil
+}
+
+func allStrings(list []any) bool {
+	for _, v := range list {
+		if _, ok := v.(string); !ok {
+			return false
+		}
+	}
+	return true
+}
+
+func orNone(s string) string {
+	if s == "" {
+		return "(not given)"
+	}
+	return s
+}
+
+func humanBytes(n int64) string {
+	switch {
+	case n >= 1<<30:
+		return strconv.FormatFloat(float64(n)/(1<<30), 'f', 1, 64) + " GiB"
+	case n >= 1<<20:
+		return strconv.FormatFloat(float64(n)/(1<<20), 'f', 1, 64) + " MiB"
+	case n >= 1<<10:
+		return strconv.FormatFloat(float64(n)/(1<<10), 'f', 1, 64) + " KiB"
+	}
+	return strconv.FormatInt(n, 10) + " bytes"
+}
+
+// ImportCollection checks a collection tarball and stores it as a version
+// of its collection, in its namespace, in a repository. The namespace must
+// exist. It returns the version's id.
 func ImportCollection(ctx context.Context, app *api.App, repository string, data []byte) (int64, error) {
 	a, err := ReadCollectionArtifact(data)
 	if err != nil {
@@ -142,17 +465,29 @@ func ImportCollection(ctx context.Context, app *api.App, repository string, data
 	}
 	var nsID, repoID int64
 	if err := app.DB.QueryRow(ctx, "SELECT id FROM collection_namespaces WHERE name = $1", a.Namespace).Scan(&nsID); err != nil {
-		return 0, fmt.Errorf("no namespace %s", a.Namespace)
+		return 0, importErr("namespace_not_found", "Namespace %q does not exist.", a.Namespace)
 	}
 	if err := app.DB.QueryRow(ctx, "SELECT id FROM collection_repositories WHERE name = $1", repository).Scan(&repoID); err != nil {
 		return 0, fmt.Errorf("no repository %s", repository)
 	}
+	if versionTaken(ctx, app, nsID, a) {
+		return 0, versionExists(a)
+	}
+	return storeCollectionVersion(ctx, app, a, data, nsID, repoID, 0)
+}
+
+// versionTaken reports whether the namespace has the artifact's version,
+// in any repository.
+func versionTaken(ctx context.Context, app *api.App, nsID int64, a *CollectionArtifact) bool {
 	var exists bool
 	app.DB.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM collection_versions v JOIN collections c ON c.id = v.collection_id
 		WHERE c.namespace_id = $1 AND c.name = $2 AND v.version = $3)`, nsID, a.Name, a.Version).Scan(&exists)
-	if exists {
-		return 0, versionExists(a)
-	}
+	return exists
+}
+
+// storeCollectionVersion stores a checked artifact as a new version, in
+// the hub's storage, and adds it to a repository.
+func storeCollectionVersion(ctx context.Context, app *api.App, a *CollectionArtifact, data []byte, nsID, repoID, by int64) (int64, error) {
 	sum := sha256.Sum256(data)
 	digest := hex.EncodeToString(sum[:])
 	filename := fmt.Sprintf("%s-%s-%s.tar.gz", a.Namespace, a.Name, a.Version)
@@ -174,7 +509,7 @@ func ImportCollection(ctx context.Context, app *api.App, repository string, data
 		}
 	}
 	var id int64
-	err = pgx.BeginFunc(ctx, app.DB, func(tx pgx.Tx) error {
+	err := pgx.BeginFunc(ctx, app.DB, func(tx pgx.Tx) error {
 		var collID int64
 		if err := tx.QueryRow(ctx, `INSERT INTO collections (namespace_id, name) VALUES ($1, $2)
 			ON CONFLICT (namespace_id, name) DO UPDATE SET modified = now() RETURNING id`, nsID, a.Name).Scan(&collID); err != nil {
@@ -184,9 +519,9 @@ func ImportCollection(ctx context.Context, app *api.App, repository string, data
 		manifest, _ := json.Marshal(a.Manifest)
 		files, _ := json.Marshal(a.Files)
 		err := tx.QueryRow(ctx, `INSERT INTO collection_versions (collection_id, version, requires_ansible, metadata, manifest, files,
-			filename, sha256, size, storage, location) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+			filename, sha256, size, storage, location, created_by_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, nullif($12, 0))
 			ON CONFLICT (collection_id, version) DO NOTHING RETURNING id`,
-			collID, a.Version, a.RequiresAnsible, info, manifest, files, filename, digest, int64(len(data)), kind, location).Scan(&id)
+			collID, a.Version, a.RequiresAnsible, info, manifest, files, filename, digest, int64(len(data)), kind, location, by).Scan(&id)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return versionExists(a)
 		}
@@ -209,7 +544,99 @@ func ImportCollection(ctx context.Context, app *api.App, repository string, data
 }
 
 func versionExists(a *CollectionArtifact) error {
-	return api.BadRequest(fmt.Sprintf("%s.%s %s already exists.", a.Namespace, a.Name, a.Version))
+	return importErr("duplicate_version", "%s.%s %s already exists: a version is uploaded once. Upload a new version, or delete this one first.",
+		a.Namespace, a.Name, a.Version)
+}
+
+// validVersionSpec reports whether s is a version range as ansible-galaxy
+// reads them: *, or comparisons separated by commas.
+func validVersionSpec(s string) bool {
+	if strings.TrimSpace(s) == "*" {
+		return true
+	}
+	for _, part := range strings.Split(s, ",") {
+		if _, _, ok := parseVersionReq(part); !ok {
+			return false
+		}
+	}
+	return true
+}
+
+var specOps = []string{"!=", "==", ">=", "<=", ">", "<", "="}
+
+// parseVersionReq splits a comparison such as >=1.2 into its operator and
+// version, completing a loose version (1.2) to a semantic one.
+func parseVersionReq(req string) (op, version string, ok bool) {
+	req = strings.TrimSpace(req)
+	op = "=="
+	for _, o := range specOps {
+		if strings.HasPrefix(req, o) {
+			op, req = o, strings.TrimSpace(req[len(o):])
+			break
+		}
+	}
+	if op == "=" {
+		op = "=="
+	}
+	if req == "*" {
+		return op, req, true
+	}
+	if !semverRe.MatchString(req) {
+		parts := strings.Split(req, ".")
+		if len(parts) > 3 {
+			return "", "", false
+		}
+		for _, p := range parts {
+			if _, err := strconv.ParseUint(p, 10, 64); err != nil {
+				return "", "", false
+			}
+		}
+		for len(parts) < 3 {
+			parts = append(parts, "0")
+		}
+		req = strings.Join(parts, ".")
+		if !semverRe.MatchString(req) {
+			return "", "", false
+		}
+	}
+	return op, req, true
+}
+
+// versionMeets reports whether version is in the range spec, as
+// ansible-galaxy's meets_requirements decides; an empty spec is any.
+func versionMeets(version, spec string) bool {
+	if s := strings.TrimSpace(spec); s == "" || s == "*" {
+		return true
+	}
+	for _, part := range strings.Split(spec, ",") {
+		op, req, ok := parseVersionReq(part)
+		if !ok {
+			return false
+		}
+		if req == "*" {
+			continue
+		}
+		c := compareSemver(version, req)
+		var meets bool
+		switch op {
+		case "==":
+			meets = c == 0
+		case "!=":
+			meets = c != 0
+		case ">=":
+			meets = c >= 0
+		case "<=":
+			meets = c <= 0
+		case ">":
+			meets = c > 0
+		case "<":
+			meets = c < 0
+		}
+		if !meets {
+			return false
+		}
+	}
+	return true
 }
 
 // semver is a parsed semantic version, ordered as semver.org says.

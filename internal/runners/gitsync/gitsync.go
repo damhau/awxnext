@@ -7,6 +7,7 @@ package gitsync
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -380,8 +381,9 @@ func runProjectUpdate(ctx context.Context, rc *jobs.RunContext) jobs.Result {
 				os.Rename(tmp, link)
 			}
 		}
-		if _, err := app.DB.Exec(ctx, `UPDATE unified_job_templates SET scm_revision = $2, playbook_files = $3, inventory_files = $4 WHERE id = $1`,
-			pid, sha, files.Playbooks, files.Inventories); err != nil {
+		reqs, _ := json.Marshal(projectscan.CollectionRequirements(dir))
+		if _, err := app.DB.Exec(ctx, `UPDATE unified_job_templates SET scm_revision = $2, playbook_files = $3, inventory_files = $4,
+			collection_requirements = $5 WHERE id = $1`, pid, sha, files.Playbooks, files.Inventories, reqs); err != nil {
 			return jobs.Result{Status: "error", Explanation: err.Error()}
 		}
 		pruneRevisions(app.Cfg.ProjectsRoot, pid, sha, 10)
