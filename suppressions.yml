@@ -552,3 +552,25 @@ suppressions:
   expires: '2026-12-16'
   created: '2026-11-16'
   source: triage
+- id: 20aae29011c6
+  reason: 'secubot triage: false positive (high confidence, single pass). The flagged
+    code runs in production. The CollectionDocs background worker (Run -> read ->
+    docs) reaches it after a collection upload, or after a request to read a version''s
+    docs again (readVersionDocs, hub_docs.go:530-538). It is not command injection.
+
+
+    1) The program that runs is never attacker-controlled. p.args comes from place()
+    (hub_docs.go:254-309), which always builds argv as the constant ['
+  expires: '2026-12-17'
+  created: '2026-11-17'
+  source: triage
+- id: 4742fa9704c0
+  reason: 'secubot triage: false positive (high confidence, single pass). The flagged
+    line is reachable in production: the collection-remote sync job (runCollectionSync)
+    calls remoteHTTPClient at hub_remote.go:544. However, InsecureSkipVerify is not
+    hard-coded to true. It is set to `!verify`, and `verify` comes from the remote''s
+    `scm_verify_ssl` column (hub_remote.go:505-507). The API exposes that column as
+    the `tls_validation` field, which defaults to true (hub_remote.'
+  expires: '2026-12-17'
+  created: '2026-11-17'
+  source: triage
