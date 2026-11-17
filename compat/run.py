@@ -1,6 +1,6 @@
 #!/usr/bin/env -S uv run --script
 # /// script
-# requires-python = ">=3.11,<3.13"
+# requires-python = ">=3.11,<3.12.8"  # awxkit 24.6.1 overrides argparse's _parse_known_args, whose signature 3.12.8 changed
 # dependencies = [
 #   "ansible-core==2.16.14",
 #   "awxkit==24.6.1",
