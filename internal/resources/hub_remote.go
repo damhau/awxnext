@@ -471,13 +471,22 @@ type remoteSync struct {
 	deps     bool
 	limit    int64
 	versions map[string][]string
-	done     map[string]bool
+	done     map[string]mirrorResult
 	problems []string
 	added    int
 	present  int
-	skipped  int
+	skipped  []string
 	sigs     int
 }
+
+// mirrorResult is what became of a version a sync mirrors.
+type mirrorResult int
+
+const (
+	mirrorFailed mirrorResult = iota
+	mirrorSkipped
+	mirrorKept
+)
 
 func (s *remoteSync) line(format string, args ...any) { s.out.Line(fmt.Sprintf(format, args...)) }
 
@@ -542,7 +551,7 @@ func runCollectionSync(ctx context.Context, rc *jobs.RunContext) jobs.Result {
 		client: &galaxyv3.Client{HTTP: httpClient, URL: input("url"), AuthURL: input("auth_url"), Token: input("token"),
 			UserAgent: "awxnext/" + version.Get().Version},
 		limit:    min(int64(app.Settings.Int(ctx, "HUB_MAX_UPLOAD_SIZE")), maxUploadLimit),
-		versions: map[string][]string{}, done: map[string]bool{},
+		versions: map[string][]string{}, done: map[string]mirrorResult{},
 	}
 	rc.Out.Line(fmt.Sprintf("Syncing the remote %s into the repository %s.", name, m.repo))
 	if err := s.client.Connect(ctx); err != nil {
@@ -569,7 +578,10 @@ func runCollectionSync(ctx context.Context, rc *jobs.RunContext) jobs.Result {
 	if ctx.Err() != nil {
 		return jobs.Result{Status: "canceled"}
 	}
-	s.line("Synced: %d versions added, %d already in the repository, %d skipped, %d signatures added.", s.added, s.present, s.skipped, s.sigs)
+	s.line("Synced: %d versions added, %d already in the repository, %d skipped, %d signatures added.", s.added, s.present, len(s.skipped), s.sigs)
+	if len(s.skipped) > 0 {
+		s.line("Skipped, with no signature that verifies with the keys of %s: %s.", m.keysName, strings.Join(s.skipped, ", "))
+	}
 	if len(s.problems) > 0 {
 		explanation := fmt.Sprintf("%d problems: %s", len(s.problems), strings.Join(s.problems, "; "))
 		if len(s.problems) == 1 {
@@ -600,7 +612,9 @@ func remoteHTTPClient(ctx context.Context, app *api.App, proxy string, verify bo
 }
 
 // require mirrors the versions of a collection in a range: all of them for
-// a requirement, the highest for a dependency.
+// a requirement, the highest that passes the signature check for a
+// dependency. A range with no version that passed, in this sync or already
+// in the repository, is a problem.
 func (s *remoteSync) require(ctx context.Context, r remoteRequirement, all bool, of string) {
 	what := r.fqcn() + " " + r.Spec
 	if of != "" {
@@ -628,28 +642,51 @@ func (s *remoteSync) require(ctx context.Context, r remoteRequirement, all bool,
 		s.problem("No version of %s on the server is in the range %s.", r.fqcn(), r.Spec)
 		return
 	}
-	if !all {
-		picked = picked[len(picked)-1:]
-	}
-	s.line("%s: %s", what, strings.Join(picked, ", "))
-	for _, v := range picked {
-		if ctx.Err() != nil {
-			return
+	results := map[mirrorResult]int{}
+	if all {
+		s.line("%s: %s", what, strings.Join(picked, ", "))
+		for _, v := range picked {
+			if ctx.Err() != nil {
+				return
+			}
+			results[s.mirrorVersion(ctx, r.Namespace, r.Name, v)]++
 		}
-		s.mirrorVersion(ctx, r.Namespace, r.Name, v)
+	} else {
+		top := len(picked) - 1
+		for top > 0 && s.done[r.fqcn()+" "+picked[top]] == mirrorSkipped {
+			top--
+		}
+		s.line("%s: %s", what, picked[top])
+		for i := top; i >= 0 && results[mirrorKept]+results[mirrorFailed] == 0; i-- {
+			if ctx.Err() != nil {
+				return
+			}
+			results[s.mirrorVersion(ctx, r.Namespace, r.Name, picked[i])]++
+		}
+	}
+	if results[mirrorKept] > 0 || results[mirrorFailed] > 0 {
+		return
+	}
+	held, err := s.mirror.versionsHeld(ctx, r.Namespace, r.Name)
+	if err != nil {
+		s.problem("%s: %v", what, err)
+		return
+	}
+	if len(remoteCandidates(held, r.Spec)) == 0 {
+		s.problem("%s is unmet: no version in its range has a signature that verifies with the keys of %s.", what, s.mirror.keysName)
 	}
 }
 
-func (s *remoteSync) mirrorVersion(ctx context.Context, ns, name, ver string) {
+func (s *remoteSync) mirrorVersion(ctx context.Context, ns, name, ver string) mirrorResult {
 	key := ns + "." + name + " " + ver
-	if s.done[key] {
-		return
+	if r, ok := s.done[key]; ok {
+		return r
 	}
-	s.done[key] = true
+	s.done[key] = mirrorFailed
 	detail, err := s.client.Version(ctx, ns, name, ver)
 	if err != nil {
 		s.problem("Reading %s: %v", key, err)
-		return
+		return mirrorFailed
 	}
 	var sigs []string
 	for _, sig := range detail.Signatures {
@@ -658,21 +695,21 @@ func (s *remoteSync) mirrorVersion(ctx context.Context, ns, name, ver string) {
 	have, err := s.mirror.existing(ctx, ns, name, ver)
 	if err != nil {
 		s.problem("%s: %v", key, err)
-		return
+		return mirrorFailed
 	}
 	var outcome mirrorOutcome
 	if have != nil {
 		if !strings.EqualFold(have.sha256, detail.Artifact.SHA256) {
 			s.problem("%s: the hub has another artifact of it (SHA-256 %s, the server's %s), which it keeps: versions don't change.",
 				key, have.sha256, strings.ToLower(detail.Artifact.SHA256))
-			return
+			return mirrorFailed
 		}
 		outcome, err = s.mirror.addExisting(ctx, have, sigs)
 	} else {
 		var data []byte
 		if data, err = s.client.Download(ctx, detail, s.limit); err != nil {
 			s.problem("Downloading %s: %v", key, err)
-			return
+			return mirrorFailed
 		}
 		outcome, err = s.mirror.addArtifact(ctx, data, sigs, &CollectionArtifact{Namespace: ns, Name: name, Version: ver})
 	}
@@ -681,22 +718,24 @@ func (s *remoteSync) mirrorVersion(ctx context.Context, ns, name, ver string) {
 	}
 	if err != nil {
 		s.problem("%s: %v", key, err)
-		return
+		return mirrorFailed
 	}
 	s.sigs += outcome.signatures
 	switch {
 	case outcome.skipped != "":
-		s.skipped++
+		s.skipped = append(s.skipped, key)
+		s.done[key] = mirrorSkipped
 		s.line("  %s: skipped, %s", key, outcome.skipped)
-		return
+		return mirrorSkipped
 	case outcome.added:
 		s.added++
 	default:
 		s.present++
 	}
+	s.done[key] = mirrorKept
 	s.line("  %s: %s", key, outcome.describe())
 	if !s.deps {
-		return
+		return mirrorKept
 	}
 	names := make([]string, 0, len(detail.Metadata.Dependencies))
 	for dep := range detail.Metadata.Dependencies {
@@ -715,4 +754,5 @@ func (s *remoteSync) mirrorVersion(ctx context.Context, ns, name, ver string) {
 		}
 		s.require(ctx, remoteRequirement{dns, dname, spec}, false, key)
 	}
+	return mirrorKept
 }

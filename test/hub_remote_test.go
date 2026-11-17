@@ -307,14 +307,17 @@ func TestHubRemoteSync(t *testing.T) {
 	g.add(t, ns, "app", "1.0.0", map[string]string{ns + ".base": ">=1.0.0,<2.0.0", ns2 + ".util": "*"}, upstream, other)
 	g.add(t, ns, "app", "1.5.0", map[string]string{ns + ".base": ">=1.1.0,<2.0.0"}, upstream)
 	g.add(t, ns, "app", "2.0.0", map[string]string{ns + ".base": ">=2.0.0"}, upstream)
+	g.add(t, ns, "app", "1.6.0", nil)
+	g.add(t, ns, "base", "1.4.0", nil)
 	g.add(t, ns2, "util", "0.1.0", nil, upstream)
 	util := g.add(t, ns2, "util", "0.2.0", nil, upstream)
 	g.add(t, ns, "unsigned", "1.0.0", nil)
 
 	cred := galaxyCredential(t, a, org, g.URL+"/", g.URL+"/auth/token", "offline-token")
-	keys := must(t, a.post("credentials/", map[string]any{"name": uniq("upstream keys"), "organization": org,
+	keysName := uniq("upstream keys")
+	keys := must(t, a.post("credentials/", map[string]any{"name": keysName, "organization": org,
 		"credential_type": credType(t, a, "gpg_public_key"), "inputs": map[string]any{"gpg_public_key": upstream.PublicKey}}), 201).id()
-	requirements := fmt.Sprintf("collections:\n  - name: %s.app\n    version: '>=1.0.0,<2.0.0'\n  - name: %s.base\n    version: ==2.1.0-beta.1\n  - %s.unsigned\n", ns, ns, ns)
+	requirements := fmt.Sprintf("collections:\n  - name: %s.app\n    version: '>=1.0.0,<2.0.0'\n  - name: %s.base\n    version: ==2.1.0-beta.1\n", ns, ns)
 
 	// What a remote takes.
 	body := func(extra map[string]any) map[string]any {
@@ -398,13 +401,17 @@ func TestHubRemoteSync(t *testing.T) {
 		t.Fatalf("sync: %s\n%s", job.Raw, out)
 	}
 	t.Logf("sync output:\n%s", out)
+	// Unsigned versions are skipped, and listed; a dependency's highest
+	// unsigned version gives way to the highest signed one.
 	for _, want := range []string{
-		ns + ".app >=1.0.0,<2.0.0: 1.0.0, 1.5.0",
-		ns + ".base >=1.0.0,<2.0.0 (a dependency of " + ns + ".app 1.0.0): 1.2.0",
-		ns + ".unsigned *: 1.0.0",
-		"skipped, no signature verifies with the keys of",
+		ns + ".app >=1.0.0,<2.0.0: 1.0.0, 1.5.0, 1.6.0",
+		ns + ".base >=1.0.0,<2.0.0 (a dependency of " + ns + ".app 1.0.0): 1.4.0\n",
+		"  " + ns + ".base 1.4.0: skipped, no signature verifies with the keys of " + keysName + "\n",
+		"  " + ns + ".base 1.2.0: added",
+		"  " + ns + ".app 1.6.0: skipped, no signature verifies with the keys of " + keysName + "\n",
 		"signature 2 dropped",
-		"Synced: 5 versions added, 0 already in the repository, 1 skipped, 5 signatures added.",
+		"Synced: 5 versions added, 0 already in the repository, 2 skipped, 5 signatures added.",
+		"Skipped, with no signature that verifies with the keys of " + keysName + ": " + ns + ".base 1.4.0, " + ns + ".app 1.6.0.",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("output lacks %q:\n%s", want, out)
@@ -466,7 +473,7 @@ func TestHubRemoteSync(t *testing.T) {
 	// Again: nothing new. Then upstream releases a version in a
 	// dependency's range: it comes, the one before stays.
 	job, out = syncRemote(t, a, rid)
-	if job.Body["status"] != "successful" || !strings.Contains(out, "0 versions added, 5 already in the repository, 1 skipped, 0 signatures added") {
+	if job.Body["status"] != "successful" || !strings.Contains(out, "0 versions added, 5 already in the repository, 2 skipped, 0 signatures added") {
 		t.Fatalf("re-sync: %s\n%s", job.Raw, out)
 	}
 	g.add(t, ns, "base", "1.3.0", nil, upstream)
@@ -475,12 +482,28 @@ func TestHubRemoteSync(t *testing.T) {
 		t.Fatalf("sync after a release: %s\n%s", job.Raw, out)
 	}
 
+	// A requirement, or a dependency, that no signed version meets fails
+	// the sync.
+	g.add(t, ns, "needy", "1.0.0", map[string]string{ns + ".unsigned": "*"}, upstream)
+	must(t, a.patch(fmt.Sprintf("collection_remotes/%d/", rid), map[string]any{"requirements_file": requirements + "  - " + ns + ".unsigned\n  - " + ns + ".needy\n"}), 200)
+	job, out = syncRemote(t, a, rid)
+	explanation := fmt.Sprint(job.Body["job_explanation"])
+	if job.Body["status"] != "failed" || !strings.Contains(explanation, "2 problems") ||
+		!strings.Contains(explanation, ns+".unsigned * is unmet: no version in its range has a signature that verifies with the keys of "+keysName) ||
+		!strings.Contains(explanation, ns+".unsigned * (a dependency of "+ns+".needy 1.0.0) is unmet") ||
+		!strings.Contains(out, "Skipped, with no signature that verifies with the keys of "+keysName+": "+ns+".base 1.4.0, "+ns+".app 1.6.0, "+ns+".unsigned 1.0.0.") {
+		t.Fatalf("sync with an unmet requirement: %s\n%s", job.Raw, out)
+	}
+	if got := repoVersions(t, memberPAT, repo, ns, "unsigned"); got != nil {
+		t.Errorf("unsigned in %s: %v", repo, got)
+	}
+
 	// Upstream rebuilds a version the hub has, and a collection is gone:
 	// the hub keeps its version, the sync fails and says why.
 	g.replace(t, util)
 	must(t, a.patch(fmt.Sprintf("collection_remotes/%d/", rid), map[string]any{"requirements_file": requirements + "  - " + ns + ".gone\n"}), 200)
 	job, out = syncRemote(t, a, rid)
-	explanation := fmt.Sprint(job.Body["job_explanation"])
+	explanation = fmt.Sprint(job.Body["job_explanation"])
 	if job.Body["status"] != "failed" || !strings.Contains(explanation, "2 problems") || !strings.Contains(explanation, "the hub has another artifact of it") ||
 		!strings.Contains(explanation, "The server has no collection "+ns+".gone") {
 		t.Fatalf("sync with a rebuilt version: %s\n%s", job.Raw, out)

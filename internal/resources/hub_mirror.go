@@ -89,6 +89,17 @@ func (m *hubMirror) existing(ctx context.Context, ns, name, version string) (*hu
 	return v, err
 }
 
+// versionsHeld lists the versions of a collection in the repository.
+func (m *hubMirror) versionsHeld(ctx context.Context, ns, name string) ([]string, error) {
+	rows, err := m.app.DB.Query(ctx, `SELECT v.version FROM collection_versions v JOIN collections c ON c.id = v.collection_id
+		JOIN collection_namespaces t ON t.id = c.namespace_id JOIN collection_repository_contents rc ON rc.version_id = v.id
+		WHERE rc.repository_id = $1 AND t.name = $2 AND c.name = $3`, m.repoID, ns, name)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, pgx.RowTo[string])
+}
+
 // checkSignatures keeps the signatures of a MANIFEST.json the mirror may
 // serve: those its keys verify, or with no keys, those ansible-galaxy can
 // read.

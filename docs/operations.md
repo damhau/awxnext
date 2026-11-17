@@ -2097,7 +2097,7 @@ System administrators create remotes, at `/api/v2/collection_remotes/`:
 | `credential` | An **Ansible Galaxy/Automation Hub API Token** credential of the server: see below. |
 | `requirements_file` | The collections to mirror, as a `requirements.yml` lists them. |
 | `sync_dependencies` | Mirror their dependencies too: `true` by default. |
-| `signature_validation_credential` | A **GPG Public Key** credential: then syncs keep only the signatures its keys verify, and only the versions that have one. |
+| `signature_validation_credential` | A **GPG Public Key** credential: then syncs keep only the signatures its keys verify, and only the versions that have one. See [Signatures](#signatures). |
 | `proxy_url` | The proxy syncs go through. Empty: the server's `HTTPS_PROXY`, if any. |
 | `tls_validation` | Check the server's TLS certificate: `true` by default. |
 | `repository` | The repository the remote syncs into, set when you create it: lowercase letters, digits, `-` and `_`. Empty: one from the remote's name. |
@@ -2142,10 +2142,10 @@ collections:
 
 A sync mirrors every version in each collection's range: a name alone mirrors all of them.
 Pre-releases come only when the range names them (`==2.1.0-beta.1`). With `sync_dependencies`,
-each mirrored version's dependencies come too, at the highest version in the range it asks for,
-and theirs. Collections only: the file refuses `roles:`, a `source:` (make a remote for that
-server), and a `type:` other than `galaxy`. Quote a version (`"1.0"`): YAML reads `1.0` as a
-number.
+each mirrored version's dependencies come too, at the highest version in the range it asks for
+that passes the [signature check](#signatures), and theirs. Collections only: the file refuses
+`roles:`, a `source:` (make a remote for that server), and a `type:` other than `galaxy`. Quote
+a version (`"1.0"`): YAML reads `1.0` as a number.
 
 #### Syncing
 
@@ -2160,9 +2160,8 @@ stays. A version is mirrored once: when the hub has it already, in any repositor
 same SHA-256, the sync adds it to the repository; with another SHA-256, the hub keeps its own,
 and the sync fails and says so. A version waiting in `staging`, or rejected, makes the sync fail
 until an approver decides. A collection the server doesn't have, or no version of it in the
-range, fails the sync too, after the rest is mirrored. A version without a valid signature,
-with `signature_validation_credential`, is skipped, and the output says so; the sync still
-succeeds.
+range, fails the sync too, after the rest is mirrored, and so does a range in which the
+[signature check](#signatures) skips every version.
 
 Each artifact is checked as an upload is (its checksums, its size up to `HUB_MAX_UPLOAD_SIZE`,
 its members). Namespaces the hub doesn't have are created in the remote's organization; versions
@@ -2174,8 +2173,18 @@ A sync mirrors each version's signatures, as the server gives them in its v3 det
 origin `remote`. Red Hat signs its certified content. Without `signature_validation_credential`
 they are kept unchecked, each with the fingerprint of the key it names, for clients to check
 with their own keyring. With it, only the signatures its keys verify are kept, and a version
-with none isn't mirrored. Versions in a remote's repository aren't signed by awxnext's own key:
-to install them with `--keyring`, give the keyring of their signers.
+with none is skipped: the sync's output says so on the version's line, and lists every skipped
+version at the end. A skipped version doesn't fail the sync while its range has another one:
+
+- For a requirement, another version in its range that the sync mirrors, or that the
+  repository already holds, meets it.
+- For a dependency, the sync tries the next lower version in its range, down to the lowest.
+
+A requirement or a dependency left with no version in its range that passed the check fails the
+sync, after the rest is mirrored: the job explanation names it as unmet.
+
+Versions in a remote's repository aren't signed by awxnext's own key: to install them with
+`--keyring`, give the keyring of their signers.
 
 #### Installing from a remote's repository
 
