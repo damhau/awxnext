@@ -5,10 +5,11 @@ import { tr } from './i18n'
 
 /**
  * Runs a job again with the same values. Syncs have no relaunch endpoint in
- * AWX; they start a new update of their project or inventory source.
+ * AWX; they start a new update of their project, inventory source or
+ * collection remote.
  */
 export async function relaunchJob(j: Pick<Job, 'id' | 'type' | 'unified_job_template'>, body: Record<string, unknown> = {}): Promise<{ id: number; type: string }> {
-  let r: { id: number; type?: string; project_update?: number; inventory_update?: number }
+  let r: { id: number; type?: string; project_update?: number; inventory_update?: number; collection_sync?: number }
   switch (j.type) {
     case 'project_update':
       r = await api.post(`projects/${j.unified_job_template}/update/`, {})
@@ -19,6 +20,9 @@ export async function relaunchJob(j: Pick<Job, 'id' | 'type' | 'unified_job_temp
     case 'system_job':
       r = await api.post(`system_job_templates/${j.unified_job_template}/launch/`, {})
       return { id: r.id, type: 'system_job' }
+    case 'collection_sync':
+      r = await api.post(`collection_remotes/${j.unified_job_template}/sync/`, {})
+      return { id: r.collection_sync ?? r.id, type: 'collection_sync' }
   }
   r = await api.post(`${jobApi(j.type, j.id)}relaunch/`, body)
   return { id: r.id, type: r.type ?? j.type }

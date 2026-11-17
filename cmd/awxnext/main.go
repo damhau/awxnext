@@ -47,6 +47,8 @@ Commands:
   restore [--passphrase-file F] FILE
                     restore a backup into an empty database (pg_restore) and queue project updates
   inventory-import  import an inventory file, directory or script (as awx-manage inventory_import)
+  hub import [--repository R] [--organization O] [--keyring FILE] DIR
+                    import the collections ansible-galaxy collection download wrote, with their signatures
   provision-instance --hostname H [--node_type T] [--uuid U]
                     register an instance (as awx-manage provision_instance)
   deprovision-instance --hostname H
@@ -96,6 +98,8 @@ func main() {
 		err = runRestore(ctx, cfg, os.Args[2:])
 	case "inventory-import":
 		err = inventoryImport(ctx, cfg, os.Args[1:])
+	case "hub":
+		err = hubCommand(ctx, cfg, os.Args[2:])
 	case "agent":
 		err = runAgent(ctx, os.Args[2:])
 	case "shim":

@@ -452,7 +452,7 @@ func jobNotificationTargets(ctx context.Context, db api.DBTX, row jobs.Row) [][2
 		db.QueryRow(ctx, "SELECT type FROM unified_job_templates WHERE id = $1", ujt).Scan(&ujtType)
 	}
 	ct := map[string]string{"job_template": "jobtemplate", "project": "project", "inventory_source": "inventorysource",
-		"system_job_template": "systemjobtemplate", "workflow_job_template": "workflowjobtemplate"}[ujtType]
+		"system_job_template": "systemjobtemplate", "workflow_job_template": "workflowjobtemplate", "collection_remote": "collectionremote"}[ujtType]
 	if ct != "" {
 		out = append(out, [2]any{ct, ujt})
 	}
@@ -474,7 +474,7 @@ func jobNotificationTargets(ctx context.Context, db api.DBTX, row jobs.Row) [][2
 }
 
 var friendlyNames = map[string]string{"job": "Job", "project_update": "Project Update", "inventory_update": "Inventory Update",
-	"ad_hoc_command": "AdHoc Command", "system_job": "Management Job", "workflow_job": "Workflow Job"}
+	"ad_hoc_command": "AdHoc Command", "system_job": "Management Job", "workflow_job": "Workflow Job", "collection_sync": "Collection Sync"}
 
 // JobUIURL is the UI address of a job's output.
 func JobUIURL(app *api.App, id int64) string {

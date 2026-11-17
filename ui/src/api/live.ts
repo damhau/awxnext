@@ -134,7 +134,7 @@ export function matches(groups: Groups, m: LiveMessage): boolean {
   const ids = groups[m.group_name]
   if (!ids) return false
   if (m.group_name === 'jobs' || m.group_name === 'schedules' || m.group_name === 'control') return true
-  const id = m.job ?? m.project_update ?? m.inventory_update ?? m.ad_hoc_command ?? m.system_job ?? m.workflow_job_id ?? m.unified_job_id
+  const id = m.job ?? m.project_update ?? m.inventory_update ?? m.ad_hoc_command ?? m.system_job ?? m.collection_sync ?? m.workflow_job_id ?? m.unified_job_id
   return ids.some((x) => String(x) === String(id))
 }
 
@@ -166,6 +166,8 @@ export function eventGroup(type: string): string {
       return 'system_job_events'
     case 'workflow_job':
       return 'workflow_events'
+    case 'collection_sync':
+      return 'collection_sync_events'
   }
   return 'job_events'
 }

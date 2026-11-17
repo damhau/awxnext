@@ -187,6 +187,8 @@ export function typeLabel(t: string): string {
       system_job: tr('Management job'),
       system_job_template: tr('Management job'),
       workflow_approval: tr('Approval'),
+      collection_sync: tr('Collection sync'),
+      collection_remote: tr('Collection remote'),
     } as Record<string, string>
   )[t] ?? t
 }
@@ -223,6 +225,7 @@ export function jobApi(type: string, id: number | string): string {
     ad_hoc_command: 'ad_hoc_commands',
     system_job: 'system_jobs',
     workflow_approval: 'workflow_approvals',
+    collection_sync: 'collection_syncs',
   }
   return `${res[type] ?? 'unified_jobs'}/${id}/`
 }

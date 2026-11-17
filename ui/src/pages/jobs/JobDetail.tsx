@@ -27,7 +27,7 @@ interface RuleCheck {
   role: 'action' | 'check'
 }
 
-const templateKind: Record<string, string> = { job: 'job_template', workflow_job: 'workflow_job_template', project_update: 'project', inventory_update: 'inventory_source', system_job: 'system_job_template' }
+const templateKind: Record<string, string> = { job: 'job_template', workflow_job: 'workflow_job_template', project_update: 'project', inventory_update: 'inventory_source', system_job: 'system_job_template', collection_sync: 'collection_remote' }
 
 export function JobDetail() {
   const { type = 'job', id } = useParams()

@@ -29,6 +29,7 @@ var eventResources = map[string]string{
 	"ad_hoc_command_events":   "ad_hoc_commands",
 	"system_job_events":       "system_jobs",
 	"workflow_events":         "workflow_jobs",
+	"collection_sync_events":  "collection_syncs",
 }
 
 var wsConnections = metrics.Default.NewGauge("awxnext_websocket_connections", "Open /websocket/ connections on this node.")

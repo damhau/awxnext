@@ -1767,14 +1767,19 @@ the `rejected` one are read only by the namespace's curators: whoever may upload
 change there (the `CollectionNamespace Upload`, `Approve` and `Admin` roles, the organization's
 administrators), the organization's auditors, and system administrators and auditors. A
 namespace's readers and its organization's members get `404` there, and jobs' read tokens read
-`published` only. The curators install from `/api/galaxy/content/staging/` to try a version
-before approving it.
+neither. The curators install from `/api/galaxy/content/staging/` to try a version before
+approving it.
+
+A [remote](#remotes)'s repository is read by the members and auditors of the remote's
+organization, its jobs, and system administrators and auditors, whatever namespaces its
+collections are in.
 
 ### URLs
 
 | What | Path |
 |---|---|
 | Server for `ansible-galaxy` (the published repository) | `/api/galaxy/content/published/`, or `/api/galaxy/` |
+| Server for a remote's repository | `/api/galaxy/content/<repository>/` |
 | Collections | `/api/galaxy/v3/plugin/ansible/content/published/collections/index/` |
 | A collection, its versions | `.../index/<namespace>/<name>/`, `.../index/<namespace>/<name>/versions/` |
 | A version | `.../index/<namespace>/<name>/versions/<version>/` |
@@ -2063,8 +2068,9 @@ It holds no token: each install gets a read token of its own, for the namespaces
 project's organization, deleted when the install ends. Should that fail, it expires 5 minutes
 after the install's timeout (`DEFAULT_PROJECT_UPDATE_TIMEOUT`, an hour without one). An install
 the requirements cache answers gets no token. With the Collection Hub credential, the cache's
-key includes the published versions of the organization's namespaces and their signatures: an
-approval, a rejection, a deletion or a signature makes the next job install again. A project can
+key includes the published versions of the organization's namespaces, the repositories of its
+[remotes](#remotes), and their signatures: an approval, a rejection, a deletion, a sync or a
+signature makes the next job install again. A project can
 [require signatures](#requiring-signatures-in-projects).
 
 The install reaches awxnext where it runs:
@@ -2074,6 +2080,148 @@ The install reaches awxnext where it runs:
 | A process on awxnext's node | `AWXNEXT_INTERNAL_URL`, else the listen address on loopback |
 | A container on awxnext's node, or a container group's pod | `AWXNEXT_SERVICE_URL`, else `AWXNEXT_BASE_URL` |
 | An execution node | `AWXNEXT_BASE_URL`, which its agent connects to |
+
+### Remotes
+
+A remote mirrors collections of another Galaxy server into a repository of its own, so that
+jobs and `ansible-builder` install them from awxnext, without reaching the internet, and the
+same versions each time, as Private Automation Hub's remotes do. The server is
+galaxy.ansible.com, Red Hat's Automation Hub, or another galaxy_ng. Each sync is a job, with
+its output and its status, that you start, schedule and notify on as a project update.
+
+System administrators create remotes, at `/api/v2/collection_remotes/`:
+
+| Field | What it holds |
+|---|---|
+| `organization` | The organization whose members and jobs read the remote's repository, and that owns the namespaces its syncs create. |
+| `credential` | An **Ansible Galaxy/Automation Hub API Token** credential of the server: see below. |
+| `requirements_file` | The collections to mirror, as a `requirements.yml` lists them. |
+| `sync_dependencies` | Mirror their dependencies too: `true` by default. |
+| `signature_validation_credential` | A **GPG Public Key** credential: then syncs keep only the signatures its keys verify, and only the versions that have one. |
+| `proxy_url` | The proxy syncs go through. Empty: the server's `HTTPS_PROXY`, if any. |
+| `tls_validation` | Check the server's TLS certificate: `true` by default. |
+| `repository` | The repository the remote syncs into, set when you create it: lowercase letters, digits, `-` and `_`. Empty: one from the remote's name. |
+
+`galaxy_credential` is the remote's managed credential, `Collection Hub: <repository>`, which
+awxnext creates with the remote, in its organization, and deletes with it.
+
+#### The server
+
+The remote's credential gives the server's URL, and its token when the server needs one:
+
+| Server | Galaxy Server URL | Auth Server URL | API Token |
+|---|---|---|---|
+| galaxy.ansible.com | `https://galaxy.ansible.com/` | | |
+| Red Hat's Automation Hub, certified content | `https://console.redhat.com/api/automation-hub/content/published/` | `https://sso.redhat.com/auth/realms/redhat-external/protocol/openid-connect/token` | Your offline token |
+| Red Hat's Automation Hub, validated content | `https://console.redhat.com/api/automation-hub/content/validated/` | as above | as above |
+| Another galaxy_ng, or Private Automation Hub | Its repository's URL, such as `https://hub.example.com/api/galaxy/content/published/` | | Its API token |
+
+To get Red Hat's offline token, sign in to console.redhat.com and load the token on the
+Automation Hub's **Connect to Hub** page (`https://console.redhat.com/ansible/automation-hub/token`).
+Each sync exchanges it at the SSO server for access tokens, as `ansible-galaxy` does, and gets
+another when one expires. An offline token that isn't used for 30 days expires: a scheduled
+sync keeps it in use.
+
+awxnext finds the server's API as `ansible-galaxy` does: the URL, else the URL with `api/`
+appended. The token goes to the server's own host only: a download that redirects elsewhere,
+to object storage for example, goes there without it.
+
+#### The requirements file
+
+The remote's `requirements_file` lists collections as a `requirements.yml` does, each a name, or
+a name and a version range:
+
+```yaml
+collections:
+  - name: community.docker
+    version: ">=4.8.0,<5.0.0"
+  - name: ansible.posix
+    version: "==2.1.0"
+  - kubernetes.core
+```
+
+A sync mirrors every version in each collection's range: a name alone mirrors all of them.
+Pre-releases come only when the range names them (`==2.1.0-beta.1`). With `sync_dependencies`,
+each mirrored version's dependencies come too, at the highest version in the range it asks for,
+and theirs. Collections only: the file refuses `roles:`, a `source:` (make a remote for that
+server), and a `type:` other than `galaxy`. Quote a version (`"1.0"`): YAML reads `1.0` as a
+number.
+
+#### Syncing
+
+To sync, `POST /api/v2/collection_remotes/<id>/sync/`: awxnext answers `202` with the new
+`collection_sync` job, at `/api/v2/collection_syncs/<id>/`, with its output at `stdout/` and its
+events at `events/`. Creating a remote doesn't sync it. Schedules (`schedules/`) and
+notification templates (`notification_templates_started/`, `_success/`, `_error/`) attach to
+the remote as to a project.
+
+A sync adds what is new: it never deletes a version, and a version the server no longer has
+stays. A version is mirrored once: when the hub has it already, in any repository, with the
+same SHA-256, the sync adds it to the repository; with another SHA-256, the hub keeps its own,
+and the sync fails and says so. A version waiting in `staging`, or rejected, makes the sync fail
+until an approver decides. A collection the server doesn't have, or no version of it in the
+range, fails the sync too, after the rest is mirrored. A version without a valid signature,
+with `signature_validation_credential`, is skipped, and the output says so; the sync still
+succeeds.
+
+Each artifact is checked as an upload is (its checksums, its size up to `HUB_MAX_UPLOAD_SIZE`,
+its members). Namespaces the hub doesn't have are created in the remote's organization; versions
+of a namespace the hub has go into that one.
+
+#### Signatures
+
+A sync mirrors each version's signatures, as the server gives them in its v3 detail, with the
+origin `remote`. Red Hat signs its certified content. Without `signature_validation_credential`
+they are kept unchecked, each with the fingerprint of the key it names, for clients to check
+with their own keyring. With it, only the signatures its keys verify are kept, and a version
+with none isn't mirrored. Versions in a remote's repository aren't signed by awxnext's own key:
+to install them with `--keyring`, give the keyring of their signers.
+
+#### Installing from a remote's repository
+
+For an organization's jobs to install from the remote, add its managed credential, the
+remote's `galaxy_credential`, to the organization's Galaxy credentials
+(`POST /api/v2/organizations/<id>/galaxy_credentials/` with `{"id": <credential>}`), before
+Galaxy's or in its place. As with the **Collection Hub** credential, each install gets a read token of its own. Members of
+the organization install with `ansible-galaxy` from `/api/galaxy/content/<repository>/` with
+their personal token, as from `published`.
+
+#### Proxies and local addresses
+
+A sync reaches the server from awxnext's node, through the remote's `proxy_url`, else the
+node's `HTTPS_PROXY`. It refuses loopback, link-local and unspecified addresses and cloud
+metadata services, the server's and the proxy's: a server or a proxy on awxnext's own host
+needs an entry in `HUB_REMOTE_ALLOWED_LOCAL_ADDRESSES` (Settings, System): an address
+(`127.0.0.1`), a network (`127.0.0.0/8`) or an address and port (`127.0.0.1:8080`).
+
+#### Without internet access
+
+To bring collections to an awxnext that can't reach the server, download them on a machine that
+can, with their dependencies, and import the directory:
+
+```sh
+ansible-galaxy collection download -r requirements.yml -p collections/
+# copy collections/ to the awxnext node, then:
+awxnext hub import --organization Default collections/
+```
+
+`awxnext hub import` reads the server's configuration as `awxnext serve` does
+(`AWXNEXT_DATABASE_URL`, `AWXNEXT_SECRET_KEY`, the storage settings). It imports the artifacts
+the directory's `requirements.yml` lists, as `ansible-galaxy collection download` writes it, or
+each `*.tar.gz` without one, and prints a line for each:
+
+| Option | What it does |
+|---|---|
+| `--repository` | The repository to import into: `published` (the default), `staging`, or a remote's. Into `published`, awxnext signs each version as an approval does. |
+| `--organization` | The organization that owns the namespaces the import creates. Without it, an artifact of a namespace the hub doesn't have fails. |
+| `--keyring` | A file of public keys, armored or binary: then only the signatures they verify are kept, and an artifact without one is skipped. |
+
+`ansible-galaxy collection download` writes no signatures. To import some, put each artifact's
+signatures, armored, in a file beside it named after it with `.asc`
+(`community-docker-4.8.1.tar.gz.asc`), or list them in the artifact's `signatures:` in
+`requirements.yml`, as files of the directory (`file://<name>`). A version the hub has already,
+with the same SHA-256, gets the signatures it lacks; with another, it fails. The command exits
+with `1` when an artifact fails, after importing the others.
 
 ### Storage
 

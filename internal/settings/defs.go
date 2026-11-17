@@ -45,6 +45,8 @@ func init() {
 			Help: "The S3 region; empty for the environment's (AWS_REGION), else us-east-1."},
 		{Key: "HUB_MAX_UPLOAD_SIZE", Category: "system", Type: "integer", Default: 100 << 20, Validate: atLeastOneKiB, Label: "Collection Hub Maximum Upload Size",
 			Help: "The largest collection artifact, in bytes, the hub takes from ansible-galaxy collection publish."},
+		{Key: "HUB_REMOTE_ALLOWED_LOCAL_ADDRESSES", Category: "system", Type: "list", Default: []any{}, Validate: localAddresses, Label: "Local addresses collection remotes may be at",
+			Help: "Collection remotes' syncs refuse loopback (127.0.0.0/8, ::1), link-local (169.254.0.0/16, fe80::/10) and unspecified addresses, and cloud metadata services: they are awxnext's own host. Allow some here, one per entry: an address (127.0.0.1), a network (127.0.0.0/8), or an address and port (127.0.0.1:8080), for example a Galaxy server or a proxy on the same host."},
 		{Key: "HUB_STORAGE_CREDENTIAL", Category: "system", Type: "integer", Default: nil, Nullable: true, Label: "Collection Hub Credential",
 			Help: "An Amazon Web Services (access key) or Microsoft Azure Resource Manager (client ID and secret) credential. Empty: the environment's (AWS's default chain; AZURE_STORAGE_CONNECTION_STRING, or Azure's default chain: environment, workload identity, managed identity)."},
 		{Key: "SUBSCRIPTIONS_USERNAME", Category: "system", Type: "string", Default: "", CompatOnly: true, Help: "No effect in awxnext: there are no Red Hat subscriptions to manage."},

@@ -754,17 +754,19 @@ func usedByCollection(c *Ctx, w http.ResponseWriter, collID int64, deleting map[
 	api.WriteJSON(w, 200, Obj{"count": len(out), "hidden": hidden, "results": out})
 }
 
-// HubPublishedState is a digest of the published versions of an
-// organization's namespaces and of their signatures, which its jobs
-// install from: the requirements cache is keyed by it, so an approval, a
-// rejection, a deletion or a signature is seen by the next install.
+// HubPublishedState is a digest of what an organization's jobs install
+// from the hub, the published versions of its namespaces and the
+// repositories of its remotes, with their signatures: the requirements
+// cache is keyed by it, so an approval, a rejection, a deletion, a sync or
+// a signature is seen by the next install.
 func HubPublishedState(ctx context.Context, app *api.App, org int64) (string, error) {
 	var state string
-	err := app.DB.QueryRow(ctx, `SELECT coalesce(md5(string_agg(v.id::text || ':' || coalesce((SELECT string_agg(s.id::text, '.' ORDER BY s.id)
-		FROM collection_version_signatures s WHERE s.collection_version_id = v.id), ''), ',' ORDER BY v.id)), '') FROM collection_versions v
+	err := app.DB.QueryRow(ctx, `SELECT coalesce(md5(string_agg(r.id::text || '/' || v.id::text || ':' || coalesce((SELECT string_agg(s.id::text, '.' ORDER BY s.id)
+		FROM collection_version_signatures s WHERE s.collection_version_id = v.id), ''), ',' ORDER BY r.id, v.id)), '') FROM collection_versions v
 		JOIN collections c ON c.id = v.collection_id JOIN collection_namespaces t ON t.id = c.namespace_id
 		JOIN collection_repository_contents rc ON rc.version_id = v.id JOIN collection_repositories r ON r.id = rc.repository_id
-		WHERE t.organization_id = $1 AND r.name = $2`, org, hubPublished).Scan(&state)
+		WHERE t.organization_id = $1 AND r.name = $2
+			OR r.remote_id IN (SELECT id FROM unified_job_templates WHERE type = 'collection_remote' AND organization_id = $1)`, org, hubPublished).Scan(&state)
 	return state, err
 }
 

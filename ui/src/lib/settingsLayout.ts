@@ -299,6 +299,11 @@ export const settingsPages: SettingsPage[] = [
             help: tr('ansible-galaxy collection publish is refused for a larger artifact.'),
             unit: 'size',
           }),
+          row('HUB_REMOTE_ALLOWED_LOCAL_ADDRESSES', {
+            label: tr('Local addresses remotes may be at'),
+            help: tr('Loopback and link-local addresses and cloud metadata services are refused: they are awxnext\'s own host. One per entry: an address, a network, or an address and port, such as 127.0.0.1:8080 for a Galaxy server or a proxy beside awxnext.'),
+            consequence: tr('Superusers can then make awxnext send requests to these addresses.'),
+          }),
         ],
       },
       { id: 'named-url', title: tr('Named URLs'), rows: [row('NAMED_URL_FORMATS', { label: tr('Named URL formats') }), row('NAMED_URL_GRAPH_NODES', { label: tr('Named URL graph') })] },

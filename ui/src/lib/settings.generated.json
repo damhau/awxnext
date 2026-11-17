@@ -139,6 +139,7 @@
     "GALAXY_IGNORE_CERTS": {"category": "jobs"},
     "GALAXY_TASK_ENV": {"category": "jobs"},
     "HUB_MAX_UPLOAD_SIZE": {"category": "system"},
+    "HUB_REMOTE_ALLOWED_LOCAL_ADDRESSES": {"category": "system"},
     "HUB_STORAGE": {"category": "system"},
     "HUB_STORAGE_BUCKET": {"category": "system"},
     "HUB_STORAGE_CREDENTIAL": {"category": "system"},

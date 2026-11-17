@@ -42,6 +42,8 @@ jobs:
       AWXNEXT_TEST_KAFKA_BOOTSTRAP: localhost:9092
       # The differential test of imported rulebooks runs this command.
       AWXNEXT_TEST_ANSIBLE_RULEBOOK: ansible-rulebook
+      # A collection remote mirrors community.docker from galaxy.ansible.com.
+      AWXNEXT_TEST_GALAXY_REMOTE: "1"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -95,6 +97,10 @@ jobs:
       # ansible-rulebook or Java is missing.
       - name: rulebook differential test against ansible-rulebook, verbose
         run: go test -count=1 -run 'TestRulebookAlertmanagerDifferential' -v ./test/
+      # Its log shows the sync's output. With AWXNEXT_TEST_GALAXY_REMOTE set
+      # it fails, not skips, when galaxy.ansible.com can't be reached.
+      - name: collection remote of galaxy.ansible.com, verbose
+        run: go test -count=1 -run 'TestHubRemoteGalaxyAnsibleCom' -v ./test/
 
   helm:
     uses: ./.github/workflows/helm.yml

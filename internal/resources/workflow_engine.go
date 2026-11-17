@@ -18,12 +18,20 @@ import (
 	"github.com/damhau/awxnext/internal/vars"
 )
 
-// RegisterJobTypes registers job types driven by the API layer (workflows).
+// RegisterJobTypes registers job types driven by the API layer: workflows,
+// and the collection hub's syncs.
 func RegisterJobTypes() {
 	jobs.Register(&jobs.TypeSpec{
 		Type:         "workflow_job",
 		TemplateType: "workflow_job_template",
 		InDispatcher: true,
+		Serial:       true,
+	})
+	jobs.Register(&jobs.TypeSpec{
+		Type:         "collection_sync",
+		TemplateType: "collection_remote",
+		Runner:       jobs.RunnerFunc(runCollectionSync),
+		ControlPlane: true,
 		Serial:       true,
 	})
 }

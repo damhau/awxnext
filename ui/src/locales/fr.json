@@ -3537,5 +3537,10 @@
   "Import again reads the rulebooks in extensions/eda/rulebooks/ and rulebooks/ of the project’s directory into event streams, connectors and rules, which start disabled.": "Importer à nouveau lit les rulebooks de extensions/eda/rulebooks/ et rulebooks/ du répertoire du projet en flux d’événements, connecteurs et règles, désactivés au départ.",
   "Upload": "Téléverser",
   "Largest collection upload": "Plus grande collection téléversée",
-  "ansible-galaxy collection publish is refused for a larger artifact.": "ansible-galaxy collection publish est refusé pour un artefact plus grand."
+  "ansible-galaxy collection publish is refused for a larger artifact.": "ansible-galaxy collection publish est refusé pour un artefact plus grand.",
+  "Collection sync": "Synchronisation de collections",
+  "Collection remote": "Source distante de collections",
+  "Local addresses remotes may be at": "Adresses locales où peuvent se trouver les sources distantes",
+  "Loopback and link-local addresses and cloud metadata services are refused: they are awxnext's own host. One per entry: an address, a network, or an address and port, such as 127.0.0.1:8080 for a Galaxy server or a proxy beside awxnext.": "Les adresses de bouclage et lien-local et les services de métadonnées du cloud sont refusés : c’est l’hôte même d’awxnext. Une par entrée : une adresse, un réseau, ou une adresse et un port, comme 127.0.0.1:8080 pour un serveur Galaxy ou un proxy à côté d’awxnext.",
+  "Superusers can then make awxnext send requests to these addresses.": "Les superutilisateurs peuvent alors faire envoyer des requêtes à ces adresses par awxnext."
 }

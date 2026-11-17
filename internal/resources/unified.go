@@ -540,7 +540,7 @@ func registerEventResource(name, typ, jobType, jobField string) {
 func jobResName(jobType string) string {
 	return map[string]string{
 		"job": "jobs", "project_update": "project_updates", "inventory_update": "inventory_updates",
-		"ad_hoc_command": "ad_hoc_commands", "system_job": "system_jobs", "workflow_job": "workflow_jobs",
+		"ad_hoc_command": "ad_hoc_commands", "system_job": "system_jobs", "workflow_job": "workflow_jobs", "collection_sync": "collection_syncs",
 	}[jobType]
 }
 
@@ -625,7 +625,7 @@ func registerUnified() {
 		Ordering: "name",
 		ReadOnly: true,
 		Fields: append([]*Field{
-			{Name: "type", Type: api.TChoice, ReadOnly: true, Choices: choices("job_template", "project", "inventory_source", "workflow_job_template", "system_job_template", "workflow_approval_template")},
+			{Name: "type", Type: api.TChoice, ReadOnly: true, Choices: choices("job_template", "project", "inventory_source", "workflow_job_template", "system_job_template", "workflow_approval_template", "collection_remote")},
 			{Name: "organization", Type: api.TFK, Ref: "organizations", ReadOnly: true, Nullable: true},
 			{Name: "folder", Type: api.TFK, Ref: "folders", ReadOnly: true, Nullable: true},
 			// Filter-only columns of job templates (e.g. inventory__name__istartswith=prod).
@@ -661,7 +661,7 @@ func registerUnified() {
 		Ordering: "-id",
 		ReadOnly: true,
 		Fields: append([]*Field{
-			{Name: "type", Type: api.TChoice, ReadOnly: true, Choices: choices("job", "project_update", "inventory_update", "ad_hoc_command", "workflow_job", "system_job", "workflow_approval")},
+			{Name: "type", Type: api.TChoice, ReadOnly: true, Choices: choices("job", "project_update", "inventory_update", "ad_hoc_command", "workflow_job", "system_job", "workflow_approval", "collection_sync")},
 		}, jobFields("unified_job_template_x", "unified_job_templates")[1:]...),
 		SummaryFields: []string{"id", "name", "description", "status", "failed", "type", "finished"},
 		View: func(c *Ctx, arg ArgFunc) string {

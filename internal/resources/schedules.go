@@ -334,7 +334,7 @@ func registerSchedules() {
 				c.DB().QueryRow(c, "SELECT type FROM unified_job_templates WHERE id = $1", id).Scan(&typ)
 				if sf, ok := o["summary_fields"].(Obj)["unified_job_template"].(Obj); ok {
 					sf["unified_job_type"] = map[string]string{"job_template": "job", "project": "project_update", "inventory_source": "inventory_update",
-						"workflow_job_template": "workflow_job", "system_job_template": "system_job"}[typ]
+						"workflow_job_template": "workflow_job", "system_job_template": "system_job", "collection_remote": "collection_sync"}[typ]
 				}
 				if r := api.LookupType(typ); r != nil {
 					o["related"].(Obj)["unified_job_template"] = r.URL(id)

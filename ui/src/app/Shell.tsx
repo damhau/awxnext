@@ -31,7 +31,7 @@ function LiveRefresh() {
           const k = q.queryKey[0]
           return (
             typeof k === 'string' &&
-            /^(unified_jobs|jobs|workflow_jobs|project_updates|inventory_updates|ad_hoc_commands|system_jobs|workflow_approvals|unified_job_templates|job_templates|workflow_job_templates|projects|inventory_sources|live-)/.test(k)
+            /^(unified_jobs|jobs|workflow_jobs|project_updates|inventory_updates|ad_hoc_commands|system_jobs|collection_syncs|collection_remotes|workflow_approvals|unified_job_templates|job_templates|workflow_job_templates|projects|inventory_sources|live-)/.test(k)
           )
         },
       })

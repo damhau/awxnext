@@ -83,7 +83,11 @@ type galaxyCall struct {
 	repoID int64
 	// tokenOrg is the organization of a sync token, whose namespaces it reads.
 	tokenOrg int64
-	args     []any
+	// remoteOrg is the organization of the repository's remote, whose
+	// members and jobs read all of it; readsRemote: the caller is one.
+	remoteOrg   int64
+	readsRemote bool
+	args        []any
 }
 
 func (g *galaxyCall) arg(v any) string {
@@ -92,13 +96,20 @@ func (g *galaxyCall) arg(v any) string {
 }
 
 // visible is the condition on namespaces (alias t) whose collections in
-// the repository the caller may read. Sync tokens read published only.
+// the repository the caller may read. Sync tokens read neither staging nor
+// rejected. A remote's repository is its organization's.
 func (g *galaxyCall) visible() string {
 	if g.tokenOrg > 0 {
-		if curatedOnly(g.repo) {
+		switch {
+		case curatedOnly(g.repo):
 			return "FALSE"
+		case g.remoteOrg == g.tokenOrg:
+			return "TRUE"
 		}
 		return "t.organization_id = " + g.arg(g.tokenOrg)
+	}
+	if g.readsRemote {
+		return "TRUE"
 	}
 	return namespaceReadable(g.Ctx, g.repo, g.arg)
 }
@@ -139,10 +150,19 @@ func galaxy(h func(g *galaxyCall)) func(c *Ctx, w http.ResponseWriter, r *http.R
 			}
 			c.User = p
 		}
-		var err error
-		if g.repoID, err = hubRepository(c, g.repo); err != nil {
+		var remote int64
+		if err := c.DB().QueryRow(c, `SELECT r.id, coalesce(r.remote_id, 0), coalesce(u.organization_id, 0) FROM collection_repositories r
+			LEFT JOIN unified_job_templates u ON u.id = r.remote_id WHERE r.name = $1`, g.repo).Scan(&g.repoID, &remote, &g.remoteOrg); err != nil {
 			galaxyNotFound(w)
 			return
+		}
+		if remote != 0 && g.tokenOrg == 0 {
+			ok, err := api.CanView(c, api.Lookup("collection_remotes"), remote)
+			if err != nil {
+				api.WriteError(w, err)
+				return
+			}
+			g.readsRemote = ok
 		}
 		h(g)
 	}

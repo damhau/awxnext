@@ -193,54 +193,106 @@ func ArmoredKeyring(keys ...string) (string, error) {
 // and returns it armored again, holding that one signature only, with the
 // key it verified with.
 func Verify(publicKeys string, data []byte, signature string) (string, *Signer, error) {
-	if len(signature) > maxSignatureBytes {
-		return "", nil, fmt.Errorf("the signature is larger than %d bytes", maxSignatureBytes)
-	}
-	block, err := armor.Decode(strings.NewReader(strings.TrimSpace(signature)))
-	if err != nil || block.Type != openpgp.SignatureType {
-		return "", nil, errors.New("not an armored OpenPGP signature (gpg --armor --detach-sign)")
-	}
-	raw, err := io.ReadAll(io.LimitReader(block.Body, maxSignatureBytes))
+	_, one, err := readSignature(signature)
 	if err != nil {
-		return "", nil, fmt.Errorf("reading the signature: %w", err)
-	}
-	p, err := packet.NewReader(bytes.NewReader(raw)).Next()
-	if err != nil {
-		return "", nil, fmt.Errorf("reading the signature: %w", err)
-	}
-	sig, ok := p.(*packet.Signature)
-	if !ok || sig.SigType != packet.SigTypeBinary {
-		return "", nil, errors.New("not a detached signature of a file")
-	}
-	for _, n := range sig.Notations {
-		if !n.IsHumanReadable || !utf8.Valid(n.Value) {
-			return "", nil, fmt.Errorf("the signature has a binary notation (%s), whose value gpg prints as is and ansible-galaxy can't read: sign with gpg", n.Name)
-		}
+		return "", nil, err
 	}
 	keys, err := ReadKeys(publicKeys)
 	if err != nil {
 		return "", nil, err
 	}
-	var one bytes.Buffer
-	if err := sig.Serialize(&one); err != nil {
-		return "", nil, err
-	}
-	signer, err := openpgp.CheckDetachedSignature(keys, bytes.NewReader(data), bytes.NewReader(one.Bytes()), nil)
+	signer, err := openpgp.CheckDetachedSignature(keys, bytes.NewReader(data), bytes.NewReader(one), nil)
 	switch {
 	case errors.Is(err, pgperrors.ErrUnknownIssuer):
 		return "", nil, errors.New("none of the public keys made the signature")
 	case err != nil:
 		return "", nil, fmt.Errorf("the signature doesn't verify: %v", err)
 	}
-	var out, pub bytes.Buffer
-	if err := writeArmored(&out, openpgp.SignatureType, func(w io.Writer) error {
-		_, err := w.Write(one.Bytes())
-		return err
-	}); err != nil {
+	out, err := armorSignature(one)
+	if err != nil {
 		return "", nil, err
 	}
+	var pub bytes.Buffer
 	if err := writeArmored(&pub, openpgp.PublicKeyType, signer.Serialize); err != nil {
 		return "", nil, err
 	}
-	return out.String(), &Signer{Fingerprint: Fingerprint(signer), UserID: userID(signer), PublicKey: pub.String()}, nil
+	return out, &Signer{Fingerprint: Fingerprint(signer), UserID: userID(signer), PublicKey: pub.String()}, nil
+}
+
+// Inspect reads an armored detached signature without checking it, and
+// returns it armored again, holding that one signature only, with the
+// fingerprint of the key it names, or its key ID when it names no
+// fingerprint, or "" when it names neither.
+func Inspect(signature string) (string, string, error) {
+	sig, one, err := readSignature(signature)
+	if err != nil {
+		return "", "", err
+	}
+	out, err := armorSignature(one)
+	if err != nil {
+		return "", "", err
+	}
+	switch {
+	case len(sig.IssuerFingerprint) > 0:
+		return out, strings.ToUpper(hex.EncodeToString(sig.IssuerFingerprint)), nil
+	case sig.IssuerKeyId != nil:
+		return out, fmt.Sprintf("%016X", *sig.IssuerKeyId), nil
+	}
+	return out, "", nil
+}
+
+// Signatures splits armored text into its armored signature blocks, as a
+// file of several gpg --armor --detach-sign outputs holds them.
+func Signatures(text string) []string {
+	const begin = "-----BEGIN PGP SIGNATURE-----"
+	var out []string
+	for _, part := range strings.SplitAfter(text, "-----END PGP SIGNATURE-----") {
+		if i := strings.Index(part, begin); i >= 0 {
+			out = append(out, strings.TrimSpace(part[i:])+"\n")
+		}
+	}
+	return out
+}
+
+// readSignature reads the one detached signature of a file an armored block
+// holds, refusing what ansible-galaxy can't check.
+func readSignature(signature string) (*packet.Signature, []byte, error) {
+	if len(signature) > maxSignatureBytes {
+		return nil, nil, fmt.Errorf("the signature is larger than %d bytes", maxSignatureBytes)
+	}
+	block, err := armor.Decode(strings.NewReader(strings.TrimSpace(signature)))
+	if err != nil || block.Type != openpgp.SignatureType {
+		return nil, nil, errors.New("not an armored OpenPGP signature (gpg --armor --detach-sign)")
+	}
+	raw, err := io.ReadAll(io.LimitReader(block.Body, maxSignatureBytes))
+	if err != nil {
+		return nil, nil, fmt.Errorf("reading the signature: %w", err)
+	}
+	p, err := packet.NewReader(bytes.NewReader(raw)).Next()
+	if err != nil {
+		return nil, nil, fmt.Errorf("reading the signature: %w", err)
+	}
+	sig, ok := p.(*packet.Signature)
+	if !ok || sig.SigType != packet.SigTypeBinary {
+		return nil, nil, errors.New("not a detached signature of a file")
+	}
+	for _, n := range sig.Notations {
+		if !n.IsHumanReadable || !utf8.Valid(n.Value) {
+			return nil, nil, fmt.Errorf("the signature has a binary notation (%s), whose value gpg prints as is and ansible-galaxy can't read: sign with gpg", n.Name)
+		}
+	}
+	var one bytes.Buffer
+	if err := sig.Serialize(&one); err != nil {
+		return nil, nil, err
+	}
+	return sig, one.Bytes(), nil
+}
+
+func armorSignature(one []byte) (string, error) {
+	var out bytes.Buffer
+	err := writeArmored(&out, openpgp.SignatureType, func(w io.Writer) error {
+		_, err := w.Write(one)
+		return err
+	})
+	return out.String(), err
 }

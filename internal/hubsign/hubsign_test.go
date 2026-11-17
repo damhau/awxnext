@@ -117,3 +117,41 @@ func TestGPG(t *testing.T) {
 		t.Fatalf("gpg on a changed file:\n%s", out)
 	}
 }
+
+func TestInspectAndSignatures(t *testing.T) {
+	a, err := Generate("first", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := Generate("second", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	data := []byte("MANIFEST.json")
+	sa, _ := Sign(a.PrivateKey, data)
+	sb, _ := Sign(b.PrivateKey, data)
+	armored, fp, err := Inspect(sa)
+	if err != nil || fp != a.Fingerprint || !strings.Contains(armored, "BEGIN PGP SIGNATURE") {
+		t.Fatalf("inspect: %q %v", fp, err)
+	}
+	if _, _, err := Verify(a.PublicKey, data, armored); err != nil {
+		t.Fatalf("the re-armored signature: %v", err)
+	}
+	for _, bad := range []string{"", "not armored", a.PublicKey} {
+		if _, _, err := Inspect(bad); err == nil {
+			t.Errorf("inspected %q", bad)
+		}
+	}
+	got := Signatures("comment\n" + sa + "\n\n" + sb + "trailing\n")
+	if len(got) != 2 {
+		t.Fatalf("%d signatures", len(got))
+	}
+	for i, k := range []*Key{a, b} {
+		if _, fp, err := Inspect(got[i]); err != nil || fp != k.Fingerprint {
+			t.Errorf("signature %d: %q %v", i, fp, err)
+		}
+	}
+	if got := Signatures("no signature here"); len(got) != 0 {
+		t.Errorf("signatures of plain text: %v", got)
+	}
+}

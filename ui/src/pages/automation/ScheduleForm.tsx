@@ -377,6 +377,7 @@ const TEMPLATE_RES: Record<string, string> = {
   project: 'projects',
   inventory_source: 'inventory_sources',
   system_job_template: 'system_job_templates',
+  collection_remote: 'collection_remotes',
 }
 
 export function templateResource(type: string): string {
@@ -557,7 +558,7 @@ export function ScheduleDialog({
         <Lookup
           label={tr('Runs')}
           resource="unified_job_templates/"
-          params={{ type__in: 'job_template,workflow_job_template,project,inventory_source,system_job_template' }}
+          params={{ type__in: 'job_template,workflow_job_template,project,inventory_source,system_job_template,collection_remote' }}
           value={template ? ({ id: template.id, name: template.name } as Ref) : null}
           onChange={(r) => setTemplate(r ? { id: r.id, type: r.type, name: r.name } : null)}
           meta={(r) => typeLabel(r.type)}
@@ -633,6 +634,7 @@ export function ujtTypeOf(jobType: string | undefined): string {
         project_update: 'project',
         inventory_update: 'inventory_source',
         system_job: 'system_job_template',
+        collection_sync: 'collection_remote',
       } as Record<string, string>
     )[jobType ?? ''] ?? 'job_template'
   )
