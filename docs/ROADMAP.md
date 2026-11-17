@@ -33,7 +33,7 @@ be matched.
 | [M7 UI completeness](#m7-ui-completeness) | Every API feature reachable from the UI; the remaining UI goals | 17 |
 | [M8 Settings that make sense](#m8-settings-that-make-sense) | Settings laid out by task, without JSON or AWX's jargon; the settings API unchanged | 10 |
 | [M9 Security](#m9-security) | Known vulnerabilities found by CI and fixed through reviewed PRs | 5 |
-| [M10 Small fixes](#m10-small-fixes) | The importer tested on a real AWX, parity.md matching the code, the deployed image scanned, the AWS lookup tested on moto, M14-10's leftovers | 5 |
+| [M10 Small fixes](#m10-small-fixes) | The importer tested on a real AWX, parity.md matching the code, the deployed image scanned, the AWS lookup tested on moto, M14-10's leftovers, a job's first lines live | 6 |
 | [M11 Notifications](#m11-notifications) | Email tested on a real mail server, Slack as in AWX, a Teams type, notifications when a result changes | 4 |
 | [M12 Beyond AWX](#m12-beyond-awx) | What changed before a failure, secrets kept out of job output, an MCP server, drifted hosts | 4 |
 | [M13 Collection hub](#m13-collection-hub) | A private Galaxy in awxnext: publish, approve, sign, mirror and install collections | 5 |
@@ -1395,6 +1395,21 @@ change. The refusal names the object and the missing role.
 
 **Done when:** the four fields can be read and set in the UI, and the 403
 names what is missing.
+
+### M10-06 Show a job's first output lines live
+**Labels:** ui, bug · **Size:** S · [#177](https://github.com/damhau/awxnext/issues/177)
+
+Found during M13-04 (added on 2026-11-17), the bug is older. When a
+relaunched job's page opens while the job runs, its live output can miss its
+first lines until the page is reloaded: the websocket's events start at
+counter 2 or later, and `firstGap` in `ui/src/pages/jobs/events.ts` doesn't
+count a missing start as a gap. When the first event received isn't the
+output's first, the page fetches the lines before it, once, and a long job's
+page still doesn't refetch its whole output.
+
+**Done when:** a Vitest test covers a stream that starts at counter 2 and
+checks that the missing line is fetched, and in the browser a relaunched
+job's live output shows its first line without a reload.
 
 ---
 
