@@ -61,8 +61,8 @@ var Vars = []Var{
 	{"AWXNEXT_DB_PASSWORD", "", "Compose: the bundled PostgreSQL's password.", "Images and commands"},
 	{"AWXNEXT_DEMO_REPO", "", "Images: where seed-demo creates its playbook repository.", "Images and commands"},
 	{"AWXNEXT_BACKUP_PASSPHRASE", "", "`awxnext backup` and `restore`: the key escrow's passphrase (or --passphrase-file).", "Images and commands"},
-	{"AWXNEXT_PG_DUMP", "pg_dump on the PATH", "`awxnext backup`: pg_dump, of the server's major version or newer.", "Images and commands"},
-	{"AWXNEXT_PG_RESTORE", "pg_restore on the PATH", "`awxnext restore`: pg_restore.", "Images and commands"},
+	{"AWXNEXT_PG_DUMP", "pg_dump on the PATH", "`awxnext backup`: pg_dump, of the server's major version: an older one refuses the server, and a newer one's backup can be unreadable to the server's pg_restore.", "Images and commands"},
+	{"AWXNEXT_PG_RESTORE", "pg_restore on the PATH", "`awxnext restore`: pg_restore, of the server's major version: a newer one can fail on an older server, as 17's `SET transaction_timeout` does on 16.", "Images and commands"},
 	{"AWX_DATABASE_URL", "", "`awxnext import-awx`: the AWX database (or --source).", "Images and commands"},
 	{"AWX_SECRET_KEY", "", "`awxnext import-awx`: AWX's SECRET_KEY, to decrypt its credentials (or --secret-key).", "Images and commands"},
 
