@@ -127,6 +127,17 @@ func TestDeploymentLifetime(t *testing.T) {
 	if r := f.requester.post(dep+"extend/", map[string]any{"days": 1}); r.Status != 400 || !strings.Contains(r.Raw, "hasn't finished") {
 		t.Errorf("an extension while one waits: %d %s", r.Status, r.Raw)
 	}
+	for _, s := range must(t, f.requester.get(dep+"extend/"), 200).Body["steps"].([]any) {
+		if why := s.(map[string]any)["refused"]; !strings.Contains(fmt.Sprint(why), "hasn't finished") {
+			t.Errorf("a step while an extension waits: %v", s)
+		}
+	}
+	ap := must(t, f.lead.get(fmt.Sprintf("portal/approvals/%d/", approvalIDs(long)[0])), 200).Body
+	rq := ap["request"].(map[string]any)
+	if d, _ := rq["deployment"].(map[string]any); rq["kind"] != "extend" || rq["lifetime_days"] != float64(5) || rq["reason"] != "the demo moved" || d == nil ||
+		!parseAPITime(t, d["expires_at"]).Equal(start.Add(96*time.Hour)) || d["extensions"] != float64(1) || d["until"] == nil || ap["quota"] != nil {
+		t.Errorf("the lead's view of the extension: %v", ap)
+	}
 	must(t, approve(f.lead, approvalIDs(long)[0], ""), 204)
 	if long = waitRequest(t, a, long["id"]); long["status"] != "successful" {
 		t.Fatalf("the approved extension: %v", long)

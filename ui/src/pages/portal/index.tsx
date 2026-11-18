@@ -12,6 +12,10 @@ const m_form = lazyModule(() => import('./RequestForm'))
 const RequestForm = m_form('RequestForm')
 const m_requests = lazyModule(() => import('./Requests'))
 const Requests = m_requests('Requests')
+const m_deployments = lazyModule(() => import('./Deployments'))
+const Deployments = m_deployments('Deployments')
+const m_approvals = lazyModule(() => import('./Approvals'))
+const Approvals = m_approvals('Approvals')
 
 export function portalRoutes() {
   return (
@@ -27,6 +31,10 @@ export function portalRoutes() {
       <Route path="items/:id" element={<RequestForm />} />
       <Route path="requests" element={<Requests />} />
       <Route path="requests/:id" element={<Requests />} />
+      <Route path="deployments" element={<Deployments />} />
+      <Route path="deployments/:id" element={<Deployments />} />
+      <Route path="approvals" element={<Approvals />} />
+      <Route path="approvals/:id" element={<Approvals />} />
       <Route path="*" element={<PortalNotFound />} />
     </Route>
   )

@@ -91,6 +91,7 @@ func TestPortal(t *testing.T) {
 	}
 
 	// What needs the user: their waiting request, the lead's approval.
+	must(t, a.patch(fmt.Sprintf("catalog_items/%d/", item), map[string]any{"max_requests_per_day": 10}), 200)
 	held := f.request(t, f.requester, item, map[string]any{"size": 8})
 	needs := must(t, f.requester.get("portal/"), 200).Body["needs_you"].(map[string]any)
 	if rs := needs["requests"].([]any); len(rs) != 1 || rs[0].(map[string]any)["id"] != held["id"] || rs[0].(map[string]any)["status"] != "awaiting_approval" {
@@ -99,7 +100,40 @@ func TestPortal(t *testing.T) {
 	if n := must(t, f.lead.get("portal/"), 200).Body["needs_you"].(map[string]any)["approvals"]; n != float64(1) {
 		t.Errorf("the lead's approvals: %v", n)
 	}
+
+	// The approvals waiting for the lead: the rule, the answers by question,
+	// the reason and the quota, which counts the request.
+	queue := must(t, f.lead.get("portal/approvals/"), 200).Body["results"].([]any)
+	if len(queue) != 1 {
+		t.Fatalf("the lead's approvals: %v", queue)
+	}
+	ap := queue[0].(map[string]any)
+	rq := ap["request"].(map[string]any)
+	answers := map[string]any{}
+	for _, x := range rq["answers"].([]any) {
+		answers[x.(map[string]any)["question"].(string)] = x.(map[string]any)["value"]
+	}
+	if ap["id"] != float64(approvalIDs(held)[0]) || ap["rule"] != "Large VMs" || ap["condition"] != "size > 5" || ap["can_answer"] != true || ap["expires"] == nil ||
+		rq["reason"] != "load test" || rq["requester"].(map[string]any)["username"] != f.requester.user || answers["Size"] != float64(8) || len(answers) != 1 || rq["team"].(map[string]any)["id"] != float64(f.team) ||
+		ap["quota"].(map[string]any)["requests"] != float64(1) || ap["quota"].(map[string]any)["max_requests_per_day"] != float64(10) {
+		t.Errorf("the lead's approval: %v", ap)
+	}
+	detail := fmt.Sprintf("portal/approvals/%d/", approvalIDs(held)[0])
+	if own := must(t, f.requester.get(detail), 200).Body; own["can_answer"] != false || own["own"] != true || own["cannot_answer"] != "Nobody approves their own request." {
+		t.Errorf("the requester's view of their approval: %v", own)
+	}
+	must(t, f.p1.get(detail), 404)
+	must(t, f.requester.get("portal/approvals/0/"), 404)
+	if q := must(t, f.requester.get("portal/approvals/"), 200).Body; q["count"] != float64(0) {
+		t.Errorf("the requester's approvals: %v", q)
+	}
 	must(t, approve(f.lead, approvalIDs(held)[0], ""), 204)
+	if d := must(t, f.lead.get(detail), 200).Body; d["status"] != "successful" || d["can_answer"] != false || d["cannot_answer"] != "It was already decided." {
+		t.Errorf("an answered approval: %v", d)
+	}
+	if q := must(t, f.lead.get("portal/approvals/"), 200).Body; q["count"] != float64(0) {
+		t.Errorf("the lead's approvals once answered: %v", q)
+	}
 	if n := must(t, f.lead.get("portal/"), 200).Body["needs_you"].(map[string]any)["approvals"]; n != float64(0) {
 		t.Errorf("the lead's approvals once answered: %v", n)
 	}

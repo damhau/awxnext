@@ -353,7 +353,7 @@ func TestCatalogApprovalNotifications(t *testing.T) {
 		byTo[strings.Join(m.To, ",")] = m
 	}
 	approvers := strings.Join([]string{f.p1.user + "@example.com", f.p2.user + "@example.com"}, ",")
-	if m, ok := byTo[approvers]; !ok || !strings.Contains(m.subject(), "Approval needed") || !strings.Contains(m.Body, "/approvals") ||
+	if m, ok := byTo[approvers]; !ok || !strings.Contains(m.subject(), "Approval needed") || !linksTo(m.Body, fmt.Sprintf("/portal/approvals/%d", approvalIDs(r)[0])) ||
 		!strings.Contains(m.Body, "load test") {
 		t.Errorf("approvers' email: %v", byTo)
 	}
@@ -367,10 +367,20 @@ func TestCatalogApprovalNotifications(t *testing.T) {
 		m := s.next(t)
 		byTo[strings.Join(m.To, ",")] = m
 	}
-	if m, ok := byTo[f.requester.user+"@example.com"]; !ok || !strings.Contains(m.subject(), "is approved") {
+	if m, ok := byTo[f.requester.user+"@example.com"]; !ok || !strings.Contains(m.subject(), "is approved") || !linksTo(m.Body, fmt.Sprintf("/portal/requests/%v", r["id"])) {
 		t.Errorf("the requester's email: %v", byTo)
 	}
 	if m, ok := byTo["approvals@example.com"]; !ok || !strings.Contains(strings.ToLower(m.subject()), "approved") {
 		t.Errorf("the organization's approved notification: %v", byTo)
 	}
+}
+
+// linksTo tells whether a mail's body has a link to path, whole.
+func linksTo(body, path string) bool {
+	for _, f := range strings.Fields(body) {
+		if strings.HasPrefix(f, "http") && strings.HasSuffix(f, path) {
+			return true
+		}
+	}
+	return false
 }

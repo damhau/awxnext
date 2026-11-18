@@ -215,6 +215,16 @@ func extensionOptions(c *Ctx, d, item Obj) (Obj, error) {
 	if err != nil {
 		return nil, err
 	}
+	busy := ""
+	if str(d["status"]) == deploymentActive {
+		if err := deploymentReady(c, d, deploymentActive); err != nil {
+			var ae *api.Error
+			if !errors.As(err, &ae) {
+				return nil, err
+			}
+			busy = errorText(err)
+		}
+	}
 	now := time.Now()
 	steps := []Obj{}
 	for _, days := range extensionSteps(item) {
@@ -222,7 +232,11 @@ func extensionOptions(c *Ctx, d, item Obj) (Obj, error) {
 		if lt.expires != nil {
 			step["expires_at"] = api.FormatTime(lt.expires.Add(time.Duration(days) * day))
 		}
-		if why := extensionRefusal(d, lt, item, days, now); why != "" {
+		why := extensionRefusal(d, lt, item, days, now)
+		if why == "" {
+			why = busy
+		}
+		if why != "" {
 			step["refused"] = why
 			steps = append(steps, step)
 			continue

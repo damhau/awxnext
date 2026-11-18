@@ -9,17 +9,17 @@ import { tr, trn } from '../../lib/i18n'
 import { approvalHint, categories, lifetimeHint, matches, requestState, type NeedsYou, type PortalItem } from '../../lib/portal'
 import { Cell, ItemIcon, Pill } from './parts'
 
-function NeedsYouCards({ needs, requestOnly }: { needs: NeedsYou; requestOnly: boolean }) {
+function NeedsYouCards({ needs }: { needs: NeedsYou }) {
   const cards = []
   for (const d of needs.deployments) {
     cards.push(
-      <div key={`d${d.id}`} className="portal-card">
+      <Link key={`d${d.id}`} to={`/portal/deployments/${d.id}`} className="portal-card">
         <div className="portal-card-head">
           <span className="mono portal-strong">{d.name}</span>
           <Pill tone="waiting">{tr('Expires {when}', { when: ago(d.expires_at) })}</Pill>
         </div>
         <span className="portal-muted">{tr('Extend it, or let it go on {date}.', { date: dateTimeText(d.expires_at) })}</span>
-      </div>,
+      </Link>,
     )
   }
   for (const r of needs.requests) {
@@ -53,15 +53,9 @@ function NeedsYouCards({ needs, requestOnly }: { needs: NeedsYou; requestOnly: b
       </>
     )
     cards.push(
-      requestOnly ? (
-        <div key="a" className="portal-card">
-          {body}
-        </div>
-      ) : (
-        <Link key="a" to="/approvals" className="portal-card">
-          {body}
-        </Link>
-      ),
+      <Link key="a" to="/portal/approvals" className="portal-card">
+        {body}
+      </Link>,
     )
   }
   if (!cards.length) return null
@@ -127,7 +121,7 @@ export function Catalog() {
         </div>
       </section>
 
-      {portal.data && <NeedsYouCards needs={portal.data.needs_you} requestOnly={portal.data.request_only} />}
+      {portal.data && <NeedsYouCards needs={portal.data.needs_you} />}
 
       <section aria-labelledby="catalog" className="portal-section">
         <div className="portal-section-head">

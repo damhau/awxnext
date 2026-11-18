@@ -265,7 +265,24 @@ func TestDeployments(t *testing.T) {
 	s := startSMTP(t, &smtpServer{})
 	must(t, a.patch(fmt.Sprintf("catalog_items/%d/", item), map[string]any{"notification_template": newEmailTemplate(t, a, f.org, emailConfig(s.port, nil), nil)}), 200)
 	must(t, f.requester.post(dep+"hand_over/", map[string]any{"user": f.p1ID}), 400)
+	choices := func(c *client) (users, teams []float64) {
+		b := must(t, c.get(dep+"hand_over/"), 200).Body
+		for _, x := range b["users"].([]any) {
+			users = append(users, x.(map[string]any)["id"].(float64))
+		}
+		for _, x := range b["teams"].([]any) {
+			teams = append(teams, x.(map[string]any)["id"].(float64))
+		}
+		return users, teams
+	}
+	if users, _ := choices(f.requester); slices.Contains(users, float64(f.p1ID)) || slices.Contains(users, float64(f.reqID)) {
+		t.Errorf("hand-over choices before the grant: %v", users)
+	}
+	must(t, f.p2.get(dep+"hand_over/"), 403)
 	grant(t, a, "CatalogItem Requester", f.p1ID, item)
+	if users, teams := choices(f.requester); !slices.Contains(users, float64(f.p1ID)) || slices.Contains(teams, float64(f.platform)) {
+		t.Errorf("hand-over choices: %v %v", users, teams)
+	}
 	h := must(t, f.requester.post(dep+"hand_over/", map[string]any{"user": f.p1ID}), 200).Body
 	if h["owner"] != float64(f.p1ID) || h["team"] != float64(f.team) {
 		t.Errorf("handed over: %v", h)
@@ -276,6 +293,9 @@ func TestDeployments(t *testing.T) {
 	}
 	must(t, f.p1.post(dep+"hand_over/", map[string]any{"team": f.platform}), 400)
 	must(t, a.post("role_team_assignments/", map[string]any{"role_definition": roleDef(t, "CatalogItem Requester"), "team": f.platform, "object_id": item}), 201)
+	if users, teams := choices(f.p1); !slices.Contains(teams, float64(f.platform)) || slices.Contains(users, float64(f.p1ID)) {
+		t.Errorf("hand-over choices with the team's grant: %v %v", users, teams)
+	}
 	h = must(t, f.p1.post(dep+"hand_over/", map[string]any{"team": f.platform}), 200).Body
 	if h["owner"] != nil || h["team"] != float64(f.platform) {
 		t.Errorf("handed over to a team: %v", h)

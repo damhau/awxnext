@@ -172,7 +172,7 @@ func registerDeployments() {
 		Actions: []*api.Action{
 			{Name: "actions", Methods: []string{"GET", "POST"}, Handler: handleDeploymentActions},
 			{Name: "extend", Methods: []string{"GET", "POST"}, Handler: handleExtend},
-			{Name: "hand_over", Methods: []string{"POST"}, Handler: handleHandOver},
+			{Name: "hand_over", Methods: []string{"GET", "POST"}, Handler: handleHandOver},
 			{Name: "reveal", Methods: []string{"POST"}, Handler: handleReveal},
 		},
 	})
@@ -1196,9 +1196,82 @@ func RequestDeploymentAction(c *Ctx, d, item Obj, body Obj) (Obj, error) {
 var handOverKeys = map[string]bool{"user": true, "team": true}
 
 func handleHandOver(c *Ctx, w http.ResponseWriter, r *http.Request, d Obj) {
+	if r.Method == "GET" {
+		out, err := handOverChoices(c, d)
+		if err != nil {
+			api.WriteError(w, err)
+			return
+		}
+		api.WriteJSON(w, 200, out)
+		return
+	}
 	if err := handOver(c, w, r, d); err != nil {
 		api.WriteError(w, err)
 	}
+}
+
+// handOverChoices lists whom a deployment can be handed over to: the users
+// and the organization's teams that can request its item.
+func handOverChoices(c *Ctx, d Obj) (Obj, error) {
+	admin, err := deploymentAdmin(c, d)
+	if err != nil {
+		return nil, err
+	}
+	if !ownsDeployment(c, d) && !admin {
+		return nil, api.Detail(403, "Only the deployment's owners and its item's admins hand it over.")
+	}
+	item, err := systemItem(c, d)
+	if err != nil {
+		return nil, err
+	}
+	id, org := int64Of(item["id"]), int64Of(item["organization"])
+	onItem, err := permHolders(c, "catalogitem", id, "request_catalogitem")
+	if err != nil {
+		return nil, err
+	}
+	onOrg, err := permHolders(c, "organization", org, "request_catalogitem")
+	if err != nil {
+		return nil, err
+	}
+	owner, _ := api.ID(d["owner"])
+	ids := slices.DeleteFunc(slices.Compact(slices.Sorted(slices.Values(append(onItem, onOrg...)))), func(u int64) bool { return u == owner })
+	users, err := people(c, ids)
+	if err != nil {
+		return nil, err
+	}
+	all, err := idList(c, "SELECT id FROM teams WHERE organization_id = $1 ORDER BY name, id", org)
+	if err != nil {
+		return nil, err
+	}
+	var allowed []int64
+	for _, t := range all {
+		if teamCanRequest(c, t, item) == nil {
+			allowed = append(allowed, t)
+		}
+	}
+	teams, err := teamRefs(c, allowed)
+	if err != nil {
+		return nil, err
+	}
+	return Obj{"users": users, "teams": teams}, nil
+}
+
+func teamRefs(c *Ctx, ids []int64) ([]Obj, error) {
+	rows, err := c.DB().Query(c, "SELECT id, name FROM teams WHERE id = ANY($1) ORDER BY name, id", ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []Obj{}
+	for rows.Next() {
+		var id int64
+		var name string
+		if err := rows.Scan(&id, &name); err != nil {
+			return nil, err
+		}
+		out = append(out, Obj{"id": id, "name": name})
+	}
+	return out, rows.Err()
 }
 
 // handOver gives a deployment to a user, a team, or both: whoever gets it

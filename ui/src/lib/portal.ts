@@ -36,6 +36,7 @@ export interface PortalItem {
   default_lifetime_days: number | null
   max_extensions?: number | null
   approval_rules?: ApprovalRule[]
+  actions?: { id: string; name: string }[]
   summary_fields: {
     freeze?: { id: number; name: string; kind: string; until: string }
     owner_team?: { id: number; name: string }

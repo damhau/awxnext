@@ -34,12 +34,21 @@ export function PortalShell() {
   const loc = useLocation()
   const brand = portal.data?.brand
   const title = brand?.title || tr('Self-service')
-  const tabs: { to: string; label: string; icon: IconName; end?: boolean }[] = [
-    { to: '/portal', label: tr('Catalog'), icon: 'box', end: true },
-    { to: '/portal/requests', label: tr('My requests'), icon: 'history' },
+  const waiting = portal.data?.needs_you.approvals ?? 0
+  const tabs: { to: string; label: string; short: string; icon: IconName; end?: boolean; count?: number }[] = [
+    { to: '/portal', label: tr('Catalog'), short: tr('Catalog'), icon: 'box', end: true },
+    { to: '/portal/requests', label: tr('My requests'), short: tr('Requests'), icon: 'history' },
+    { to: '/portal/deployments', label: tr('My deployments'), short: tr('Deployments'), icon: 'server' },
+    { to: '/portal/approvals', label: tr('Approvals'), short: tr('Approvals'), icon: 'approve', count: waiting },
   ]
+  const badge = (n?: number) =>
+    n ? (
+      <span className="portal-count" aria-label={tr('{n} waiting', { n })}>
+        {n}
+      </span>
+    ) : null
   return (
-    <div className="portal">
+    <div className="portal" data-focus={/^\/portal\/approvals\/\d+/.test(loc.pathname) ? 'decide' : undefined}>
       <header className="portal-bar">
         <div className="portal-wrap portal-bar-in">
           <Link to="/portal" className="portal-brand">
@@ -50,6 +59,7 @@ export function PortalShell() {
             {tabs.map((t) => (
               <NavLink key={t.to} to={t.to} end={t.end}>
                 {t.label}
+                {badge(t.count)}
               </NavLink>
             ))}
           </nav>
@@ -73,8 +83,11 @@ export function PortalShell() {
       <nav aria-label={tr('Portal')} className="portal-tabs">
         {tabs.map((t) => (
           <NavLink key={t.to} to={t.to} end={t.end}>
-            <Icon name={t.icon} size={20} />
-            <span>{t.label}</span>
+            <span className="portal-tab-icon">
+              <Icon name={t.icon} size={20} />
+              {badge(t.count)}
+            </span>
+            <span>{t.short}</span>
           </NavLink>
         ))}
       </nav>

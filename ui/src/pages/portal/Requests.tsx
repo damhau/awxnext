@@ -243,7 +243,7 @@ export function Requests() {
   const rows = open ? all.filter((r) => unfinished.includes(r.status)) : all
   const selected = id ? Number(id) : rows[0]?.id
   return (
-    <div className="portal-page">
+    <div className="portal-page" data-detail={id ? 'yes' : 'no'}>
       <div className="portal-section-head">
         <h1>{tr('My requests')}</h1>
         <Link to="/portal" className="portal-btn">

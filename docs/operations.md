@@ -2534,6 +2534,11 @@ approved, denied, or approved but unable to run. Approvers without an email addr
 mail. To notify a fixed list as well, attach notification templates to the organization's
 `notification_templates_approvals`: they are sent as for any workflow approval.
 
+The mails link to the [portal](#the-portal): an approver's to the approval
+(`/portal/approvals/N`), the requester's to the request (`/portal/requests/N`). So do the
+approval notifications of a catalog request. A link only opens the page, and answering takes a
+click there: mail scanners that open links decide nothing.
+
 ### Quotas
 
 An item's quotas limit what each team uses of it: `max_deployments`, how many of its deployments
@@ -2650,6 +2655,11 @@ set, the new owner, or the team's members, are mailed a link to it. The activity
 the hand-over. When the item has a deployment [quota](#quotas), whoever gets the deployment needs
 room in it: the item's admins can hand over past it, its owners can't.
 
+`GET deployments/N/hand_over/` lists who can get it: `users`, the people who hold a requester role
+on the item or its organization, apart from its owner (`id`, `username`, `name`), and `teams`, the
+organization's teams that can request it (`id`, `name`). Its owners and the item's admins can read
+it.
+
 #### Deleting
 
 `DELETE /api/v2/deployments/N/` asks for the deployment's deletion and answers `202`. The
@@ -2674,6 +2684,7 @@ caps are `max_extensions`, how many extensions a deployment gets (empty: no limi
 `GET deployments/N/extend/` lists each extension with the expiry it gives, why it's refused
 (`refused`), or the approvals it would wait for (`approvals`: the rule, its approvers and the
 approvals it needs), with the deployment's `extensions` and the latest it can be kept (`until`).
+While a request on the deployment waits or runs, every extension is refused until it finishes.
 To extend, an owner posts `days` and an optional `reason` to the same URL; awxnext answers
 `201` with the request, of kind `extend`. An extension goes through the item's
 [rules](#approvals): one that no rule holds applies at once, and one that a rule holds waits for
@@ -2747,6 +2758,41 @@ progress:
 
 Steps follow plays because Ansible tags don't reach job events. To show a step per stage, give
 each stage its own play, and reword the plays in the item's `step_labels`.
+
+**My deployments** lists the [deployments](#deployments) that the user or their teams own, apart
+from deleted ones, with when each expires, or that it's being deleted or couldn't be. A
+deployment's page shows:
+
+- its lifetime, a cell per day: gone, today, left, and the days that extensions added, at most
+  60, the oldest going first. Below it, the item's extensions as buttons, from
+  `GET deployments/N/extend/`; one that a rule holds names who approves it;
+- how to connect, as the item's `connection` lays it out, with a copy button where the entry
+  allows one. A secret shows on demand, through `deployments/N/reveal/`, which records each
+  showing;
+- its actions, each with its template's survey and an optional reason, and **Hand it over**, to
+  one of the teams or people from `GET deployments/N/hand_over/`;
+- what happened, from its requests, and who can use it, with **Delete it now**, which asks first;
+- when its teardown failed, the reason and what it left (`left_behind`), with **Try deleting it
+  again**.
+
+**Approvals** lists the requests waiting for the user's answer, oldest first; the tab shows how
+many. Each one shows the rule that holds and its condition, the requester's reason, their answers
+with those the condition reads highlighted, the quota the request uses, and what happens if nobody
+answers in time. To deny, the approver writes a comment; approving needs none. On a phone, Deny
+and Approve stay at the bottom of the screen. The portal reads the approvals from two endpoints:
+
+| Endpoint | What it gives |
+|---|---|
+| `GET /api/v2/portal/approvals/` | The approvals waiting for the user's answer, oldest first, at most 100: `count` and `results`. |
+| `GET /api/v2/portal/approvals/N/` | An approval of a catalog request that the user can see, waiting or settled. |
+
+| Field | What it holds |
+|---|---|
+| `id`, `status`, `timed_out`, `created`, `expires` | The workflow approval, and when it times out. |
+| `kind`, `rule`, `condition`, `approvers`, `fallback`, `required`, `approved`, `answers` | Why it waits and who answered, as in the request's [`approvals`](#approvals). |
+| `can_answer`, `cannot_answer`, `own` | Whether the user can answer it, why not, and whether the request is theirs: nobody approves their own. |
+| `request` | The request: `id`, `kind`, `status`, `created`, `reason`, `lifetime_days`, `item`, `team`, `requester`, `answers` (each with its survey `question`, in the survey's order), the `action` it runs, and the `deployment` it is about, with its expiry, extensions and `until`. |
+| `quota` | For a new deployment of an item with a quota, the usage of the team or user it counts against, this request included. |
 
 ## Settings
 

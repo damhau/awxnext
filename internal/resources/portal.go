@@ -30,6 +30,8 @@ var portalLogoTypes = []string{"data:image/png;base64,", "data:image/jpeg;base64
 
 func installPortal(app *api.App) {
 	app.Handle("GET", "/api/v2/portal/", portalView)
+	app.Handle("GET", "/api/v2/portal/approvals/", portalApprovals)
+	app.Handle("GET", "/api/v2/portal/approvals/{id}/", portalApprovalDetail)
 }
 
 func portalView(c *Ctx, w http.ResponseWriter, r *http.Request) {
@@ -150,9 +152,7 @@ func needsYou(c *Ctx) (Obj, error) {
 		out["deployments"] = deployments
 	}
 	var approvals int64
-	if err := c.DB().QueryRow(c, `SELECT count(*) FROM catalog_request_approvals g JOIN unified_jobs a ON a.id = g.approval_id
-		WHERE a.status = 'pending' AND $1 = ANY(g.approvers)
-		AND NOT EXISTS (SELECT 1 FROM catalog_approval_answers x WHERE x.approval_id = g.approval_id AND x.user_id = $1)`, c.User.UserID).Scan(&approvals); err != nil {
+	if err := c.DB().QueryRow(c, "SELECT count(*) "+waitingForUser, c.User.UserID).Scan(&approvals); err != nil {
 		return nil, err
 	}
 	out["approvals"] = approvals

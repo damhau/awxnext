@@ -552,13 +552,13 @@ var approvalMessages = map[string]string{
 // organization) for an approval reaching status running, approved, denied or timed_out.
 // An event rule's approval notifies its organization's.
 func notifyApproval(c *Ctx, approvalID int64, status string) {
-	var wfJob, wfjt, org int64
+	var wfJob, wfjt, org, request int64
 	var name string
-	if err := c.App.DB.QueryRow(c, `SELECT coalesce(w.id, 0), coalesce(w.unified_job_template_id, 0), coalesce(w.organization_id, r.organization_id, q.organization_id, 0), a.name
+	if err := c.App.DB.QueryRow(c, `SELECT coalesce(w.id, 0), coalesce(w.unified_job_template_id, 0), coalesce(w.organization_id, r.organization_id, q.organization_id, 0), a.name, coalesce(q.id, 0)
 		FROM unified_jobs a LEFT JOIN workflow_job_nodes n ON n.job_id = a.id LEFT JOIN unified_jobs w ON w.id = n.workflow_job_id
 		LEFT JOIN event_rules r ON r.id = a.event_rule_id LEFT JOIN catalog_requests q ON q.id = a.catalog_request_id
 		WHERE a.id = $1 AND (w.id IS NOT NULL OR r.id IS NOT NULL OR q.id IS NOT NULL)`, approvalID).
-		Scan(&wfJob, &wfjt, &org, &name); err != nil {
+		Scan(&wfJob, &wfjt, &org, &name, &request); err != nil {
 		return
 	}
 	rows, err := c.App.DB.Query(c, `SELECT DISTINCT notification_template_id FROM notification_template_links WHERE event = 'approvals' AND
@@ -574,7 +574,10 @@ func notifyApproval(c *Ctx, approvalID int64, status string) {
 	}
 	rows.Close()
 	workflowURL := JobUIURL(c.App, wfJob)
-	if wfJob == 0 {
+	switch {
+	case request != 0:
+		workflowURL = portalApprovalURL(c.App, approvalID)
+	case wfJob == 0:
 		workflowURL = approvalsURL(c.App)
 	}
 	meta, _ := json.MarshalIndent(map[string]any{"id": approvalID, "name": name, "url": workflowURL, "status": status,

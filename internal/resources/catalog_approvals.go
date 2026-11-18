@@ -503,7 +503,7 @@ func announceApprovals(c *Ctx, ci *catalogItem, request int64, approvals []int64
 		if required > 1 {
 			need = fmt.Sprintf("It needs %d approvals.", required)
 		}
-		body := fmt.Sprintf("%s\n\n%s\n\nApprove or deny it: %s\n", desc, need, approvalsURL(c.App))
+		body := fmt.Sprintf("%s\n\n%s\n\nApprove or deny it: %s\n", desc, need, portalApprovalURL(c.App, id))
 		mailUsers(c, ci.item["notification_template"], &id, approvers, fmt.Sprintf("Approval needed: %s, request %d (%s)", str(ci.item["name"]), request, rule), body)
 	}
 }
@@ -635,7 +635,7 @@ func resolveRequest(ctx context.Context, app *api.App, id int64) error {
 	case requestFailed:
 		subject = fmt.Sprintf("Your request %d for %s is approved but could not run", id, out.itemName)
 	}
-	mailUsers(sys, out.template, nil, []int64{out.requester}, subject, out.explanation+"\n")
+	mailUsers(sys, out.template, nil, []int64{out.requester}, subject, out.explanation+"\n\n"+portalRequestURL(app, id)+"\n")
 	return nil
 }
 
