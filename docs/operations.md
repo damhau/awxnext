@@ -2365,6 +2365,7 @@ To publish a template, post to `/api/v2/catalog_items/` with these fields:
 | `owner_team` | The team of the organization that owns the item. |
 | `questions` | What the item makes of the template's survey ([The item's form](#the-items-form)). |
 | `max_lifetime_days`, `default_lifetime_days` | For a `deployment` item, the longest a requester can keep the deployment and the lifetime the form proposes, in days. Empty `max_lifetime_days`: requesters can keep it for good. |
+| `deployment_name`, `connection`, `actions`, `teardown_template` | For a `deployment` item, what its deployments are named, how to connect to them, their day-2 actions and what deleting one runs ([Deployments](#deployments)). |
 
 The item's creator gets `CatalogItem Admin` on it. These roles give access to items:
 
@@ -2430,7 +2431,9 @@ answers `201` with the request (`/api/v2/catalog_requests/N/`). The request reco
 team, the reason, the lifetime, the answers the requester gave (passwords masked), the label
 each answer was shown with when it differs from the answer (`answer_labels`, for lists from a
 [choice source](surveys.md#choice-sources)), the fixed answers they were shown, its job, and a `status` that follows the job's: `pending`, `running`,
-`successful`, `failed` or `canceled`.
+`successful`, `failed` or `canceled`. Its `kind` is `new`; requests on a
+[deployment](#deployments) have the deployment's id in `deployment`, and the kind of an action or
+`delete`.
 
 The requester sees their requests, not the jobs that run them: a request's jobs, the workflow's
 nodes included, carry the item's hidden answers, and stay visible to those with a role on the
@@ -2464,8 +2467,8 @@ A request that no rule holds runs at once. Otherwise its `status` is `awaiting_a
 each rule whose condition holds gets its own workflow approval, as an event rule's
 [approval mode](#approval-mode) does, so the approvals page, its count in the navigation, `/api/v2/workflow_approvals/` and the organization's
 approval notifications serve it. The rules wait in parallel: when every one approves, awxnext
-runs the request as the requester, who must still be able to request the item, and the status
-follows the job's. The first deny or timeout ends the request: its `status` is `denied`, its
+runs the request as the requester, who must still be able to request the item (for a request on
+a deployment, still own it), and the status follows the job's. The first deny or timeout ends the request: its `status` is `denied`, its
 `explanation` says who denied it and why, and its other approvals are canceled. A request that
 is approved but can't run, because its item was deleted or its requester lost access, is `failed`
 with the reason.
@@ -2480,12 +2483,15 @@ A condition is an [expr](https://expr-lang.org/docs/language-definition) express
 
 - each answer by its variable, as the job gets it: `size > 4`, `env == "prod"`. An unanswered
   question reads as its type's zero value: `0`, `""` or an empty list. Password answers aren't
-  readable.
+  readable. The variables are those of the template's survey and of the item's actions'
+  surveys: a request for an action answers its own survey.
 - `answers`, the same answers by variable, with `nil` for unanswered questions.
 - `item("x")`, the item picked in list `x`, as [computed questions](surveys.md#computed-questions-value_from)
   read it.
 - `team`, the team the request is for (`id`, `name`), or `nil`.
-- `kind`, the kind of request: `new`.
+- `kind`, the kind of request: `new`, the id of a deployment's [action](#day-2-actions), or
+  `delete`. A rule without a condition holds every kind: to hold only new requests, use
+  `kind == "new"`.
 - `user`, the requester (`id`, `username`, `email`, `teams`), and `request` (`id`,
   `lifetime_days`, `expires_at`).
 
@@ -2522,6 +2528,109 @@ each rule's approvers when a request waits for them, and the requester when the 
 approved, denied, or approved but unable to run. Approvers without an email address get no
 mail. To notify a fixed list as well, attach notification templates to the organization's
 `notification_templates_approvals`: they are sent as for any workflow approval.
+
+### Deployments
+
+When a request for a `deployment` item succeeds, awxnext records what it provisioned, such as a
+VM or a database, as a deployment (`/api/v2/deployments/N/`). Its owners are the requester
+(`owner`) and the team the request was for (`team`): each of them sees it, runs its actions,
+shows its secrets, hands it over and deletes it. The item's admins and the organization's
+auditors see it too; the item's admins also hand it over and delete it, but don't see its
+secrets.
+
+| Field | What it holds |
+|---|---|
+| `name`, `description` | Its name, from the item's `deployment_name`, and a description. Its owners can change both. |
+| `catalog_item`, `item_name`, `request` | The item, its name when it was requested, and the request that created it. |
+| `owner`, `team` | Its owners. |
+| `status` | `active`, `deleting`, `delete_failed` or `deleted`. |
+| `outputs` | The outputs of its runs, by name. Secret outputs show as `$encrypted$`. |
+| `connection` | How to connect to it ([How to connect](#how-to-connect)). |
+| `expires_at` | When its lifetime ends, from the request's `lifetime_days`. Empty: it is kept for good. |
+| `explanation`, `left_behind`, `deleted_at` | Why its teardown failed, what the teardown left, and when it was deleted. |
+
+The outputs are those that the template [declares](workflows.md#typed-outputs) and its playbook
+publishes with `set_stats`; for a workflow template, those of its jobs that succeeded, the later
+ones winning. Artifacts that no template declares aren't kept, and
+[secret outputs](workflows.md#secret-outputs) stay encrypted. `deployments/N/requests/` lists
+the requests on the deployment, with their `kind`: the one that created it, its actions and its
+deletions. Deployments record no cost.
+
+An item's `deployment_name` is an expression over `answers` (as the request records them),
+`outputs`, `request` (`id`) and `item` (the item's name): `answers.name + "-db"`. Empty, or when
+it gives nothing, the name is the item's name and the request's id.
+
+#### How to connect
+
+An item's `connection` lays out how to connect to its deployments, in order. Each entry is an
+object:
+
+| Key | What it sets |
+|---|---|
+| `label` | What the entry shows, unique in the item. |
+| `value` | An [expr](https://expr-lang.org/docs/language-definition) expression that reads each output by name (`host`), all of them as `outputs` (`outputs.host`), and the deployment's `id` and `name` as `deployment`. |
+| `copy` | `false` to show the value without a copy button. The default is `true`. |
+
+```json
+"connection": [
+  {"label": "Host", "value": "host"},
+  {"label": "Port", "value": "port", "copy": false},
+  {"label": "Password", "value": "db_password"},
+  {"label": "Connection string", "value": "\"postgresql://\" + db_user + \":\" + db_password + \"@\" + host + \":\" + string(port) + \"/app\""}
+]
+```
+
+Without a layout, every output shows under its name, in alphabetical order. An entry that reads a
+secret output is secret: the deployment's `connection` shows it as `$encrypted$`, with `secret:
+true`. To show it, an owner posts its label to `deployments/N/reveal/` (`{"label": "Password"}`),
+which answers with its `value`. Each showing is recorded in the deployment's activity stream, as
+`revealed` with the label, and in the server log, never with the value. An entry whose expression
+fails shows the `error` instead of a value.
+
+#### Day-2 actions
+
+An item's `actions` are what its deployments' owners can run on them after they're made, such as
+a restart, a snapshot or a resize. Each action is an object:
+
+| Key | What it sets |
+|---|---|
+| `id` | Lowercase letters, digits and `_`, starting with a letter, unique in the item: the `kind` of the action's requests. `new`, `extend` and `delete` are taken. |
+| `name`, `description` | What the portal shows. |
+| `template` | The job or workflow template the action runs, of the item's organization. As for the item's template, publishing it takes the right to change it. |
+
+`GET deployments/N/actions/` lists the actions, with the questions of their templates' surveys. To
+run one, post `action` (its id), `answers` and `reason` to the same URL: awxnext answers `201`
+with the request. The template runs as the owner who asked, with the deployment's outputs as
+variables, secret ones passed as survey passwords are, and the answers over them. Ansible's own
+variables (`ansible_*`) among the outputs aren't passed. The request goes through the item's
+[rules](#approvals) and freezes as any request does; its `kind` is the action's id, so a rule can
+hold some actions only: `kind == "resize" && size == "large"`. When the action succeeds, the
+outputs its template declares and its playbook publishes replace the deployment's, such as a
+rotated password.
+
+A deployment takes one request at a time: while a request on it waits or runs, another one is
+refused with `400`.
+
+#### Handing over
+
+To give a deployment to someone else, post `user`, `team` or both to `deployments/N/hand_over/`.
+`user` alone changes the owner and keeps the team; `team` alone gives it to the team, with no
+owning user. Whoever gets it must be able to request the item: a requester role on the item or
+its organization, held by the team or by a team it is in. With the item's `notification_template`
+set, the new owner, or the team's members, are mailed a link to it. The activity stream records
+the hand-over.
+
+#### Deleting
+
+`DELETE /api/v2/deployments/N/` asks for the deployment's deletion and answers `202`. The
+deletion is a request of kind `delete`, which goes through the item's rules and freezes. It runs
+the item's `teardown_template` with the deployment's outputs, and the deployment's `status` is
+`deleting`; without a teardown template, the deployment is deleted at once.
+
+When the teardown succeeds, the status is `deleted`. When it fails or is canceled, the status is
+`delete_failed`, with the job's explanation and what the teardown published as `left_behind` (with
+`set_stats`, such as a list of what's left), and the owners are mailed. To try again, delete it
+again. A deleted deployment stays listed, with `deleted_at`.
 
 ## Settings
 

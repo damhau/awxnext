@@ -247,7 +247,8 @@ type gate struct {
 // for it; a freeze without one refuses the request.
 func requestGates(c *Ctx, ci *catalogItem, env *ruleEnv, requester int64, at time.Time) ([]*gate, error) {
 	org, _ := api.ID(ci.item["organization"])
-	variables := conditionVariables(ci.view.spec)
+	ujt, _ := api.ID(ci.item["unified_job_template"])
+	variables := conditionVariables(itemRuleSpec(c, ujt, itemActions(ci.item["actions"])))
 	vars := env.vars(variables)
 	broken := func(r itemRule, what string, err error) error {
 		return api.Detail(400, fmt.Sprintf("The item's approval rule %q no longer applies (%s: %v): its owners must update it.", r.Name, what, err))
@@ -432,15 +433,18 @@ func itemFreeze(c *Ctx, item any, org int64, at time.Time) (*activeWindow, error
 	return nil, rows.Err()
 }
 
-// requestLaunch is what a held request launches once approved.
+// requestLaunch is what a held request launches once approved: the
+// item's template, or for a request on a deployment, Template.
 type requestLaunch struct {
 	Vars         map[string]any  `json:"vars"`
 	Passwords    []string        `json:"passwords"`
 	ActivityVars map[string]bool `json:"activity_vars"`
+	Template     int64           `json:"template,omitempty"`
 }
 
-// holdRequest creates the request's approvals, one per gate.
-func holdRequest(c *Ctx, ci *catalogItem, id int64, gates []*gate, team any, reason string) ([]int64, error) {
+// holdRequest creates the request's approvals, one per gate. what says
+// what a request on a deployment asks.
+func holdRequest(c *Ctx, ci *catalogItem, id int64, gates []*gate, team any, reason, what string) ([]int64, error) {
 	who := c.User.Username
 	if t, ok := api.ID(team); ok {
 		var name string
@@ -454,6 +458,9 @@ func holdRequest(c *Ctx, ci *catalogItem, id int64, gates []*gate, team any, rea
 			name = name[:509] + "..."
 		}
 		desc := fmt.Sprintf("Requested by %s. %s.", who, strings.TrimSuffix(g.why, "."))
+		if what != "" {
+			desc = fmt.Sprintf("Requested by %s: %s. %s.", who, what, strings.TrimSuffix(g.why, "."))
+		}
 		if reason != "" {
 			desc += " Reason: " + reason
 		}
@@ -596,8 +603,11 @@ func resolveRequest(ctx context.Context, app *api.App, id int64) error {
 		}
 		job, why := launchApproved(c, id, out.requester, out.item, launch)
 		out.status, out.explanation = requestPending, "Approved."
-		if why != "" {
+		switch {
+		case why != "":
 			out.status, out.explanation = requestFailed, why
+		case job == 0:
+			out.status = requestSuccessful
 		}
 		_, err = c.DB().Exec(c, "UPDATE catalog_requests SET status = $2, explanation = $3, unified_job_id = $4, launch = NULL, modified = now() WHERE id = $1",
 			id, out.status, out.explanation, nullID(job))
@@ -675,8 +685,8 @@ func requestApprovalState(c *Ctx, request int64) (string, []int64, error) {
 }
 
 // launchApproved launches an approved request as its requester, who must
-// still be able to request the item. It returns the job, or why it could
-// not run.
+// still be able to request the item, or for a request on a deployment, still
+// own it. It returns the job, or why it could not run.
 func launchApproved(c *Ctx, id, requester, item int64, launch []byte) (int64, string) {
 	if item == 0 {
 		return 0, "Approved, but the catalog item was deleted."
@@ -690,28 +700,35 @@ func launchApproved(c *Ctx, id, requester, item int64, launch []byte) (int64, st
 	}
 	rc := *c
 	rc.User = p
-	obj, err := api.Get(&rc, api.Lookup("catalog_items"), item)
-	if err == nil {
-		var ok bool
-		if ok, err = api.HasPerm(&rc, api.Lookup("catalog_items"), obj, "request"); err == nil && !ok {
-			err = api.ErrForbidden
-		}
-	}
-	if err != nil {
-		return 0, "Approved, but its requester can no longer request the item."
-	}
-	ci, err := loadCatalogItem(&rc, obj)
-	if err != nil {
-		return 0, "Approved, but " + errorText(err)
+	var kind string
+	var deployment *int64
+	if err := c.DB().QueryRow(c, "SELECT kind, deployment_id FROM catalog_requests WHERE id = $1", id).Scan(&kind, &deployment); err != nil {
+		return 0, "Approved, but " + err.Error()
 	}
 	var l requestLaunch
 	if err := json.Unmarshal(launch, &l); err != nil || l.Vars == nil {
 		return 0, "Approved, but what it launches was lost."
 	}
+	obj, err := api.Get(&rc, api.Lookup("catalog_items"), item)
+	if err != nil {
+		return 0, "Approved, but the catalog item was deleted."
+	}
+	ci := &catalogItem{item: obj}
+	if kind == requestNew {
+		ok, err := api.HasPerm(&rc, api.Lookup("catalog_items"), obj, "request")
+		if err != nil || !ok {
+			return 0, "Approved, but its requester can no longer request the item."
+		}
+		if ci, err = loadCatalogItem(&rc, obj); err != nil {
+			return 0, "Approved, but " + errorText(err)
+		}
+	} else if why := deploymentRequestValid(&rc, deployment, kind, obj, &l); why != "" {
+		return 0, "Approved, but " + why
+	}
 	if _, err := c.DB().Exec(c, "SAVEPOINT approved_launch"); err != nil {
 		return 0, "Approved, but " + err.Error()
 	}
-	job, err := launchRequest(&rc, ci, id, l.Vars, l.Passwords, l.ActivityVars)
+	job, err := startRequest(&rc, id, kind, deployment, ci, l)
 	if err != nil {
 		c.DB().Exec(c, "ROLLBACK TO SAVEPOINT approved_launch")
 		return 0, "Approved, but it could not run: " + errorText(err)

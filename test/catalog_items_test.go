@@ -323,8 +323,9 @@ func TestCatalogItemTeamsAndLifetime(t *testing.T) {
 	}
 }
 
-// Catalog items are declared in GitOps, with their template by kind and
-// name and their owner team by name.
+// Catalog items are declared in GitOps, with their templates (the item's,
+// its teardown's and its actions') by kind and name and their owner team by
+// name.
 func TestCatalogItemGitOps(t *testing.T) {
 	f := newCatalogFixture(t)
 	a := f.a
@@ -335,14 +336,19 @@ func TestCatalogItemGitOps(t *testing.T) {
 name: Small VM
 description: A VM for a few days
 spec:
-  template: {kind: JobTemplate, name: %s}
+  template: {kind: JobTemplate, name: %[1]s}
   kind: deployment
   category: Compute
-  owner_team: %s
+  owner_team: %[2]s
   max_lifetime_days: 14
   questions:
     env: {choices: [dev, staging]}
     token: {value: from-git}
+  approval_rules:
+    - {name: Large, condition: size > 5, approvers: team, team: %[2]s}
+  teardown_template: {kind: JobTemplate, name: %[1]s}
+  actions:
+    - {id: restart, name: Restart, template: {kind: JobTemplate, name: %[1]s}}
 `, jtName, teamName)
 	repo := gitRepo(t, map[string]string{"gitops/catalog.yml": doc})
 	proj := must(t, a.post("projects/", map[string]any{"name": uniq("p"), "organization": f.org, "scm_type": "git", "scm_url": "file://" + repo}), 201).id()
@@ -355,7 +361,8 @@ spec:
 	}
 	it := one(t, a, fmt.Sprintf("catalog_items/?organization=%d&name=%s", f.org, url.QueryEscape("Small VM")))
 	if it["managed_by"] != fmt.Sprintf("gitops:%d", sid) || it["unified_job_template"] != float64(f.jt) || it["owner_team"] != float64(team) ||
-		it["kind"] != "deployment" || it["max_lifetime_days"] != float64(14) {
+		it["kind"] != "deployment" || it["max_lifetime_days"] != float64(14) || it["teardown_template"] != float64(f.jt) ||
+		fmt.Sprint(it["actions"]) != fmt.Sprintf("[map[description: id:restart name:Restart template:%d]]", f.jt) {
 		t.Fatalf("item: %v", it)
 	}
 	must(t, a.patch(fmt.Sprintf("catalog_items/%v/", it["id"]), map[string]any{"description": "x"}), 409)

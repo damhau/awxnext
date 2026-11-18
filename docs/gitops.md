@@ -154,6 +154,9 @@ spec:
   approval_rules:
     - {name: Long, condition: request.lifetime_days > 7, approvers: team, team: Platform}   # a team, by name
   freeze_exception_team: Platform
+  teardown_template: {kind: JobTemplate, name: Delete VM}
+  actions:
+    - {id: restart, name: Restart, template: {kind: JobTemplate, name: Restart VM}}
 ```
 
 Kinds are applied in dependency order (Label, Team, Project, Inventory,
@@ -167,7 +170,8 @@ An `EventRule` takes the API's fields: a rule that waits for a
 [pattern](operations.md#patterns) sets `pattern`, `pattern_window`, and
 `conditions` or `pattern_count`. A rule that [checks its fixes](operations.md#checking-fixes)
 with a template names it as `template` does: `check_template: {kind: JobTemplate, name: Check service}`.
-A `CatalogItem` names its template as a schedule does. Its `questions` are written in the file
+A `CatalogItem` names its template, its `teardown_template` and its actions' templates as a
+schedule names its template. Its `questions` are written in the file
 whole, fixed password answers included: give secrets to the template through credentials instead.
 Documents of kind `EventRuleTest` are tests of the rules, which
 `awxnext rules test` runs in your CI ([Testing rules offline](operations.md#testing-rules-offline)):

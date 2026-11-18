@@ -2,7 +2,6 @@ package resources
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -88,6 +87,14 @@ func registerCatalogItems() {
 				Help: "The team that approves an exception for a request inside a window that lists the item. Empty: such a request is refused."},
 			{Name: "notification_template", Type: api.TFK, Ref: "notification_templates", Nullable: true,
 				Help: "An email notification template that mails the approvers when a request waits for them, and the requester when it is decided, at their own addresses."},
+			{Name: "deployment_name", Type: api.TString, Default: "", MaxLength: 1024,
+				Help: "For an item that creates a deployment, an expression that names it, over answers, outputs and request. Empty: the item's name and the request's id."},
+			{Name: "connection", Type: api.TJSON, Default: []any{},
+				Help: "How to connect to a deployment, in order: each entry a label, a value (an expression over the outputs, by name or as outputs) and copy (false: no copy button). Empty: every output under its name."},
+			{Name: "actions", Type: api.TJSON, Default: []any{},
+				Help: "The day-2 actions of a deployment: each an id (its requests' kind), a name, a description and the job or workflow template it runs, which gets the deployment's outputs."},
+			{Name: "teardown_template", Type: api.TFK, Ref: "unified_job_templates", Nullable: true,
+				Help: "The job or workflow template that deleting a deployment runs, with its outputs. Empty: a deployment is deleted at once."},
 		},
 		CanAdd:     func(c *Ctx, data Obj) error { return requireUJTPerm(c, data["unified_job_template"], "change") },
 		CanChange:  changeCatalogItem,
@@ -128,7 +135,10 @@ func registerCatalogItems() {
 			{Name: "item_name", Type: api.TString, ReadOnly: true, Help: "The item's name when it was requested."},
 			{Name: "organization", Type: api.TFK, Ref: "organizations", ReadOnly: true},
 			{Name: "team", Type: api.TFK, Ref: "teams", ReadOnly: true, Nullable: true, Help: "The team the request is for."},
-			{Name: "kind", Type: api.TChoice, ReadOnly: true, Choices: labelled(requestNew, "New")},
+			{Name: "kind", Type: api.TString, ReadOnly: true,
+				Help: "What the request asks: new, the id of one of the item's actions, or delete."},
+			{Name: "deployment", Type: api.TFK, Ref: "deployments", ReadOnly: true, Nullable: true,
+				Help: "The deployment it created, or that it acts on."},
 			{Name: "status", Type: api.TChoice, ReadOnly: true, Choices: labelled(requestAwaiting, "Awaiting approval", requestDenied, "Denied",
 				requestPending, "Pending", requestRunning, "Running", requestSuccessful, "Successful", requestFailed, "Failed", requestCanceled, "Canceled")},
 			{Name: "explanation", Type: api.TText, ReadOnly: true, Help: "Why it was denied, or could not run once approved."},
@@ -148,7 +158,8 @@ func registerCatalogItems() {
 			a := rbac.ArgFunc(arg)
 			admin := c.User.Predicate(a, "catalogitem", "change_catalogitem", rbac.Scope{ID: "t.catalog_item_id", Org: "t.organization_id"})
 			audit := c.User.Predicate(a, "organization", "audit_organization", rbac.Scope{ID: "t.organization_id", Org: "t.organization_id"})
-			return fmt.Sprintf("t.created_by_id = %s OR %s OR %s", arg(c.User.UserID), admin, audit)
+			owned := "t.deployment_id IN (SELECT d.id FROM deployments d WHERE " + ownedPredicate(c, arg, "d") + ")"
+			return fmt.Sprintf("t.created_by_id = %s OR %s OR %s OR %s", arg(c.User.UserID), admin, audit, owned)
 		},
 		Summary: func(c *Ctx, objs []Obj) error {
 			for _, o := range objs {
@@ -256,8 +267,12 @@ func saveCatalogItem(c *Ctx, old, data Obj) error {
 		}
 	}
 	_, rulesGiven := data["approval_rules"]
-	if rulesGiven || old == nil || !sameValue(old["unified_job_template"], ujt) {
-		rules, err := checkApprovalRules(c, pick("approval_rules"), *org, enabledSurvey(c, ujt))
+	_, actionsGiven := data["actions"]
+	if err := checkDeploymentFields(c, old, data, pick, *org); err != nil {
+		return err
+	}
+	if rulesGiven || actionsGiven || old == nil || !sameValue(old["unified_job_template"], ujt) {
+		rules, err := checkApprovalRules(c, pick("approval_rules"), *org, itemRuleSpec(c, ujt, itemActions(data["actions"])))
 		if err != nil {
 			return err
 		}
@@ -277,6 +292,27 @@ func saveCatalogItem(c *Ctx, old, data Obj) error {
 	}
 	data["questions"] = qs
 	return nil
+}
+
+// NormalizeCatalogItem fills in what an item's rules, layout and actions
+// leave to their defaults, as saving the item does, so that GitOps compares
+// a file's item with the stored one.
+func NormalizeCatalogItem(data Obj) {
+	fill := func(key string, defaults map[string]any) {
+		list, _ := data[key].([]any)
+		for _, x := range list {
+			if m, ok := x.(map[string]any); ok {
+				for k, v := range defaults {
+					if _, set := m[k]; !set {
+						m[k] = v
+					}
+				}
+			}
+		}
+	}
+	fill("approval_rules", map[string]any{"condition": "", "required": 1, "timeout": defaultApprovalTimeout})
+	fill("connection", map[string]any{"copy": true})
+	fill("actions", map[string]any{"description": ""})
 }
 
 // enabledSurvey is the template's survey, or nothing when it is off.
@@ -774,43 +810,9 @@ func RequestCatalogItem(c *Ctx, ci *catalogItem, body Obj) (Obj, error) {
 		delete(answered, k)
 	}
 	env := &ruleEnv{answers: answered, picked: sc.Picked, team: sc.Team, user: userEnv(c, c.User.UserID), request: sc.Request, kind: requestNew}
-	gates, err := requestGates(c, ci, env, c.User.UserID, created)
-	if err != nil {
-		return nil, err
-	}
-	answersJSON, _ := json.Marshal(shown)
-	labelsJSON, _ := json.Marshal(labels)
-	status, launch := requestPending, []byte(nil)
-	if len(gates) > 0 {
-		status = requestAwaiting
-		if launch, err = json.Marshal(requestLaunch{Vars: sv, Passwords: pw, ActivityVars: keep}); err != nil {
-			return nil, err
-		}
-	}
-	var req Obj
-	var approvals []int64
-	err = c.WithTx(func(c *Ctx) error {
-		if _, err := c.DB().Exec(c, `INSERT INTO catalog_requests (id, created, modified, created_by_id, modified_by_id, catalog_item_id, item_name, organization_id, team_id,
-			answers, answer_labels, reason, lifetime_days, kind, status, launch) VALUES ($1, $2, $2, $3, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
-			id, created, nullID(c.User.UserID), ci.item["id"], ci.item["name"], ci.item["organization"], team, string(answersJSON), string(labelsJSON), reason, lifetime,
-			requestNew, status, launch); err != nil {
-			return err
-		}
-		var err error
-		if len(gates) > 0 {
-			approvals, err = holdRequest(c, ci, id, gates, team, reason)
-		} else {
-			_, err = launchRequest(c, ci, id, sv, pw, keep)
-		}
-		if err != nil {
-			return err
-		}
-		res := api.Lookup("catalog_requests")
-		if req, err = api.Get(c, res, id); err != nil {
-			return err
-		}
-		return api.Activity(c, "create", res, req, api.ActivityFields(res, req), nil, nil, "")
-	})
+	p := &pendingRequest{ci: ci, kind: requestNew, team: team, reason: reason, lifetime: lifetime, shown: shown, labels: labels,
+		launch: requestLaunch{Vars: sv, Passwords: pw, ActivityVars: keep}, env: env}
+	req, approvals, err := p.submit(c, id, created)
 	if err != nil {
 		return nil, err
 	}
@@ -820,25 +822,7 @@ func RequestCatalogItem(c *Ctx, ci *catalogItem, body Obj) (Obj, error) {
 
 // launchRequest runs a request's template with its answers, as c's user.
 func launchRequest(c *Ctx, ci *catalogItem, id int64, sv map[string]any, pw []string, keep map[string]bool) (int64, error) {
-	lc := *c
-	lc.Extra = maps.Clone(c.Extra)
-	if lc.Extra == nil {
-		lc.Extra = map[string]any{}
-	}
-	lc.Extra["activity_vars"] = keep
-	ov := &LaunchOverrides{Survey: &SurveyAnswers{Vars: sv, Passwords: pw}, ExtraJob: map[string]any{"catalog_request_id": id}}
-	var jobID int64
-	var err error
-	if ci.tplRes.Name == "workflow_job_templates" {
-		jobID, _, err = LaunchWorkflowJobTemplate(&lc, ci.template, Obj{}, "manual", ov)
-	} else {
-		jobID, _, err = LaunchJobTemplate(&lc, ci.template, Obj{}, "manual", ov)
-	}
-	if err != nil {
-		return 0, err
-	}
-	_, err = c.DB().Exec(c, "UPDATE catalog_requests SET unified_job_id = $2 WHERE id = $1", id, jobID)
-	return jobID, err
+	return launchTemplate(c, ci.tplRes, ci.template, id, sv, pw, keep)
 }
 
 // requestTeam is the team a request is for: the one given, which must be
@@ -959,6 +943,7 @@ func CatalogJobFinished(ctx context.Context, m *jobs.Manager, job jobs.Row) {
 		status = requestCanceled
 	}
 	setRequestStatus(ctx, m, job, status)
+	deploymentJobFinished(ctx, m.App, job)
 }
 
 func setRequestStatus(ctx context.Context, m *jobs.Manager, job jobs.Row, status string) {

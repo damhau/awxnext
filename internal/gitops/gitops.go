@@ -7,8 +7,9 @@
 // WorkflowJobTemplate (with nodes), NotificationTemplate, Schedule, Team,
 // EventRule (its streams by name), MaintenanceWindow (its rules and catalog
 // items by name, its groups by inventory and name), EventConnector (its
-// stream and credentials by name), CatalogItem (its template as {kind,
-// name}, its teams, its rules' included, by name).
+// stream and credentials by name), CatalogItem (its template, teardown
+// template and actions' templates as {kind, name}, its teams, its rules'
+// included, by name).
 //
 //	kind: JobTemplate
 //	name: Deploy web
@@ -135,7 +136,7 @@ var kinds = map[string]kind{
 	"EventRule":            {res: "event_rules", relations: map[string]bool{"check_template": true}},
 	"MaintenanceWindow":    {res: "maintenance_windows", relations: map[string]bool{"event_rules": true, "groups": true, "catalog_items": true}},
 	"EventConnector":       {res: "event_connectors"},
-	"CatalogItem":          {res: "catalog_items"},
+	"CatalogItem":          {res: "catalog_items", relations: map[string]bool{"teardown_template": true}},
 }
 
 var errDryRun = errors.New("dry run")
@@ -689,6 +690,31 @@ func (r *reconciler) applyDoc(d *Document) error {
 		data["event_rules"], data["groups"], data["catalog_items"] = rules, groups, items
 	}
 	if d.Kind == "CatalogItem" {
+		data["teardown_template"] = nil
+		if t, ok := d.Spec["teardown_template"]; ok && t != nil {
+			ref, err := templateRef(t)
+			if err != nil {
+				return fmt.Errorf("teardown_template: %w", err)
+			}
+			if data["teardown_template"], err = r.resolveTemplate(ref); err != nil {
+				return err
+			}
+		}
+		if actions, ok := data["actions"].([]any); ok {
+			for _, x := range actions {
+				action, _ := x.(map[string]any)
+				if t, ok := action["template"].(map[string]any); ok {
+					ref, err := templateRef(t)
+					if err != nil {
+						return fmt.Errorf("action %v: %w", action["id"], err)
+					}
+					if action["template"], err = r.resolveTemplate(ref); err != nil {
+						return fmt.Errorf("action %v: %w", action["id"], err)
+					}
+				}
+			}
+		}
+		resources.NormalizeCatalogItem(data)
 		if rules, ok := data["approval_rules"].([]any); ok {
 			for _, x := range rules {
 				rule, _ := x.(map[string]any)
