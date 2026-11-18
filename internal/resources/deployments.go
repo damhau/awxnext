@@ -93,7 +93,9 @@ func registerDeployments() {
 				Help: "The declared outputs of its runs, by name; secret ones show as $encrypted$."},
 			{Name: "left_behind", Type: api.TJSON, ReadOnly: true, Nullable: true,
 				Help: "What its teardown said it left, from its left_behind artifact."},
-			{Name: "expires_at", Type: api.TDateTime, ReadOnly: true, Nullable: true, Help: "When it expires. Empty: it is kept for good."},
+			{Name: "expires_at", Type: api.TDateTime, Nullable: true,
+				Help: "When it expires and its teardown runs. Empty: it is kept for good. Its owners extend it; only the item's admins set it."},
+			{Name: "extensions", Type: api.TInt, ReadOnly: true, Default: 0, Help: "How many times it was extended."},
 			{Name: "deleted_at", Type: api.TDateTime, ReadOnly: true, Nullable: true},
 			{Name: "connection", Type: api.TJSON, ReadOnly: true, Virtual: true,
 				Help: "How to connect, as the item lays it out: each entry's label, value, and whether it is secret (shown through reveal) or copied."},
@@ -126,6 +128,14 @@ func registerDeployments() {
 			}
 			return deploymentReady(c, obj, deploymentActive, deploymentDeleteFailed)
 		},
+		BeforeSave: checkExpiryChange,
+		AfterUpdate: func(c *Ctx, old, obj Obj) error {
+			if sameTime(old["expires_at"], obj["expires_at"]) {
+				return nil
+			}
+			_, err := c.DB().Exec(c, "UPDATE deployments SET reminded_hours = NULL WHERE id = $1", obj["id"])
+			return err
+		},
 		SoftDelete:   func(c *Ctx, obj Obj) error { return requestDeletion(c, obj) },
 		FinishDelete: func(app *api.App, obj Obj) { announceHeld(app, obj) },
 		Summary: func(c *Ctx, objs []Obj) error {
@@ -140,6 +150,7 @@ func registerDeployments() {
 			if rel, ok := o["related"].(Obj); ok {
 				base := api.Lookup("deployments").URL(o["id"])
 				rel["actions"] = base + "actions/"
+				rel["extend"] = base + "extend/"
 				rel["hand_over"] = base + "hand_over/"
 				rel["reveal"] = base + "reveal/"
 			}
@@ -152,6 +163,7 @@ func registerDeployments() {
 				"edit":      owns || admin,
 				"delete":    (owns || admin) && (status == deploymentActive || status == deploymentDeleteFailed),
 				"run":       owns && status == deploymentActive,
+				"extend":    owns && status == deploymentActive && obj["expires_at"] != nil,
 				"hand_over": (owns || admin) && status == deploymentActive,
 				"reveal":    owns && status != deploymentDeleted,
 			}
@@ -159,6 +171,7 @@ func registerDeployments() {
 		SubLists: []*SubList{readOnlyChildSub("requests", "catalog_requests", "deployment_id")},
 		Actions: []*api.Action{
 			{Name: "actions", Methods: []string{"GET", "POST"}, Handler: handleDeploymentActions},
+			{Name: "extend", Methods: []string{"GET", "POST"}, Handler: handleExtend},
 			{Name: "hand_over", Methods: []string{"POST"}, Handler: handleHandOver},
 			{Name: "reveal", Methods: []string{"POST"}, Handler: handleReveal},
 		},
@@ -764,13 +777,18 @@ type pendingRequest struct {
 	launch        requestLaunch
 	env           *ruleEnv
 	what          string
+	// ungated skips the item's rules and freezes: an expiry.
+	ungated bool
 }
 
 // submit records the request and holds it for its gates, or starts it.
 func (p *pendingRequest) submit(c *Ctx, id int64, created time.Time) (Obj, []int64, error) {
-	gates, err := requestGates(c, p.ci, p.env, c.User.UserID, created)
-	if err != nil {
-		return nil, nil, err
+	var gates []*gate
+	var err error
+	if !p.ungated {
+		if gates, err = requestGates(c, p.ci, p.env, c.User.UserID, created); err != nil {
+			return nil, nil, err
+		}
 	}
 	answersJSON, _ := json.Marshal(p.shown)
 	labelsJSON, _ := json.Marshal(p.labels)
@@ -834,6 +852,9 @@ func startRequest(c *Ctx, id int64, kind string, deployment any, ci *catalogItem
 		return launchRequest(c, ci, id, l.Vars, l.Passwords, l.ActivityVars)
 	}
 	dep, _ := api.ID(deployment)
+	if kind == requestExtend {
+		return 0, extendDeployment(c, id, dep, ci.item)
+	}
 	if kind == requestDelete && l.Template == 0 {
 		if _, err := c.DB().Exec(c, "UPDATE catalog_requests SET status = $2, modified = now() WHERE id = $1", id, requestSuccessful); err != nil {
 			return 0, err
@@ -923,11 +944,15 @@ func deploymentRequestValid(c *Ctx, deployment *int64, kind string, item Obj, l 
 		}
 	}
 	statuses := []string{deploymentActive}
-	if kind == requestDelete {
+	switch kind {
+	case requestDelete:
 		statuses = append(statuses, deploymentDeleteFailed)
 		l.Template, _ = api.ID(item["teardown_template"])
-	} else if a, ok := findAction(item, kind); !ok || a.Template != l.Template {
-		return "the item's action changed since: request it again."
+	case requestExtend:
+	default:
+		if a, ok := findAction(item, kind); !ok || a.Template != l.Template {
+			return "the item's action changed since: request it again."
+		}
 	}
 	if !slices.Contains(statuses, str(d["status"])) {
 		return fmt.Sprintf("the deployment is %s.", strings.ReplaceAll(str(d["status"]), "_", " "))
@@ -938,19 +963,37 @@ func deploymentRequestValid(c *Ctx, deployment *int64, kind string, item Obj, l 
 // requestDeletion requests a deployment's deletion: its teardown runs with
 // its outputs, once the item's rules let it.
 func requestDeletion(c *Ctx, d Obj) error {
+	if d["catalog_item"] == nil {
+		id, _ := api.ID(d["id"])
+		if err := deploymentReady(c, d, deploymentActive, deploymentDeleteFailed); err != nil {
+			return err
+		}
+		return setDeploymentStatus(c, id, deploymentDeleted, "", nil)
+	}
 	item, err := systemItem(c, d)
 	if err != nil {
 		return err
 	}
-	var id int64
-	if err := c.DB().QueryRow(c, "SELECT nextval(pg_get_serial_sequence('catalog_requests', 'id'))").Scan(&id); err != nil {
+	id, created, err := nextRequest(c)
+	if err != nil {
 		return err
 	}
-	created := time.Now().UTC().Truncate(time.Microsecond)
+	p := deletionRequest(c, d, item, id, created)
+	_, approvals, err := p.submit(c, id, created)
+	if err != nil {
+		return err
+	}
+	d["_held"] = &heldRequest{item: item, request: id, approvals: approvals}
+	return nil
+}
+
+// deletionRequest is the request that runs a deployment's teardown with its
+// outputs.
+func deletionRequest(c *Ctx, d, item Obj, id int64, created time.Time) *pendingRequest {
 	outs, _ := d["outputs"].(map[string]any)
 	vars, pw := outputVars(outs)
 	teardown, _ := api.ID(item["teardown_template"])
-	p := &pendingRequest{
+	return &pendingRequest{
 		ci: &catalogItem{item: item}, kind: requestDelete, deployment: d["id"], statuses: []string{deploymentActive, deploymentDeleteFailed},
 		team: d["team"], shown: map[string]any{}, labels: map[string]any{},
 		launch: requestLaunch{Vars: vars, Passwords: pw, ActivityVars: map[string]bool{}, Template: teardown},
@@ -958,12 +1001,6 @@ func requestDeletion(c *Ctx, d Obj) error {
 			request: requestEnv(id, created, nil), kind: requestDelete},
 		what: "delete " + str(d["name"]),
 	}
-	_, approvals, err := p.submit(c, id, created)
-	if err != nil {
-		return err
-	}
-	d["_held"] = &heldRequest{item: item, request: id, approvals: approvals}
-	return nil
 }
 
 type heldRequest struct {

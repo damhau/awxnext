@@ -30,6 +30,7 @@ const (
 	itemRunOnce    = "run_once"
 	itemDeployment = "deployment"
 	maxLifetime    = 3650
+	maxExtensions  = 100
 
 	requestPending    = "pending"
 	requestRunning    = "running"
@@ -95,6 +96,12 @@ func registerCatalogItems() {
 				Help: "The day-2 actions of a deployment: each an id (its requests' kind), a name, a description and the job or workflow template it runs, which gets the deployment's outputs."},
 			{Name: "teardown_template", Type: api.TFK, Ref: "unified_job_templates", Nullable: true,
 				Help: "The job or workflow template that deleting a deployment runs, with its outputs. Empty: a deployment is deleted at once."},
+			{Name: "extension_days", Type: api.TJSON, Default: []any{},
+				Help: "For an item that creates a deployment, the extensions its owners may ask for, in days, such as [1, 3, 7]. An extension is a request of kind extend, which the item's approval rules may hold."},
+			{Name: "max_extensions", Type: api.TInt, Nullable: true, Validate: optionalBetween(0, maxExtensions),
+				Help: "How many times a deployment may be extended. Empty: as often as max_lifetime_days allows."},
+			{Name: "expiry_waits_for_freeze", Type: api.TBool, Default: false,
+				Help: "Whether a deployment that expires inside a maintenance window or change freeze that lists the item waits for the window's end before its teardown runs."},
 		},
 		CanAdd:     func(c *Ctx, data Obj) error { return requireUJTPerm(c, data["unified_job_template"], "change") },
 		CanChange:  changeCatalogItem,
@@ -109,10 +116,11 @@ func registerCatalogItems() {
 				base := api.Lookup("catalog_items").URL(o["id"])
 				rel["request"] = base + "request/"
 				rel["survey_choices"] = base + "survey_choices/"
+				rel["notification_templates_reminders"] = base + "notification_templates_reminders/"
 			}
 		},
 		AfterDelete: removeFromWindows("catalog_items"),
-		SubLists:    []*SubList{readOnlyChildSub("requests", "catalog_requests", "catalog_item_id")},
+		SubLists:    []*SubList{readOnlyChildSub("requests", "catalog_requests", "catalog_item_id"), notificationSub("catalogitem", "reminders")},
 		Actions: []*api.Action{
 			{Name: "request", Methods: []string{"GET", "POST"}, Perm: "request", Handler: handleCatalogRequest},
 			{Name: "survey_choices", Methods: []string{"GET"}, Perm: "request", Handler: handleItemChoices},
@@ -136,7 +144,7 @@ func registerCatalogItems() {
 			{Name: "organization", Type: api.TFK, Ref: "organizations", ReadOnly: true},
 			{Name: "team", Type: api.TFK, Ref: "teams", ReadOnly: true, Nullable: true, Help: "The team the request is for."},
 			{Name: "kind", Type: api.TString, ReadOnly: true,
-				Help: "What the request asks: new, the id of one of the item's actions, or delete."},
+				Help: "What the request asks: new, the id of one of the item's actions, extend or delete."},
 			{Name: "deployment", Type: api.TFK, Ref: "deployments", ReadOnly: true, Nullable: true,
 				Help: "The deployment it created, or that it acts on."},
 			{Name: "status", Type: api.TChoice, ReadOnly: true, Choices: labelled(requestAwaiting, "Awaiting approval", requestDenied, "Denied",
@@ -147,7 +155,7 @@ func registerCatalogItems() {
 			{Name: "answers", Type: api.TJSON, ReadOnly: true, Help: "What the requester answered, passwords masked, and the fixed answers they were shown."},
 			{Name: "answer_labels", Type: api.TJSON, ReadOnly: true, Help: "What the requester saw for the answers picked in labelled lists, such as a choice source's, as they were when the request was made."},
 			{Name: "reason", Type: api.TText, ReadOnly: true, Help: "Why the requester needs it."},
-			{Name: "lifetime_days", Type: api.TInt, ReadOnly: true, Nullable: true, Help: "How long to keep the deployment, in days. Empty: for good, or an item that runs once."},
+			{Name: "lifetime_days", Type: api.TInt, ReadOnly: true, Nullable: true, Help: "How long to keep the deployment, in days, or for an extension, the days it adds. Empty: for good, or an item that runs once."},
 			{Name: "job", Column: "unified_job_id", Type: api.TFK, Ref: "unified_jobs", ReadOnly: true, Nullable: true,
 				Help: "The job or workflow job that runs the request. Its details are for those who can see the job."},
 		},
@@ -269,6 +277,9 @@ func saveCatalogItem(c *Ctx, old, data Obj) error {
 	_, rulesGiven := data["approval_rules"]
 	_, actionsGiven := data["actions"]
 	if err := checkDeploymentFields(c, old, data, pick, *org); err != nil {
+		return err
+	}
+	if err := checkLifetimeFields(pick, data); err != nil {
 		return err
 	}
 	if rulesGiven || actionsGiven || old == nil || !sameValue(old["unified_job_template"], ujt) {

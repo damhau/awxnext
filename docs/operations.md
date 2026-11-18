@@ -2366,6 +2366,7 @@ To publish a template, post to `/api/v2/catalog_items/` with these fields:
 | `questions` | What the item makes of the template's survey ([The item's form](#the-items-form)). |
 | `max_lifetime_days`, `default_lifetime_days` | For a `deployment` item, the longest a requester can keep the deployment and the lifetime the form proposes, in days. Empty `max_lifetime_days`: requesters can keep it for good. |
 | `deployment_name`, `connection`, `actions`, `teardown_template` | For a `deployment` item, what its deployments are named, how to connect to them, their day-2 actions and what deleting one runs ([Deployments](#deployments)). |
+| `extension_days`, `max_extensions`, `expiry_waits_for_freeze` | For a `deployment` item, the extensions its deployments' owners can ask for, how many, and whether an expiry waits for a freeze's end ([Lifetime](#lifetime)). |
 
 The item's creator gets `CatalogItem Admin` on it. These roles give access to items:
 
@@ -2432,8 +2433,8 @@ team, the reason, the lifetime, the answers the requester gave (passwords masked
 each answer was shown with when it differs from the answer (`answer_labels`, for lists from a
 [choice source](surveys.md#choice-sources)), the fixed answers they were shown, its job, and a `status` that follows the job's: `pending`, `running`,
 `successful`, `failed` or `canceled`. Its `kind` is `new`; requests on a
-[deployment](#deployments) have the deployment's id in `deployment`, and the kind of an action or
-`delete`.
+[deployment](#deployments) have the deployment's id in `deployment`, and the kind of an action,
+`extend` or `delete`.
 
 The requester sees their requests, not the jobs that run them: a request's jobs, the workflow's
 nodes included, carry the item's hidden answers, and stay visible to those with a role on the
@@ -2489,11 +2490,12 @@ A condition is an [expr](https://expr-lang.org/docs/language-definition) express
 - `item("x")`, the item picked in list `x`, as [computed questions](surveys.md#computed-questions-value_from)
   read it.
 - `team`, the team the request is for (`id`, `name`), or `nil`.
-- `kind`, the kind of request: `new`, the id of a deployment's [action](#day-2-actions), or
-  `delete`. A rule without a condition holds every kind: to hold only new requests, use
-  `kind == "new"`.
+- `kind`, the kind of request: `new`, the id of a deployment's [action](#day-2-actions),
+  `extend` or `delete`. A rule without a condition holds every kind: to hold only new requests,
+  use `kind == "new"`.
 - `user`, the requester (`id`, `username`, `email`, `teams`), and `request` (`id`,
-  `lifetime_days`, `expires_at`).
+  `lifetime_days`, `expires_at`). For an [extension](#lifetime), `request.lifetime_days` is the
+  days it adds and `request.expires_at` the expiry it gives.
 
 awxnext compiles the conditions when the item is saved. When the template's survey changes so that
 a condition no longer compiles or fails at run time, requests answer `400` until the item's
@@ -2518,7 +2520,8 @@ When a [maintenance window or change freeze](#maintenance-windows-and-change-fre
 the item is going on, awxnext refuses its requests with `400`, the window's name and its end
 (`window.until`). If the item's `freeze_exception_team` is set, a request waits for an exception
 instead: one approval by a member of that team, with the organization's admins as the fallback,
-which times out when the window ends.
+which times out when the window ends. Freezes don't apply to a deployment's
+[extensions](#lifetime), which change nothing that they protect.
 
 #### Emails
 
@@ -2546,7 +2549,7 @@ secrets.
 | `status` | `active`, `deleting`, `delete_failed` or `deleted`. |
 | `outputs` | The outputs of its runs, by name. Secret outputs show as `$encrypted$`. |
 | `connection` | How to connect to it ([How to connect](#how-to-connect)). |
-| `expires_at` | When its lifetime ends, from the request's `lifetime_days`. Empty: it is kept for good. |
+| `expires_at`, `extensions` | When it expires, counted from the request by its `lifetime_days`, and how many times it was extended ([Lifetime](#lifetime)). Empty `expires_at`: it is kept for good. |
 | `explanation`, `left_behind`, `deleted_at` | Why its teardown failed, what the teardown left, and when it was deleted. |
 
 The outputs are those that the template [declares](workflows.md#typed-outputs) and its playbook
@@ -2630,7 +2633,47 @@ the item's `teardown_template` with the deployment's outputs, and the deployment
 When the teardown succeeds, the status is `deleted`. When it fails or is canceled, the status is
 `delete_failed`, with the job's explanation and what the teardown published as `left_behind` (with
 `set_stats`, such as a list of what's left), and the owners are mailed. To try again, delete it
-again. A deleted deployment stays listed, with `deleted_at`.
+again. A deleted deployment stays listed, with `deleted_at`. When the item was deleted, there's no
+teardown to run: deleting the deployment marks it deleted at once.
+
+#### Lifetime
+
+A requester chooses how long to keep a deployment, up to the item's `max_lifetime_days`; its
+`expires_at` counts from the request, as the request's `expires_at` does. An item's
+`extension_days` lists the extensions its owners can ask for, in days, such as `[1, 3, 7]`. Its
+caps are `max_extensions`, how many extensions a deployment gets (empty: no limit), and
+`max_lifetime_days`, which holds for the whole lifetime, extensions included.
+
+`GET deployments/N/extend/` lists each extension with the expiry it gives, why it's refused
+(`refused`), or the approvals it would wait for (`approvals`: the rule, its approvers and the
+approvals it needs), with the deployment's `extensions` and the latest it can be kept (`until`).
+To extend, an owner posts `days` and an optional `reason` to the same URL; awxnext answers
+`201` with the request, of kind `extend`. An extension goes through the item's
+[rules](#approvals): one that no rule holds applies at once, and one that a rule holds waits for
+its approvals. To have extensions longer than 3 days approved, add a rule such as:
+
+```json
+{"name": "Long extensions", "condition": "kind == \"extend\" && request.lifetime_days > 3", "approvers": "team_admins"}
+```
+
+An extension adds its days to the expiry. An extension past a cap is refused with `400`, and one
+that was approved meanwhile fails with the reason. Past the caps, the item's admins set
+`expires_at` on the deployment themselves; its owners can't.
+
+Reminders go out 24 hours and 2 hours before expiry, once per expiry: an extension or a new
+`expires_at` sends them again. The owners are mailed at their own addresses through the item's
+`notification_template`, with a link to the deployment. Each notification template in the item's
+`notification_templates_reminders` gets the reminders too: an email template at its own
+recipients, a webhook template as JSON, with `subject`, `body`, `hours_left` and the
+`deployment` (`id`, `name`, `url`, `expires_at`, `catalog_item`, `item_name`, `owner`, `team`).
+Slack notifications come with roadmap M11-02.
+
+At expiry, awxnext requests the deployment's deletion itself, with the reason `It expired.` and no
+requester. The item's rules don't apply, so the teardown runs at once, inside a maintenance window
+or change freeze too. To have it wait for the window's end, set the item's
+`expiry_waits_for_freeze`. An extension that still waits for approval is canceled; a request on
+the deployment that runs is waited for. When the item was deleted, no teardown can run: the
+expired deployment is `delete_failed`, for its admins to delete once what it provisioned is gone.
 
 ## Settings
 

@@ -296,6 +296,11 @@ func requestGates(c *Ctx, ci *catalogItem, env *ruleEnv, requester int64, at tim
 		}
 		gates = append(gates, g)
 	}
+	if env.kind == requestExtend {
+		// An extension changes nothing that a freeze protects, and refusing
+		// it would let the deployment expire inside the freeze.
+		return gates, nil
+	}
 	f, err := itemFreeze(c, ci.item["id"], org, at)
 	if err != nil || f == nil {
 		return gates, err
@@ -538,8 +543,10 @@ func mailUsers(c *Ctx, template any, job *int64, users []int64, subject, body st
 }
 
 // CatalogTick resolves the requests whose approvals were decided while no
-// hook could: a node stopped between an approval and its request.
+// hook could (a node stopped between an approval and its request), then
+// reminds and expires deployments.
 func CatalogTick(ctx context.Context, m *jobs.Manager) {
+	defer DeploymentTick(ctx, m.App)
 	c := &Ctx{Context: ctx, App: m.App, User: rbac.System(), Extra: map[string]any{}}
 	ids, err := idList(c, `SELECT q.id FROM catalog_requests q WHERE q.status = 'awaiting_approval' AND (
 			NOT EXISTS (SELECT 1 FROM catalog_request_approvals g WHERE g.request_id = q.id) OR

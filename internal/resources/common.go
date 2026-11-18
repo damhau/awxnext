@@ -210,28 +210,33 @@ func notificationSubs(ct string, approvals bool) []*SubList {
 	}
 	var out []*SubList
 	for _, ev := range events {
-		ev := ev
-		out = append(out, &SubList{
-			Name:   "notification_templates_" + ev,
-			Target: "notification_templates",
-			Filter: func(arg ArgFunc, pid int64) string {
-				return fmt.Sprintf("t.id IN (SELECT notification_template_id FROM notification_template_links WHERE content_type = %s AND object_id = %s AND event = %s)", arg(ct), arg(pid), arg(ev))
-			},
-			NoCreate: true,
-			CanAttach: func(c *Ctx, parent Obj, cid int64) error {
-				return allowed(api.HasPermID(c, "notification_templates", cid, "change"))
-			},
-			Associate: func(c *Ctx, pid, cid int64) error {
-				_, err := c.DB().Exec(c, `INSERT INTO notification_template_links (content_type, object_id, notification_template_id, event) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING`, ct, pid, cid, ev)
-				return err
-			},
-			Disassociate: func(c *Ctx, pid, cid int64) error {
-				_, err := c.DB().Exec(c, `DELETE FROM notification_template_links WHERE content_type = $1 AND object_id = $2 AND notification_template_id = $3 AND event = $4`, ct, pid, cid, ev)
-				return err
-			},
-		})
+		out = append(out, notificationSub(ct, ev))
 	}
 	return out
+}
+
+// notificationSub exposes the notification templates linked to an object
+// for one event.
+func notificationSub(ct, ev string) *SubList {
+	return &SubList{
+		Name:   "notification_templates_" + ev,
+		Target: "notification_templates",
+		Filter: func(arg ArgFunc, pid int64) string {
+			return fmt.Sprintf("t.id IN (SELECT notification_template_id FROM notification_template_links WHERE content_type = %s AND object_id = %s AND event = %s)", arg(ct), arg(pid), arg(ev))
+		},
+		NoCreate: true,
+		CanAttach: func(c *Ctx, parent Obj, cid int64) error {
+			return allowed(api.HasPermID(c, "notification_templates", cid, "change"))
+		},
+		Associate: func(c *Ctx, pid, cid int64) error {
+			_, err := c.DB().Exec(c, `INSERT INTO notification_template_links (content_type, object_id, notification_template_id, event) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING`, ct, pid, cid, ev)
+			return err
+		},
+		Disassociate: func(c *Ctx, pid, cid int64) error {
+			_, err := c.DB().Exec(c, `DELETE FROM notification_template_links WHERE content_type = $1 AND object_id = $2 AND notification_template_id = $3 AND event = $4`, ct, pid, cid, ev)
+			return err
+		},
+	}
 }
 
 // isOrgAdminOfAny reports whether the principal is admin of at least one organization.
