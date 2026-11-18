@@ -411,6 +411,7 @@ func timeValue(v any) *time.Time {
 // deletes those that have.
 func DeploymentTick(ctx context.Context, app *api.App) {
 	c := &Ctx{Context: ctx, App: app, User: rbac.System(), Extra: map[string]any{}}
+	defer sendRequestEvents(c)
 	remindDeployments(c)
 	ids, err := idList(c, "SELECT id FROM deployments WHERE status = 'active' AND expires_at <= now() ORDER BY expires_at, id LIMIT 100")
 	if err != nil {
@@ -574,6 +575,7 @@ func remind(c *Ctx, id, hours int64, expires time.Time) error {
 		text += fmt.Sprintf("No extension is left: %s can keep it longer.\n\n%s\n", who, link)
 	}
 	mailUsers(c, item["notification_template"], nil, deploymentOwners(c, d), subject, text)
+	hookExpiring(c, d, item, hours)
 	nts, err := idList(c, `SELECT notification_template_id FROM notification_template_links WHERE content_type = 'catalogitem' AND object_id = $1
 		AND event = 'reminders' ORDER BY notification_template_id`, item["id"])
 	if err != nil || len(nts) == 0 {

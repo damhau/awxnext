@@ -125,6 +125,7 @@ func registerCatalogItems() {
 				rel["request"] = base + "request/"
 				rel["survey_choices"] = base + "survey_choices/"
 				rel["notification_templates_reminders"] = base + "notification_templates_reminders/"
+				rel["notification_templates_requests"] = base + "notification_templates_requests/"
 				rel["quota_usage"] = base + "quota_usage/"
 				rel["preview"] = base + "preview/"
 			}
@@ -135,7 +136,7 @@ func registerCatalogItems() {
 			}
 		},
 		AfterDelete: removeFromWindows("catalog_items"),
-		SubLists:    []*SubList{readOnlyChildSub("requests", "catalog_requests", "catalog_item_id"), notificationSub("catalogitem", "reminders")},
+		SubLists:    []*SubList{readOnlyChildSub("requests", "catalog_requests", "catalog_item_id"), notificationSub("catalogitem", "reminders"), notificationSub("catalogitem", "requests")},
 		Actions: []*api.Action{
 			{Name: "request", Methods: []string{"GET", "POST"}, Perm: "request", Handler: handleCatalogRequest},
 			{Name: "survey_choices", Methods: []string{"GET"}, Perm: "request", Handler: handleItemChoices},

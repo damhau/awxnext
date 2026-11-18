@@ -2704,6 +2704,7 @@ Reminders go out 24 hours and 2 hours before expiry, once per expiry: an extensi
 `notification_templates_reminders` gets the reminders too: an email template at its own
 recipients, a webhook template as JSON, with `subject`, `body`, `hours_left` and the
 `deployment` (`id`, `name`, `url`, `expires_at`, `catalog_item`, `item_name`, `owner`, `team`).
+The item's [request webhooks](#requests-from-another-catalog) get them as `expiring` events.
 Slack notifications come with roadmap M11-02.
 
 At expiry, awxnext requests the deployment's deletion itself, with the reason `It expired.` and no
@@ -2793,6 +2794,120 @@ and Approve stay at the bottom of the screen. The portal reads the approvals fro
 | `can_answer`, `cannot_answer`, `own` | Whether the user can answer it, why not, and whether the request is theirs: nobody approves their own. |
 | `request` | The request: `id`, `kind`, `status`, `created`, `reason`, `lifetime_days`, `item`, `team`, `requester`, `answers` (each with its survey `question`, in the survey's order), the `action` it runs, and the `deployment` it is about, with its expiry, extensions and `until`. |
 | `quota` | For a new deployment of an item with a quota, the usage of the team or user it counts against, this request included. |
+
+### Requests from another catalog
+
+When another catalog, such as ServiceNow, is your users' front door, it requests items through the
+API as the portal does, and hears back through webhooks. awxnext has no integration of its own
+for it.
+
+The other catalog calls the API as a user of its own, with a personal token (`/api/v2/tokens/`,
+`write` scope) sent as `Authorization: Bearer <token>`. Give that user `CatalogItem Requester` on
+the items, or `Organization CatalogItem Requester`, and make it a member of the teams it requests
+for. Then:
+
+1. To request an item, post its `answers`, `team`, `reason` and `lifetime_days` to
+   `catalog_items/N/request/`, as in [Requests](#requests). Keep the request's `id`.
+1. To follow it, read `catalog_requests/N/`: its `status` is `awaiting_approval` or `denied`
+   while its [approvals](#approvals) decide, then follows its job's. Its `explanation` says why it
+   was denied, or why it couldn't start.
+1. Once a `deployment` item's request is `successful`, read the deployment, `deployments/N/`, from
+   the request's `deployment`: its `outputs` and `connection`. Secret outputs show as
+   `$encrypted$`; the owner shows one through `deployments/N/reveal/`, which records each
+   showing.
+
+The deployment belongs to the user that requested it, and to the request's team. To give it to
+someone else, post `{"user": N}` or `{"team": N}` to `deployments/N/hand_over/`.
+
+Rather than read the request again and again, link a webhook notification template to the item.
+Post `{"id": N}` to `catalog_items/N/notification_templates_requests/`, as for the
+[reminders](#deployments). Each change of a request's state then sends one of these events:
+
+| Event | When |
+|---|---|
+| `waiting` | The request waits for approval. |
+| `approved` | Its approvals are all given. A request that needs none sends no event until it runs. |
+| `denied` | An approver denied it, or nobody answered in time. |
+| `running` | Its job started. |
+| `ready` | A new deployment is ready: its request succeeded and the deployment exists, with its outputs. |
+| `done` | Any other request succeeded: an item that runs once, an extension or an action. |
+| `failed` | Its job failed, or it couldn't start. |
+| `canceled` | Its job was canceled, or an extension that waited was canceled when the deployment expired. |
+| `expiring` | The deployment expires within 24 hours, then within 2 hours, with `hours_left`. |
+| `deleted` | A deletion succeeded: the teardown ran. |
+
+The webhook gets a JSON body:
+
+| Field | What it holds |
+|---|---|
+| `event` | The event, from the table above. |
+| `time` | When the request changed state. |
+| `request` | The request: `id`, `url` (its page in the portal), `kind`, `status` at that time, `catalog_item`, `item_name`, `requester` and `team` by name, `reason`, `explanation`, `lifetime_days`, `created` and `deployment` (its id). |
+| `deployment` | Empty unless the request is about a deployment: its `id`, `name`, `url`, `status`, `expires_at`, `catalog_item`, `item_name`, `owner`, `team`, `outputs` and `connection` as it is now, secrets masked. |
+
+A request's events go out in order, each once, within a few seconds of the change: awxnext
+records each change with the change itself, and its leader sends them. An email template linked
+the same way gets the event as text, with a link to the request. A failed delivery isn't retried:
+it shows as a failed notification in `/api/v2/notifications/`, and the other catalog catches up by
+reading the request.
+
+For example, to make a PostgreSQL database a ServiceNow catalog item, with awxnext's item 4 asking
+for `name` and `size`:
+
+1. In ServiceNow, create the catalog item with the variables `name`, `size` and `lifetime_days`,
+   and a field on the requested item (`sc_req_item`) for awxnext's request, such as
+   `u_awxnext_request`.
+1. In its flow, add a REST step that posts the request to awxnext, with the token in an
+   `Authorization: Bearer` header and the item's variables in place of `${...}`, and saves the
+   `id` of the answer in `u_awxnext_request`:
+
+   ```http
+   POST https://awxnext.example.com/api/v2/catalog_items/4/request/
+   Content-Type: application/json
+
+   {"answers": {"name": "${name}", "size": "${size}"}, "lifetime_days": ${lifetime_days}, "reason": "${number}: ${short_description}"}
+   ```
+
+1. In ServiceNow, add a Scripted REST API resource, `POST /api/x_acme/awxnext/event`, that
+   updates the requested item from each event:
+
+   ```javascript
+   (function process(request, response) {
+     var event = request.body.data;
+     var ritm = new GlideRecord('sc_req_item');
+     if (!ritm.get('u_awxnext_request', String(event.request.id))) {
+       response.setStatus(404);
+       return;
+     }
+     ritm.work_notes = 'awxnext: ' + event.event + (event.request.explanation ? ': ' + event.request.explanation : '');
+     if (event.event == 'ready') {
+       ritm.work_notes += '\nHost: ' + event.deployment.outputs.host;
+       ritm.state = 3; // Closed Complete
+     } else if (event.event == 'denied' || event.event == 'failed') {
+       ritm.state = 4; // Closed Incomplete
+     }
+     ritm.update();
+     response.setStatus(204);
+   })(request, response);
+   ```
+
+1. In awxnext, create a webhook template for that resource, with the user and password of a
+   ServiceNow integration user, and link it to the item:
+
+   ```sh
+   curl -X POST https://awxnext.example.com/api/v2/notification_templates/ \
+     -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+     -d '{"name": "ServiceNow", "organization": 1, "notification_type": "webhook",
+          "notification_configuration": {"url": "https://acme.service-now.com/api/x_acme/awxnext/event",
+            "http_method": "POST", "headers": {}, "username": "awxnext", "password": "'"$SN_PASSWORD"'"}}'
+   curl -X POST https://awxnext.example.com/api/v2/catalog_items/4/notification_templates_requests/ \
+     -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"id": 12}'
+   ```
+
+   `12` is the template's `id` from the first answer.
+
+The requested item then shows each step in its work notes, and closes when the database is ready
+or the request is denied or fails.
 
 ## Settings
 
