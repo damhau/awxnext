@@ -1,11 +1,12 @@
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { Link } from 'react-router'
 import { api } from '../../api/client'
 import { useInvalidate, useList } from '../../api/hooks'
 import type { Any } from '../../api/types'
-import { useConfirm, useToast } from '../../components/overlay'
+import { Dialog, useToast } from '../../components/overlay'
 import { DataTable, Pager, type Column } from '../../components/table'
 import { Ago, Empty, PageHead, Status, useTick } from '../../components/ui'
+import { approvalProgress, approvalRequest, decisionBody, needsComment, type Decision } from '../../lib/approvals'
 import { absolute, duration, parseDate } from '../../lib/format'
 import { tr, trn } from '../../lib/i18n'
 import './automation.css'
@@ -30,39 +31,57 @@ export function Countdown({ approval }: { approval: Any }) {
   )
 }
 
-/** Approve or deny one approval, with confirmation. */
-export function useDecide() {
-  const confirm = useConfirm()
+/** Approve or deny approvals, with a comment, which a request's deny needs. */
+function DecisionDialog({ approvals, action, onClose }: { approvals: Any[]; action: Decision; onClose: (done: boolean) => void }) {
   const toast = useToast()
   const invalidate = useInvalidate()
-  return async (approvals: Any[], action: 'approve' | 'deny') => {
-    if (!approvals.length) return false
-    const one = approvals.length === 1
-    const what = one ? `“${approvals[0].name}”` : `${approvals.length} approvals`
-    const ok = await confirm({
-      title: action === 'approve' ? tr('Approve {what}?', { what }) : tr('Deny {what}?', { what }),
-      body: (
-        <p style={{ margin: 0 }}>
-          {action === 'approve'
-            ? tr('The workflow continues with the steps that follow approval.')
-            : tr('The workflow takes its failure path; without one it stops as failed.')}
-        </p>
-      ),
-      confirm: action === 'approve' ? tr('Approve') : tr('Deny'),
-      danger: action === 'deny',
-    })
-    if (!ok) return false
-    const results = await Promise.allSettled(approvals.map((a) => api.post(`workflow_approvals/${a.id}/${action}/`)))
+  const id = useId()
+  const [comment, setComment] = useState('')
+  const [busy, setBusy] = useState(false)
+  const one = approvals.length === 1
+  const what = one ? `“${approvals[0].name}”` : `${approvals.length} approvals`
+  const required = needsComment(approvals, action)
+  const requests = approvals.some((a) => approvalRequest(a))
+  const submit = async () => {
+    setBusy(true)
+    const results = await Promise.allSettled(approvals.map((a) => api.post(`workflow_approvals/${a.id}/${action}/`, decisionBody(comment))))
     const failed = results.filter((r) => r.status === 'rejected') as PromiseRejectedResult[]
-    invalidate('workflow_approvals', 'workflow_jobs', 'unified_jobs')
+    invalidate('workflow_approvals', 'workflow_jobs', 'unified_jobs', 'catalog_requests')
     if (failed.length) {
       const vars = { failed: failed.length, total: approvals.length, error: String(failed[0].reason?.message ?? failed[0].reason) }
       toast(action === 'approve' ? tr('{failed} of {total} could not be approved: {error}', vars) : tr('{failed} of {total} could not be denied: {error}', vars), 'error')
-    }
-    else if (one) toast(action === 'approve' ? tr('{name} approved', { name: approvals[0].name }) : tr('{name} denied', { name: approvals[0].name }))
+    } else if (one) toast(action === 'approve' ? tr('{name} approved', { name: approvals[0].name }) : tr('{name} denied', { name: approvals[0].name }))
     else toast(action === 'approve' ? trn(approvals.length, '{n} approval approved', '{n} approvals approved') : trn(approvals.length, '{n} approval denied', '{n} approvals denied'))
-    return true
+    onClose(true)
   }
+  let effect: string
+  if (requests) effect = action === 'approve' ? tr('The request runs once every rule that holds it is approved.') : tr('The request is denied, and its requester reads your comment.')
+  else effect = action === 'approve' ? tr('The workflow continues with the steps that follow approval.') : tr('The workflow takes its failure path; without one it stops as failed.')
+  return (
+    <Dialog
+      title={action === 'approve' ? tr('Approve {what}?', { what }) : tr('Deny {what}?', { what })}
+      onClose={() => onClose(false)}
+      footer={
+        <>
+          <button className="btn" onClick={() => onClose(false)}>
+            {tr('Cancel')}
+          </button>
+          <button className={`btn ${action === 'deny' ? 'danger solid' : 'primary'}`} disabled={busy || (required && !comment.trim())} onClick={submit}>
+            {action === 'approve' ? tr('Approve') : tr('Deny')}
+          </button>
+        </>
+      }
+    >
+      <p style={{ margin: 0 }}>{effect}</p>
+      <div className="field" style={{ marginTop: 12 }}>
+        <label htmlFor={id}>
+          {tr('Comment')} {!required && <span className="opt">{tr('· optional')}</span>}
+        </label>
+        <textarea id={id} className="textarea" rows={3} maxLength={2000} value={comment} onChange={(e) => setComment(e.target.value)} />
+        {required && <span className="help">{tr('A deny needs a comment: say why.')}</span>}
+      </div>
+    </Dialog>
+  )
 }
 
 function decision(a: Any): string {
@@ -78,18 +97,26 @@ export function ApprovalsPage() {
   const [page, setPage] = useState(1)
   const pending = useList<Any>('workflow_approvals/', { status: 'pending', order_by: 'created', page_size: 100 })
   const decided = useList<Any>('workflow_approvals/', { not__status: 'pending', order_by: '-finished', page, page_size: 20 })
-  const decide = useDecide()
+  const [asking, setAsking] = useState<{ list: Any[]; action: Decision } | null>(null)
   const rows = pending.data?.results ?? []
   const actionable = rows.filter((a) => a.can_approve_or_deny)
   const chosen = rows.filter((a) => selected.has(a.id) && a.can_approve_or_deny)
 
-  const run = async (list: Any[], action: 'approve' | 'deny') => {
-    if (await decide(list, action)) setSelected(new Set())
+  const run = (list: Any[], action: Decision) => {
+    if (list.length) setAsking({ list, action })
   }
 
   const workflowCell = (a: Any) => {
     const wf = a.summary_fields?.source_workflow_job
     const rule = a.summary_fields?.event_rule
+    const req = approvalRequest(a)
+    if (req)
+      return (
+        <span className="ellipsis">
+          {tr('Request {id} · {item}', { id: req.id, item: req.item })}
+          {req.requester && <span className="faint small"> {tr('by {user}', { user: req.requester })}</span>}
+        </span>
+      )
     if (!wf && rule)
       return (
         <Link to={`/event-rules/${rule.id}`} className="ellipsis">
@@ -109,12 +136,21 @@ export function ApprovalsPage() {
     {
       key: 'name',
       header: tr('Approval'),
-      render: (a) => (
-        <div>
-          <div className="cell-title">{a.name}</div>
-          {a.description && <div className="small muted">{a.description}</div>}
-        </div>
-      ),
+      render: (a) => {
+        const progress = approvalProgress(a)
+        return (
+          <div>
+            <div className="cell-title">{a.name}</div>
+            {a.description && <div className="small muted">{a.description}</div>}
+            {progress && (
+              <div className="small faint">
+                {tr('{approved} of {required} approvals', { approved: progress.approved, required: progress.required })}
+                {progress.fallback && <> · {tr('the organization admins stand in')}</>}
+              </div>
+            )}
+          </div>
+        )
+      },
     },
     { key: 'wf', header: tr('Workflow'), render: workflowCell },
     { key: 'asked', header: tr('Requested'), className: 'nowrap', render: (a) => <Ago at={a.created} /> },
@@ -157,6 +193,16 @@ export function ApprovalsPage() {
 
   return (
     <div className="page">
+      {asking && (
+        <DecisionDialog
+          approvals={asking.list}
+          action={asking.action}
+          onClose={(done) => {
+            setAsking(null)
+            if (done) setSelected(new Set())
+          }}
+        />
+      )}
       <PageHead title={tr('Approvals')} subtitle={tr('Workflows paused for a human decision. Approving continues the workflow; denying takes its failure path.')} bordered={false} />
       <div className="page-body">
         <div className="section-title">

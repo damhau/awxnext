@@ -160,7 +160,7 @@ func TestCatalogItems(t *testing.T) {
 			t.Errorf("%s: %d %s", name, r.Status, r.Raw)
 		}
 	}
-	if n := must(t, a.get("catalog_requests/"), 200).count(); n != 0 {
+	if n := must(t, a.get(item(id)+"requests/"), 200).count(); n != 0 {
 		t.Errorf("refused requests were recorded: %d", n)
 	}
 

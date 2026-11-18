@@ -569,9 +569,9 @@ func (g *guards) windowList(r *eventRule) ([]window, error) {
 		return list, nil
 	}
 	rows, err := g.db.Query(g.ctx, `SELECT id, name, kind, rrule, duration, inventory_groups, event_rules @> jsonb_build_array($1::bigint),
-			event_rules = '[]'::jsonb AND inventory_groups = '[]'::jsonb
+			event_rules = '[]'::jsonb AND inventory_groups = '[]'::jsonb AND catalog_items = '[]'::jsonb
 		FROM maintenance_windows WHERE enabled AND organization_id = $2 AND (event_rules @> jsonb_build_array($1::bigint)
-			OR event_rules = '[]'::jsonb OR inventory_groups <> '[]'::jsonb)
+			OR (event_rules = '[]'::jsonb AND catalog_items = '[]'::jsonb) OR inventory_groups <> '[]'::jsonb)
 		ORDER BY kind, id`, r.ID, r.Org)
 	if err != nil {
 		return nil, err

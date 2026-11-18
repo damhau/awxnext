@@ -48,12 +48,13 @@ function WindowState({ w }: { w: Win }) {
   )
 }
 
-/** What a window covers: its rules, its groups' hosts, or its organization. */
+/** What a window covers: its rules, its groups' hosts, its catalog items' requests, or its organization. */
 function coverage(w: Win): string {
   const rules = (w.event_rules ?? []).length
   const groups = (w.groups ?? []).length
-  if (!rules && !groups) return tr('Every rule of its organization')
-  return [rules && trn(rules, '{n} rule', '{n} rules'), groups && trn(groups, '{n} group', '{n} groups')].filter(Boolean).join(' · ')
+  const items = (w.catalog_items ?? []).length
+  if (!rules && !groups && !items) return tr('Every rule of its organization')
+  return [rules && trn(rules, '{n} rule', '{n} rules'), groups && trn(groups, '{n} group', '{n} groups'), items && trn(items, '{n} catalog item', '{n} catalog items')].filter(Boolean).join(' · ')
 }
 
 export function WindowList() {
@@ -109,7 +110,7 @@ export function WindowNew() {
   )
 }
 
-/** The rules and groups a window lists, by name. */
+/** The rules, groups and catalog items a window lists, by name. */
 function useRefs(path: string, ids: number[] | undefined) {
   const list = useList<Any>(ids?.length ? path : null, { id__in: ids?.join(','), page_size: 200 })
   return ids?.length ? list.data?.results.map((r): Ref => ({ id: r.id, name: r.name, summary_fields: r.summary_fields })) : []
@@ -121,6 +122,7 @@ export function WindowDetail() {
   const del = useDelete()
   const rules = useRefs('event_rules/', win.data?.event_rules)
   const groups = useRefs('groups/', win.data?.groups)
+  const items = useRefs('catalog_items/', win.data?.catalog_items)
   if (win.error) return <div className="page-body"><ErrorNote error={win.error} /></div>
   if (!win.data) return <Loading />
   const w = win.data
@@ -181,10 +183,11 @@ export function WindowDetail() {
                           ))}
                         </span>
                       ) : (
-                        <span className="faint">{(w.groups ?? []).length ? tr('The rules launching on the groups’ hosts') : tr('Every rule of the organization')}</span>
+                        <span className="faint">{(w.groups ?? []).length ? tr('The rules launching on the groups’ hosts') : (w.catalog_items ?? []).length ? tr('None') : tr('Every rule of the organization')}</span>
                       ),
                     ],
                     [tr('Groups'), groups?.length ? groups.map((g) => g.name).join(', ') : ''],
+                    [tr('Catalog items'), items?.length ? items.map((i) => i.name).join(', ') : ''],
                     [tr('Organization'), <Link to={`/organizations/${w.organization}`}>{w.summary_fields.organization?.name}</Link>],
                     [tr('Changed'), <Ago at={w.modified} />],
                   ]}
@@ -192,7 +195,7 @@ export function WindowDetail() {
               </Panel>
             }
           />
-          <Route path="edit" element={rules && groups ? <WindowForm win={w} rules={rules} groups={groups} /> : <Loading />} />
+          <Route path="edit" element={rules && groups && items ? <WindowForm win={w} rules={rules} groups={groups} items={items} /> : <Loading />} />
           <Route path="access" element={<AccessTab resource="maintenance_windows" id={id} name={w.name} />} />
         </Routes>
       </div>
@@ -211,9 +214,10 @@ interface WinValues extends Record<string, unknown> {
   enabled: boolean
   rules: Ref[]
   groups: Ref[]
+  items: Ref[]
 }
 
-function WindowForm({ win, rules, groups }: { win?: Win; rules?: Ref[]; groups?: Ref[] }) {
+function WindowForm({ win, rules, groups, items }: { win?: Win; rules?: Ref[]; groups?: Ref[]; items?: Ref[] }) {
   const nav = useNavigate()
   const { org } = useOrg()
   const invalidate = useInvalidate()
@@ -229,11 +233,15 @@ function WindowForm({ win, rules, groups }: { win?: Win; rules?: Ref[]; groups?:
     enabled: win?.enabled ?? true,
     rules: rules ?? [],
     groups: groups ?? [],
+    items: items ?? [],
   })
   usePreselectOrg(f.values.organization, (o) => f.set('organization', o), !win)
   const orgId = f.values.organization?.id
   useEffect(() => {
-    if (!win && !rules) f.set('rules', [])
+    if (!win && !rules) {
+      f.set('rules', [])
+      f.set('items', [])
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orgId])
   const [error, setError] = useState<unknown>(null)
@@ -251,6 +259,7 @@ function WindowForm({ win, rules, groups }: { win?: Win; rules?: Ref[]; groups?:
       enabled: f.values.enabled,
       event_rules: f.values.rules.map((r) => r.id),
       groups: f.values.groups.map((g) => g.id),
+      catalog_items: f.values.items.map((i) => i.id),
     }
     try {
       const saved = win ? await api.patch<Win>(`maintenance_windows/${win.id}/`, body) : await api.post<Win>('maintenance_windows/', body)
@@ -258,7 +267,7 @@ function WindowForm({ win, rules, groups }: { win?: Win; rules?: Ref[]; groups?:
       nav(`/maintenance-windows/${saved.id}`)
     } catch (e) {
       setError(e)
-      if (e instanceof ApiError) f.setErrors({ ...e.fields, rules: e.fields.event_rules ?? '', n: e.fields.duration ?? '' })
+      if (e instanceof ApiError) f.setErrors({ ...e.fields, rules: e.fields.event_rules ?? '', items: e.fields.catalog_items ?? '', n: e.fields.duration ?? '' })
     } finally {
       setBusy(false)
     }
@@ -306,7 +315,7 @@ function WindowForm({ win, rules, groups }: { win?: Win; rules?: Ref[]; groups?:
       <section className="form-section">
         <h2>{tr('Covers')}</h2>
         <p className="small muted" style={{ margin: 0 }}>
-          {tr('The rules it lists, and the launches on the hosts of the groups it lists. Listing neither, it covers every rule of its organization. Each rule says whether it holds its action back or asks for approval.')}
+          {tr('The rules it lists, the launches on the hosts of the groups it lists, and the requests of the catalog items it lists. Listing none of them, it covers every rule of its organization. Each rule says whether it holds its action back or asks for approval; an item refuses requests, or waits for its exception team.')}
         </p>
         <div className="form-grid">
           <MultiLookup label={tr('Rules')} optional resource="event_rules/" params={orgId ? { organization: orgId } : undefined} values={f.values.rules} onChange={(v) => f.set('rules', v)} error={f.errors.rules} />
@@ -319,6 +328,7 @@ function WindowForm({ win, rules, groups }: { win?: Win; rules?: Ref[]; groups?:
             error={f.errors.groups}
             meta={(r) => <span className="faint small">{r.summary_fields?.inventory?.name}</span>}
           />
+          <MultiLookup label={tr('Catalog items')} optional resource="catalog_items/" params={orgId ? { organization: orgId } : undefined} values={f.values.items} onChange={(v) => f.set('items', v)} error={f.errors.items} />
         </div>
         <Check label={tr('Enabled')} checked={f.values.enabled} onChange={(v) => f.set('enabled', v)} />
       </section>

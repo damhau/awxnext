@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"math"
 	"regexp"
 	"strings"
@@ -479,6 +480,9 @@ func ApplySurvey(c *Ctx, spec map[string]any, answers map[string]any, sc SurveyC
 			picked[v] = items
 			out[v], answered[v] = list, list
 		}
+	}
+	if sc.Picked != nil {
+		maps.Copy(sc.Picked, picked)
 	}
 	return out, passwords, errs
 }

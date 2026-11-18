@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"maps"
 	"net/http"
 	"sort"
@@ -81,6 +82,12 @@ func registerCatalogItems() {
 				Help: "For an item that creates a deployment, the longest a requester may keep it, in days. Empty: they may keep it for good."},
 			{Name: "default_lifetime_days", Type: api.TInt, Nullable: true, Validate: optionalBetween(1, maxLifetime),
 				Help: "For an item that creates a deployment, how long the form proposes to keep it, in days."},
+			{Name: "approval_rules", Type: api.TJSON, Default: []any{},
+				Help: "The rules that hold a request for approval: each a name, a condition on the request (an expression; none: every request), its approvers (team_admins: the request's team's admins; team, with team; users, with users_from, an expression giving usernames or email addresses), the approvals it needs (required) and its timeout in seconds."},
+			{Name: "freeze_exception_team", Type: api.TFK, Ref: "teams", Nullable: true,
+				Help: "The team that approves an exception for a request inside a window that lists the item. Empty: such a request is refused."},
+			{Name: "notification_template", Type: api.TFK, Ref: "notification_templates", Nullable: true,
+				Help: "An email notification template that mails the approvers when a request waits for them, and the requester when it is decided, at their own addresses."},
 		},
 		CanAdd:     func(c *Ctx, data Obj) error { return requireUJTPerm(c, data["unified_job_template"], "change") },
 		CanChange:  changeCatalogItem,
@@ -97,7 +104,8 @@ func registerCatalogItems() {
 				rel["survey_choices"] = base + "survey_choices/"
 			}
 		},
-		SubLists: []*SubList{readOnlyChildSub("requests", "catalog_requests", "catalog_item_id")},
+		AfterDelete: removeFromWindows("catalog_items"),
+		SubLists:    []*SubList{readOnlyChildSub("requests", "catalog_requests", "catalog_item_id")},
 		Actions: []*api.Action{
 			{Name: "request", Methods: []string{"GET", "POST"}, Perm: "request", Handler: handleCatalogRequest},
 			{Name: "survey_choices", Methods: []string{"GET"}, Perm: "request", Handler: handleItemChoices},
@@ -120,8 +128,12 @@ func registerCatalogItems() {
 			{Name: "item_name", Type: api.TString, ReadOnly: true, Help: "The item's name when it was requested."},
 			{Name: "organization", Type: api.TFK, Ref: "organizations", ReadOnly: true},
 			{Name: "team", Type: api.TFK, Ref: "teams", ReadOnly: true, Nullable: true, Help: "The team the request is for."},
-			{Name: "status", Type: api.TChoice, ReadOnly: true, Choices: labelled(requestPending, "Pending", requestRunning, "Running",
-				requestSuccessful, "Successful", requestFailed, "Failed", requestCanceled, "Canceled")},
+			{Name: "kind", Type: api.TChoice, ReadOnly: true, Choices: labelled(requestNew, "New")},
+			{Name: "status", Type: api.TChoice, ReadOnly: true, Choices: labelled(requestAwaiting, "Awaiting approval", requestDenied, "Denied",
+				requestPending, "Pending", requestRunning, "Running", requestSuccessful, "Successful", requestFailed, "Failed", requestCanceled, "Canceled")},
+			{Name: "explanation", Type: api.TText, ReadOnly: true, Help: "Why it was denied, or could not run once approved."},
+			{Name: "approvals", Type: api.TJSON, ReadOnly: true, Virtual: true,
+				Help: "The approvals the request waits or waited for: each gate's rule, approvers, the approvals it needs, and the answers."},
 			{Name: "answers", Type: api.TJSON, ReadOnly: true, Help: "What the requester answered, passwords masked, and the fixed answers they were shown."},
 			{Name: "answer_labels", Type: api.TJSON, ReadOnly: true, Help: "What the requester saw for the answers picked in labelled lists, such as a choice source's, as they were when the request was made."},
 			{Name: "reason", Type: api.TText, ReadOnly: true, Help: "Why the requester needs it."},
@@ -137,6 +149,12 @@ func registerCatalogItems() {
 			admin := c.User.Predicate(a, "catalogitem", "change_catalogitem", rbac.Scope{ID: "t.catalog_item_id", Org: "t.organization_id"})
 			audit := c.User.Predicate(a, "organization", "audit_organization", rbac.Scope{ID: "t.organization_id", Org: "t.organization_id"})
 			return fmt.Sprintf("t.created_by_id = %s OR %s OR %s", arg(c.User.UserID), admin, audit)
+		},
+		Summary: func(c *Ctx, objs []Obj) error {
+			for _, o := range objs {
+				o["approvals"] = requestApprovals(c, o["id"])
+			}
+			return nil
 		},
 	})
 }
@@ -212,6 +230,23 @@ func saveCatalogItem(c *Ctx, old, data Obj) error {
 			return api.FieldError("owner_team", "The owner team must be of the template's organization.")
 		}
 	}
+	if team, ok := api.ID(pick("freeze_exception_team")); ok {
+		var torg int64
+		if err := c.DB().QueryRow(c, "SELECT organization_id FROM teams WHERE id = $1", team).Scan(&torg); err != nil || torg != *org {
+			return api.FieldError("freeze_exception_team", "The team must be of the template's organization.")
+		}
+	}
+	if nt, ok := api.ID(pick("notification_template")); ok {
+		var typ string
+		var ntOrg *int64
+		if err := c.DB().QueryRow(c, "SELECT notification_type, organization_id FROM notification_templates WHERE id = $1", nt).Scan(&typ, &ntOrg); err != nil ||
+			ntOrg == nil || *ntOrg != *org {
+			return api.FieldError("notification_template", "The notification template must be of the template's organization.")
+		}
+		if typ != "email" {
+			return api.FieldError("notification_template", "Requests mail people: the notification template must be an email one.")
+		}
+	}
 	if pick("kind") != itemDeployment && (pick("max_lifetime_days") != nil || pick("default_lifetime_days") != nil) {
 		return api.FieldError("max_lifetime_days", "Only an item that creates a deployment has a lifetime.")
 	}
@@ -219,6 +254,14 @@ func saveCatalogItem(c *Ctx, old, data Obj) error {
 		if max, ok := api.ID(pick("max_lifetime_days")); ok && def > max {
 			return api.FieldError("default_lifetime_days", "The default lifetime is longer than the longest.")
 		}
+	}
+	_, rulesGiven := data["approval_rules"]
+	if rulesGiven || old == nil || !sameValue(old["unified_job_template"], ujt) {
+		rules, err := checkApprovalRules(c, pick("approval_rules"), *org, enabledSurvey(c, ujt))
+		if err != nil {
+			return err
+		}
+		data["approval_rules"] = rules
 	}
 	_, given := data["questions"]
 	if !given && old != nil && sameValue(old["unified_job_template"], ujt) {
@@ -697,7 +740,7 @@ func RequestCatalogItem(c *Ctx, ci *catalogItem, body Obj) (Obj, error) {
 	}
 	created := time.Now().UTC().Truncate(time.Microsecond)
 	sc := ci.surveyContext(c)
-	sc.Labels = map[string]any{}
+	sc.Labels, sc.Picked = map[string]any{}, map[string]any{}
 	sc.Request, sc.Team = requestEnv(id, created, lifetime), teamEnv(c, team)
 	sv, pw, errs := ApplySurvey(c, ci.view.spec, answers, sc)
 	if len(errs) > 0 {
@@ -726,33 +769,40 @@ func RequestCatalogItem(c *Ctx, ci *catalogItem, body Obj) (Obj, error) {
 			labels[k] = l
 		}
 	}
+	answered := maps.Clone(sv)
+	for _, k := range pw {
+		delete(answered, k)
+	}
+	env := &ruleEnv{answers: answered, picked: sc.Picked, team: sc.Team, user: userEnv(c, c.User.UserID), request: sc.Request, kind: requestNew}
+	gates, err := requestGates(c, ci, env, c.User.UserID, created)
+	if err != nil {
+		return nil, err
+	}
 	answersJSON, _ := json.Marshal(shown)
 	labelsJSON, _ := json.Marshal(labels)
+	status, launch := requestPending, []byte(nil)
+	if len(gates) > 0 {
+		status = requestAwaiting
+		if launch, err = json.Marshal(requestLaunch{Vars: sv, Passwords: pw, ActivityVars: keep}); err != nil {
+			return nil, err
+		}
+	}
 	var req Obj
+	var approvals []int64
 	err = c.WithTx(func(c *Ctx) error {
 		if _, err := c.DB().Exec(c, `INSERT INTO catalog_requests (id, created, modified, created_by_id, modified_by_id, catalog_item_id, item_name, organization_id, team_id,
-			answers, answer_labels, reason, lifetime_days) VALUES ($1, $2, $2, $3, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
-			id, created, nullID(c.User.UserID), ci.item["id"], ci.item["name"], ci.item["organization"], team, string(answersJSON), string(labelsJSON), reason, lifetime); err != nil {
+			answers, answer_labels, reason, lifetime_days, kind, status, launch) VALUES ($1, $2, $2, $3, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
+			id, created, nullID(c.User.UserID), ci.item["id"], ci.item["name"], ci.item["organization"], team, string(answersJSON), string(labelsJSON), reason, lifetime,
+			requestNew, status, launch); err != nil {
 			return err
 		}
-		lc := *c
-		lc.Extra = maps.Clone(c.Extra)
-		if lc.Extra == nil {
-			lc.Extra = map[string]any{}
-		}
-		lc.Extra["activity_vars"] = keep
-		ov := &LaunchOverrides{Survey: &SurveyAnswers{Vars: sv, Passwords: pw}, ExtraJob: map[string]any{"catalog_request_id": id}}
-		var jobID int64
 		var err error
-		if ci.tplRes.Name == "workflow_job_templates" {
-			jobID, _, err = LaunchWorkflowJobTemplate(&lc, ci.template, Obj{}, "manual", ov)
+		if len(gates) > 0 {
+			approvals, err = holdRequest(c, ci, id, gates, team, reason)
 		} else {
-			jobID, _, err = LaunchJobTemplate(&lc, ci.template, Obj{}, "manual", ov)
+			_, err = launchRequest(c, ci, id, sv, pw, keep)
 		}
 		if err != nil {
-			return err
-		}
-		if _, err := c.DB().Exec(c, "UPDATE catalog_requests SET unified_job_id = $2 WHERE id = $1", id, jobID); err != nil {
 			return err
 		}
 		res := api.Lookup("catalog_requests")
@@ -761,7 +811,34 @@ func RequestCatalogItem(c *Ctx, ci *catalogItem, body Obj) (Obj, error) {
 		}
 		return api.Activity(c, "create", res, req, api.ActivityFields(res, req), nil, nil, "")
 	})
-	return req, err
+	if err != nil {
+		return nil, err
+	}
+	announceApprovals(c, ci, id, approvals)
+	return req, nil
+}
+
+// launchRequest runs a request's template with its answers, as c's user.
+func launchRequest(c *Ctx, ci *catalogItem, id int64, sv map[string]any, pw []string, keep map[string]bool) (int64, error) {
+	lc := *c
+	lc.Extra = maps.Clone(c.Extra)
+	if lc.Extra == nil {
+		lc.Extra = map[string]any{}
+	}
+	lc.Extra["activity_vars"] = keep
+	ov := &LaunchOverrides{Survey: &SurveyAnswers{Vars: sv, Passwords: pw}, ExtraJob: map[string]any{"catalog_request_id": id}}
+	var jobID int64
+	var err error
+	if ci.tplRes.Name == "workflow_job_templates" {
+		jobID, _, err = LaunchWorkflowJobTemplate(&lc, ci.template, Obj{}, "manual", ov)
+	} else {
+		jobID, _, err = LaunchJobTemplate(&lc, ci.template, Obj{}, "manual", ov)
+	}
+	if err != nil {
+		return 0, err
+	}
+	_, err = c.DB().Exec(c, "UPDATE catalog_requests SET unified_job_id = $2 WHERE id = $1", id, jobID)
+	return jobID, err
 }
 
 // requestTeam is the team a request is for: the one given, which must be
@@ -866,6 +943,14 @@ func CatalogJobStarted(ctx context.Context, m *jobs.Manager, job jobs.Row) {
 }
 
 func CatalogJobFinished(ctx context.Context, m *jobs.Manager, job jobs.Row) {
+	if job.Str("type") == "workflow_approval" {
+		if job.Has("catalog_request_id") {
+			if err := resolveRequest(ctx, m.App, job.Int("catalog_request_id")); err != nil {
+				slog.Warn("resolving a catalog request", "catalog_request", job.Int("catalog_request_id"), "err", err)
+			}
+		}
+		return
+	}
 	status := requestFailed
 	switch job.Str("status") {
 	case "successful":

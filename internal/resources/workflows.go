@@ -636,13 +636,29 @@ func registerWorkflows() {
 		name: "workflow_approvals", typ: "workflow_approval", verbose: "Workflow Approval",
 		templateField: "workflow_approval_template", templateRes: "workflow_approval_templates",
 		visible: func(c *Ctx, arg ArgFunc) string {
-			// An event rule's approvals are seen by those who see the rule.
+			// An event rule's approvals are seen by those who see the rule,
+			// a catalog request's by those who see the request and its
+			// approvers.
 			return "t.id IN (SELECT n.job_id FROM workflow_job_nodes n JOIN unified_jobs t ON t.id = n.workflow_job_id WHERE " + wjVisible(c, arg) +
-				") OR t.event_rule_id IN (SELECT t.id FROM event_rules t WHERE " + api.ViewPredicate(c, api.Lookup("event_rules"), arg) + ")"
+				") OR t.event_rule_id IN (SELECT t.id FROM event_rules t WHERE " + api.ViewPredicate(c, api.Lookup("event_rules"), arg) + ")" +
+				" OR t.catalog_request_id IN (SELECT t.id FROM catalog_requests t WHERE " + api.ViewPredicate(c, api.Lookup("catalog_requests"), arg) + ")" +
+				fmt.Sprintf(" OR t.id IN (SELECT approval_id FROM catalog_request_approvals WHERE %s = ANY(approvers))", arg(c.User.UserID))
 		},
 		canManage: func(c *Ctx, job Obj) (bool, error) {
 			if rule := approvalRule(c, job); rule != 0 {
 				return rulePerm(c, rule, "change")
+			}
+			if req := approvalRequest(c, job); req != 0 {
+				var item *int64
+				c.DB().QueryRow(c, "SELECT catalog_item_id FROM catalog_requests WHERE id = $1", req).Scan(&item)
+				if item == nil {
+					return c.User.Superuser, nil
+				}
+				ok, err := api.HasPermID(c, "catalog_items", *item, "change")
+				if errors.Is(err, api.ErrNotFound) {
+					return false, nil
+				}
+				return ok, err
 			}
 			wf := approvalWorkflowTemplate(c, job)
 			if wf == 0 {
@@ -681,15 +697,26 @@ func registerWorkflows() {
 				c.DB().QueryRow(c, "SELECT name FROM unified_jobs WHERE id = $1", wf).Scan(&name)
 				o["summary_fields"].(Obj)["source_workflow_job"] = Obj{"id": wf, "name": name}
 			}
+			if req := approvalRequest(c, o); req != 0 {
+				var item *int64
+				var itemName string
+				var requester *int64
+				var username *string
+				c.DB().QueryRow(c, `SELECT q.catalog_item_id, q.item_name, q.created_by_id, u.username FROM catalog_requests q
+					LEFT JOIN users u ON u.id = q.created_by_id WHERE q.id = $1`, req).Scan(&item, &itemName, &requester, &username)
+				sf := o["summary_fields"].(Obj)
+				sf["catalog_request"] = Obj{"id": req, "catalog_item": item, "item_name": itemName, "requester": requester, "requester_username": username}
+				sf["request_approval"] = requestApprovalInfo(c, o["id"])
+			}
 		}
 		return nil
 	}
 	ap.Actions = append(ap.Actions,
 		&api.Action{Name: "approve", Methods: []string{"POST"}, Handler: func(c *Ctx, w http.ResponseWriter, r *http.Request, obj Obj) {
-			decideApproval(c, w, obj, true)
+			decideApproval(c, w, r, obj, true)
 		}},
 		&api.Action{Name: "deny", Methods: []string{"POST"}, Handler: func(c *Ctx, w http.ResponseWriter, r *http.Request, obj Obj) {
-			decideApproval(c, w, obj, false)
+			decideApproval(c, w, r, obj, false)
 		}},
 	)
 
@@ -763,6 +790,13 @@ func rulePerm(c *Ctx, rule int64, perm string) (bool, error) {
 }
 
 func canApprove(c *Ctx, job Obj) error {
+	if approvalRequest(c, job) != 0 {
+		g, err := loadRequestGate(c, job["id"])
+		if err != nil {
+			return err
+		}
+		return g.canAnswer(c)
+	}
 	if c.User.Superuser {
 		return nil
 	}
@@ -782,7 +816,11 @@ func canApprove(c *Ctx, job Obj) error {
 	return nil
 }
 
-func decideApproval(c *Ctx, w http.ResponseWriter, obj Obj, approve bool) {
+func decideApproval(c *Ctx, w http.ResponseWriter, r *http.Request, obj Obj, approve bool) {
+	if approvalRequest(c, obj) != 0 {
+		decideRequestApproval(c, w, r, obj, approve)
+		return
+	}
 	if err := canApprove(c, obj); err != nil {
 		api.WriteError(w, err)
 		return

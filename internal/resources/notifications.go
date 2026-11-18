@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"net/http"
 	"net/url"
 	"strings"
@@ -378,10 +379,15 @@ func deliver(ctx context.Context, app *api.App, id int64) {
 	var typ, subject string
 	var cfg map[string]any
 	var body json.RawMessage
-	err := app.DB.QueryRow(ctx, `SELECT n.notification_type, t.notification_configuration, n.subject, n.body FROM notifications n
-		JOIN notification_templates t ON t.id = n.notification_template_id WHERE n.id = $1`, id).Scan(&typ, &cfg, &subject, &body)
+	var addresses []string
+	err := app.DB.QueryRow(ctx, `SELECT n.notification_type, t.notification_configuration, n.subject, n.body, n.addresses FROM notifications n
+		JOIN notification_templates t ON t.id = n.notification_template_id WHERE n.id = $1`, id).Scan(&typ, &cfg, &subject, &body, &addresses)
 	if err == nil {
 		if typ == "email" {
+			if len(addresses) > 0 {
+				cfg = maps.Clone(cfg)
+				cfg["recipients"] = toAnyList(addresses)
+			}
 			var text string
 			if json.Unmarshal(body, &text) != nil {
 				text = string(body)
@@ -548,9 +554,10 @@ var approvalMessages = map[string]string{
 func notifyApproval(c *Ctx, approvalID int64, status string) {
 	var wfJob, wfjt, org int64
 	var name string
-	if err := c.App.DB.QueryRow(c, `SELECT coalesce(w.id, 0), coalesce(w.unified_job_template_id, 0), coalesce(w.organization_id, r.organization_id, 0), a.name
+	if err := c.App.DB.QueryRow(c, `SELECT coalesce(w.id, 0), coalesce(w.unified_job_template_id, 0), coalesce(w.organization_id, r.organization_id, q.organization_id, 0), a.name
 		FROM unified_jobs a LEFT JOIN workflow_job_nodes n ON n.job_id = a.id LEFT JOIN unified_jobs w ON w.id = n.workflow_job_id
-		LEFT JOIN event_rules r ON r.id = a.event_rule_id WHERE a.id = $1 AND (w.id IS NOT NULL OR r.id IS NOT NULL)`, approvalID).
+		LEFT JOIN event_rules r ON r.id = a.event_rule_id LEFT JOIN catalog_requests q ON q.id = a.catalog_request_id
+		WHERE a.id = $1 AND (w.id IS NOT NULL OR r.id IS NOT NULL OR q.id IS NOT NULL)`, approvalID).
 		Scan(&wfJob, &wfjt, &org, &name); err != nil {
 		return
 	}
@@ -568,7 +575,7 @@ func notifyApproval(c *Ctx, approvalID int64, status string) {
 	rows.Close()
 	workflowURL := JobUIURL(c.App, wfJob)
 	if wfJob == 0 {
-		workflowURL = strings.TrimRight(c.App.Cfg.BaseURL, "/") + "/approvals"
+		workflowURL = approvalsURL(c.App)
 	}
 	meta, _ := json.MarshalIndent(map[string]any{"id": approvalID, "name": name, "url": workflowURL, "status": status,
 		"friendly_name": "Workflow Approval", "workflow_job": wfJob}, "", "    ")

@@ -46,6 +46,9 @@ type SurveyContext struct {
 	// Labels, when not nil, gets the labels of the answers picked in
 	// labelled lists, by variable: a string, or a list for a multiselect.
 	Labels map[string]any
+	// Picked, when not nil, gets the items picked in lists, as item()
+	// reads them.
+	Picked map[string]any
 	// Trusted variables come from a workflow or a schedule, not from
 	// whoever launches: one given for a computed question is ignored
 	// rather than refused.

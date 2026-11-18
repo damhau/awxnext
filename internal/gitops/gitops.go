@@ -5,10 +5,10 @@
 // changes. Supported kinds: Label, Project, Inventory (with inline Ansible
 // YAML inventory content), InventorySource, JobTemplate,
 // WorkflowJobTemplate (with nodes), NotificationTemplate, Schedule, Team,
-// EventRule (its streams by name), MaintenanceWindow (its rules by name, its
-// groups by inventory and name), EventConnector (its stream and credentials
-// by name), CatalogItem (its template as {kind, name}, its owner team by
-// name).
+// EventRule (its streams by name), MaintenanceWindow (its rules and catalog
+// items by name, its groups by inventory and name), EventConnector (its
+// stream and credentials by name), CatalogItem (its template as {kind,
+// name}, its teams, its rules' included, by name).
 //
 //	kind: JobTemplate
 //	name: Deploy web
@@ -120,7 +120,7 @@ type kind struct {
 }
 
 // order is the apply order (dependencies first); pruning runs in reverse.
-var order = []string{"Label", "Team", "Project", "Inventory", "InventorySource", "NotificationTemplate", "JobTemplate", "WorkflowJobTemplate", "Schedule", "EventRule", "MaintenanceWindow", "EventConnector", "CatalogItem"}
+var order = []string{"Label", "Team", "Project", "Inventory", "InventorySource", "NotificationTemplate", "JobTemplate", "WorkflowJobTemplate", "Schedule", "EventRule", "CatalogItem", "MaintenanceWindow", "EventConnector"}
 
 var kinds = map[string]kind{
 	"Label":                {res: "labels"},
@@ -133,7 +133,7 @@ var kinds = map[string]kind{
 	"WorkflowJobTemplate":  {res: "workflow_job_templates"},
 	"Schedule":             {res: "schedules", identity: scheduleIdentity},
 	"EventRule":            {res: "event_rules", relations: map[string]bool{"check_template": true}},
-	"MaintenanceWindow":    {res: "maintenance_windows", relations: map[string]bool{"event_rules": true, "groups": true}},
+	"MaintenanceWindow":    {res: "maintenance_windows", relations: map[string]bool{"event_rules": true, "groups": true, "catalog_items": true}},
 	"EventConnector":       {res: "event_connectors"},
 	"CatalogItem":          {res: "catalog_items"},
 }
@@ -682,7 +682,25 @@ func (r *reconciler) applyDoc(d *Document) error {
 		if err != nil {
 			return err
 		}
-		data["event_rules"], data["groups"] = rules, groups
+		items, err := r.listRefs("catalog_items", d.Spec["catalog_items"])
+		if err != nil {
+			return err
+		}
+		data["event_rules"], data["groups"], data["catalog_items"] = rules, groups, items
+	}
+	if d.Kind == "CatalogItem" {
+		if rules, ok := data["approval_rules"].([]any); ok {
+			for _, x := range rules {
+				rule, _ := x.(map[string]any)
+				if name, ok := rule["team"].(string); ok {
+					id, err := r.lookup("teams", name, "")
+					if err != nil {
+						return fmt.Errorf("approval rule %v: %w", rule["name"], err)
+					}
+					rule["team"] = id
+				}
+			}
+		}
 	}
 	if d.Kind == "EventConnector" {
 		creds, err := r.listRefs("credentials", d.Spec["credentials"])

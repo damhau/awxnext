@@ -3211,7 +3211,6 @@
   "A maintenance window: the hosts are being worked on.": "Une fenêtre de maintenance : on travaille sur les hôtes.",
   "Each occurrence lasts": "Chaque occurrence dure",
   "From one minute to 90 days.": "D’une minute à 90 jours.",
-  "The rules it lists, and the launches on the hosts of the groups it lists. Listing neither, it covers every rule of its organization. Each rule says whether it holds its action back or asks for approval.": "Les règles qu’elle liste, et les lancements sur les hôtes des groupes qu’elle liste. Sans aucun des deux, elle couvre chaque règle de son organisation. Chaque règle dit si elle retient son action ou demande une approbation.",
   "Inventory groups": "Groupes d’inventaire",
   "Create window": "Créer la fenêtre",
   "Event connectors": "Connecteurs d’événements",
@@ -3873,5 +3872,18 @@
   "Computed by the server at launch": "Calculée par le serveur au lancement",
   "Computed value": "Valeur calculée",
   "An expression the server computes the answer from at launch; the question is then never asked. It can read item(\"variable\") for the item picked in an earlier list, answers, user, team and request. password(24) generates a password.": "Une expression dont le serveur calcule la réponse au lancement ; la question n’est alors jamais posée. Elle peut lire item(\"variable\") pour l’élément choisi dans une liste précédente, answers, user, team et request. password(24) génère un mot de passe.",
-  "Computed by the server at launch:": "Calculée par le serveur au lancement :"
+  "Computed by the server at launch:": "Calculée par le serveur au lancement :",
+  "Comment": "Commentaire",
+  "by {user}": "par {user}",
+  "Request {id} · {item}": "Demande {id} · {item}",
+  "{approved} of {required} approvals": "{approved} approbation(s) sur {required}",
+  "the organization admins stand in": "les admins de l’organisation suppléent",
+  "A deny needs a comment: say why.": "Un refus demande un commentaire : dites pourquoi.",
+  "The request is denied, and its requester reads your comment.": "La demande est refusée, et son demandeur lit votre commentaire.",
+  "The request runs once every rule that holds it is approved.": "La demande s’exécute une fois approuvée par chaque règle qui la retient.",
+  "The rules it lists, the launches on the hosts of the groups it lists, and the requests of the catalog items it lists. Listing none of them, it covers every rule of its organization. Each rule says whether it holds its action back or asks for approval; an item refuses requests, or waits for its exception team.": "Les règles qu’elle liste, les lancements sur les hôtes des groupes qu’elle liste et les demandes des éléments du catalogue qu’elle liste. Sans aucun d’eux, elle couvre chaque règle de son organisation. Chaque règle dit si elle retient son action ou demande une approbation ; un élément refuse les demandes, ou attend son équipe d’exception.",
+  "{n} catalog items": {
+    "one": "{n} élément du catalogue",
+    "other": "{n} éléments du catalogue"
+  }
 }

@@ -1128,12 +1128,15 @@ To create one, post to `/api/v2/maintenance_windows/`:
 | `duration` | How long each period lasts, in seconds, from one minute to 90 days. |
 | `event_rules` | The IDs of the rules the window covers. |
 | `groups` | The IDs of the inventory groups the window covers: a launch on one of their hosts, or of their children's. |
+| `catalog_items` | The IDs of the catalog items the window covers: their requests are refused, or wait for an exception ([Freezes](#freezes)). |
 | `enabled` | `false` turns the window off. |
 
 A window covers the rules that it lists, the launches on the hosts of the groups that it lists,
-or, when it lists neither, every rule of its organization. It covers only the rules of its own
-organization. Listing a rule takes the right to change it, and listing a group the right to
-change its inventory. Deleting a rule or a group takes it out of the windows that list it.
+the requests of the catalog items that it lists, or, when it lists none of them, every rule of
+its organization. It covers only the rules and items of its own organization. Listing a rule
+takes the right to change it, listing a group the right to change its inventory, and listing an
+item the right to change the item. Deleting a rule, a group or an item takes it out of the
+windows that list it.
 
 The answer's `active` says whether a period is going on, `active_until` when it ends, and
 `next_start` when the next one starts. Windows have a version history and `used_by`, and a
@@ -2434,6 +2437,91 @@ nodes included, carry the item's hidden answers, and stay visible to those with 
 template. In the requester's activity stream, the job's entry shows only what they answered or
 were shown. An item's admins and the organization's auditors see its requests in
 `/api/v2/catalog_items/N/requests/` and `/api/v2/catalog_requests/`.
+
+### Approvals
+
+Some requests should wait for someone: a large VM, anything in production. An item's
+`approval_rules` hold a request until its approvers approve it. Each rule is an object:
+
+| Key | What it sets |
+|---|---|
+| `name` | The rule's name, unique in the item. Approvers see it. |
+| `condition` | An expression that holds the request when true ([Conditions](#conditions)). Empty: every request. |
+| `approvers` | Who approves: `team_admins`, the Team Admins of the team the request is for; `team`, the members of `team`; or `users`, the users that `users_from` names. |
+| `team` | With `approvers: team`, a team of the item's organization. |
+| `users_from` | With `approvers: users`, an expression that gives usernames or email addresses, matched to awxnext's active users regardless of case: `item("group").owners` for the owners of the group that the requester picked. |
+| `required` | How many approvals the rule needs, from 1 (the default) to 20. When the group is smaller, every member must approve. |
+| `timeout` | How long the rule waits, in seconds: 7 days by default, at most 90 days, `0` for no limit. A timeout denies the request. |
+
+```json
+"approval_rules": [
+  {"name": "Large VMs", "condition": "size == \"large\"", "approvers": "team", "team": 12, "required": 2},
+  {"name": "Production", "condition": "env == \"prod\"", "approvers": "team_admins"}
+]
+```
+
+A request that no rule holds runs at once. Otherwise its `status` is `awaiting_approval`, and
+each rule whose condition holds gets its own workflow approval, as an event rule's
+[approval mode](#approval-mode) does, so the approvals page, its count in the navigation, `/api/v2/workflow_approvals/` and the organization's
+approval notifications serve it. The rules wait in parallel: when every one approves, awxnext
+runs the request as the requester, who must still be able to request the item, and the status
+follows the job's. The first deny or timeout ends the request: its `status` is `denied`, its
+`explanation` says who denied it and why, and its other approvals are canceled. A request that
+is approved but can't run, because its item was deleted or its requester lost access, is `failed`
+with the reason.
+
+The request's `approvals` lists each approval with its rule, its approvers, the approvals it
+needs, its answers and when it expires. An approval's `summary_fields` has the request
+(`catalog_request`) and the same details (`request_approval`).
+
+#### Conditions
+
+A condition is an [expr](https://expr-lang.org/docs/language-definition) expression. It reads:
+
+- each answer by its variable, as the job gets it: `size > 4`, `env == "prod"`. An unanswered
+  question reads as its type's zero value: `0`, `""` or an empty list. Password answers aren't
+  readable.
+- `answers`, the same answers by variable, with `nil` for unanswered questions.
+- `item("x")`, the item picked in list `x`, as [computed questions](surveys.md#computed-questions-value_from)
+  read it.
+- `team`, the team the request is for (`id`, `name`), or `nil`.
+- `kind`, the kind of request: `new`.
+- `user`, the requester (`id`, `username`, `email`, `teams`), and `request` (`id`,
+  `lifetime_days`, `expires_at`).
+
+awxnext compiles the conditions when the item is saved. When the template's survey changes so that
+a condition no longer compiles or fails at run time, requests answer `400` until the item's
+admins update the rule.
+
+#### Who approves
+
+Nobody approves their own request, Team Admins and superusers included: awxnext takes the requester
+out of each rule's group. When nobody is left, the organization's admins approve instead (the
+superusers, if the organization has none), and the approval's `fallback` is `true`.
+
+Each approver answers once, at `/api/v2/workflow_approvals/N/approve/` or `deny/`, with an
+optional `comment`. A deny needs a comment. An approval is decided by its first deny, or once it
+has the approvals it needs. The organization's admins can answer any waiting request of their
+organization, even when they aren't among its approvers: their answer decides the approval at
+once. Each answer is recorded in the request's activity stream, with `as_admin` for an admin's.
+`can_approve_or_deny` is `false` for the requester and for those who have answered.
+
+#### Freezes
+
+When a [maintenance window or change freeze](#maintenance-windows-and-change-freezes) that lists
+the item is going on, awxnext refuses its requests with `400`, the window's name and its end
+(`window.until`). If the item's `freeze_exception_team` is set, a request waits for an exception
+instead: one approval by a member of that team, with the organization's admins as the fallback,
+which times out when the window ends.
+
+#### Emails
+
+To mail the people concerned, set the item's `notification_template` to an email notification
+template of its organization. awxnext uses its server and sender, but not its recipients: it mails
+each rule's approvers when a request waits for them, and the requester when the request is
+approved, denied, or approved but unable to run. Approvers without an email address get no
+mail. To notify a fixed list as well, attach notification templates to the organization's
+`notification_templates_approvals`: they are sent as for any workflow approval.
 
 ## Settings
 

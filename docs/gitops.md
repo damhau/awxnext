@@ -127,6 +127,7 @@ spec:
   event_rules: [Restart on ServiceDown]   # rules, by name
   groups:                                 # inventory groups, by inventory and name
     - {inventory: Production, name: web}
+  catalog_items: [Small VM]               # catalog items, by name
 ---
 kind: EventConnector
 name: orders
@@ -150,11 +151,14 @@ spec:
   questions:                       # the item's form, a view over the survey
     env: {question_name: Stage, choices: [dev, staging]}
     size: {value: small, visible: true}
+  approval_rules:
+    - {name: Long, condition: request.lifetime_days > 7, approvers: team, team: Platform}   # a team, by name
+  freeze_exception_team: Platform
 ```
 
 Kinds are applied in dependency order (Label, Team, Project, Inventory,
 InventorySource, NotificationTemplate, JobTemplate, WorkflowJobTemplate,
-Schedule, EventRule, MaintenanceWindow, EventConnector, CatalogItem) and pruned in reverse. Credentials are referenced, never declared:
+Schedule, EventRule, CatalogItem, MaintenanceWindow, EventConnector) and pruned in reverse. Credentials are referenced, never declared:
 secrets stay out of git. Event streams are referenced too: create them in the
 API or the UI. An event rule runs as the user who last saved the source
 ([Event rules](operations.md#owner-and-rights)): a rule in `auto` mode takes that user's
