@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>My requests</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@700&amp;family=JetBrains+Mono:wght@400;500&amp;family=Schibsted+Grotesk:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#F3F1EA;color:#15171A;font-family:'Schibsted Grotesk',system-ui,sans-serif;font-size:15px;line-height:1.5}
+a{color:#15171A}a:hover{color:#3C4047}
+button,input,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid #15171A;outline-offset:2px}
+.pulse{animation:dcpulse 1.4s ease-in-out infinite}
+@keyframes dcpulse{0%,100%{opacity:1}50%{opacity:.5}}
+@media (prefers-reduced-motion: reduce){.pulse{animation:none}}
+</style>
+</helmet>
+<div style="min-height: 100vh; background: #F3F1EA; color: #15171A; font-family: 'Schibsted Grotesk', system-ui, sans-serif">
+<header style="background: #F3F1EA; border-bottom: 1px solid #E2DED3">
+<div style="max-width: 1180px; margin: 0 auto; padding: 0 clamp(16px, 4vw, 32px); min-height: 64px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 28px">
+<a href="Catalog.dc.html" style="display: flex; align-items: center; gap: 10px; text-decoration: none; color: #15171A; padding: 12px 0">
+<span aria-hidden="true" style="display: grid; grid-template-columns: repeat(2, 9px); gap: 2px">
+<span style="width: 9px; height: 9px; border-radius: 2px; background: #2D6A4F"></span>
+<span style="width: 9px; height: 9px; border-radius: 2px; background: #F2B33D"></span>
+<span style="width: 9px; height: 9px; border-radius: 2px; background: #2D6A4F"></span>
+<span style="width: 9px; height: 9px; border-radius: 2px; background: #C8F03C; box-shadow: inset 0 0 0 1.5px #15171A"></span>
+</span>
+<span style="font-family: 'Bricolage Grotesque', sans-serif; font-weight: 700; font-size: 18px; letter-spacing: -0.02em">Acme self-service</span>
+</a>
+<nav aria-label="Portal" style="display: flex; flex-wrap: wrap; gap: 4px 6px; flex: 1 1 auto">
+<a href="Catalog.dc.html" style="padding: 19px 10px 17px; border-bottom: 2px solid transparent; text-decoration: none; color: #4A4E55">Catalog</a>
+<a href="Requests.dc.html" aria-current="page" style="padding: 19px 10px 17px; border-bottom: 2px solid #15171A; text-decoration: none; color: #15171A; font-weight: 600">My requests</a>
+<a href="Deployments.dc.html" style="padding: 19px 10px 17px; border-bottom: 2px solid transparent; text-decoration: none; color: #4A4E55">My deployments</a>
+<a href="Approvals.dc.html" style="padding: 19px 10px 17px; border-bottom: 2px solid transparent; text-decoration: none; color: #4A4E55; display: flex; align-items: center; gap: 6px">Approvals <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 500; background: #F2B33D; color: #15171A; border-radius: 999px; padding: 0 7px; line-height: 18px">2</span></a>
+</nav>
+<div style="display: flex; align-items: center; gap: 16px">
+<a href="#" style="font-size: 13px; color: #4A4E55">Admin view</a>
+<button type="button" aria-label="Alex Morgan, account menu" style="width: 34px; height: 34px; border-radius: 999px; border: 1px solid #CFC9BB; background: #FFFFFF; font-size: 12px; font-weight: 600; cursor: pointer">AM</button>
+</div>
+</div>
+</header>
+
+<main style="max-width: 1180px; margin: 0 auto; padding: 32px clamp(16px, 4vw, 32px) 64px; display: flex; flex-direction: column; gap: 24px">
+<div style="display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 12px">
+<h1 style="margin: 0; font-family: 'Bricolage Grotesque', sans-serif; font-weight: 700; font-size: clamp(26px, 3.6vw, 34px); letter-spacing: -0.025em; line-height: 1.1">My requests</h1>
+<a href="Catalog.dc.html" style="font-size: 14px">New request</a>
+</div>
+
+<div style="display: flex; flex-wrap: wrap; align-items: flex-start; gap: 24px">
+
+<section aria-label="Requests" style="flex: 1 1 340px; display: flex; flex-direction: column; gap: 10px">
+<div role="group" aria-label="Show" style="display: flex; gap: 6px">
+<button type="button" aria-pressed="true" style="min-height: 36px; padding: 0 14px; border-radius: 999px; border: 1px solid #15171A; background: #15171A; color: #F3F1EA; font-size: 14px; cursor: pointer">All <span style="font-family: 'JetBrains Mono', monospace; font-size: 11.5px">6</span></button>
+<button type="button" aria-pressed="false" style="min-height: 36px; padding: 0 14px; border-radius: 999px; border: 1px solid #CFC9BB; background: #FFFFFF; font-size: 14px; cursor: pointer">Open <span style="font-family: 'JetBrains Mono', monospace; font-size: 11.5px">3</span></button>
+</div>
+<div style="background: #FFFFFF; border: 1px solid #E2DED3; border-radius: 12px; padding: 6px; display: flex; flex-direction: column; gap: 2px">
+<sc-for list="{{rows}}" as="r" hint-placeholder-count="6">
+<button type="button" aria-pressed="{{r.pressed}}" onClick="{{r.pick}}" style="display: flex; align-items: flex-start; gap: 12px; text-align: left; width: 100%; padding: 12px 14px; border-radius: 8px; border: 0; background: {{r.bg}}; box-shadow: {{r.ring}}; cursor: pointer">
+<span class="{{r.cell.cls}}" aria-hidden="true" style="flex: none; margin-top: 4px; width: 14px; height: 14px; border-radius: 2px; box-sizing: border-box; background: {{r.cell.bg}}; border: {{r.cell.border}}; box-shadow: {{r.cell.shadow}}; display: flex; align-items: center; justify-content: center"><sc-if value="{{r.cell.failed}}" hint-placeholder-val="{{ false }}"><span style="width: 5px; height: 5px; background: #FFFFFF; transform: rotate(45deg)"></span></sc-if></span>
+<span style="display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1">
+<span style="display: flex; justify-content: space-between; gap: 8px"><span style="font-weight: 600">{{r.title}}</span><span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #4A4E55; white-space: nowrap">{{r.when}}</span></span>
+<span style="font-family: 'JetBrains Mono', monospace; font-size: 13px; color: #3C4047; overflow-wrap: anywhere">{{r.what}}</span>
+<span style="font-size: 13.5px; color: #4A4E55">{{r.status}}</span>
+</span>
+</button>
+</sc-for>
+</div>
+</section>
+
+<section aria-labelledby="rq" style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 24px; background: #FFFFFF; border: 1px solid #E2DED3; border-radius: 14px; padding: clamp(18px, 3vw, 32px)">
+<div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 12px">
+<div style="display: flex; flex-direction: column; gap: 2px">
+<span style="font-family: 'JetBrains Mono', monospace; font-size: 12.5px; color: #4A4E55">{{cur.id}}</span>
+<h2 id="rq" style="margin: 0; font-family: 'Bricolage Grotesque', sans-serif; font-weight: 700; font-size: 24px; letter-spacing: -0.02em">{{cur.title}}</h2>
+<span style="font-size: 14px; color: #4A4E55"><span style="font-family: 'JetBrains Mono', monospace; font-size: 13px; color: #15171A">{{cur.what}}</span> · sent by you, {{cur.sent}}</span>
+</div>
+<span style="font-size: 13px; font-weight: 600; background: {{cur.pillBg}}; color: {{cur.pillFg}}; border-radius: 999px; padding: 4px 12px">{{cur.status}}</span>
+</div>
+
+<ol aria-label="Steps" style="margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px">
+<sc-for list="{{cur.steps}}" as="st" hint-placeholder-count="4">
+<li style="display: flex; flex-direction: column; gap: 6px; min-width: 0">
+<span class="{{st.cls}}" aria-hidden="true" style="height: 30px; border-radius: 3px; box-sizing: border-box; background: {{st.bg}}; border: {{st.border}}; box-shadow: {{st.shadow}}; display: flex; align-items: center; justify-content: center"><sc-if value="{{st.failed}}" hint-placeholder-val="{{ false }}"><span style="width: 9px; height: 9px; background: #FFFFFF; transform: rotate(45deg)"></span></sc-if></span>
+<span style="font-size: 14px; font-weight: 600">{{st.label}}</span>
+<span style="font-size: 13px; color: #4A4E55">{{st.sub}}</span>
+</li>
+</sc-for>
+</ol>
+
+<sc-if value="{{cur.isWaiting}}" hint-placeholder-val="{{ false }}">
+<div style="display: flex; flex-direction: column; gap: 10px; background: #FDF0D2; border-radius: 10px; padding: 14px 16px">
+<span style="color: #6E4A00">{{cur.waitText}}</span>
+<div style="display: flex; flex-wrap: wrap; gap: 10px">
+<button type="button" style="min-height: 40px; padding: 0 16px; border-radius: 10px; border: 1px solid #6E4A00; background: transparent; color: #6E4A00; cursor: pointer">Remind them</button>
+<button type="button" style="min-height: 40px; padding: 0 16px; border-radius: 10px; border: 1px solid transparent; background: transparent; color: #6E4A00; text-decoration: underline; cursor: pointer">Cancel the request</button>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{cur.isReady}}" hint-placeholder-val="{{ false }}">
+<div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; background: #E3EFE7; border-radius: 10px; padding: 14px 16px">
+<span style="color: #1F4D39">Ready since 12 Nov, 09:41. It took 14 minutes.</span>
+<a href="Deployments.dc.html" style="display: inline-flex; align-items: center; min-height: 40px; padding: 0 16px; border-radius: 10px; background: #FFFFFF; border: 1px solid #1F4D39; color: #1F4D39; font-weight: 600; text-decoration: none">Open orders-db-test</a>
+</div>
+</sc-if>
+
+<sc-if value="{{cur.isDenied}}" hint-placeholder-val="{{ false }}">
+<div style="display: flex; flex-direction: column; gap: 8px; background: #EBE8DF; border-radius: 10px; padding: 14px 16px">
+<span style="font-weight: 600">Denied by Lena Fischer, Network team, on 13 Nov at 09:12</span>
+<blockquote style="margin: 0; padding-left: 12px; border-left: 2px solid #CFC9BB; color: #3C4047">Service names go in the internal zone, int.acme.internal. Ask for the record there and I'll approve it.</blockquote>
+<a href="Request.dc.html" style="font-size: 14px; align-self: flex-start">Ask again, with these answers</a>
+</div>
+</sc-if>
+
+<sc-if value="{{cur.isFailed}}" hint-placeholder-val="{{ false }}">
+<div style="display: flex; flex-direction: column; gap: 8px; background: #FBE3DA; border-radius: 10px; padding: 14px 16px">
+<span style="font-weight: 600; color: #8E2A10">The VM couldn't be created</span>
+<span style="color: #8E2A10">Cluster dev-02 had no room left. Nothing was kept, and the VM went back to your team's quota. Platform team knows: ticket PLAT-2291.</span>
+<a href="Request.dc.html" style="font-size: 14px; align-self: flex-start; color: #8E2A10">Ask again, with these answers</a>
+</div>
+</sc-if>
+
+<sc-if value="{{cur.hasLog}}" hint-placeholder-val="{{ true }}">
+<div style="display: flex; flex-direction: column; gap: 10px">
+<h3 style="margin: 0; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: #4A4E55">Progress</h3>
+<ol style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px">
+<sc-for list="{{cur.log}}" as="l" hint-placeholder-count="5">
+<li style="display: flex; align-items: center; gap: 12px">
+<span style="font-family: 'JetBrains Mono', monospace; font-size: 12.5px; color: #4A4E55; width: 44px">{{l.t}}</span>
+<span class="{{l.cls}}" aria-hidden="true" style="width: 10px; height: 10px; border-radius: 2px; flex: none; background: {{l.bg}}; box-shadow: {{l.shadow}}"></span>
+<span>{{l.text}}</span>
+</li>
+</sc-for>
+</ol>
+<p style="margin: 0; font-size: 13px; color: #4A4E55">Each step is a play of Platform team's playbook. About 60% done, going by the last successful run. <a href="#">Technical details: job 8812</a>, for people who can see the job.</p>
+</div>
+</sc-if>
+
+<div style="display: flex; flex-direction: column; gap: 10px">
+<h3 style="margin: 0; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: #4A4E55">Your answers</h3>
+<dl style="margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: 6px 18px; font-size: 14px">
+<sc-for list="{{cur.answers}}" as="a" hint-placeholder-count="4">
+<dt style="color: #4A4E55">{{a.k}}</dt><dd style="margin: 0">{{a.v}}</dd>
+</sc-for>
+</dl>
+</div>
+</section>
+</div>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":1180}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { sel: '1042' };
+  }
+  renderVals() {
+    const cells = {
+      done: { bg: '#2D6A4F', border: '0', shadow: 'none', cls: '', failed: false },
+      skipped: { bg: '#D6D2C6', border: '0', shadow: 'none', cls: '', failed: false },
+      running: { bg: '#C8F03C', border: '0', shadow: 'inset 0 0 0 2px #15171A', cls: 'pulse', failed: false },
+      waiting: { bg: 'transparent', border: '1px dashed #4A4E55', shadow: 'none', cls: '', failed: false },
+      pending: { bg: '#E9E6DD', border: '0', shadow: 'none', cls: '', failed: false },
+      denied: { bg: '#BDB7A9', border: '0', shadow: 'none', cls: '', failed: false },
+      failed: { bg: '#E4572E', border: '0', shadow: 'none', cls: '', failed: true }
+    };
+    const pills = {
+      running: ['#F3FAD8', '#15171A'], waiting: ['#FDF0D2', '#6E4A00'], ready: ['#E3EFE7', '#1F4D39'],
+      denied: ['#EBE8DF', '#3C4047'], failed: ['#FBE3DA', '#8E2A10']
+    };
+    const step = (label, sub, state) => Object.assign({ label, sub }, cells[state]);
+    const reqs = [
+      { id: '1042', title: 'Linux VM for development', what: 'api-test', when: '14:02', sent: 'today at 14:02', status: 'Being created', kind: 'running', cell: 'running',
+        steps: [step('Sent', '14:02', 'done'), step('Approval', 'Not needed for Medium', 'skipped'), step('Being created', 'About 60%, 8 min left', 'running'), step('Ready', 'You get an email', 'pending')],
+        log: [['14:02', 'Request received', 'done'], ['14:02', "Web team's quota checked: 3 of 5 VMs", 'done'], ['14:03', 'Creating the VM in ge-dc2', 'done'], ['14:05', 'Joining it to the lab network', 'done'], ['14:06', 'Installing the base packages', 'running']],
+        answers: [['Name', 'api-test'], ['Operating system', 'RHEL 9'], ['Size', 'Medium: 4 vCPU, 16 GB'], ['Keep it for', '7 days, until Tuesday 24 Nov']] },
+      { id: '1039', title: 'Firewall rule', what: 'web-zone → db-zone, 5432/tcp', when: '11:04', sent: 'today at 11:04', status: 'Waiting for Network team', kind: 'waiting', cell: 'waiting',
+        waitText: 'Waiting since 11:04 for the Network team: Lena Fischer, Omar Haddad and 3 others. If nobody answers by Thursday 11:04, the request is denied.',
+        steps: [step('Sent', '11:04', 'done'), step('Approval', 'Network team', 'waiting'), step('Being changed', '', 'pending'), step('Done', '', 'pending')],
+        answers: [['From', 'web-zone'], ['To', 'db-zone'], ['Port', '5432/tcp'], ['Why', 'The orders API reads the test database']] },
+      { id: '1036', title: 'Join an AD group', what: 'grp-sql-readers', when: 'Mon', sent: 'yesterday at 16:40', status: "Waiting for the group's owner", kind: 'waiting', cell: 'waiting',
+        waitText: "Waiting since yesterday 16:40 for the group's owners, Dana Kim and Ravi Iyer: the first answer counts. If neither answers by Wednesday 16:40, the request is denied.",
+        steps: [step('Sent', 'Mon 16:40', 'done'), step('Approval', "Group's owners", 'waiting'), step('Adding you', '', 'pending'), step('Done', '', 'pending')],
+        answers: [['Group', 'grp-sql-readers'], ['For', '8 hours from the approval']] },
+      { id: '1031', title: 'PostgreSQL database', what: 'orders-db-test', when: '12 Nov', sent: 'on 12 Nov at 09:27', status: 'Ready', kind: 'ready', cell: 'done', isReady: true,
+        steps: [step('Sent', '12 Nov, 09:27', 'done'), step('Approval', 'Not needed for test', 'skipped'), step('Being created', '14 min', 'done'), step('Ready', '09:41', 'done')],
+        answers: [['Name', 'orders-db-test'], ['Version', 'PostgreSQL 16'], ['Environment', 'test'], ['Keep it for', '7 days']] },
+      { id: '1027', title: 'DNS record', what: 'api.lab.acme.internal', when: '13 Nov', sent: 'on 13 Nov at 08:30', status: 'Denied', kind: 'denied', cell: 'denied', isDenied: true,
+        steps: [step('Sent', '13 Nov, 08:30', 'done'), step('Approval', 'Denied', 'denied'), step('Being created', 'Not run', 'pending'), step('Done', '', 'pending')],
+        answers: [['Name', 'api'], ['Type', 'CNAME'], ['Points to', 'web-lb-01.lab.acme.internal']] },
+      { id: '1020', title: 'Linux VM for development', what: 'perf-01', when: '10 Nov', sent: 'on 10 Nov at 15:10', status: 'Failed', kind: 'failed', cell: 'failed', isFailed: true,
+        steps: [step('Sent', '10 Nov, 15:10', 'done'), step('Approval', 'Not needed for Medium', 'skipped'), step('Being created', 'Failed after 6 min', 'failed'), step('Ready', '', 'pending')],
+        answers: [['Name', 'perf-01'], ['Operating system', 'Ubuntu 24.04 LTS'], ['Size', 'Medium: 4 vCPU, 16 GB'], ['Keep it for', '3 days']] }
+    ];
+    const sel = this.state.sel;
+    const rows = reqs.map((r) => ({
+      title: r.title, what: r.what, when: r.when, status: r.status,
+      cell: cells[r.cell],
+      pressed: r.id === sel ? 'true' : 'false',
+      bg: r.id === sel ? '#F3F1EA' : 'transparent',
+      ring: r.id === sel ? 'inset 0 0 0 1px #CFC9BB' : 'none',
+      pick: () => this.setState({ sel: r.id })
+    }));
+    const r = reqs.find((x) => x.id === sel);
+    const cur = {
+      id: 'REQ-' + r.id, title: r.title, what: r.what, sent: r.sent, status: r.status,
+      pillBg: pills[r.kind][0], pillFg: pills[r.kind][1],
+      steps: r.steps,
+      isWaiting: r.kind === 'waiting', waitText: r.waitText || '',
+      isReady: !!r.isReady, isDenied: !!r.isDenied, isFailed: !!r.isFailed,
+      hasLog: !!r.log,
+      log: (r.log || []).map((l) => ({ t: l[0], text: l[1], bg: cells[l[2]].bg, shadow: cells[l[2]].shadow, cls: cells[l[2]].cls })),
+      answers: r.answers.map((a) => ({ k: a[0], v: a[1] }))
+    };
+    return { rows, cur };
+  }
+}
+</script>
+</body>
+</html>

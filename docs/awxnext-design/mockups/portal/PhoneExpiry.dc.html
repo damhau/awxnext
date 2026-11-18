@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Expiry reminder on a phone</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@700&amp;family=JetBrains+Mono:wght@400;500&amp;family=Schibsted+Grotesk:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#F3F1EA;color:#15171A;font-family:'Schibsted Grotesk',system-ui,sans-serif;font-size:15px;line-height:1.5}
+a{color:#15171A}a:hover{color:#3C4047}
+button{font:inherit;color:inherit}
+button:disabled{cursor:not-allowed}
+:focus-visible{outline:2px solid #15171A;outline-offset:2px}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; overflow: hidden; display: flex; flex-direction: column; background: #F3F1EA; color: #15171A; font-family: 'Schibsted Grotesk', system-ui, sans-serif">
+
+<header style="flex: none; height: 56px; padding: 0 16px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #E2DED3">
+<a href="Catalog.dc.html" style="display: flex; align-items: center; gap: 9px; text-decoration: none; color: #15171A">
+<span aria-hidden="true" style="display: grid; grid-template-columns: repeat(2, 8px); gap: 2px">
+<span style="width: 8px; height: 8px; border-radius: 2px; background: #2D6A4F"></span>
+<span style="width: 8px; height: 8px; border-radius: 2px; background: #F2B33D"></span>
+<span style="width: 8px; height: 8px; border-radius: 2px; background: #2D6A4F"></span>
+<span style="width: 8px; height: 8px; border-radius: 2px; background: #C8F03C; box-shadow: inset 0 0 0 1.5px #15171A"></span>
+</span>
+<span style="font-family: 'Bricolage Grotesque', sans-serif; font-weight: 700; font-size: 17px; letter-spacing: -0.02em">Acme self-service</span>
+</a>
+<button type="button" aria-label="Alex Morgan, account menu" style="width: 34px; height: 34px; border-radius: 999px; border: 1px solid #CFC9BB; background: #FFFFFF; font-size: 12px; font-weight: 600">AM</button>
+</header>
+
+<main style="flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 16px">
+<a href="Deployments.dc.html" style="font-size: 14px; color: #4A4E55; min-height: 32px; display: flex; align-items: center">‹ My deployments</a>
+<div style="display: flex; flex-direction: column; gap: 2px">
+<h1 style="margin: 0; font-family: 'JetBrains Mono', monospace; font-weight: 500; font-size: 22px">orders-db-test</h1>
+<span style="font-size: 14px; color: #4A4E55">PostgreSQL database</span>
+</div>
+
+<section aria-labelledby="exp" style="display: flex; flex-direction: column; gap: 12px; background: {{cardBg}}; border-radius: 16px; padding: 18px">
+<h2 id="exp" style="margin: 0; font-family: 'Bricolage Grotesque', sans-serif; font-weight: 700; font-size: 28px; letter-spacing: -0.02em; line-height: 1.1; color: {{cardFg}}">{{headline}}</h2>
+<span style="font-size: 15px; color: {{cardFg}}">{{subline}}</span>
+<div role="img" aria-label="{{cellsAria}}" style="display: flex; gap: 3px">
+<sc-for list="{{cells}}" as="c" hint-placeholder-count="8"><span style="flex: 1; height: 18px; border-radius: 3px; background: {{c.bg}}; box-shadow: {{c.shadow}}"></span></sc-for>
+</div>
+</section>
+
+<div style="display: flex; flex-direction: column; gap: 10px">
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px">
+<button type="button" onClick="{{ext1}}" disabled="{{noExtend}}" style="min-height: 54px; border-radius: 12px; border: 1px solid #15171A; background: #FFFFFF; font-size: 16px; font-weight: 600; opacity: {{extOpacity}}; cursor: pointer">+1 day</button>
+<button type="button" onClick="{{ext3}}" disabled="{{noExtend}}" style="min-height: 54px; border-radius: 12px; border: 1px solid #15171A; background: #FFFFFF; font-size: 16px; font-weight: 600; opacity: {{extOpacity}}; cursor: pointer">+3 days</button>
+</div>
+<button type="button" onClick="{{ext7}}" disabled="{{noSeven}}" style="min-height: 54px; border-radius: 12px; border: 1px dashed #6E4A00; background: #FDF0D2; color: #6E4A00; font-size: 15px; opacity: {{sevenOpacity}}; cursor: pointer">+7 days · Priya Shah approves</button>
+<p aria-live="polite" style="margin: 0; font-size: 14px; color: #3C4047">{{note}}</p>
+</div>
+
+<section aria-labelledby="conn" style="display: flex; flex-direction: column; gap: 8px; background: #FFFFFF; border: 1px solid #E2DED3; border-radius: 14px; padding: 14px 16px">
+<h2 id="conn" style="margin: 0; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: #4A4E55">Connect</h2>
+<div style="display: flex; align-items: center; gap: 10px">
+<span style="flex: 1; min-width: 0; font-family: 'JetBrains Mono', monospace; font-size: 13px; overflow-wrap: anywhere">orders-db-test.db.lab.acme.internal:5432</span>
+<button type="button" aria-label="Copy the host" style="flex: none; width: 44px; height: 44px; border-radius: 10px; border: 1px solid #CFC9BB; background: #FFFFFF; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M5 15V6a2 2 0 0 1 2-2h8"></path></svg></button>
+</div>
+</section>
+</main>
+
+<nav aria-label="Portal" style="flex: none; height: 64px; border-top: 1px solid #E2DED3; background: #FFFFFF; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr))">
+<a href="Catalog.dc.html" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; text-decoration: none; color: #4A4E55; font-size: 11.5px"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect><rect x="3" y="14" width="7" height="7" rx="1.5"></rect><rect x="14" y="14" width="7" height="7" rx="1.5"></rect></svg>Catalog</a>
+<a href="Requests.dc.html" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; text-decoration: none; color: #4A4E55; font-size: 11.5px"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13M8 12h13M8 18h13"></path><path d="M3 6h.01M3 12h.01M3 18h.01"></path></svg>Requests</a>
+<a href="Deployments.dc.html" aria-current="page" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; text-decoration: none; color: #15171A; font-weight: 600; font-size: 11.5px"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="7" rx="2"></rect><rect x="3" y="13" width="18" height="7" rx="2"></rect></svg>Deployments</a>
+<a href="PhoneApprove.dc.html" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; text-decoration: none; color: #4A4E55; font-size: 11.5px; position: relative"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"></circle><path d="M2.5 20c.6-3.4 3.2-5.5 6.5-5.5 1.6 0 3 .5 4.1 1.3"></path><path d="m15 18 2 2 4-4"></path></svg>Approvals <span style="position: absolute; top: 8px; left: calc(50% + 6px); font-family: 'JetBrains Mono', monospace; font-size: 10px; background: #F2B33D; color: #15171A; border-radius: 999px; padding: 0 5px; line-height: 15px">2</span></a>
+</nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { ext: 0, extCount: 0, asked: false };
+  }
+  renderVals() {
+    const s = this.state;
+    const days = ['Thursday 19 Nov', 'Friday 20 Nov', 'Saturday 21 Nov', 'Sunday 22 Nov', 'Monday 23 Nov', 'Tuesday 24 Nov', 'Wednesday 25 Nov'];
+    const cells = [];
+    for (let i = 0; i < 7; i++) cells.push({ bg: '#CFC9BB', shadow: 'none' });
+    cells.push({ bg: '#C8F03C', shadow: 'inset 0 0 0 2px #15171A' });
+    for (let i = 0; i < s.ext; i++) cells.push({ bg: '#2D6A4F', shadow: 'none' });
+    const extended = s.ext > 0;
+    const noExtend = s.extCount >= 2;
+    const noSeven = noExtend || s.asked;
+    let note = 'Or let it go: at 18:00 it is deleted, with its 2 snapshots.';
+    if (extended) note = 'Extended by ' + s.ext + (s.ext === 1 ? ' day' : ' days') + '. ' + (noExtend ? 'No extension left.' : 'One extension left.');
+    if (s.asked) note = 'Asked Priya Shah for 7 more days. Until she answers, it still expires ' + (extended ? days[s.ext] : 'today') + ' at 18:00.';
+    return {
+      headline: extended ? 'Expires in ' + s.ext + (s.ext === 1 ? ' day' : ' days') : 'Expires in 2 hours',
+      subline: extended ? days[s.ext] + ' at 18:00' : 'Today, Thursday 19 Nov, at 18:00',
+      cardBg: extended ? '#E3EFE7' : '#FDF0D2',
+      cardFg: extended ? '#1F4D39' : '#6E4A00',
+      cells,
+      cellsAria: '7 days gone, today' + (extended ? ', ' + s.ext + ' days added' : ', its last day'),
+      noExtend,
+      noSeven,
+      extOpacity: noExtend ? 0.45 : 1,
+      sevenOpacity: noSeven ? 0.45 : 1,
+      note,
+      ext1: () => this.setState({ ext: s.ext + 1, extCount: s.extCount + 1 }),
+      ext3: () => this.setState({ ext: s.ext + 3, extCount: s.extCount + 1 }),
+      ext7: () => this.setState({ asked: true })
+    };
+  }
+}
+</script>
+</body>
+</html>

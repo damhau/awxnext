@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>My deployments</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@700&amp;family=JetBrains+Mono:wght@400;500&amp;family=Schibsted+Grotesk:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#F3F1EA;color:#15171A;font-family:'Schibsted Grotesk',system-ui,sans-serif;font-size:15px;line-height:1.5}
+a{color:#15171A}a:hover{color:#3C4047}
+button,input,textarea{font:inherit;color:inherit}
+button:disabled{cursor:not-allowed}
+:focus-visible{outline:2px solid #15171A;outline-offset:2px}
+.pulse{animation:dcpulse 1.4s ease-in-out infinite}
+@keyframes dcpulse{0%,100%{opacity:1}50%{opacity:.5}}
+@media (prefers-reduced-motion: reduce){.pulse{animation:none}}
+.act:hover{border-color:#CFC9BB;background:#F6F4EE}
+</style>
+</helmet>
+<div style="min-height: 100vh; background: #F3F1EA; color: #15171A; font-family: 'Schibsted Grotesk', system-ui, sans-serif">
+<header style="background: #F3F1EA; border-bottom: 1px solid #E2DED3">
+<div style="max-width: 1180px; margin: 0 auto; padding: 0 clamp(16px, 4vw, 32px); min-height: 64px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 28px">
+<a href="Catalog.dc.html" style="display: flex; align-items: center; gap: 10px; text-decoration: none; color: #15171A; padding: 12px 0">
+<span aria-hidden="true" style="display: grid; grid-template-columns: repeat(2, 9px); gap: 2px">
+<span style="width: 9px; height: 9px; border-radius: 2px; background: #2D6A4F"></span>
+<span style="width: 9px; height: 9px; border-radius: 2px; background: #F2B33D"></span>
+<span style="width: 9px; height: 9px; border-radius: 2px; background: #2D6A4F"></span>
+<span style="width: 9px; height: 9px; border-radius: 2px; background: #C8F03C; box-shadow: inset 0 0 0 1.5px #15171A"></span>
+</span>
+<span style="font-family: 'Bricolage Grotesque', sans-serif; font-weight: 700; font-size: 18px; letter-spacing: -0.02em">Acme self-service</span>
+</a>
+<nav aria-label="Portal" style="display: flex; flex-wrap: wrap; gap: 4px 6px; flex: 1 1 auto">
+<a href="Catalog.dc.html" style="padding: 19px 10px 17px; border-bottom: 2px solid transparent; text-decoration: none; color: #4A4E55">Catalog</a>
+<a href="Requests.dc.html" style="padding: 19px 10px 17px; border-bottom: 2px solid transparent; text-decoration: none; color: #4A4E55">My requests</a>
+<a href="Deployments.dc.html" aria-current="page" style="padding: 19px 10px 17px; border-bottom: 2px solid #15171A; text-decoration: none; color: #15171A; font-weight: 600">My deployments</a>
+<a href="Approvals.dc.html" style="padding: 19px 10px 17px; border-bottom: 2px solid transparent; text-decoration: none; color: #4A4E55; display: flex; align-items: center; gap: 6px">Approvals <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 500; background: #F2B33D; color: #15171A; border-radius: 999px; padding: 0 7px; line-height: 18px">2</span></a>
+</nav>
+<div style="display: flex; align-items: center; gap: 16px">
+<a href="#" style="font-size: 13px; color: #4A4E55">Admin view</a>
+<button type="button" aria-label="Alex Morgan, account menu" style="width: 34px; height: 34px; border-radius: 999px; border: 1px solid #CFC9BB; background: #FFFFFF; font-size: 12px; font-weight: 600; cursor: pointer">AM</button>
+</div>
+</div>
+</header>
+
+<main style="max-width: 1180px; margin: 0 auto; padding: 32px clamp(16px, 4vw, 32px) 64px; display: flex; flex-direction: column; gap: 24px">
+<h1 style="margin: 0; font-family: 'Bricolage Grotesque', sans-serif; font-weight: 700; font-size: clamp(26px, 3.6vw, 34px); letter-spacing: -0.025em; line-height: 1.1">My deployments</h1>
+
+<div style="display: flex; flex-wrap: wrap; align-items: flex-start; gap: 24px">
+
+<section aria-label="Deployments" style="flex: 1 1 300px; background: #FFFFFF; border: 1px solid #E2DED3; border-radius: 12px; padding: 6px; display: flex; flex-direction: column; gap: 2px">
+<sc-for list="{{rows}}" as="r" hint-placeholder-count="4">
+<button type="button" aria-pressed="{{r.pressed}}" onClick="{{r.pick}}" style="display: flex; align-items: flex-start; gap: 12px; text-align: left; width: 100%; padding: 12px 14px; border-radius: 8px; border: 0; background: {{r.bg}}; box-shadow: {{r.ring}}; cursor: pointer">
+<span class="{{r.cls}}" aria-hidden="true" style="flex: none; margin-top: 4px; width: 14px; height: 14px; border-radius: 2px; box-sizing: border-box; background: {{r.cell}}; box-shadow: {{r.cellRing}}; display: flex; align-items: center; justify-content: center"><sc-if value="{{r.failed}}" hint-placeholder-val="{{ false }}"><span style="width: 5px; height: 5px; background: #FFFFFF; transform: rotate(45deg)"></span></sc-if></span>
+<span style="display: flex; flex-direction: column; gap: 1px; min-width: 0">
+<span style="font-family: 'JetBrains Mono', monospace; font-size: 14px; font-weight: 500">{{r.name}}</span>
+<span style="font-size: 13.5px; color: #4A4E55">{{r.kind}}</span>
+<span style="font-size: 13.5px; color: {{r.statusFg}}">{{r.status}}</span>
+</span>
+</button>
+</sc-for>
+</section>
+
+<div style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 18px">
+
+<sc-if value="{{isOrders}}" hint-placeholder-val="{{ true }}">
+<section aria-labelledby="env" style="display: flex; flex-direction: column; gap: 18px">
+<div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 12px">
+<div style="display: flex; gap: 14px; align-items: flex-start">
+<span aria-hidden="true" style="width: 46px; height: 46px; border-radius: 12px; background: #EBE8DF; display: flex; align-items: center; justify-content: center; flex: none"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#15171A" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5.5" rx="8" ry="2.5"></ellipse><path d="M4 5.5v13c0 1.4 3.6 2.5 8 2.5s8-1.1 8-2.5v-13"></path><path d="M4 12c0 1.4 3.6 2.5 8 2.5s8-1.1 8-2.5"></path></svg></span>
+<div style="display: flex; flex-direction: column; gap: 2px">
+<h2 id="env" style="margin: 0; font-family: 'JetBrains Mono', monospace; font-weight: 500; font-size: 24px; letter-spacing: -0.01em">orders-db-test</h2>
+<span style="font-size: 14px; color: #4A4E55">PostgreSQL database · created 12 Nov from <a href="Requests.dc.html">REQ-1031</a> · owner: you</span>
+</div>
+</div>
+<span style="font-size: 13px; font-weight: 600; background: {{pillBg}}; color: {{pillFg}}; border-radius: 999px; padding: 4px 12px">{{pillText}}</span>
+</div>
+
+<sc-if value="{{deleting}}" hint-placeholder-val="{{ false }}">
+<div role="status" style="background: #EBE8DF; border-radius: 10px; padding: 14px 16px">Being deleted, with its 2 snapshots. You get an email when it's gone.</div>
+</sc-if>
+
+<div style="display: flex; flex-direction: column; gap: 14px; background: #FFFFFF; border: 1px solid #E2DED3; border-radius: 14px; padding: 22px 24px">
+<div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 8px">
+<h3 style="margin: 0; font-size: 18px; font-weight: 600">Expires in {{left}} days: {{expiry}}, 18:00</h3>
+<span style="font-size: 13.5px; color: #4A4E55">Extended {{extCount}} of 2 times · 30 days at most, until Friday 12 Dec</span>
+</div>
+<div role="img" aria-label="{{cellsAria}}" style="display: flex; gap: 3px">
+<sc-for list="{{cells}}" as="c" hint-placeholder-count="8"><span style="flex: 1; height: 22px; border-radius: 3px; background: {{c.bg}}; box-shadow: {{c.shadow}}"></span></sc-for>
+</div>
+<div aria-hidden="true" style="display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12.5px; color: #4A4E55">
+<span style="display: flex; align-items: center; gap: 6px"><span style="width: 10px; height: 10px; border-radius: 2px; background: #CFC9BB"></span>Gone</span>
+<span style="display: flex; align-items: center; gap: 6px"><span style="width: 10px; height: 10px; border-radius: 2px; background: #C8F03C; box-shadow: inset 0 0 0 1.5px #15171A"></span>Today</span>
+<span style="display: flex; align-items: center; gap: 6px"><span style="width: 10px; height: 10px; border-radius: 2px; background: #E9E6DD"></span>Left</span>
+<span style="display: flex; align-items: center; gap: 6px"><span style="width: 10px; height: 10px; border-radius: 2px; background: #2D6A4F"></span>Added</span>
+</div>
+<div style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center">
+<button type="button" onClick="{{ext1}}" disabled="{{noExtend}}" style="min-height: 44px; padding: 0 18px; border-radius: 10px; border: 1px solid #15171A; background: #FFFFFF; opacity: {{extOpacity}}; cursor: pointer">+1 day</button>
+<button type="button" onClick="{{ext3}}" disabled="{{noExtend}}" style="min-height: 44px; padding: 0 18px; border-radius: 10px; border: 1px solid #15171A; background: #FFFFFF; opacity: {{extOpacity}}; cursor: pointer">+3 days</button>
+<button type="button" onClick="{{ext7}}" disabled="{{noSeven}}" style="min-height: 44px; padding: 0 18px; border-radius: 10px; border: 1px dashed #6E4A00; background: #FDF0D2; color: #6E4A00; opacity: {{sevenOpacity}}; cursor: pointer">+7 days · Priya Shah approves</button>
+</div>
+<p aria-live="polite" style="margin: 0; font-size: 14px; color: #3C4047">{{extNote}}</p>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 12px; background: #FFFFFF; border: 1px solid #E2DED3; border-radius: 14px; padding: 22px 24px">
+<h3 style="margin: 0; font-size: 18px; font-weight: 600">How to connect</h3>
+<dl style="margin: 0; display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 8px 20px; align-items: center">
+<dt style="color: #4A4E55; font-size: 14px">Host</dt><dd style="margin: 0; font-family: 'JetBrains Mono', monospace; font-size: 13.5px; overflow-wrap: anywhere">orders-db-test.db.lab.acme.internal</dd>
+<dt style="color: #4A4E55; font-size: 14px">Port</dt><dd style="margin: 0; font-family: 'JetBrains Mono', monospace; font-size: 13.5px">5432</dd>
+<dt style="color: #4A4E55; font-size: 14px">Database</dt><dd style="margin: 0; font-family: 'JetBrains Mono', monospace; font-size: 13.5px">orders</dd>
+<dt style="color: #4A4E55; font-size: 14px">User</dt><dd style="margin: 0; font-family: 'JetBrains Mono', monospace; font-size: 13.5px">orders_app</dd>
+<dt style="color: #4A4E55; font-size: 14px">Password</dt><dd style="margin: 0; display: flex; align-items: center; gap: 12px"><span style="font-family: 'JetBrains Mono', monospace; font-size: 13.5px">{{password}}</span><button type="button" onClick="{{toggleReveal}}" style="min-height: 32px; padding: 0 12px; border-radius: 8px; border: 1px solid #CFC9BB; background: #FFFFFF; font-size: 13px; cursor: pointer">{{revealLabel}}</button></dd>
+</dl>
+<div style="display: flex; align-items: center; gap: 10px; background: #15171A; color: #E6E3DA; border-radius: 10px; padding: 10px 10px 10px 14px">
+<code style="flex: 1; min-width: 0; font-family: 'JetBrains Mono', monospace; font-size: 13px; overflow-wrap: anywhere">postgresql://orders_app@orders-db-test.db.lab.acme.internal:5432/orders</code>
+<button type="button" aria-label="Copy the connection string" style="flex: none; width: 36px; height: 36px; border-radius: 8px; border: 1px solid #33373C; background: transparent; color: #E6E3DA; cursor: pointer; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M5 15V6a2 2 0 0 1 2-2h8"></path></svg></button>
+</div>
+<p style="margin: 0; font-size: 13px; color: #4A4E55">Showing the password is logged.</p>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 12px; background: #FFFFFF; border: 1px solid #E2DED3; border-radius: 14px; padding: 22px 24px">
+<h3 style="margin: 0; font-size: 18px; font-weight: 600">Actions</h3>
+<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px">
+<button type="button" class="act" style="text-align: left; display: flex; flex-direction: column; gap: 2px; padding: 14px 16px; border-radius: 10px; border: 1px solid #E2DED3; background: #FFFFFF; cursor: pointer; min-height: 64px"><span style="font-weight: 600">Restart</span><span style="font-size: 13px; color: #4A4E55">About 1 minute</span></button>
+<button type="button" class="act" style="text-align: left; display: flex; flex-direction: column; gap: 2px; padding: 14px 16px; border-radius: 10px; border: 1px solid #E2DED3; background: #FFFFFF; cursor: pointer; min-height: 64px"><span style="font-weight: 600">Take a snapshot</span><span style="font-size: 13px; color: #4A4E55">Kept as long as the database</span></button>
+<button type="button" class="act" style="text-align: left; display: flex; flex-direction: column; gap: 2px; padding: 14px 16px; border-radius: 10px; border: 1px solid #E2DED3; background: #FFFFFF; cursor: pointer; min-height: 64px"><span style="font-weight: 600">Restore a snapshot</span><span style="font-size: 13px; color: #4A4E55">2 snapshots, newest 14 Nov</span></button>
+<button type="button" class="act" style="text-align: left; display: flex; flex-direction: column; gap: 2px; padding: 14px 16px; border-radius: 10px; border: 1px solid #E2DED3; background: #FFFFFF; cursor: pointer; min-height: 64px"><span style="font-weight: 600">Resize</span><span style="font-size: 13px; color: #6E4A00">Above Medium, Priya Shah approves</span></button>
+<button type="button" class="act" style="text-align: left; display: flex; flex-direction: column; gap: 2px; padding: 14px 16px; border-radius: 10px; border: 1px solid #E2DED3; background: #FFFFFF; cursor: pointer; min-height: 64px"><span style="font-weight: 600">Add a read-only user</span><span style="font-size: 13px; color: #4A4E55">For a tool or a colleague</span></button>
+<button type="button" class="act" style="text-align: left; display: flex; flex-direction: column; gap: 2px; padding: 14px 16px; border-radius: 10px; border: 1px solid #E2DED3; background: #FFFFFF; cursor: pointer; min-height: 64px"><span style="font-weight: 600">Hand it over</span><span style="font-size: 13px; color: #4A4E55">To a colleague or to Orders team</span></button>
+</div>
+</div>
+
+<div style="display: flex; flex-wrap: wrap; gap: 18px">
+<div style="flex: 999 1 340px; display: flex; flex-direction: column; gap: 10px; background: #FFFFFF; border: 1px solid #E2DED3; border-radius: 14px; padding: 22px 24px">
+<h3 style="margin: 0; font-size: 18px; font-weight: 600">What happened</h3>
+<ol style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; font-size: 14px">
+<sc-for list="{{activity}}" as="a" hint-placeholder-count="4">
+<li style="display: flex; gap: 14px"><span style="font-family: 'JetBrains Mono', monospace; font-size: 12.5px; color: #4A4E55; width: 96px; flex: none">{{a.t}}</span><span>{{a.text}}</span></li>
+</sc-for>
+</ol>
+</div>
+<div style="flex: 1 1 240px; display: flex; flex-direction: column; gap: 10px; background: #FFFFFF; border: 1px solid #E2DED3; border-radius: 14px; padding: 22px 24px">
+<h3 style="margin: 0; font-size: 18px; font-weight: 600">Who can use it</h3>
+<p style="margin: 0; font-size: 14px">You own it. <strong>Orders team</strong> can see it and run its actions.</p>
+<sc-if value="{{confirmIdle}}" hint-placeholder-val="{{ true }}">
+<button type="button" onClick="{{askDelete}}" style="align-self: flex-start; margin-top: 6px; min-height: 40px; padding: 0 16px; border-radius: 10px; border: 1px solid #B23A16; background: #FFFFFF; color: #B23A16; cursor: pointer">Delete it now</button>
+</sc-if>
+<sc-if value="{{confirming}}" hint-placeholder-val="{{ false }}">
+<div style="display: flex; flex-direction: column; gap: 10px; background: #FFF7F2; border: 1px solid #F2C2AE; border-radius: 10px; padding: 12px 14px">
+<span style="font-size: 14px; color: #8E2A10">Delete orders-db-test and its 2 snapshots? You can't undo this.</span>
+<div style="display: flex; gap: 10px; flex-wrap: wrap">
+<button type="button" onClick="{{doDelete}}" style="min-height: 40px; padding: 0 16px; border-radius: 10px; border: 0; background: #B23A16; color: #FFFFFF; cursor: pointer">Delete</button>
+<button type="button" onClick="{{cancelDelete}}" style="min-height: 40px; padding: 0 16px; border-radius: 10px; border: 1px solid #CFC9BB; background: #FFFFFF; cursor: pointer">Keep it</button>
+</div>
+</div>
+</sc-if>
+</div>
+</div>
+</section>
+</sc-if>
+
+<sc-if value="{{isLab}}" hint-placeholder-val="{{ false }}">
+<section aria-labelledby="lab" style="display: flex; flex-direction: column; gap: 18px">
+<div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 12px">
+<div style="display: flex; flex-direction: column; gap: 2px">
+<h2 id="lab" style="margin: 0; font-family: 'JetBrains Mono', monospace; font-weight: 500; font-size: 24px">lab-checkout</h2>
+<span style="font-size: 14px; color: #4A4E55">Test lab · created 13 Nov · owner: you</span>
+</div>
+<span style="font-size: 13px; font-weight: 600; background: #FBE3DA; color: #8E2A10; border-radius: 999px; padding: 4px 12px">Couldn't be deleted</span>
+</div>
+<div style="display: flex; flex-direction: column; gap: 8px; background: #FBE3DA; border-radius: 12px; padding: 16px 18px; color: #8E2A10">
+<span style="font-weight: 600">It expired on Sunday 16 Nov at 18:00, but deleting it failed.</span>
+<span>The three VMs are gone. The load balancer is left: another pool still uses it. Platform team knows (ticket PLAT-2297) and finishes the job. Until then, it holds your team's only lab.</span>
+</div>
+<div style="display: flex; flex-direction: column; gap: 10px; background: #FFFFFF; border: 1px solid #E2DED3; border-radius: 14px; padding: 22px 24px">
+<h3 style="margin: 0; font-size: 18px; font-weight: 600">What's left</h3>
+<ul style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px">
+<li style="display: flex; align-items: center; gap: 12px"><span aria-hidden="true" style="width: 14px; height: 14px; border-radius: 2px; background: #E4572E; display: flex; align-items: center; justify-content: center"><span style="width: 5px; height: 5px; background: #FFFFFF; transform: rotate(45deg)"></span></span><span style="font-family: 'JetBrains Mono', monospace; font-size: 13.5px">lb-checkout-01</span><span style="font-size: 14px; color: #4A4E55">load balancer, still there</span></li>
+<li style="display: flex; align-items: center; gap: 12px"><span aria-hidden="true" style="width: 14px; height: 14px; border-radius: 2px; background: #2D6A4F"></span><span style="font-family: 'JetBrains Mono', monospace; font-size: 13.5px">lab-checkout-vm1, vm2, vm3</span><span style="font-size: 14px; color: #4A4E55">deleted</span></li>
+</ul>
+<button type="button" style="align-self: flex-start; margin-top: 6px; min-height: 40px; padding: 0 16px; border-radius: 10px; border: 1px solid #15171A; background: #FFFFFF; cursor: pointer">Try deleting it again</button>
+</div>
+</section>
+</sc-if>
+
+<sc-if value="{{isOther}}" hint-placeholder-val="{{ false }}">
+<section style="display: flex; flex-direction: column; gap: 10px; background: #FFFFFF; border: 1px solid #E2DED3; border-radius: 14px; padding: 22px 24px">
+<h2 style="margin: 0; font-family: 'JetBrains Mono', monospace; font-weight: 500; font-size: 22px">{{other.name}}</h2>
+<span style="font-size: 14px; color: #4A4E55">{{other.kind}}</span>
+<p style="margin: 0">{{other.text}}</p>
+<a href="{{other.href}}" style="font-size: 14px; align-self: flex-start">{{other.link}}</a>
+</section>
+</sc-if>
+
+</div>
+</div>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":1480}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { sel: 'orders', ext: 0, extCount: 0, last: '', asked: false, reveal: false, confirm: false, deleting: false };
+  }
+  renderVals() {
+    const s = this.state;
+    const envs = [
+      { id: 'orders', name: 'orders-db-test', kind: 'PostgreSQL database', status: s.deleting ? 'Being deleted' : 'Expires in ' + (2 + s.ext) + ' days', statusFg: '#6E4A00', cell: '#F2B33D', cellRing: 'none', cls: '' },
+      { id: 'web', name: 'dev-alex-web', kind: 'Linux VM for development', status: 'Expires in 9 days', statusFg: '#4A4E55', cell: '#2D6A4F', cellRing: 'none', cls: '' },
+      { id: 'api', name: 'dev-alex-api-test', kind: 'Linux VM for development', status: 'Being created', statusFg: '#4A4E55', cell: '#C8F03C', cellRing: 'inset 0 0 0 2px #15171A', cls: 'pulse' },
+      { id: 'lab', name: 'lab-checkout', kind: 'Test lab', status: "Couldn't be deleted", statusFg: '#B23A16', cell: '#E4572E', cellRing: 'none', cls: '', failed: true }
+    ];
+    const rows = envs.map((e) => Object.assign({}, e, {
+      failed: !!e.failed,
+      pressed: e.id === s.sel ? 'true' : 'false',
+      bg: e.id === s.sel ? '#F3F1EA' : 'transparent',
+      ring: e.id === s.sel ? 'inset 0 0 0 1px #CFC9BB' : 'none',
+      pick: () => this.setState({ sel: e.id })
+    }));
+    const days = ['Thursday 19 Nov', 'Friday 20 Nov', 'Saturday 21 Nov', 'Sunday 22 Nov', 'Monday 23 Nov', 'Tuesday 24 Nov', 'Wednesday 25 Nov'];
+    const expiry = days[Math.min(s.ext, 6)];
+    const cells = [];
+    for (let i = 0; i < 5; i++) cells.push({ bg: '#CFC9BB', shadow: 'none' });
+    cells.push({ bg: '#C8F03C', shadow: 'inset 0 0 0 2px #15171A' });
+    for (let i = 0; i < 2; i++) cells.push({ bg: '#E9E6DD', shadow: 'none' });
+    for (let i = 0; i < s.ext; i++) cells.push({ bg: '#2D6A4F', shadow: 'none' });
+    const noExtend = s.extCount >= 2 || s.deleting;
+    const noSeven = noExtend || s.asked;
+    let extNote = '+1 and +3 days apply at once. 7 days needs your team lead.';
+    if (s.last) extNote = 'Extended by ' + s.last + '. It now expires ' + expiry + ', 18:00.';
+    if (s.asked) extNote = 'Asked Priya Shah for 7 more days. Until she answers, it still expires ' + expiry + ', 18:00.';
+    if (s.extCount >= 2) extNote = 'No extension left. Platform team can extend it further.';
+    const activity = [];
+    if (s.deleting) activity.push({ t: 'Today 14:31', text: 'You asked to delete it' });
+    if (s.asked) activity.push({ t: 'Today 14:24', text: 'You asked Priya Shah for 7 more days' });
+    if (s.ext > 0) activity.push({ t: 'Today 14:20', text: 'You extended it by ' + s.ext + (s.ext === 1 ? ' day' : ' days') });
+    activity.push({ t: 'Today 08:00', text: 'Reminder sent: it expires in 2 days' });
+    activity.push({ t: '14 Nov 10:12', text: 'You took a snapshot' });
+    activity.push({ t: '12 Nov 09:41', text: 'Ready, after 14 minutes' });
+    activity.push({ t: '12 Nov 09:27', text: 'You asked for it: REQ-1031' });
+    const others = {
+      web: { name: 'dev-alex-web', kind: 'Linux VM for development', text: 'Ready. It expires on Wednesday 26 Nov at 18:00.', href: '#', link: 'Open' },
+      api: { name: 'dev-alex-api-test', kind: 'Linux VM for development', text: 'Being created: about 8 minutes left.', href: 'Requests.dc.html', link: 'Follow REQ-1042' }
+    };
+    return {
+      rows,
+      isOrders: s.sel === 'orders',
+      isLab: s.sel === 'lab',
+      isOther: s.sel === 'web' || s.sel === 'api',
+      other: others[s.sel] || others.web,
+      pillText: s.deleting ? 'Being deleted' : 'Ready',
+      pillBg: s.deleting ? '#EBE8DF' : '#E3EFE7',
+      pillFg: s.deleting ? '#3C4047' : '#1F4D39',
+      deleting: s.deleting,
+      left: 2 + s.ext,
+      expiry,
+      extCount: s.extCount,
+      cells,
+      cellsAria: '5 days gone, today, ' + (2 + s.ext) + ' days left',
+      noExtend,
+      noSeven,
+      extOpacity: noExtend ? 0.45 : 1,
+      sevenOpacity: noSeven ? 0.45 : 1,
+      extNote,
+      ext1: () => this.setState({ ext: s.ext + 1, extCount: s.extCount + 1, last: '1 day' }),
+      ext3: () => this.setState({ ext: s.ext + 3, extCount: s.extCount + 1, last: '3 days' }),
+      ext7: () => this.setState({ asked: true }),
+      password: s.reveal ? 'k3P9-wq7Z-mT2x' : '••••••••••••',
+      revealLabel: s.reveal ? 'Hide' : 'Show',
+      toggleReveal: () => this.setState({ reveal: !s.reveal }),
+      activity,
+      confirmIdle: !s.confirm && !s.deleting,
+      confirming: s.confirm && !s.deleting,
+      askDelete: () => this.setState({ confirm: true }),
+      cancelDelete: () => this.setState({ confirm: false }),
+      doDelete: () => this.setState({ deleting: true, confirm: false })
+    };
+  }
+}
+</script>
+</body>
+</html>

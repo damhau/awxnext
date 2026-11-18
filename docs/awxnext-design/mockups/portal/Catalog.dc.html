@@ -1,0 +1,320 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Portal catalog</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@700&amp;family=JetBrains+Mono:wght@400;500&amp;family=Schibsted+Grotesk:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#F3F1EA;color:#15171A;font-family:'Schibsted Grotesk',system-ui,sans-serif;font-size:15px;line-height:1.5}
+a{color:#15171A}a:hover{color:#3C4047}
+button,input,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid #15171A;outline-offset:2px}
+.pulse{animation:dcpulse 1.4s ease-in-out infinite}
+@keyframes dcpulse{0%,100%{opacity:1}50%{opacity:.5}}
+@media (prefers-reduced-motion: reduce){.pulse{animation:none}}
+.card:hover{border-color:#CFC9BB}
+</style>
+</helmet>
+<div style="min-height: 100vh; background: #F3F1EA; color: #15171A; font-family: 'Schibsted Grotesk', system-ui, sans-serif">
+<header style="background: #F3F1EA; border-bottom: 1px solid #E2DED3">
+<div style="max-width: 1180px; margin: 0 auto; padding: 0 clamp(16px, 4vw, 32px); min-height: 64px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 28px">
+<a href="Catalog.dc.html" style="display: flex; align-items: center; gap: 10px; text-decoration: none; color: #15171A; padding: 12px 0">
+<span aria-hidden="true" style="display: grid; grid-template-columns: repeat(2, 9px); gap: 2px">
+<span style="width: 9px; height: 9px; border-radius: 2px; background: #2D6A4F"></span>
+<span style="width: 9px; height: 9px; border-radius: 2px; background: #F2B33D"></span>
+<span style="width: 9px; height: 9px; border-radius: 2px; background: #2D6A4F"></span>
+<span style="width: 9px; height: 9px; border-radius: 2px; background: #C8F03C; box-shadow: inset 0 0 0 1.5px #15171A"></span>
+</span>
+<span style="font-family: 'Bricolage Grotesque', sans-serif; font-weight: 700; font-size: 18px; letter-spacing: -0.02em">Acme self-service</span>
+</a>
+<nav aria-label="Portal" style="display: flex; flex-wrap: wrap; gap: 4px 6px; flex: 1 1 auto">
+<a href="Catalog.dc.html" aria-current="page" style="padding: 19px 10px 17px; border-bottom: 2px solid #15171A; text-decoration: none; color: #15171A; font-weight: 600">Catalog</a>
+<a href="Requests.dc.html" style="padding: 19px 10px 17px; border-bottom: 2px solid transparent; text-decoration: none; color: #4A4E55">My requests</a>
+<a href="Deployments.dc.html" style="padding: 19px 10px 17px; border-bottom: 2px solid transparent; text-decoration: none; color: #4A4E55">My deployments</a>
+<a href="Approvals.dc.html" style="padding: 19px 10px 17px; border-bottom: 2px solid transparent; text-decoration: none; color: #4A4E55; display: flex; align-items: center; gap: 6px">Approvals <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 500; background: #F2B33D; color: #15171A; border-radius: 999px; padding: 0 7px; line-height: 18px">2</span></a>
+</nav>
+<div style="display: flex; align-items: center; gap: 16px">
+<a href="#" style="font-size: 13px; color: #4A4E55">Admin view</a>
+<button type="button" aria-label="Alex Morgan, account menu" style="width: 34px; height: 34px; border-radius: 999px; border: 1px solid #CFC9BB; background: #FFFFFF; font-size: 12px; font-weight: 600; cursor: pointer">AM</button>
+</div>
+</div>
+</header>
+
+<main style="max-width: 1180px; margin: 0 auto; padding: 40px clamp(16px, 4vw, 32px) 64px; display: flex; flex-direction: column; gap: 40px">
+
+<section style="display: flex; flex-direction: column; gap: 18px">
+<div style="display: flex; flex-direction: column; gap: 6px">
+<h1 style="margin: 0; font-family: 'Bricolage Grotesque', sans-serif; font-weight: 700; font-size: clamp(28px, 4vw, 38px); letter-spacing: -0.025em; line-height: 1.1">What do you need, Alex?</h1>
+<p style="margin: 0; color: #4A4E55; font-size: 16px; max-width: 640px">Ask for a server, a database or access. You follow each request here, and what you get stays under My deployments until it expires.</p>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px; max-width: 640px">
+<label for="q" style="font-size: 13px; font-weight: 600; color: #3C4047">Search the catalog</label>
+<div style="display: flex; align-items: center; gap: 10px; background: #FFFFFF; border: 1px solid #CFC9BB; border-radius: 12px; padding: 0 14px; min-height: 50px">
+<svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4A4E55" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg>
+<input id="q" type="search" placeholder="VM, database, firewall rule…" style="flex: 1; border: 0; outline: none; background: transparent; font-size: 16px; min-height: 48px">
+</div>
+</div>
+</section>
+
+<section aria-labelledby="attn" style="display: flex; flex-direction: column; gap: 14px">
+<h2 id="attn" style="margin: 0; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: #4A4E55">Needs you</h2>
+<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px">
+<a href="Deployments.dc.html" class="card" style="display: flex; flex-direction: column; gap: 10px; padding: 18px 20px; background: #FFFFFF; border: 1px solid #E2DED3; border-radius: 12px; text-decoration: none; color: #15171A">
+<div style="display: flex; justify-content: space-between; align-items: baseline; gap: 10px"><span style="font-family: 'JetBrains Mono', monospace; font-size: 14px; font-weight: 500">orders-db-test</span><span style="font-size: 12.5px; background: #FDF0D2; color: #6E4A00; border-radius: 999px; padding: 2px 9px">Expires in 2 days</span></div>
+<div role="img" aria-label="Lifetime: 5 days gone, today, 2 days left" style="display: flex; gap: 3px">
+<span style="flex: 1; height: 14px; border-radius: 2px; background: #CFC9BB"></span><span style="flex: 1; height: 14px; border-radius: 2px; background: #CFC9BB"></span><span style="flex: 1; height: 14px; border-radius: 2px; background: #CFC9BB"></span><span style="flex: 1; height: 14px; border-radius: 2px; background: #CFC9BB"></span><span style="flex: 1; height: 14px; border-radius: 2px; background: #CFC9BB"></span><span style="flex: 1; height: 14px; border-radius: 2px; background: #C8F03C; box-shadow: inset 0 0 0 2px #15171A"></span><span style="flex: 1; height: 14px; border-radius: 2px; background: #E9E6DD"></span><span style="flex: 1; height: 14px; border-radius: 2px; background: #E9E6DD"></span>
+</div>
+<span style="font-size: 14px; color: #4A4E55">PostgreSQL database. Extend it, or let it go on Thursday at 18:00.</span>
+</a>
+<a href="Requests.dc.html" class="card" style="display: flex; flex-direction: column; gap: 10px; padding: 18px 20px; background: #FFFFFF; border: 1px solid #E2DED3; border-radius: 12px; text-decoration: none; color: #15171A">
+<div style="display: flex; justify-content: space-between; align-items: baseline; gap: 10px"><span style="font-weight: 600">Firewall rule</span><span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #4A4E55">REQ-1039</span></div>
+<div style="display: flex; align-items: center; gap: 8px"><span aria-hidden="true" style="width: 14px; height: 14px; border-radius: 2px; border: 1px dashed #4A4E55; box-sizing: border-box"></span><span style="font-size: 14px">Waiting for the Network team since 11:04</span></div>
+<span style="font-size: 14px; color: #4A4E55">web-zone to db-zone, port 5432. They usually answer within a day.</span>
+</a>
+<a href="Approvals.dc.html" class="card" style="display: flex; flex-direction: column; gap: 10px; padding: 18px 20px; background: #FFFFFF; border: 1px solid #E2DED3; border-radius: 12px; text-decoration: none; color: #15171A">
+<div style="display: flex; justify-content: space-between; align-items: baseline; gap: 10px"><span style="font-weight: 600">2 requests wait for you</span><span style="font-size: 12.5px; background: #FDF0D2; color: #6E4A00; border-radius: 999px; padding: 2px 9px">Web team lead</span></div>
+<div style="display: flex; align-items: center; gap: 8px"><span aria-hidden="true" style="width: 14px; height: 14px; border-radius: 2px; border: 1px dashed #4A4E55; box-sizing: border-box"></span><span aria-hidden="true" style="width: 14px; height: 14px; border-radius: 2px; border: 1px dashed #4A4E55; box-sizing: border-box"></span><span style="font-size: 14px">A Large Linux VM, an extension</span></div>
+<span style="font-size: 14px; color: #4A4E55">The oldest one is denied on its own in 1 day 23 h.</span>
+</a>
+</div>
+</section>
+
+<section aria-labelledby="cat" style="display: flex; flex-direction: column; gap: 16px">
+<div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px">
+<h2 id="cat" style="margin: 0; font-family: 'Bricolage Grotesque', sans-serif; font-weight: 700; font-size: 24px; letter-spacing: -0.02em">Catalog</h2>
+<div role="group" aria-label="Category" style="display: flex; flex-wrap: wrap; gap: 6px">
+<sc-for list="{{chips}}" as="c" hint-placeholder-count="5">
+<button type="button" aria-pressed="{{c.pressed}}" onClick="{{c.pick}}" style="display: flex; align-items: center; gap: 7px; min-height: 36px; padding: 0 14px; border-radius: 999px; border: 1px solid {{c.bd}}; background: {{c.bg}}; color: {{c.fg}}; font-size: 14px; cursor: pointer">{{c.label}} <span style="font-family: 'JetBrains Mono', monospace; font-size: 11.5px; opacity: 0.8">{{c.n}}</span></button>
+</sc-for>
+</div>
+</div>
+
+<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 14px">
+
+<sc-if value="{{show.compute}}" hint-placeholder-val="{{ true }}">
+<a href="Request.dc.html" class="card" style="display: flex; flex-direction: column; gap: 12px; padding: 20px; background: #FFFFFF; border: 1px solid #E2DED3; border-radius: 12px; text-decoration: none; color: #15171A">
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 12px">
+<span aria-hidden="true" style="width: 40px; height: 40px; border-radius: 10px; background: #EBE8DF; display: flex; align-items: center; justify-content: center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#15171A" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="7" rx="2"></rect><rect x="3" y="13" width="18" height="7" rx="2"></rect><path d="M7 7.5h.01M7 16.5h.01"></path></svg></span>
+<span style="font-size: 12px; color: #4A4E55; text-transform: uppercase; letter-spacing: 0.06em">Compute</span>
+</div>
+<div style="display: flex; flex-direction: column; gap: 4px"><span style="font-size: 17px; font-weight: 600">Linux VM for development</span><span style="font-size: 14px; color: #4A4E55">RHEL 9 or Ubuntu 24.04, for a day or up to 30.</span></div>
+<div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: auto">
+<span style="font-size: 12.5px; background: #F3F1EA; border: 1px solid #E2DED3; color: #3C4047; border-radius: 999px; padding: 2px 9px">About 12 min</span>
+<span style="font-size: 12.5px; background: #FDF0D2; color: #6E4A00; border-radius: 999px; padding: 2px 9px">Approval for Large only</span>
+<span style="font-size: 12.5px; background: #F3F1EA; border: 1px solid #E2DED3; color: #3C4047; border-radius: 999px; padding: 2px 9px">Expires: you choose</span>
+</div>
+<div style="display: flex; align-items: center; gap: 10px; padding-top: 12px; border-top: 1px solid #EDEAE2; font-size: 13px; color: #4A4E55">
+<span role="img" aria-label="Web team VMs: 2 of 5 used" style="display: flex; gap: 2px"><span style="width: 10px; height: 10px; border-radius: 2px; background: #15171A"></span><span style="width: 10px; height: 10px; border-radius: 2px; background: #15171A"></span><span style="width: 10px; height: 10px; border-radius: 2px; background: #E9E6DD"></span><span style="width: 10px; height: 10px; border-radius: 2px; background: #E9E6DD"></span><span style="width: 10px; height: 10px; border-radius: 2px; background: #E9E6DD"></span></span>
+<span>3 of 5 VMs left for Web team</span>
+</div>
+</a>
+</sc-if>
+
+<sc-if value="{{show.compute}}" hint-placeholder-val="{{ true }}">
+<a href="Request.dc.html" class="card" style="display: flex; flex-direction: column; gap: 12px; padding: 20px; background: #FFFFFF; border: 1px solid #E2DED3; border-radius: 12px; text-decoration: none; color: #15171A">
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 12px">
+<span aria-hidden="true" style="width: 40px; height: 40px; border-radius: 10px; background: #EBE8DF; display: flex; align-items: center; justify-content: center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#15171A" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"></rect><path d="M8 20h8M12 16v4"></path></svg></span>
+<span style="font-size: 12px; color: #4A4E55; text-transform: uppercase; letter-spacing: 0.06em">Compute</span>
+</div>
+<div style="display: flex; flex-direction: column; gap: 4px"><span style="font-size: 17px; font-weight: 600">Windows Server VM</span><span style="font-size: 14px; color: #4A4E55">Windows Server 2025, joined to the lab domain.</span></div>
+<div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: auto">
+<span style="font-size: 12.5px; background: #F3F1EA; border: 1px solid #E2DED3; color: #3C4047; border-radius: 999px; padding: 2px 9px">About 25 min</span>
+<span style="font-size: 12.5px; background: #FDF0D2; color: #6E4A00; border-radius: 999px; padding: 2px 9px">Platform team approves</span>
+<span style="font-size: 12.5px; background: #F3F1EA; border: 1px solid #E2DED3; color: #3C4047; border-radius: 999px; padding: 2px 9px">Expires: you choose</span>
+</div>
+<div style="display: flex; align-items: center; gap: 10px; padding-top: 12px; border-top: 1px solid #EDEAE2; font-size: 13px; color: #4A4E55">
+<span role="img" aria-label="Web team VMs: 2 of 5 used" style="display: flex; gap: 2px"><span style="width: 10px; height: 10px; border-radius: 2px; background: #15171A"></span><span style="width: 10px; height: 10px; border-radius: 2px; background: #15171A"></span><span style="width: 10px; height: 10px; border-radius: 2px; background: #E9E6DD"></span><span style="width: 10px; height: 10px; border-radius: 2px; background: #E9E6DD"></span><span style="width: 10px; height: 10px; border-radius: 2px; background: #E9E6DD"></span></span>
+<span>Shares the VM quota</span>
+</div>
+</a>
+</sc-if>
+
+<sc-if value="{{show.compute}}" hint-placeholder-val="{{ true }}">
+<a href="Request.dc.html" class="card" style="display: flex; flex-direction: column; gap: 12px; padding: 20px; background: #FFFFFF; border: 1px solid #E2DED3; border-radius: 12px; text-decoration: none; color: #15171A">
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 12px">
+<span aria-hidden="true" style="width: 40px; height: 40px; border-radius: 10px; background: #EBE8DF; display: flex; align-items: center; justify-content: center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#15171A" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 3 8l9 5 9-5-9-5z"></path><path d="m3 13 9 5 9-5"></path></svg></span>
+<span style="font-size: 12px; color: #4A4E55; text-transform: uppercase; letter-spacing: 0.06em">Compute</span>
+</div>
+<div style="display: flex; flex-direction: column; gap: 4px"><span style="font-size: 17px; font-weight: 600">Test lab</span><span style="font-size: 14px; color: #4A4E55">Three Linux VMs behind a load balancer, for integration tests.</span></div>
+<div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: auto">
+<span style="font-size: 12.5px; background: #F3F1EA; border: 1px solid #E2DED3; color: #3C4047; border-radius: 999px; padding: 2px 9px">About 40 min</span>
+<span style="font-size: 12.5px; background: #E3EFE7; color: #1F4D39; border-radius: 999px; padding: 2px 9px">No approval</span>
+<span style="font-size: 12.5px; background: #F3F1EA; border: 1px solid #E2DED3; color: #3C4047; border-radius: 999px; padding: 2px 9px">3 days at most</span>
+</div>
+<div style="display: flex; align-items: center; gap: 10px; padding-top: 12px; border-top: 1px solid #EDEAE2; font-size: 13px; color: #4A4E55">
+<span role="img" aria-label="Web team labs: 1 of 1 used" style="display: flex; gap: 2px"><span style="width: 10px; height: 10px; border-radius: 2px; background: #15171A"></span></span>
+<span>No lab left: lab-checkout holds it</span>
+</div>
+</a>
+</sc-if>
+
+<sc-if value="{{show.compute}}" hint-placeholder-val="{{ true }}">
+<a href="Request.dc.html" class="card" style="display: flex; flex-direction: column; gap: 12px; padding: 20px; background: #FFFFFF; border: 1px solid #E2DED3; border-radius: 12px; text-decoration: none; color: #15171A">
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 12px">
+<span aria-hidden="true" style="width: 40px; height: 40px; border-radius: 10px; background: #EBE8DF; display: flex; align-items: center; justify-content: center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#15171A" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8 12 3 3 8v8l9 5 9-5V8z"></path><path d="m3 8 9 5 9-5M12 13v8"></path></svg></span>
+<span style="font-size: 12px; color: #4A4E55; text-transform: uppercase; letter-spacing: 0.06em">Compute</span>
+</div>
+<div style="display: flex; flex-direction: column; gap: 4px"><span style="font-size: 17px; font-weight: 600">Kubernetes namespace</span><span style="font-size: 14px; color: #4A4E55">A namespace on the dev cluster, with your team as its admin.</span></div>
+<div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: auto">
+<span style="font-size: 12.5px; background: #F3F1EA; border: 1px solid #E2DED3; color: #3C4047; border-radius: 999px; padding: 2px 9px">About 2 min</span>
+<span style="font-size: 12.5px; background: #E3EFE7; color: #1F4D39; border-radius: 999px; padding: 2px 9px">No approval</span>
+<span style="font-size: 12.5px; background: #F3F1EA; border: 1px solid #E2DED3; color: #3C4047; border-radius: 999px; padding: 2px 9px">Expires: you choose</span>
+</div>
+<div style="display: flex; align-items: center; gap: 10px; padding-top: 12px; border-top: 1px solid #EDEAE2; font-size: 13px; color: #4A4E55">
+<span role="img" aria-label="Web team namespaces: 1 of 3 used" style="display: flex; gap: 2px"><span style="width: 10px; height: 10px; border-radius: 2px; background: #15171A"></span><span style="width: 10px; height: 10px; border-radius: 2px; background: #E9E6DD"></span><span style="width: 10px; height: 10px; border-radius: 2px; background: #E9E6DD"></span></span>
+<span>2 of 3 namespaces left</span>
+</div>
+</a>
+</sc-if>
+
+<sc-if value="{{show.db}}" hint-placeholder-val="{{ true }}">
+<a href="Request.dc.html" class="card" style="display: flex; flex-direction: column; gap: 12px; padding: 20px; background: #FFFFFF; border: 1px solid #E2DED3; border-radius: 12px; text-decoration: none; color: #15171A">
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 12px">
+<span aria-hidden="true" style="width: 40px; height: 40px; border-radius: 10px; background: #EBE8DF; display: flex; align-items: center; justify-content: center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#15171A" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5.5" rx="8" ry="2.5"></ellipse><path d="M4 5.5v13c0 1.4 3.6 2.5 8 2.5s8-1.1 8-2.5v-13"></path><path d="M4 12c0 1.4 3.6 2.5 8 2.5s8-1.1 8-2.5"></path></svg></span>
+<span style="font-size: 12px; color: #4A4E55; text-transform: uppercase; letter-spacing: 0.06em">Databases</span>
+</div>
+<div style="display: flex; flex-direction: column; gap: 4px"><span style="font-size: 17px; font-weight: 600">PostgreSQL database</span><span style="font-size: 14px; color: #4A4E55">PostgreSQL 16 with daily backups and a read-only user.</span></div>
+<div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: auto">
+<span style="font-size: 12.5px; background: #F3F1EA; border: 1px solid #E2DED3; color: #3C4047; border-radius: 999px; padding: 2px 9px">About 15 min</span>
+<span style="font-size: 12.5px; background: #FDF0D2; color: #6E4A00; border-radius: 999px; padding: 2px 9px">Team lead approves production</span>
+<span style="font-size: 12.5px; background: #F3F1EA; border: 1px solid #E2DED3; color: #3C4047; border-radius: 999px; padding: 2px 9px">Expires: you choose</span>
+</div>
+<div style="display: flex; align-items: center; gap: 10px; padding-top: 12px; border-top: 1px solid #EDEAE2; font-size: 13px; color: #4A4E55">
+<span role="img" aria-label="Web team databases: 2 of 3 used" style="display: flex; gap: 2px"><span style="width: 10px; height: 10px; border-radius: 2px; background: #15171A"></span><span style="width: 10px; height: 10px; border-radius: 2px; background: #15171A"></span><span style="width: 10px; height: 10px; border-radius: 2px; background: #E9E6DD"></span></span>
+<span>1 of 3 databases left</span>
+</div>
+</a>
+</sc-if>
+
+<sc-if value="{{show.net}}" hint-placeholder-val="{{ true }}">
+<a href="Request.dc.html" class="card" style="display: flex; flex-direction: column; gap: 12px; padding: 20px; background: #FFFFFF; border: 1px solid #E2DED3; border-radius: 12px; text-decoration: none; color: #15171A">
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 12px">
+<span aria-hidden="true" style="width: 40px; height: 40px; border-radius: 10px; background: #EBE8DF; display: flex; align-items: center; justify-content: center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#15171A" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4 6v6c0 4.4 3.4 7.6 8 9 4.6-1.4 8-4.6 8-9V6l-8-3z"></path></svg></span>
+<span style="font-size: 12px; color: #4A4E55; text-transform: uppercase; letter-spacing: 0.06em">Network</span>
+</div>
+<div style="display: flex; flex-direction: column; gap: 4px"><span style="font-size: 17px; font-weight: 600">Firewall rule</span><span style="font-size: 14px; color: #4A4E55">Open a port from one zone to another.</span></div>
+<div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: auto">
+<span style="font-size: 12.5px; background: #F3F1EA; border: 1px solid #E2DED3; color: #3C4047; border-radius: 999px; padding: 2px 9px">About 5 min</span>
+<span style="font-size: 12.5px; background: #FDF0D2; color: #6E4A00; border-radius: 999px; padding: 2px 9px">Network team approves</span>
+<span style="font-size: 12.5px; background: #F3F1EA; border: 1px solid #E2DED3; color: #3C4047; border-radius: 999px; padding: 2px 9px">Kept until removed</span>
+</div>
+<div style="display: flex; align-items: center; gap: 10px; padding-top: 12px; border-top: 1px solid #EDEAE2; font-size: 13px; color: #4A4E55">
+<span aria-hidden="true" style="width: 10px; height: 10px; border-radius: 2px; background: #D6D2C6"></span>
+<span>Paused for the year-end freeze, 19 Dec to 5 Jan</span>
+</div>
+</a>
+</sc-if>
+
+<sc-if value="{{show.net}}" hint-placeholder-val="{{ true }}">
+<a href="Request.dc.html" class="card" style="display: flex; flex-direction: column; gap: 12px; padding: 20px; background: #FFFFFF; border: 1px solid #E2DED3; border-radius: 12px; text-decoration: none; color: #15171A">
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 12px">
+<span aria-hidden="true" style="width: 40px; height: 40px; border-radius: 10px; background: #EBE8DF; display: flex; align-items: center; justify-content: center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#15171A" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3z"></path></svg></span>
+<span style="font-size: 12px; color: #4A4E55; text-transform: uppercase; letter-spacing: 0.06em">Network</span>
+</div>
+<div style="display: flex; flex-direction: column; gap: 4px"><span style="font-size: 17px; font-weight: 600">DNS record</span><span style="font-size: 14px; color: #4A4E55">An A or CNAME record in <span style="font-family: 'JetBrains Mono', monospace; font-size: 13px">lab.acme.internal</span>.</span></div>
+<div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: auto">
+<span style="font-size: 12.5px; background: #F3F1EA; border: 1px solid #E2DED3; color: #3C4047; border-radius: 999px; padding: 2px 9px">About 2 min</span>
+<span style="font-size: 12.5px; background: #E3EFE7; color: #1F4D39; border-radius: 999px; padding: 2px 9px">No approval</span>
+<span style="font-size: 12.5px; background: #F3F1EA; border: 1px solid #E2DED3; color: #3C4047; border-radius: 999px; padding: 2px 9px">Kept until removed</span>
+</div>
+<div style="display: flex; align-items: center; gap: 10px; padding-top: 12px; border-top: 1px solid #EDEAE2; font-size: 13px; color: #4A4E55">
+<span aria-hidden="true" style="width: 10px; height: 10px; border-radius: 2px; background: #2D6A4F"></span>
+<span>No quota</span>
+</div>
+</a>
+</sc-if>
+
+<sc-if value="{{show.access}}" hint-placeholder-val="{{ true }}">
+<a href="Request.dc.html" class="card" style="display: flex; flex-direction: column; gap: 12px; padding: 20px; background: #FFFFFF; border: 1px solid #E2DED3; border-radius: 12px; text-decoration: none; color: #15171A">
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 12px">
+<span aria-hidden="true" style="width: 40px; height: 40px; border-radius: 10px; background: #EBE8DF; display: flex; align-items: center; justify-content: center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#15171A" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"></circle><path d="M2.5 20c.6-3.4 3.2-5.5 6.5-5.5s5.9 2.1 6.5 5.5"></path><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8M18 14.8c1.9.7 3.2 2.5 3.5 5.2"></path></svg></span>
+<span style="font-size: 12px; color: #4A4E55; text-transform: uppercase; letter-spacing: 0.06em">Access</span>
+</div>
+<div style="display: flex; flex-direction: column; gap: 4px"><span style="font-size: 17px; font-weight: 600">Join an AD group</span><span style="font-size: 14px; color: #4A4E55">Membership of a group, from 8 hours to 30 days.</span></div>
+<div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: auto">
+<span style="font-size: 12.5px; background: #F3F1EA; border: 1px solid #E2DED3; color: #3C4047; border-radius: 999px; padding: 2px 9px">About 1 min</span>
+<span style="font-size: 12.5px; background: #FDF0D2; color: #6E4A00; border-radius: 999px; padding: 2px 9px">The group's owner approves</span>
+<span style="font-size: 12.5px; background: #F3F1EA; border: 1px solid #E2DED3; color: #3C4047; border-radius: 999px; padding: 2px 9px">Removed when it expires</span>
+</div>
+<div style="display: flex; align-items: center; gap: 10px; padding-top: 12px; border-top: 1px solid #EDEAE2; font-size: 13px; color: #4A4E55">
+<span aria-hidden="true" style="width: 10px; height: 10px; border-radius: 2px; background: #2D6A4F"></span>
+<span>No quota</span>
+</div>
+</a>
+</sc-if>
+
+</div>
+</section>
+
+<section aria-labelledby="envs" style="display: flex; flex-direction: column; gap: 12px">
+<div style="display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px">
+<h2 id="envs" style="margin: 0; font-family: 'Bricolage Grotesque', sans-serif; font-weight: 700; font-size: 24px; letter-spacing: -0.02em">Your deployments</h2>
+<a href="Deployments.dc.html" style="font-size: 14px">All 4</a>
+</div>
+<div style="background: #FFFFFF; border: 1px solid #E2DED3; border-radius: 12px; display: flex; flex-direction: column">
+<a href="Deployments.dc.html" style="display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; padding: 14px 20px; border-bottom: 1px solid #EDEAE2; text-decoration: none; color: #15171A">
+<span style="font-family: 'JetBrains Mono', monospace; font-size: 14px; font-weight: 500; flex: 1 1 180px">orders-db-test</span>
+<span style="font-size: 14px; color: #4A4E55; flex: 1 1 180px">PostgreSQL database</span>
+<span style="font-size: 12.5px; background: #FDF0D2; color: #6E4A00; border-radius: 999px; padding: 2px 9px">Expires in 2 days</span>
+</a>
+<a href="Deployments.dc.html" style="display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; padding: 14px 20px; border-bottom: 1px solid #EDEAE2; text-decoration: none; color: #15171A">
+<span style="font-family: 'JetBrains Mono', monospace; font-size: 14px; font-weight: 500; flex: 1 1 180px">dev-alex-web</span>
+<span style="font-size: 14px; color: #4A4E55; flex: 1 1 180px">Linux VM for development</span>
+<span style="font-size: 12.5px; background: #F3F1EA; border: 1px solid #E2DED3; color: #3C4047; border-radius: 999px; padding: 2px 9px">Expires in 9 days</span>
+</a>
+<a href="Deployments.dc.html" style="display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; padding: 14px 20px; text-decoration: none; color: #15171A">
+<span style="font-family: 'JetBrains Mono', monospace; font-size: 14px; font-weight: 500; flex: 1 1 180px">lab-checkout</span>
+<span style="font-size: 14px; color: #4A4E55; flex: 1 1 180px">Test lab</span>
+<span style="font-size: 12.5px; background: #FBE3DA; color: #8E2A10; border-radius: 999px; padding: 2px 9px">Couldn't be deleted: Platform team is on it</span>
+</a>
+</div>
+</section>
+
+<p style="margin: 0; font-size: 14px; color: #4A4E55">Can't find what you need? <a href="#">Ask the Platform team</a>.</p>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":1600}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { cat: 'all' };
+  }
+  renderVals() {
+    const cat = this.state.cat;
+    const defs = [
+      { id: 'all', label: 'All', n: 8 },
+      { id: 'compute', label: 'Compute', n: 4 },
+      { id: 'db', label: 'Databases', n: 1 },
+      { id: 'net', label: 'Network', n: 2 },
+      { id: 'access', label: 'Access', n: 1 }
+    ];
+    const chips = defs.map((d) => {
+      const on = d.id === cat;
+      return {
+        label: d.label,
+        n: d.n,
+        pressed: on ? 'true' : 'false',
+        bg: on ? '#15171A' : '#FFFFFF',
+        fg: on ? '#F3F1EA' : '#15171A',
+        bd: on ? '#15171A' : '#CFC9BB',
+        pick: () => this.setState({ cat: d.id })
+      };
+    });
+    const show = {
+      compute: cat === 'all' || cat === 'compute',
+      db: cat === 'all' || cat === 'db',
+      net: cat === 'all' || cat === 'net',
+      access: cat === 'all' || cat === 'access'
+    };
+    return { chips, show };
+  }
+}
+</script>
+</body>
+</html>

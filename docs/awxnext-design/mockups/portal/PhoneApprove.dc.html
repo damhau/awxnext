@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Approve on a phone</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@700&amp;family=JetBrains+Mono:wght@400;500&amp;family=Schibsted+Grotesk:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#F3F1EA;color:#15171A;font-family:'Schibsted Grotesk',system-ui,sans-serif;font-size:15px;line-height:1.5}
+a{color:#15171A}a:hover{color:#3C4047}
+button,textarea{font:inherit;color:inherit}
+button:disabled{cursor:not-allowed}
+:focus-visible{outline:2px solid #15171A;outline-offset:2px}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; overflow: hidden; display: flex; flex-direction: column; background: #F3F1EA; color: #15171A; font-family: 'Schibsted Grotesk', system-ui, sans-serif">
+
+<header style="flex: none; height: 56px; padding: 0 16px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #E2DED3">
+<a href="Catalog.dc.html" style="display: flex; align-items: center; gap: 9px; text-decoration: none; color: #15171A">
+<span aria-hidden="true" style="display: grid; grid-template-columns: repeat(2, 8px); gap: 2px">
+<span style="width: 8px; height: 8px; border-radius: 2px; background: #2D6A4F"></span>
+<span style="width: 8px; height: 8px; border-radius: 2px; background: #F2B33D"></span>
+<span style="width: 8px; height: 8px; border-radius: 2px; background: #2D6A4F"></span>
+<span style="width: 8px; height: 8px; border-radius: 2px; background: #C8F03C; box-shadow: inset 0 0 0 1.5px #15171A"></span>
+</span>
+<span style="font-family: 'Bricolage Grotesque', sans-serif; font-weight: 700; font-size: 17px; letter-spacing: -0.02em">Acme self-service</span>
+</a>
+<button type="button" aria-label="Alex Morgan, account menu" style="width: 34px; height: 34px; border-radius: 999px; border: 1px solid #CFC9BB; background: #FFFFFF; font-size: 12px; font-weight: 600">AM</button>
+</header>
+
+<main style="flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 14px">
+<div style="display: flex; justify-content: space-between; align-items: center">
+<a href="Approvals.dc.html" style="font-size: 14px; color: #4A4E55; min-height: 32px; display: flex; align-items: center">‹ Approvals</a>
+<span style="font-size: 13px; color: #4A4E55">1 of {{waiting}} waiting</span>
+</div>
+
+<div style="display: flex; gap: 12px; align-items: center">
+<span aria-hidden="true" style="flex: none; width: 42px; height: 42px; border-radius: 999px; background: #EBE8DF; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600">SO</span>
+<div style="display: flex; flex-direction: column">
+<h1 style="margin: 0; font-family: 'Bricolage Grotesque', sans-serif; font-weight: 700; font-size: 22px; letter-spacing: -0.02em; line-height: 1.15">Sam Okafor asks for a Large Linux VM</h1>
+<span style="font-size: 13.5px; color: #4A4E55">Web team · 20 minutes ago</span>
+</div>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 6px; background: #FDF0D2; border-radius: 12px; padding: 12px 14px; color: #6E4A00">
+<span style="font-weight: 600">Large VMs need the requester's team lead.</span>
+<code style="align-self: flex-start; font-family: 'JetBrains Mono', monospace; font-size: 12.5px; background: #FFFFFF; border-radius: 4px; padding: 1px 6px; color: #15171A">size == "large"</code>
+</div>
+
+<blockquote style="margin: 0; font-size: 15.5px; background: #FFFFFF; border: 1px solid #E2DED3; border-radius: 12px; padding: 12px 14px">“Load test of the checkout service before the sale. Five days is enough.”</blockquote>
+
+<dl style="margin: 0; display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 2px 14px; font-size: 14px; background: #FFFFFF; border: 1px solid #E2DED3; border-radius: 12px; padding: 8px">
+<dt style="color: #4A4E55; padding: 5px 8px">Name</dt><dd style="margin: 0; padding: 5px 8px; font-family: 'JetBrains Mono', monospace; font-size: 12.5px; overflow-wrap: anywhere">dev-sam-perf-02</dd>
+<dt style="color: #4A4E55; padding: 5px 8px; background: #F3FAD8; border-radius: 6px">Size</dt><dd style="margin: 0; padding: 5px 8px; background: #F3FAD8; border-radius: 6px; font-weight: 600">Large: 8 vCPU, 32 GB</dd>
+<dt style="color: #4A4E55; padding: 5px 8px">Keep it for</dt><dd style="margin: 0; padding: 5px 8px">7 days</dd>
+<dt style="color: #4A4E55; padding: 5px 8px">Web team's VMs</dt><dd style="margin: 0; padding: 5px 8px; display: flex; align-items: center; gap: 8px"><span role="img" aria-label="3 used, this would be the 4th of 5" style="display: flex; gap: 2px"><span style="width: 11px; height: 11px; border-radius: 2px; background: #15171A"></span><span style="width: 11px; height: 11px; border-radius: 2px; background: #15171A"></span><span style="width: 11px; height: 11px; border-radius: 2px; background: #15171A"></span><span style="width: 11px; height: 11px; border-radius: 2px; background: #C8F03C; box-shadow: inset 0 0 0 1.5px #15171A"></span><span style="width: 11px; height: 11px; border-radius: 2px; background: #E9E6DD"></span></span>4th of 5</dd>
+</dl>
+
+<sc-if value="{{open}}" hint-placeholder-val="{{ true }}">
+<div style="display: flex; flex-direction: column; gap: 6px">
+<label for="pc" style="font-weight: 600; font-size: 14px">Comment for Sam</label>
+<textarea id="pc" rows="2" value="{{comment}}" onChange="{{setComment}}" placeholder="Needed to deny" style="border: 1px solid #CFC9BB; border-radius: 10px; padding: 10px 12px; background: #FFFFFF; resize: none"></textarea>
+<span style="font-size: 13px; color: #4A4E55">Denied on its own on Thursday at 14:22 if nobody answers.</span>
+</div>
+</sc-if>
+
+<sc-if value="{{done}}" hint-placeholder-val="{{ false }}">
+<div role="status" style="display: flex; flex-direction: column; gap: 4px; background: {{doneBg}}; color: {{doneFg}}; border-radius: 12px; padding: 14px 16px">
+<span style="font-weight: 600">{{doneTitle}}</span>
+<span style="font-size: 14px">{{doneText}}</span>
+</div>
+</sc-if>
+</main>
+
+<sc-if value="{{open}}" hint-placeholder-val="{{ true }}">
+<div style="flex: none; padding: 12px 16px 16px; border-top: 1px solid #E2DED3; background: #FFFFFF; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px">
+<button type="button" onClick="{{deny}}" disabled="{{denyOff}}" style="min-height: 54px; border-radius: 12px; border: 1px solid #15171A; background: #FFFFFF; font-size: 16px; opacity: {{denyOpacity}}; cursor: pointer">Deny</button>
+<button type="button" onClick="{{approve}}" style="min-height: 54px; border-radius: 12px; border: 0; background: #C8F03C; color: #15171A; font-size: 16px; font-weight: 600; box-shadow: inset 0 0 0 1px #15171A; cursor: pointer">Approve</button>
+</div>
+</sc-if>
+<sc-if value="{{done}}" hint-placeholder-val="{{ false }}">
+<div style="flex: none; padding: 12px 16px 16px; border-top: 1px solid #E2DED3; background: #FFFFFF">
+<a href="Approvals.dc.html" style="display: flex; align-items: center; justify-content: center; min-height: 54px; border-radius: 12px; border: 1px solid #15171A; background: #FFFFFF; text-decoration: none; font-size: 16px">Next: Jo Lee's extension</a>
+</div>
+</sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { decision: null, comment: '' };
+  }
+  renderVals() {
+    const s = this.state;
+    const approved = s.decision === 'approved';
+    const denyOff = !s.comment.trim();
+    return {
+      waiting: 2,
+      open: !s.decision,
+      done: !!s.decision,
+      comment: s.comment,
+      setComment: (e) => this.setState({ comment: e.target.value }),
+      approve: () => this.setState({ decision: 'approved' }),
+      deny: () => this.setState({ decision: 'denied' }),
+      denyOff,
+      denyOpacity: denyOff ? 0.45 : 1,
+      doneTitle: approved ? 'Approved' : 'Denied',
+      doneText: approved ? "Sam's VM is being created. Sam gets an email." : 'Sam gets an email with your comment.',
+      doneBg: approved ? '#E3EFE7' : '#EBE8DF',
+      doneFg: approved ? '#1F4D39' : '#3C4047'
+    };
+  }
+}
+</script>
+</body>
+</html>

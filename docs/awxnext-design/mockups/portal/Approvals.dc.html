@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Approvals</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@700&amp;family=JetBrains+Mono:wght@400;500&amp;family=Schibsted+Grotesk:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#F3F1EA;color:#15171A;font-family:'Schibsted Grotesk',system-ui,sans-serif;font-size:15px;line-height:1.5}
+a{color:#15171A}a:hover{color:#3C4047}
+button,input,textarea{font:inherit;color:inherit}
+button:disabled{cursor:not-allowed}
+:focus-visible{outline:2px solid #15171A;outline-offset:2px}
+</style>
+</helmet>
+<div style="min-height: 100vh; background: #F3F1EA; color: #15171A; font-family: 'Schibsted Grotesk', system-ui, sans-serif">
+<header style="background: #F3F1EA; border-bottom: 1px solid #E2DED3">
+<div style="max-width: 1180px; margin: 0 auto; padding: 0 clamp(16px, 4vw, 32px); min-height: 64px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 28px">
+<a href="Catalog.dc.html" style="display: flex; align-items: center; gap: 10px; text-decoration: none; color: #15171A; padding: 12px 0">
+<span aria-hidden="true" style="display: grid; grid-template-columns: repeat(2, 9px); gap: 2px">
+<span style="width: 9px; height: 9px; border-radius: 2px; background: #2D6A4F"></span>
+<span style="width: 9px; height: 9px; border-radius: 2px; background: #F2B33D"></span>
+<span style="width: 9px; height: 9px; border-radius: 2px; background: #2D6A4F"></span>
+<span style="width: 9px; height: 9px; border-radius: 2px; background: #C8F03C; box-shadow: inset 0 0 0 1.5px #15171A"></span>
+</span>
+<span style="font-family: 'Bricolage Grotesque', sans-serif; font-weight: 700; font-size: 18px; letter-spacing: -0.02em">Acme self-service</span>
+</a>
+<nav aria-label="Portal" style="display: flex; flex-wrap: wrap; gap: 4px 6px; flex: 1 1 auto">
+<a href="Catalog.dc.html" style="padding: 19px 10px 17px; border-bottom: 2px solid transparent; text-decoration: none; color: #4A4E55">Catalog</a>
+<a href="Requests.dc.html" style="padding: 19px 10px 17px; border-bottom: 2px solid transparent; text-decoration: none; color: #4A4E55">My requests</a>
+<a href="Deployments.dc.html" style="padding: 19px 10px 17px; border-bottom: 2px solid transparent; text-decoration: none; color: #4A4E55">My deployments</a>
+<a href="Approvals.dc.html" aria-current="page" style="padding: 19px 10px 17px; border-bottom: 2px solid #15171A; text-decoration: none; color: #15171A; font-weight: 600; display: flex; align-items: center; gap: 6px">Approvals <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 500; background: #F2B33D; color: #15171A; border-radius: 999px; padding: 0 7px; line-height: 18px">{{waiting}}</span></a>
+</nav>
+<div style="display: flex; align-items: center; gap: 16px">
+<a href="#" style="font-size: 13px; color: #4A4E55">Admin view</a>
+<button type="button" aria-label="Alex Morgan, account menu" style="width: 34px; height: 34px; border-radius: 999px; border: 1px solid #CFC9BB; background: #FFFFFF; font-size: 12px; font-weight: 600; cursor: pointer">AM</button>
+</div>
+</div>
+</header>
+
+<main style="max-width: 1180px; margin: 0 auto; padding: 32px clamp(16px, 4vw, 32px) 64px; display: flex; flex-direction: column; gap: 24px">
+<div style="display: flex; flex-direction: column; gap: 4px">
+<h1 style="margin: 0; font-family: 'Bricolage Grotesque', sans-serif; font-weight: 700; font-size: clamp(26px, 3.6vw, 34px); letter-spacing: -0.025em; line-height: 1.1">Approvals</h1>
+<p style="margin: 0; color: #4A4E55">You approve for Web team, as one of its leads with Priya Shah. The first answer counts.</p>
+</div>
+
+<div style="display: flex; flex-wrap: wrap; align-items: flex-start; gap: 24px">
+
+<section aria-label="Waiting for you" style="flex: 1 1 320px; background: #FFFFFF; border: 1px solid #E2DED3; border-radius: 12px; padding: 6px; display: flex; flex-direction: column; gap: 2px">
+<sc-for list="{{rows}}" as="r" hint-placeholder-count="3">
+<button type="button" aria-pressed="{{r.pressed}}" onClick="{{r.pick}}" style="display: flex; align-items: flex-start; gap: 12px; text-align: left; width: 100%; padding: 12px 14px; border-radius: 8px; border: 0; background: {{r.bg}}; box-shadow: {{r.ring}}; cursor: pointer">
+<span aria-hidden="true" style="flex: none; width: 34px; height: 34px; border-radius: 999px; background: #EBE8DF; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600">{{r.initials}}</span>
+<span style="display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1">
+<span style="display: flex; justify-content: space-between; gap: 8px"><span style="font-weight: 600">{{r.who}}</span><span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #4A4E55; white-space: nowrap">{{r.when}}</span></span>
+<span style="font-size: 14px">{{r.title}}</span>
+<span style="font-size: 13.5px; color: {{r.stateFg}}">{{r.state}}</span>
+</span>
+</button>
+</sc-for>
+</section>
+
+<section aria-labelledby="ap" style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 20px; background: #FFFFFF; border: 1px solid #E2DED3; border-radius: 14px; padding: clamp(18px, 3vw, 32px)">
+<div style="display: flex; flex-direction: column; gap: 2px">
+<span style="font-family: 'JetBrains Mono', monospace; font-size: 12.5px; color: #4A4E55">{{cur.id}}</span>
+<h2 id="ap" style="margin: 0; font-family: 'Bricolage Grotesque', sans-serif; font-weight: 700; font-size: 24px; letter-spacing: -0.02em">{{cur.title}}</h2>
+<span style="font-size: 14px; color: #4A4E55">{{cur.meta}}</span>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 8px; background: #FDF0D2; border-radius: 10px; padding: 14px 16px">
+<span style="font-weight: 600; color: #6E4A00">{{cur.why}}</span>
+<span style="font-size: 14px; color: #6E4A00">Rule on <span style="font-weight: 600">{{cur.item}}</span>, set by Platform team: <code style="font-family: 'JetBrains Mono', monospace; font-size: 13px; background: #FFFFFF; border-radius: 4px; padding: 1px 6px; color: #15171A">{{cur.rule}}</code></span>
+</div>
+
+<sc-if value="{{cur.hasNote}}" hint-placeholder-val="{{ true }}">
+<figure style="margin: 0; display: flex; flex-direction: column; gap: 4px">
+<figcaption style="font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: #4A4E55">{{cur.noteBy}}</figcaption>
+<blockquote style="margin: 0; font-size: 16px">{{cur.note}}</blockquote>
+</figure>
+</sc-if>
+
+<div style="display: flex; flex-direction: column; gap: 8px">
+<h3 style="margin: 0; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: #4A4E55">{{cur.answersTitle}}</h3>
+<dl style="margin: 0; display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 2px 18px; font-size: 14px">
+<sc-for list="{{cur.answers}}" as="a" hint-placeholder-count="4">
+<dt style="color: #4A4E55; padding: 5px 8px; border-radius: 6px; background: {{a.bg}}">{{a.k}}</dt><dd style="margin: 0; padding: 5px 8px; border-radius: 6px; background: {{a.bg}}; font-weight: {{a.weight}}">{{a.v}}</dd>
+</sc-for>
+</dl>
+</div>
+
+<sc-if value="{{cur.hasQuota}}" hint-placeholder-val="{{ true }}">
+<div style="display: flex; flex-direction: column; gap: 8px">
+<h3 style="margin: 0; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: #4A4E55">Web team's VMs</h3>
+<div role="img" aria-label="3 used, this request would be the 4th of 5" style="display: flex; gap: 4px; max-width: 360px">
+<span style="flex: 1; height: 22px; border-radius: 3px; background: #15171A"></span>
+<span style="flex: 1; height: 22px; border-radius: 3px; background: #15171A"></span>
+<span style="flex: 1; height: 22px; border-radius: 3px; background: #15171A"></span>
+<span style="flex: 1; height: 22px; border-radius: 3px; background: #C8F03C; box-shadow: inset 0 0 0 2px #15171A"></span>
+<span style="flex: 1; height: 22px; border-radius: 3px; background: #E9E6DD"></span>
+</div>
+<span style="font-size: 14px; color: #4A4E55">It would be the team's 4th of 5.</span>
+</div>
+</sc-if>
+
+<sc-if value="{{cur.isOwn}}" hint-placeholder-val="{{ false }}">
+<div style="display: flex; flex-direction: column; gap: 6px; background: #EBE8DF; border-radius: 10px; padding: 14px 16px">
+<span style="font-weight: 600">This is your own request</span>
+<span style="font-size: 14px">Priya Shah approves it: nobody approves their own requests, leads included.</span>
+<a href="Requests.dc.html" style="font-size: 14px; align-self: flex-start">Follow it in My requests</a>
+</div>
+</sc-if>
+
+<sc-if value="{{cur.canDecide}}" hint-placeholder-val="{{ true }}">
+<div style="display: flex; flex-direction: column; gap: 12px; padding-top: 4px; border-top: 1px solid #EDEAE2">
+<p style="margin: 12px 0 0; font-size: 14px; color: #4A4E55">{{cur.timeout}}</p>
+<div style="display: flex; flex-direction: column; gap: 6px">
+<label for="cm" style="font-weight: 600">Comment for {{cur.first}}</label>
+<textarea id="cm" rows="3" value="{{comment}}" onChange="{{setComment}}" placeholder="Needed to deny, optional to approve" style="border: 1px solid #CFC9BB; border-radius: 10px; padding: 12px 14px; background: #FFFFFF; resize: vertical"></textarea>
+</div>
+<div style="display: flex; flex-wrap: wrap; gap: 10px">
+<button type="button" onClick="{{approve}}" style="min-height: 48px; padding: 0 24px; border-radius: 10px; border: 0; background: #C8F03C; color: #15171A; font-weight: 600; box-shadow: inset 0 0 0 1px #15171A; cursor: pointer">Approve</button>
+<button type="button" onClick="{{deny}}" disabled="{{denyOff}}" style="min-height: 48px; padding: 0 24px; border-radius: 10px; border: 1px solid #15171A; background: #FFFFFF; opacity: {{denyOpacity}}; cursor: pointer">Deny</button>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{cur.isDecided}}" hint-placeholder-val="{{ false }}">
+<div role="status" style="display: flex; flex-direction: column; gap: 4px; background: {{cur.doneBg}}; color: {{cur.doneFg}}; border-radius: 10px; padding: 14px 16px">
+<span style="font-weight: 600">{{cur.doneTitle}}</span>
+<span style="font-size: 14px">{{cur.doneText}}</span>
+</div>
+</sc-if>
+</section>
+</div>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":1240}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { sel: '1043', decided: {}, comment: '' };
+  }
+  renderVals() {
+    const s = this.state;
+    const reqs = [
+      { id: '1043', who: 'Sam Okafor', initials: 'SO', first: 'Sam', when: '14:22', short: 'Linux VM, Large: perf-02',
+        title: 'Sam Okafor asks for a Large Linux VM', meta: 'Web team · sent today at 14:22, 20 minutes ago',
+        why: "Large VMs need the requester's team lead.", item: 'Linux VM for development', rule: 'size == "large"',
+        noteBy: 'Sam wrote', note: 'Load test of the checkout service before the sale. Five days is enough.',
+        answersTitle: 'What Sam asked for',
+        answers: [['Name', 'dev-sam-perf-02.lab.acme.internal'], ['Operating system', 'Ubuntu 24.04 LTS'], ['Size', 'Large: 8 vCPU, 32 GB, 160 GB disk', true], ['Keep it for', '7 days, until Tuesday 24 Nov']],
+        hasQuota: true, timeout: 'If nobody answers by Thursday 19 Nov at 14:22, the request is denied.' },
+      { id: '1045', who: 'Jo Lee', initials: 'JL', first: 'Jo', when: '12:10', short: 'Extend dev-jo-etl by 7 days',
+        title: 'Jo Lee asks for 7 more days on dev-jo-etl', meta: 'Web team · sent today at 12:10',
+        why: "Extensions of a week need the owner's team lead.", item: 'Linux VM for development', rule: 'extend.days >= 7',
+        noteBy: 'Jo wrote', note: 'The ETL rewrite slipped a week.',
+        answersTitle: 'The extension',
+        answers: [['Deployment', 'dev-jo-etl, a Linux VM'], ['Expires now', 'Friday 21 Nov, 18:00'], ['Would expire', 'Friday 28 Nov, 18:00', true], ['Extended', '1 of 2 times'], ['Lifetime', '23 of 30 days at most']],
+        hasQuota: false, timeout: 'If nobody answers by Thursday 19 Nov at 12:10, the extension is denied. The VM keeps its current expiry.' },
+      { id: '1044', who: 'You', initials: 'AM', first: 'you', when: '09:15', short: 'PostgreSQL database, production', own: true,
+        title: 'A production PostgreSQL database', meta: 'Your request · sent today at 09:15',
+        why: 'Production databases need the requester\'s team lead.', item: 'PostgreSQL database', rule: 'environment == "production"',
+        answersTitle: 'What you asked for',
+        answers: [['Name', 'orders-db-prod'], ['Version', 'PostgreSQL 16'], ['Environment', 'production', true], ['Keep it for', 'No expiry']],
+        hasQuota: false }
+    ];
+    const decided = s.decided;
+    const rows = reqs.map((r) => {
+      const d = decided[r.id];
+      let state = 'Waiting for you';
+      let stateFg = '#6E4A00';
+      if (r.own) { state = 'Waiting for Priya Shah'; stateFg = '#4A4E55'; }
+      if (d === 'approved') { state = 'You approved it'; stateFg = '#1F4D39'; }
+      if (d === 'denied') { state = 'You denied it'; stateFg = '#4A4E55'; }
+      return {
+        who: r.who, initials: r.initials, when: r.when, title: r.short, state, stateFg,
+        pressed: r.id === s.sel ? 'true' : 'false',
+        bg: r.id === s.sel ? '#F3F1EA' : 'transparent',
+        ring: r.id === s.sel ? 'inset 0 0 0 1px #CFC9BB' : 'none',
+        pick: () => this.setState({ sel: r.id, comment: '' })
+      };
+    });
+    const r = reqs.find((x) => x.id === s.sel);
+    const d = decided[r.id];
+    const decide = (v) => () => {
+      const next = Object.assign({}, decided);
+      next[r.id] = v;
+      this.setState({ decided: next });
+    };
+    const cur = {
+      id: 'REQ-' + r.id, title: r.title, meta: r.meta, why: r.why, item: r.item, rule: r.rule,
+      hasNote: !!r.note, noteBy: r.noteBy || '', note: r.note || '',
+      answersTitle: r.answersTitle,
+      answers: r.answers.map((a) => ({ k: a[0], v: a[1], bg: a[2] ? '#F3FAD8' : 'transparent', weight: a[2] ? 600 : 400 })),
+      hasQuota: r.hasQuota,
+      isOwn: !!r.own,
+      canDecide: !r.own && !d,
+      isDecided: !!d,
+      first: r.first,
+      timeout: r.timeout || '',
+      doneTitle: d === 'approved' ? 'You approved it at 14:42' : 'You denied it at 14:42',
+      doneText: d === 'approved' ? (r.id === '1043' ? "Sam's VM is being created. Sam gets an email." : 'dev-jo-etl now expires on Friday 28 Nov. Jo gets an email.') : r.first + ' gets an email with your comment.',
+      doneBg: d === 'approved' ? '#E3EFE7' : '#EBE8DF',
+      doneFg: d === 'approved' ? '#1F4D39' : '#3C4047'
+    };
+    const waiting = reqs.filter((x) => !x.own && !decided[x.id]).length;
+    const denyOff = !s.comment.trim();
+    return {
+      rows, cur, waiting,
+      comment: s.comment,
+      setComment: (e) => this.setState({ comment: e.target.value }),
+      approve: decide('approved'),
+      deny: decide('denied'),
+      denyOff,
+      denyOpacity: denyOff ? 0.45 : 1
+    };
+  }
+}
+</script>
+</body>
+</html>
