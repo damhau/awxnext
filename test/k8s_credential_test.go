@@ -1,6 +1,7 @@
 package test
 
 import (
+	"crypto/sha1"
 	"fmt"
 	"strings"
 	"testing"
@@ -13,7 +14,7 @@ const k8sPlaybook = `- hosts: all
         msg: "host={{ lookup('env', 'K8S_AUTH_HOST') }} keylen={{ lookup('env', 'K8S_AUTH_API_KEY') | length }} verify={{ lookup('env', 'K8S_AUTH_VERIFY_SSL') }} cafile={{ lookup('env', 'K8S_AUTH_SSL_CA_CERT') }}"
       run_once: true
     - ansible.builtin.debug:
-        msg: "ca=[{{ lookup('file', lookup('env', 'K8S_AUTH_SSL_CA_CERT')) }}]"
+        msg: "ca=[{{ lookup('file', lookup('env', 'K8S_AUTH_SSL_CA_CERT')) }}] sha1={{ lookup('file', lookup('env', 'K8S_AUTH_SSL_CA_CERT')) | hash('sha1') }}"
       when: lookup('env', 'K8S_AUTH_SSL_CA_CERT') != ''
       run_once: true
 `
@@ -52,8 +53,11 @@ func TestKubernetesTokenCA(t *testing.T) {
 		return m
 	}
 
+	// The CA data is a secret input, so the output masks it (M12-02); its
+	// hash shows that the file holds it.
 	out := run(with(map[string]any{"verify_ssl": true, "ssl_ca_cert": ca}))
-	if !strings.Contains(out, "host=https://k8s.example.com:6443 keylen=9 verify=True cafile=/") || !strings.Contains(out, "ca=["+strings.ReplaceAll(ca, "\n", `\n`)+"]") {
+	if !strings.Contains(out, "host=https://k8s.example.com:6443 keylen=9 verify=True cafile=/") ||
+		!strings.Contains(out, fmt.Sprintf("ca=[$encrypted$] sha1=%x", sha1.Sum([]byte(ca)))) {
 		t.Fatalf("with CA data:\n%s", out)
 	}
 	// Without CA data, verification stays on against the system's CAs.
