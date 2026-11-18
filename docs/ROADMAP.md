@@ -38,7 +38,7 @@ be matched.
 | [M12 Beyond AWX](#m12-beyond-awx) | What changed before a failure, secrets kept out of job output, an MCP server, drifted hosts | 4 |
 | [M13 Collection hub](#m13-collection-hub) | A private Galaxy in awxnext: publish, approve, sign, mirror and install collections | 5 |
 | [M14 Event-driven automation](#m14-event-driven-automation) | Event streams into a durable log, rules evaluated by awxnext with guardrails, connectors, rulebooks imported | 10 |
-| [M15 Self-service portal](#m15-self-service-portal) | A catalog of requestable items, with approvals, quotas and environments that expire | 5 |
+| [M15 Self-service portal](#m15-self-service-portal) | A portal of its own: requestable items with forms fed by APIs and jobs, approvals by rule, quotas, and deployments that expire | 10 |
 
 ---
 
@@ -1812,73 +1812,222 @@ still fails is in `compat/known-failures.yml` with its reason.
 
 ## M15 Self-service portal
 
-The operator view (`/run`) lists every template a user may launch. M15
-makes it a governed catalog (Decision 18): chosen items, requestable without
-access to their templates, approvals before they run, quotas, and
-environments that their owners manage and that expire. **Exit:** a user with
-no access to a template requests its catalog item, a team approves, the
-environment is provisioned with its outputs, extended once, and torn down
-when it expires.
+A portal of its own for people who request automation rather than run it
+(Decision 21): a catalog of items published from job and workflow templates,
+requestable without access to the templates, with forms whose choices come
+from APIs and jobs, approvals by rule, quotas, and deployments that their
+owners manage and that expire. It is served by the same server, with the
+same sign-in, API and RBAC; `/run` stays the operator view. Four stages:
+items, their forms and outputs (M15-01 to M15-03); approvals (M15-04); deployments,
+their lifetime and quotas (M15-05 to M15-07); the portal and other front
+doors (M15-08 to M15-10). **Exit:** a user with only the request role
+requests an item from the portal, picking a VLAN that a choice source lists
+from an API; the item's rule sends the request to their Team Admins, one
+approves, and the deployment is provisioned with its outputs, extended
+once, and torn down when it expires.
 
 ### M15-01 Catalog items
 **Labels:** feature, api, rbac · **Size:** M · [#163](https://github.com/damhau/awxnext/issues/163)
 
 An item publishes a job or workflow template with its own name, description,
-icon, category and owner team, and its form: the questions to show, defaults
-and fixed answers. Its request role gives no role on the template, its
-inventory, project or credentials; the requester shows as the launcher.
-Version history, `used_by` and GitOps, as for other objects.
+icon, category and owner team. Only an Admin of the template or of its
+organization can publish it, and a template can have several items, each
+with its own answers and rules. The item's form is a view over the
+template's survey: it hides, rewords and narrows questions (fewer choices, a
+`filter` on a dynamic list), sets defaults and fixes answers, and adds no
+variable, so Decision 5 holds. The item's owner chooses which fixed answers
+requesters see; password answers are never shown. An item runs once (a
+firewall rule) or creates an deployment (M15-05), and adds the portal's own
+fields: how long to keep it, and why, when an approval applies. The Catalog
+Item Requester role, on an item or on an organization for all its items,
+gives no role on the template, its inventory, project or credentials; the
+requester shows as the launcher, and one in several teams says which team
+the request is for. Version history, `used_by` and GitOps, as for other
+objects.
 
 **Done when:** a user with only the request role launches through the item
-but not the template, and a request that overrides a fixed answer is
-refused.
+but not the template; a request that overrides a fixed answer is refused; a
+user with Execute but not Admin on the template can't publish it; and items
+can be managed through the API and GitOps.
 
-### M15-02 Approvals before a request runs
+### M15-02 Choice sources: APIs and jobs
+**Labels:** feature, api, credentials · **Size:** M · [#180](https://github.com/damhau/awxnext/issues/180)
+
+A choice source is an organization's list for survey questions, created and
+tested by its admins and used as `choices_from: {type: source, source: N}`,
+so the admin launch and `/run` get it too. Two kinds:
+
+- `http`: a JSON API (NetBox, a CMDB, Microsoft Graph), called by the server
+  only, through `netguard` and the administrator's host list, with an
+  awxnext credential (a token, basic or OAuth client credentials, credential
+  lookups included). Its parameters can use earlier answers and the
+  requester, URL-encoded, so one question narrows the next.
+- `job`: a job template whose run publishes the list with `set_stats`
+  (M3-04), refreshed on a schedule or by hand, as a launch type of its own.
+  The last good list stays when a refresh fails.
+
+The reply is read with expr (`items`, `value`, `label`, and a `filter` that
+can use the answers and the user). Lists are cached per source and
+parameters, with at most 500 items and 1 MB, and a 5 s timeout; the label is
+kept with the answer. At launch the answer is checked against the cached or
+a fresh list, and a source that can't be reached, with nothing cached,
+refuses the launch with its reason. Search as you type is left for later.
+
+**Done when:** a test's HTTP source lists choices from a fake API with a
+credential, filtered by an earlier answer; a job source lists what its run
+published and keeps it when the next run fails; an answer outside the list
+is refused; and a source aimed at a refused address lists nothing.
+
+### M15-03 Computed questions and secret outputs
+**Labels:** feature, api, credentials · **Size:** M · [#181](https://github.com/damhau/awxnext/issues/181)
+
+A survey question with `value_from` is never asked: the server computes it
+at launch with an expr expression over the item picked in a dynamic list
+(`item("vlan").name`), earlier answers, the user and their team, and, for
+portal requests, the request (`request.expires_at`). The playbook gets a
+variable its survey declares, such as a hostname built from the requester's
+name or tags for a VM's owner and expiry, without weakening Decision 5. A
+launch that sets a computed variable is refused. AWX clients ignore the key,
+as they do `choices_from`. On a `password` question, `value_from:
+password(24)` makes awxnext generate the value and hand it to the job, so it
+is encrypted and masked like any survey password, and the item can show it
+on the deployment.
+
+A template's declared output (M3-04) can be `secret`, such as a database
+password the playbook publishes with `set_stats`. Its value is removed from
+the `set_stats` task's event before the event is stored, kept encrypted, shown
+as `$encrypted$` in the job's artifacts, and masked in the rest of the output
+as M12-02 masks credentials. The next workflow nodes get it as they get a
+survey password; only an deployment's owners can reveal it (M15-05).
+
+**Done when:** a job gets variables computed from a picked item, the user
+and the request; a launch that sets one is refused; a generated password
+reaches the job and appears in no output line; a secret output is
+stored encrypted, appears in no event, artifact or output line, and reaches
+the next workflow node; and `docs/surveys.md` and `docs/workflows.md`
+document them.
+
+### M15-04 Approvals before a request runs
 **Labels:** feature, workflows, notifications · **Size:** M · [#164](https://github.com/damhau/awxnext/issues/164)
 
-An item can make its requests wait for one or N approvers of its approver
-team, who see the answers and the requester, with a timeout that denies.
-Built on workflow approvals, so the bell, the approvals page,
-`workflow_approvals/` and their notifications work unchanged. The requester
-is notified of the outcome.
+An item's approval rules are expr conditions on the answers, the team and
+the kind of request (new, extend, resize), each with its approvers: the
+requester's Team Admins, a team, or the users that a field of a picked item
+names (a group's owners). Approvers are always groups, and the first answer
+counts, or N of them. Nobody approves their own request: when nobody else is
+left, the organization's admins approve, and they can answer any waiting
+request, which is logged. All matching rules must approve, in parallel, and
+one deny ends the request; a deny needs a comment, and a timeout denies.
+Built on workflow approvals, as M14's approval mode is, so the bell, the
+approvals page, `workflow_approvals/` and their notifications work
+unchanged. M14's maintenance windows and change freezes can list items:
+inside one, a request is refused with the freeze's end, or, if the item says
+so, waits for an exception that a named team approves. Personal delegation
+is left for later.
 
-**Done when:** a request runs once approved, doesn't once denied or timed
-out, and approvers and requester are notified.
+**Done when:** a request runs once approved, and doesn't once denied or
+timed out; a rule applies only when its condition holds; requesters can't
+approve their own requests, and the fallback reaches the organization's
+admins; a freeze refuses a request or asks for its exception; and approvers
+and requester are notified.
 
-### M15-03 Environments and their lifecycle
-**Labels:** feature, workflows, jobs · **Size:** L · [#165](https://github.com/damhau/awxnext/issues/165)
+### M15-05 Deployments and day-2 actions
+**Labels:** feature, workflows, jobs · **Size:** M · [#165](https://github.com/damhau/awxnext/issues/165)
 
-What an item's run provisioned is recorded as an environment, owned by the
-requester and their team, with the workflow's outputs (M3-04). Day-2 actions
-run the item's templates on it with those outputs. It expires after the
-item's lifetime, extendable N times, with warnings before; expiry or delete
-runs the teardown template, and a failed teardown leaves it flagged.
+What an item's run provisioned is recorded as an deployment, owned by the
+requester and the request's team, with the run's outputs (M3-04). The item
+lays out how to connect: labels, order, copy buttons, and values built with
+expr from the outputs, such as a connection string; without a layout, every
+declared output shows under its name. Showing a secret output is for the
+deployment's owners only, and is logged. Day-2 actions (restart, snapshot,
+resize) run the item's templates on it with those outputs, through the same
+rules and approvals, and their outputs update the deployment's (a rotated
+password). It can be handed over to a user or team that
+has the request role on the item and room in its quota, who is notified.
+Deleting it runs the item's teardown template; a failed teardown leaves it
+flagged and still counted in the quota. Deployments record no cost.
 
-**Done when:** a test's item provisions an environment with its outputs,
-runs a day-2 action, is extended, and is torn down at expiry, and a failed
-teardown is flagged.
+**Done when:** a test's item provisions an deployment with its outputs,
+laid out as the item says; a day-2 action updates an output; the
+deployment is handed over and deleted; a failed teardown is flagged; and
+revealing a secret output is logged.
 
-### M15-04 Quotas
+### M15-06 Lifetime: expiry, extensions and reminders
+**Labels:** feature, jobs, notifications · **Size:** M · [#182](https://github.com/damhau/awxnext/issues/182)
+
+The requester chooses how long to keep an deployment, up to the item's
+maximum, or for good if the item has none. The item lists its extension
+steps: short ones (+1 day, +3 days) apply at once, longer ones are approved
+as M15-04's rules say, within caps on the number of extensions and on the
+whole lifetime. Reminders go out 24 hours and 2 hours before expiry, by
+email, webhook, or Slack once M11-02 is done, linking to the deployment. At
+expiry the teardown runs, even during a change freeze unless the item says
+otherwise.
+
+**Done when:** an deployment expires at its chosen time; a short extension
+applies at once and a long one waits for approval; the caps refuse one more;
+reminders are sent at both times; and expiry runs the teardown.
+
+### M15-07 Quotas
 **Labels:** feature, rbac · **Size:** S · [#166](https://github.com/damhau/awxnext/issues/166)
 
-Limits per item and per team or user: active environments and requests per
-day. Over quota, a request is refused with the reason or waits for approval,
-as the item says. Admins see usage against quotas.
+Limits per item and per team or user: active deployments and requests per
+day. The form shows what's left before the request is sent. Over quota, a
+request is refused with the reason or waits for approval, as the item says.
+A failed provisioning gives its place back; a failed teardown keeps it.
+Admins see usage against quotas.
 
-**Done when:** an over-quota request is refused or waits, as the item says,
-and usage shows through the API and the UI.
+**Done when:** an over-quota request is refused or waits, as the item says;
+a failed provisioning frees its place; and usage shows through the API and
+the UI.
 
-### M15-05 The portal
+### M15-08 The portal: catalog, requests and progress
 **Labels:** feature, ui · **Size:** M · [#167](https://github.com/damhau/awxnext/issues/167)
 
-The operator view grows into the portal: the catalog by category, an item's
-request form with its preview and the quota left, My requests (status,
-approval, the run in plain words), My environments (outputs, day-2 actions,
-expiry). Users with only request roles land there after sign-in, without the
-admin navigation.
+A shell of its own at `/portal`, in the same UI build: a light top bar
+without the admin navigation, words for requesters, and a phone-first
+layout; an organization can set its name and logo. Users with only request
+roles land there after sign-in; the others reach it through a link, and
+admins go back through an Admin view link. The catalog by category, with
+search and what needs the user (expiring deployments, waiting requests,
+approvals to give); an item's form with its dynamic choices, the approval it
+will need and why, the quota left and the lifetime; My requests, whose
+progress steps are the playbook's plays, reworded by the item if it wants
+(Ansible tags don't reach job events), with a percentage estimated from the
+last successful run, and the job's details only for those who can see the
+job.
 
-**Done when:** a requester finds, requests and follows an item and manages
-its environment in the browser, and `tsc` and Vitest pass.
+**Done when:** a requester finds, requests and follows an item on a desktop
+and a phone-sized screen, and `tsc` and Vitest pass.
+
+### M15-09 The portal: deployments and approvals
+**Labels:** feature, ui · **Size:** M · [#183](https://github.com/damhau/awxnext/issues/183)
+
+My deployments: each with its lifetime as cells, its extensions, how to
+connect (secret outputs shown on demand, which is logged), its day-2
+actions, its history, who can use it, hand-over and deletion, and a flagged
+teardown with what was left. Approvals: the requests waiting for the user,
+with the rule that applies, the requester's reason, the answers that decided
+it, the quota and the timeout; approve, or deny with a comment, on a desktop
+or a phone. Notifications link to the exact screen and never act by
+themselves.
+
+**Done when:** a requester extends, uses and deletes an deployment; an
+approver approves and denies from the portal on a phone-sized screen; and
+`tsc` and Vitest pass.
+
+### M15-10 Requests from ServiceNow and other front doors
+**Labels:** feature, api, notifications · **Size:** S · [#184](https://github.com/damhau/awxnext/issues/184)
+
+Other catalogs request items through the API, as the portal does: the
+request, its state and the deployment's outputs, with a webhook when a
+request changes state. Documented with a ServiceNow catalog item as the
+example; awxnext builds no integration of its own, and nothing for
+Backstage.
+
+**Done when:** a test requests an item through the API, follows it to ready
+and gets a webhook for each change of state, and the operator guide has the
+ServiceNow example.
 
 ---
 
@@ -2022,8 +2171,9 @@ Taken on 2026-11-15:
       Their objects use awxnext's projects, credentials and organizations.
       EDA's own API, for the `ansible.eda` collection, comes last (M14-06,
       now M14-10).
-    - **The portal** (M15) grows from the operator view (`/run`), not as a
-      separate portal such as Red Hat's, which is built on Backstage.
+    - **The portal** (M15; amended by Decision 21) grows from the operator
+      view (`/run`), not as a separate portal such as Red Hat's, which is
+      built on Backstage.
     - A sixth proposal, alert-driven runs (Alertmanager alerts launching
       templates, deduplicated and throttled), is M14's event streams and
       their rules, not a mechanism of its own.
@@ -2061,6 +2211,49 @@ Taken on 2026-11-15:
     still installs. galaxy_ng's `docs-blob/` is served from the same docs,
     with the README as text rather than rendered HTML.
 
+Taken on 2026-11-18:
+
+21. M15 is redesigned after a review of Red Hat's portals and of a clickable
+    mockup. Red Hat had Tower's portal mode, then the Automation Services
+    Catalog (AAP 2.0 to 2.3), then the self-service automation portal (AAP
+    2.5), built on Backstage, which publishes templates to users who need
+    Execute on them and has no approvals, quotas or lifecycle. ServiceNow
+    and lifecycle tools such as Port and HCP Terraform were reviewed too.
+    - **The portal is a shell of its own** (`/portal`), not a narrower
+      operator view (amending Decision 18's item on the portal): no admin
+      navigation, words for requesters, phone first. It stays in awxnext's
+      UI, served by the same server with the same sign-in, API and RBAC, so
+      there's nothing more to deploy. `/run` stays the operator view.
+    - **Items:** only an Admin of the template, or of its organization,
+      publishes it; a template can have several items; and an item's form
+      is a view over the template's survey. Surveys gain choice sources
+      (APIs, and lists that a job produces) and computed questions, so every
+      variable a playbook gets is declared in its survey and Decision 5
+      holds; the admin launch and `/run` get them too. Playbooks publish
+      what they made with `set_stats`, as declared outputs, which can be
+      secret; the item lays out how to connect, so playbooks hold no
+      presentation.
+    - **Approvals** are rules on the answers, with groups as approvers, the
+      organization's admins as the fallback, and no self-approval. Inside an
+      M14 change freeze, a request is refused, or a named team approves an
+      exception, as the item says.
+    - **What a request provisions is a deployment**, not an environment,
+      which in awxnext already means an execution or decision environment.
+    - **Lifetimes** are chosen at request. Short extensions apply at once,
+      longer ones are approved, and reminders go out 24 hours and 2 hours
+      before expiry.
+    - **Progress** shows the playbook's plays as steps, with a percentage
+      from the last successful run: Ansible tags don't reach job events.
+    - **Left out:** cost, which deployments don't record; a ServiceNow
+      integration (ServiceNow calls the request API, documented with an
+      example); anything for Backstage; an installable app and push
+      notifications. Personal delegation of approvals and search as you type
+      in choice lists are left for later.
+
+    #163 to #167 are rewritten, #164 to #167 becoming M15-04, M15-05, M15-07
+    and M15-08, and M15-02, M15-03, M15-06, M15-09 and M15-10 (#180 to
+    #184) are added.
+
 ## On GitHub
 
 Created on 2026-10-27 on `damhau/awxnext`: the type, area and size labels,
@@ -2075,5 +2268,7 @@ after M9. M10-04 (#129) and M11 (#130 to #132) were added on 2026-11-08
 (Decision 17). M11-04 (#147) and M12 to M15 (#148 to #167) were added on
 2026-11-15 (Decision 18), and M14 was redesigned the same day (Decision
 19): #157 to #162 were rewritten, and M14-07 to M14-10 (#168 to #171)
+added. M15 was redesigned on 2026-11-18 (Decision 21): #163 to #167 were
+rewritten, and M15-02, M15-03, M15-06, M15-09 and M15-10 (#180 to #184)
 added. This file stays the index;
 when a task changes, change its issue too.
