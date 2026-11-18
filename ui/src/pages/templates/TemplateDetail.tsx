@@ -102,6 +102,11 @@ export function TemplateDetail({ kind }: { kind: Kind }) {
                 {tr('Edit')}
               </Link>
             )}
+            {caps.edit && (
+              <Link className="btn" to={`/catalog-items/new?template=${id}`}>
+                {tr('Publish to the portal')}
+              </Link>
+            )}
             {caps.start !== false && (
               <Link className="btn primary" to={`/launch/${kind}/${id}`}>
                 <Icon name="play" size={10} />

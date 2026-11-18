@@ -12,7 +12,7 @@ export function Pill({ tone, children }: { tone: 'neutral' | 'waiting' | 'runnin
   return <span className={`portal-pill ${tone}`}>{children}</span>
 }
 
-const itemIcons: IconName[] = ['server', 'box', 'key', 'shield', 'users', 'team', 'inventory', 'host', 'plug', 'window', 'terminal', 'workflow', 'bolt', 'folder']
+export const itemIcons: IconName[] = ['server', 'box', 'key', 'shield', 'users', 'team', 'inventory', 'host', 'plug', 'window', 'terminal', 'workflow', 'bolt', 'folder']
 
 /** An item's icon: the one it names, or a box. */
 export function ItemIcon({ name, size = 22 }: { name: string; size?: number }) {

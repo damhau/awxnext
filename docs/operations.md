@@ -2352,6 +2352,40 @@ The self-service portal is for people who request automation rather than run it 
 catalog item publishes a job or workflow template to people with no role on the template: they
 fill in the item's form, and awxnext runs the template for them.
 
+### In the admin UI
+
+**Portal** in the navigation has these pages:
+
+- **Catalog items:** the items you can see, filtered by kind, category, template or organization.
+  An item's page has its details, its requests, its notifications and its access. **Open in the
+  portal** shows the item as its requesters see it.
+- **Requests:** the requests for the items you administer, and your own, filtered by item, status,
+  kind, team or requester. Each links to its page in the portal and to its job.
+- **Deployments:** the deployments of the items you administer, and your own, filtered by item,
+  status, owner or team.
+- **Catalog quotas:** what each team uses of the items' [quotas](#quotas).
+- **Open the portal:** the portal itself ([The portal](#the-portal)).
+
+To publish a template, select **Publish to the portal** on the template's page, or **Publish a
+template** in **Catalog items**. Both show only to those with Admin on a template. The form has a
+section for each part of the item:
+
+- **The item:** its name, template, description, kind, category, icon and owner team.
+- **Questions:** for each question of the template's survey, whether requesters answer it, don't
+  see it, or get a fixed answer, which you can show them; its wording, default and choices, and a
+  dynamic list's filter ([The item's form](#the-items-form)).
+- **Approvals:** the [rules](#approvals), the freeze exception team and the email notification.
+- **The deployment,** for an item that creates one: the deployment's name, its teardown, its
+  lifetime, [how to connect](#how-to-connect) and its [actions](#day-2-actions). **Kept until
+  deleted** keeps each deployment until its owners delete it. **Expires** takes a default or a
+  longest lifetime, and the extensions owners can ask for ([Lifetime](#lifetime)).
+- **Quotas** and **Step labels.**
+
+When the API refuses the item, each error shows on its field or section, and the form scrolls to
+the first one. On the item's **Notifications** tab, **Request changes** attaches the
+[request webhooks](#requests-from-another-catalog) and **Expiry reminders** the
+[reminders](#lifetime).
+
 ### Catalog items
 
 To publish a template, post to `/api/v2/catalog_items/` with these fields:
@@ -2364,7 +2398,7 @@ To publish a template, post to `/api/v2/catalog_items/` with these fields:
 | `icon`, `category` | The icon the portal shows, by name (`server`), and the category it lists the item under. |
 | `owner_team` | The team of the organization that owns the item. |
 | `questions` | What the item makes of the template's survey ([The item's form](#the-items-form)). |
-| `max_lifetime_days`, `default_lifetime_days` | For a `deployment` item, the longest a requester can keep the deployment and the lifetime the form proposes, in days. Empty `max_lifetime_days`: requesters can keep it for good. |
+| `max_lifetime_days`, `default_lifetime_days` | For a `deployment` item, the longest a requester can keep the deployment and the lifetime the form proposes, in days. With neither, a deployment is kept until its owners delete it ([Lifetime](#lifetime)). |
 | `deployment_name`, `connection`, `actions`, `teardown_template` | For a `deployment` item, what its deployments are named, how to connect to them, their day-2 actions and what deleting one runs ([Deployments](#deployments)). |
 | `max_deployments`, `max_requests_per_day`, `over_quota` | The deployments each team can keep at once, the requests it can make in 24 hours, and whether a request over quota is refused or waits for approval ([Quotas](#quotas)). |
 | `extension_days`, `max_extensions`, `expiry_waits_for_freeze` | For a `deployment` item, the extensions its deployments' owners can ask for, how many, and whether an expiry waits for a freeze's end ([Lifetime](#lifetime)). |
@@ -2561,7 +2595,7 @@ The request form (`GET catalog_items/N/request/`) gives the usage in `quota`: th
 `max_deployments`, `max_requests_per_day` and `over_quota`, and in `usage`, the `deployments` and
 `requests` of each of the requester's teams in the item's organization, or of the requester when
 they have none. The item's admins see every team's and user's usage at
-`GET /api/v2/catalog_items/N/quota_usage/`, and in the UI under **Admin > Catalog quotas**.
+`GET /api/v2/catalog_items/N/quota_usage/`, and in the UI under **Portal > Catalog quotas**.
 
 ### Deployments
 
@@ -2676,7 +2710,10 @@ teardown to run: deleting the deployment marks it deleted at once.
 #### Lifetime
 
 A requester chooses how long to keep a deployment, up to the item's `max_lifetime_days`; its
-`expires_at` counts from the request, as the request's `expires_at` does. An item's
+`expires_at` counts from the request, as the request's `expires_at` does. A request that gives no
+`lifetime_days` gets the item's `default_lifetime_days`. When the item has neither lifetime, such
+a request's deployment is kept until its owners delete it, with no `expires_at`; when the item has
+only `max_lifetime_days`, the request must give one. An item's
 `extension_days` lists the extensions its owners can ask for, in days, such as `[1, 3, 7]`. Its
 caps are `max_extensions`, how many extensions a deployment gets (empty: no limit), and
 `max_lifetime_days`, which holds for the whole lifetime, extensions included.

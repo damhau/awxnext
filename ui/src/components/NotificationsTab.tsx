@@ -1,5 +1,5 @@
 import { useQueries } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Link } from 'react-router'
 import { api, type Page } from '../api/client'
 import { useInvalidate, useList } from '../api/hooks'
@@ -22,16 +22,31 @@ type NT = Base & { notification_type: string }
 /**
  * The notifications that fire for an object's jobs: every notification the
  * user can see, with a switch per event. `approvals` adds the approval event
- * (workflows and organizations). Attaching needs change on the object and on
- * the notification.
+ * (workflows and organizations); `events` replaces them for objects with
+ * other events, such as catalog items. Attaching needs change on the object
+ * and on the notification.
  */
-export function NotificationsTab({ resource, id, approvals, editable }: { resource: string; id: number; approvals?: boolean; editable: boolean }) {
+export function NotificationsTab({
+  resource,
+  id,
+  approvals,
+  editable,
+  events: only,
+  intro,
+}: {
+  resource: string
+  id: number
+  approvals?: boolean
+  editable: boolean
+  events?: { key: string; label: string }[]
+  intro?: ReactNode
+}) {
   const [q, setQ] = useState('')
   const [busy, setBusy] = useState<string>()
   const toast = useToast()
   const invalidate = useInvalidate()
   const all = useList<NT>('notification_templates/', { search: q || undefined, order_by: 'name', page_size: 100 })
-  const events = notificationEvents.filter((e) => approvals || e.key !== 'approvals')
+  const events = only ?? notificationEvents.filter((e) => approvals || e.key !== 'approvals')
   const sub = (ev: string) => `${resource}/${id}/notification_templates_${ev}/`
   const attached = useQueries({
     queries: events.map((e) => ({ queryKey: [sub(e.key), 'list', { page_size: 200 }], queryFn: () => api.get<Page<Base>>(sub(e.key), { page_size: 200 }) })),
@@ -95,7 +110,11 @@ export function NotificationsTab({ resource, id, approvals, editable }: { resour
     <div className="stack" style={{ gap: 10 }}>
       <div className="row wrap" style={{ gap: 8 }}>
         <p className="muted grow" style={{ margin: 0 }}>
-          {tr('Choose which notifications fire when a job')} {approvals ? tr('starts, succeeds, fails or waits for approval') : tr('starts, succeeds or fails')}.
+          {intro ?? (
+            <>
+              {tr('Choose which notifications fire when a job')} {approvals ? tr('starts, succeeds, fails or waits for approval') : tr('starts, succeeds or fails')}.
+            </>
+          )}
         </p>
         <input className="input" type="search" placeholder={tr('Filter notifications…')} aria-label={tr('Filter notifications')} value={q} onChange={(e) => setQ(e.target.value)} style={{ maxWidth: 260 }} />
       </div>

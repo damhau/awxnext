@@ -110,6 +110,16 @@ function useNav(): { label: string; items: NavItem[] }[] {
       ],
     },
     {
+      label: tr('Portal'),
+      items: [
+        { to: '/catalog-items', label: tr('Catalog items'), icon: 'columns' },
+        { to: '/catalog-requests', label: tr('Requests'), icon: 'clock' },
+        { to: '/deployments', label: tr('Deployments'), icon: 'server' },
+        { to: '/catalog-quotas', label: tr('Catalog quotas'), icon: 'gauge' },
+        { to: '/portal', label: tr('Open the portal'), icon: 'external' },
+      ],
+    },
+    {
       label: tr('Collection hub'),
       items: [
         { to: '/collections', label: tr('Collections'), icon: 'box' },
@@ -135,7 +145,6 @@ function useNav(): { label: string; items: NavItem[] }[] {
         { to: '/credential-types', label: tr('Credential types'), icon: 'shield' },
         { to: '/roles', label: tr('Roles'), icon: 'key' },
         { to: '/host-metrics', label: tr('Host metrics'), icon: 'host', superuser: true },
-        { to: '/catalog-quotas', label: tr('Catalog quotas'), icon: 'gauge' },
         { to: '/notifications', label: tr('Notifications'), icon: 'bell' },
         { to: '/gitops', label: tr('GitOps'), icon: 'git' },
         { to: '/management-jobs', label: tr('Management jobs'), icon: 'terminal', superuser: true },
