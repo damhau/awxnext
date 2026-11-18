@@ -311,6 +311,24 @@ var Managed = []Def{
 			choice("postgres_sslmode", "SSL Mode", "choices", []any{"disable", "allow", "prefer", "require", "verify-ca", "verify-full"}, "default", "prefer"),
 		}, []string{"postgres_db_host", "postgres_db_port", "postgres_db_name", "postgres_db_user"})},
 
+	// awxnext's own, for choice sources (M15-02): how awxnext authenticates
+	// to the JSON APIs that list a survey's choices. Not in AWX.
+	{Namespace: "http_api_token", Name: "HTTP API Token", Kind: "token", Description: "A token awxnext sends to a JSON API in a header, for choice sources.", Inputs: inputs([]field{
+		str("token", "Token", "secret", true),
+		str("header", "Header", "default", "Authorization", "help_text", "The header that carries the token."),
+		str("prefix", "Prefix", "default", "Bearer", "help_text", "What comes before the token in the header: Bearer, Token for NetBox, or nothing."),
+	}, []string{"token"})},
+	{Namespace: "http_api_basic", Name: "HTTP API Basic Authentication", Kind: "token", Description: "A username and password awxnext sends to a JSON API (HTTP Basic), for choice sources.", Inputs: inputs([]field{
+		str("username", "Username"),
+		str("password", "Password", "secret", true),
+	}, []string{"username", "password"})},
+	{Namespace: "oauth2_client_credentials", Name: "OAuth 2.0 Client Credentials", Kind: "token", Description: "An OAuth 2.0 client awxnext gets a token for before calling a JSON API, such as Microsoft Graph, for choice sources.", Inputs: inputs([]field{
+		str("token_url", "Token URL", "format", "url", "help_text", "Such as https://login.microsoftonline.com/<tenant>/oauth2/v2.0/token. Its host must be one choice sources may call."),
+		str("client_id", "Client ID"),
+		str("client_secret", "Client Secret", "secret", true),
+		str("scope", "Scope", "help_text", "Scopes separated by spaces, such as https://graph.microsoft.com/.default."),
+	}, []string{"token_url", "client_id", "client_secret"})},
+
 	// External secret lookups (v1 scope: HashiCorp Vault and Azure Key Vault).
 	{Namespace: "hashivault_kv", Name: "HashiCorp Vault Secret Lookup", Kind: "external", Inputs: inputs(append(vaultInputs(),
 		choice("api_version", "API Version", "choices", []any{"v1", "v2"}, "default", "v1", "help_text", "API v1 is for static key/value lookups.  API v2 is for versioned key/value lookups."),

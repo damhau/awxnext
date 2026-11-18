@@ -78,7 +78,7 @@ export function JobsTable({ fixed = {}, filter = true, compact = false }: { fixe
       key: 'by',
       header: tr('Started by'),
       className: 'nowrap',
-      render: (j) => (j.launch_type === 'scheduled' ? <span className="muted">{tr('schedule')}</span> : j.launch_type === 'webhook' ? <span className="muted">{tr('webhook')}</span> : j.launch_type === 'workflow' ? <span className="muted">{tr('workflow')}</span> : userName(j.summary_fields.created_by)),
+      render: (j) => (j.launch_type === 'scheduled' ? <span className="muted">{tr('schedule')}</span> : j.launch_type === 'webhook' ? <span className="muted">{tr('webhook')}</span> : j.launch_type === 'workflow' ? <span className="muted">{tr('workflow')}</span> : j.launch_type === 'choice_source' && !j.summary_fields.created_by ? <span className="muted">{tr('choice source')}</span> : userName(j.summary_fields.created_by)),
     },
     ...(compact ? [] : [{ key: 'node', header: tr('Node'), className: 'nowrap mono small', render: (j: Job) => j.execution_node || '—' }]),
     { key: 'started', header: tr('Started'), sort: 'started', className: 'nowrap small', render: (j) => <Ago at={j.started ?? j.created} /> },

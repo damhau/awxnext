@@ -37,6 +37,7 @@ export function modelLabel(model: string, many = false): string {
     eventconnector: [tr('Event connector'), tr('Event connectors')],
     collectionnamespace: [tr('Collection namespace'), tr('Collection namespaces')],
     catalogitem: [tr('Catalog item'), tr('Catalog items')],
+    choicesource: [tr('Choice source'), tr('Choice sources')],
   }
   const n = names[m]
   return n ? n[many ? 1 : 0] : m

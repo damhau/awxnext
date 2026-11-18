@@ -20,6 +20,8 @@ describe('used by', () => {
     expect(linkTo(d('workflow_job_template', 2, 'node_template'))).toBe('/templates/workflow/2')
     expect(linkTo(d('schedule', 9, 'inventory', 'cleared', 'nightly run'))).toBe('/schedules?q=nightly%20run')
     expect(linkTo(d('inventory_source', 3, 'source_project', 'deleted'))).toBe('/inventory-sources/3')
+    expect(howUsed(d('choice_source', 5, 'job_template', 'cleared'))).toBe('lists what it publishes')
+    expect(linkTo(d('choice_source', 5, 'credential', 'cleared'))).toBe('/choice-sources/5')
   })
   it('links the rules that read a stream and the windows that list a rule', () => {
     expect(howUsed(d('event_rule', 5, 'streams'))).toBe('reads its events')

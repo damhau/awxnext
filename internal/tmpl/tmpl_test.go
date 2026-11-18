@@ -25,6 +25,12 @@ func TestRender(t *testing.T) {
 			t.Errorf("%s: got %q, %v; want %q", src, got, err, want)
 		}
 	}
+	if got, _ := RenderBlank("site={{ answers.site }}&x={{ job.missing | default('n/a') }}", ctx); got != "site=&x=n/a" {
+		t.Errorf("RenderBlank: %q", got)
+	}
+	if got, _ := Render("{{ answers.site }}", ctx); got != "None" {
+		t.Errorf("Render of a missing value: %q", got)
+	}
 	for _, bad := range []string{"{{ }}", "{% if x %}", "{% endif %}", "{{ x | nope }}", "{{ x.__class__() }}", "{% for x in y %}{% endfor %}"} {
 		if _, err := Render(bad, ctx); err == nil {
 			t.Errorf("%q: expected error", bad)

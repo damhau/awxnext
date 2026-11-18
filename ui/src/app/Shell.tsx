@@ -105,6 +105,7 @@ function useNav(): { label: string; items: NavItem[] }[] {
         { to: '/hosts', label: tr('Hosts'), icon: 'host' },
         { to: '/projects', label: tr('Projects'), icon: 'project' },
         { to: '/credentials', label: tr('Credentials'), icon: 'key' },
+        { to: '/choice-sources', label: tr('Choice sources'), icon: 'menu' },
         { to: '/execution-environments', label: tr('Execution environments'), icon: 'box' },
       ],
     },

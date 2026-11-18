@@ -2386,8 +2386,9 @@ To request the item, post to the same URL:
 
 awxnext then runs the template with the item's answers, the requester as the launcher, and
 answers `201` with the request (`/api/v2/catalog_requests/N/`). The request records the item, the
-team, the reason, the lifetime, the answers the requester gave (passwords masked) and the fixed
-answers they were shown, its job, and a `status` that follows the job's: `pending`, `running`,
+team, the reason, the lifetime, the answers the requester gave (passwords masked), the label
+each answer was shown with when it differs from the answer (`answer_labels`, for lists from a
+[choice source](surveys.md#choice-sources)), the fixed answers they were shown, its job, and a `status` that follows the job's: `pending`, `running`,
 `successful`, `failed` or `canceled`.
 
 The requester sees their requests, not the jobs that run them: a request's jobs, the workflow's

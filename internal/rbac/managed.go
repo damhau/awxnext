@@ -25,13 +25,14 @@ var typePerms = map[string][]string{
 	"eventconnector":       {"view", "change", "delete"},
 	"collectionnamespace":  {"view", "change", "delete", "upload", "approve"},
 	"catalogitem":          {"view", "change", "delete", "request"},
+	"choicesource":         {"view", "change", "delete", "use"},
 }
 
 // Types that can live in a folder.
 var folderChildTypes = []string{"credential", "project", "inventory", "jobtemplate", "workflowjobtemplate", "notificationtemplate"}
 
 // Types that can be created inside an organization (add_<type> is granted on the org).
-var orgChildTypes = []string{"team", "credential", "project", "inventory", "workflowjobtemplate", "notificationtemplate", "executionenvironment", "folder", "eventstream", "eventrule", "maintenancewindow", "eventconnector", "collectionnamespace"}
+var orgChildTypes = []string{"team", "credential", "project", "inventory", "workflowjobtemplate", "notificationtemplate", "executionenvironment", "folder", "eventstream", "eventrule", "maintenancewindow", "eventconnector", "collectionnamespace", "choicesource"}
 
 func perms(ct string, actions ...string) []string {
 	out := make([]string, 0, len(actions))
@@ -159,6 +160,9 @@ func buildManaged() []ManagedRole {
 		{"CatalogItem Admin", "Has all permissions to a single catalog item", "catalogitem", all("catalogitem"), "admin_role"},
 		{"CatalogItem Requester", "May request the catalog item, without any role on its template", "catalogitem", perms("catalogitem", "view", "request"), "requester_role"},
 		{"CatalogItem Read", "May view the catalog item", "catalogitem", perms("catalogitem", "view"), "read_role"},
+
+		{"ChoiceSource Admin", "Has all permissions to a single choice source", "choicesource", all("choicesource"), "admin_role"},
+		{"ChoiceSource Use", "May use the choice source in a survey, without seeing its credential", "choicesource", perms("choicesource", "view", "use"), "use_role"},
 
 		{"Folder Admin", "Has all permissions to a folder, its subfolders and every object inside", "folder", folderAdmin(), "admin_role"},
 		{"Folder Execute", "May run any job or workflow template in the folder", "folder", concat([]string{"view_folder"}, perms("jobtemplate", "view", "execute"), perms("workflowjobtemplate", "view", "execute")), "execute_role"},

@@ -1,10 +1,15 @@
-// Routes for inventories, hosts, projects, credentials and execution environments.
+// Routes for inventories, hosts, projects, credentials, choice sources and
+// execution environments.
 import { Route, useOutletContext } from 'react-router'
 import './resources.css'
 
 import type { Inventory } from './inventories'
 import { lazyModule } from '../../lib/lazy'
 
+const m_choiceSources = lazyModule(() => import('./choiceSources'))
+const ChoiceSourceDetail = m_choiceSources('ChoiceSourceDetail')
+const ChoiceSourceList = m_choiceSources('ChoiceSourceList')
+const ChoiceSourceNew = m_choiceSources('ChoiceSourceNew')
 const m_credentials = lazyModule(() => import('./credentials'))
 const CredentialAccessTab = m_credentials('CredentialAccessTab')
 const CredentialDetail = m_credentials('CredentialDetail')
@@ -91,6 +96,9 @@ export function resourceRoutes() {
         <Route index element={<CredentialDetailsTab />} />
         <Route path="access" element={<CredentialAccessTab />} />
       </Route>
+      <Route path="choice-sources" element={<ChoiceSourceList />} />
+      <Route path="choice-sources/new" element={<ChoiceSourceNew />} />
+      <Route path="choice-sources/:id/*" element={<ChoiceSourceDetail />} />
       <Route path="execution-environments" element={<ExecutionEnvironmentList />} />
     </>
   )

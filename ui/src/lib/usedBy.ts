@@ -45,6 +45,7 @@ const kinds: Record<string, [string, string]> = {
   maintenance_window: [tr('maintenance window'), tr('maintenance windows')],
   event_connector: [tr('event connector'), tr('event connectors')],
   collection_version: [tr('collection version'), tr('collection versions')],
+  choice_source: [tr('choice source'), tr('choice sources')],
 }
 
 export function kindOf(d: Dependent, n = 1): string {
@@ -79,6 +80,7 @@ const how: Record<string, string> = {
   collection_requirements: tr('in its collection requirements'),
   dependencies: tr('as a dependency'),
   contents: tr('holds it in its image'),
+  job_template: tr('lists what it publishes'),
 }
 
 /** "as its inventory", "runs it in a step" */
@@ -125,6 +127,8 @@ export function linkTo(d: Dependent): string | null {
       return `/event-connectors/${d.id}`
     case 'collection_version':
       return `/collection-versions/${d.id}`
+    case 'choice_source':
+      return `/choice-sources/${d.id}`
   }
   return null
 }

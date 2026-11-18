@@ -22,7 +22,7 @@ var jobStatusChoices = labelled("new", "New", "pending", "Pending", "waiting", "
 	"successful", "Successful", "failed", "Failed", "error", "Error", "canceled", "Canceled")
 
 var launchTypeChoices = labelled("manual", "Manual", "relaunch", "Relaunch", "callback", "Callback", "scheduled", "Scheduled",
-	"dependency", "Dependency", "workflow", "Workflow", "webhook", "Webhook", "sync", "Sync", "scm", "SCM Update")
+	"dependency", "Dependency", "workflow", "Workflow", "webhook", "Webhook", "sync", "Sync", "scm", "SCM Update", "choice_source", "Choice Source Refresh")
 
 var ujtStatusChoices = labelled("new", "New", "pending", "Pending", "waiting", "Waiting", "running", "Running",
 	"successful", "Successful", "failed", "Failed", "error", "Error", "canceled", "Canceled", "never updated", "Never Updated",

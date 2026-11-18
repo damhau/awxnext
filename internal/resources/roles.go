@@ -155,6 +155,8 @@ func ctLabel(ct string) string {
 		return "Collection Namespace"
 	case "catalogitem":
 		return "Catalog Item"
+	case "choicesource":
+		return "Choice Source"
 	}
 	return strings.ToUpper(ct[:1]) + ct[1:]
 }

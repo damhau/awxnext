@@ -1,4 +1,4 @@
-import { useQueries } from '@tanstack/react-query'
+import { keepPreviousData, useQueries } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import { api } from '../../api/client'
 import { useInvalidate, useObject } from '../../api/hooks'
@@ -7,7 +7,7 @@ import { Check, FormError, Lookup, SelectField, TextArea, TextInput } from '../.
 import { Icon } from '../../components/icons'
 import { Dialog, useConfirm, useToast } from '../../components/overlay'
 import { Empty, Loading, Panel } from '../../components/ui'
-import { describeSource, patternError, visibleQuestions, type ChoicesFrom, type ShowIf } from './surveyLogic'
+import { describeSource, earlierAnswers, patternError, visibleQuestions, type ChoicesFrom, type ShowIf } from './surveyLogic'
 import { resOf, type Kind } from './TemplateDetail'
 import { tr } from '../../lib/i18n'
 
@@ -28,24 +28,49 @@ export interface Question {
   new_question?: boolean
 }
 
-/** Choices listed by the server for questions with choices_from, by variable. */
-export type DynamicChoices = Record<string, { choices: string[]; error?: string; pending?: boolean }>
+/** Choices listed by the server for questions with choices_from, by
+ * variable, with the labels that differ from them. */
+export type DynamicChoices = Record<string, { choices: string[]; labels?: Record<string, string>; error?: string; pending?: boolean }>
+
+/** v once it has stopped changing for ms. */
+function useSettled<T>(v: T, ms: number): T {
+  const key = JSON.stringify(v)
+  const [settled, setSettled] = useState(v)
+  useEffect(() => {
+    const t = window.setTimeout(() => setSettled(v), ms)
+    return () => window.clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key])
+  return settled
+}
 
 /** Lists the dynamic choices of a survey for the current user, from the
  * inventory picked at launch when the template prompts for one. */
-export function useSurveyChoices(res: string, tplId: number, questions: Question[], inventory?: number | null): DynamicChoices {
+export function useSurveyChoices(res: string, tplId: number, questions: Question[], inventory?: number | null, values?: Record<string, unknown>): DynamicChoices {
   const dynamic = questions.filter((q) => q.choices_from)
+  const settled = useSettled(values ?? {}, 400)
   const results = useQueries({
-    queries: dynamic.map((q) => ({
-      queryKey: [`${res}/${tplId}/survey_choices/`, q.variable, inventory ?? null],
-      queryFn: () => api.get<{ choices: string[]; error?: string }>(`${res}/${tplId}/survey_choices/`, { variable: q.variable, ...(inventory ? { inventory } : {}) }),
-      staleTime: 30_000,
-    })),
+    queries: dynamic.map((q) => {
+      // A choice source's list can depend on the earlier answers.
+      const earlier = q.choices_from?.type === 'source' ? earlierAnswers(questions, q.variable, settled) : {}
+      const answers = Object.keys(earlier).length ? JSON.stringify(earlier) : null
+      return {
+        queryKey: [`${res}/${tplId}/survey_choices/`, q.variable, inventory ?? null, answers],
+        queryFn: () =>
+          api.get<{ choices: string[]; labels?: Record<string, string>; error?: string }>(`${res}/${tplId}/survey_choices/`, {
+            variable: q.variable,
+            ...(inventory ? { inventory } : {}),
+            ...(answers ? { answers } : {}),
+          }),
+        staleTime: 30_000,
+        placeholderData: keepPreviousData,
+      }
+    }),
   })
   const out: DynamicChoices = {}
   dynamic.forEach((q, i) => {
     const r = results[i]
-    out[q.variable] = { choices: r.data?.choices ?? [], error: r.data?.error ?? (r.error ? (r.error as Error).message : undefined), pending: r.isPending }
+    out[q.variable] = { choices: r.data?.choices ?? [], labels: r.data?.labels, error: r.data?.error ?? (r.error ? (r.error as Error).message : undefined), pending: r.isPending }
   })
   return out
 }
@@ -263,6 +288,7 @@ const SOURCES: [string, string][] = [
   ['groups', tr('Groups of an inventory')],
   ['git_refs', tr('Git tags or branches of a project')],
   ['resource', tr('Another list from the API')],
+  ['source', tr('A choice source')],
 ]
 
 const lines = (s: string) => s.split('\n').map((x) => x.trim()).filter(Boolean)
@@ -296,6 +322,7 @@ function QuestionDialog({
   const src0 = initial.choices_from
   const [inv, setInv] = useState<Ref | null>(src0?.inventory ? { id: src0.inventory, name: `Inventory #${src0.inventory}` } : null)
   const [project, setProject] = useState<Ref | null>(src0?.project ? { id: src0.project, name: `Project #${src0.project}` } : null)
+  const [source, setSource] = useState<Ref | null>(src0?.source ? { id: src0.source, name: `Choice source #${src0.source}` } : null)
   const [filterText, setFilterText] = useState(Object.entries(src0?.filter ?? {}).map(([k, v]) => `${k}=${v}`).join('\n'))
   const [showVar, setShowVar] = useState(initial.show_if?.variable ?? '')
   const [showValues, setShowValues] = useState<string[]>((initial.show_if?.values ?? []).map(String))
@@ -311,7 +338,7 @@ function QuestionDialog({
   // The server decides (setting ALLOW_ANSIBLE_VARS_AT_LAUNCH), so this only warns.
   const varWarning = /^ansible_/i.test(q.variable) ? 'ansible_* variables control how Ansible connects and runs: saving is refused unless an administrator allows them at launch.' : ''
   const patternOk = !isText || validPattern(q.pattern)
-  const sourceOk = !src || (src.type === 'resource' ? !!src.resource : src.type === 'git_refs' && kind === 'workflow' ? !!project : true)
+  const sourceOk = !src || (src.type === 'resource' ? !!src.resource : src.type === 'source' ? !!source : src.type === 'git_refs' && kind === 'workflow' ? !!project : true)
   const valid =
     q.question_name.trim() && q.variable && !varError && (!isChoice || src || choicesOf(q).length > 0) && sourceOk && patternOk && (!showVar || showValues.length > 0)
   const finish = () => {
@@ -329,6 +356,7 @@ function QuestionDialog({
         const filter = Object.fromEntries(lines(filterText).map((l) => [l.split('=')[0].trim(), l.slice(l.indexOf('=') + 1).trim()]))
         if (Object.keys(filter).length) cf.filter = filter
       }
+      if (src.type === 'source' && source) cf.source = source.id
       out.choices_from = cf
       delete out.choices
     } else if (isChoice) {
@@ -412,6 +440,16 @@ function QuestionDialog({
             <TextInput label={tr('Field')} value={src.field ?? ''} onChange={(v) => setSrc({ field: v.trim() })} mono optional placeholder={tr('name')} />
             <TextArea label={tr('Filters')} value={filterText} onChange={setFilterText} optional rows={3} help={<>{tr('One API filter per line, e.g.')} <span className="mono">{tr('organization=1')}</span> {tr('or')} <span className="mono">{tr('name__startswith=prod')}</span>.</>} />
           </>
+        )}
+        {src?.type === 'source' && (
+          <Lookup
+            label={tr('Choice source')}
+            resource="choice_sources/"
+            value={source}
+            onChange={setSource}
+            meta={(r) => <span className="faint small">{r.summary_fields?.organization?.name}</span>}
+            help={tr('A list from an API or a job, set up by your organization’s admins. Picking one takes Use on it. Its parameters and filter can use the answers to earlier questions.')}
+          />
         )}
         {(isNumber || isText) && (
           <>
@@ -553,7 +591,7 @@ export function SurveyFields({
                 {choices.map((c) => (
                   <label key={c} className="check">
                     <input type="checkbox" disabled={preview} checked={sel.includes(c)} onChange={(e) => onChange(q.variable, e.target.checked ? [...sel, c] : sel.filter((x) => x !== c))} />
-                    {c}
+                    {dyn?.labels?.[c] ?? c}
                   </label>
                 ))}
               </div>
@@ -568,7 +606,9 @@ export function SurveyFields({
               <select id={id} className="select" disabled={preview} value={String(v)} onChange={(e) => onChange(q.variable, e.target.value)} style={{ maxWidth: 440 }}>
                 {(!q.required || !choices.includes(String(v))) && <option value="">—</option>}
                 {choices.map((c) => (
-                  <option key={c}>{c}</option>
+                  <option key={c} value={c}>
+                    {dyn?.labels?.[c] ?? c}
+                  </option>
                 ))}
               </select>
             ) : q.type === 'textarea' ? (

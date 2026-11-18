@@ -2,6 +2,7 @@ package resources
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -23,9 +24,12 @@ import (
 //	{"type": "groups", "inventory": 3}         group names of inventory 3
 //	{"type": "git_refs", "refs": "tags"}       tags (newest first), "branches" or "all" of the template's project
 //	{"type": "resource", "resource": "inventories", "field": "name", "filter": {"organization": 1}}
+//	{"type": "source", "source": 4}            the list of choice source 4
 //
 // Choices are listed as the launching user, so they only see what they can
-// view, and answers are checked against the same list at launch.
+// view, and answers are checked against the same list at launch. A choice
+// source's list is the source's, whoever launches: the survey's owners
+// chose it, as they choose a template's credentials.
 
 // SurveyContext is what dynamic survey choices are resolved against.
 type SurveyContext struct {
@@ -39,18 +43,106 @@ type SurveyContext struct {
 	System bool
 	// Filter, when set, narrows a dynamic list with the answers so far.
 	Filter func(variable string, choices []string, answered map[string]any) ([]string, error)
+	// Labels, when not nil, gets the labels of the answers picked in
+	// labelled lists, by variable: a string, or a list for a multiselect.
+	Labels map[string]any
+}
+
+// options lists a question's choices and their labels, narrowed by the
+// context's filter. answered are the earlier answers.
+func (sc SurveyContext) options(c *Ctx, q map[string]any, answered map[string]any) ([]choiceOption, error) {
+	var opts []choiceOption
+	if src, ok := q["choices_from"].(map[string]any); ok && str(src["type"]) == "source" {
+		id, _ := api.ID(src["source"])
+		var err error
+		if opts, err = sourceOptions(c, id, answered); err != nil {
+			return nil, err
+		}
+	} else {
+		values, err := resolveChoices(c, q, sc)
+		if err != nil {
+			return nil, err
+		}
+		opts = make([]choiceOption, len(values))
+		for i, v := range values {
+			opts[i] = choiceOption{Value: v, Label: v}
+		}
+	}
+	if sc.Filter == nil || q["choices_from"] == nil {
+		return opts, nil
+	}
+	kept, err := sc.Filter(str(q["variable"]), optionValues(opts), answered)
+	if err != nil {
+		return nil, err
+	}
+	out := []choiceOption{}
+	for _, o := range opts {
+		if contains(kept, o.Value) {
+			out = append(out, o)
+		}
+	}
+	return out, nil
 }
 
 // choices lists a question's choices, narrowed by the context's filter.
 func (sc SurveyContext) choices(c *Ctx, q map[string]any, answered map[string]any) ([]string, error) {
-	choices, err := resolveChoices(c, q, sc)
-	if err != nil || sc.Filter == nil || q["choices_from"] == nil {
-		return choices, err
-	}
-	return sc.Filter(str(q["variable"]), choices, answered)
+	opts, err := sc.options(c, q, answered)
+	return optionValues(opts), err
 }
 
-var choiceSourceTypes = map[string]bool{"hosts": true, "groups": true, "git_refs": true, "resource": true}
+func optionValues(opts []choiceOption) []string {
+	out := make([]string, len(opts))
+	for i, o := range opts {
+		out[i] = o.Value
+	}
+	return out
+}
+
+// choicesReply is the reply of the survey_choices endpoints: the values,
+// and their labels when a list has any.
+func choicesReply(variable string, opts []choiceOption) Obj {
+	labels := map[string]string{}
+	for _, o := range opts {
+		if o.Label != o.Value {
+			labels[o.Value] = o.Label
+		}
+	}
+	out := Obj{"variable": variable, "choices": optionValues(opts)}
+	if len(labels) > 0 {
+		out["labels"] = labels
+	}
+	return out
+}
+
+// earlierAnswers keeps the answers to the questions before variable's: a
+// dynamic list depends only on those, as show_if does. Passwords are left
+// out, since a choice source can send answers to an API.
+func earlierAnswers(spec map[string]any, variable string, given map[string]any) map[string]any {
+	out := map[string]any{}
+	for _, q := range surveyQuestions(spec) {
+		v := str(q["variable"])
+		if v == variable {
+			break
+		}
+		if a, ok := given[v]; ok && str(q["type"]) != "password" {
+			out[v] = a
+		}
+	}
+	return out
+}
+
+// answersParam reads the answers query parameter (a JSON object).
+func answersParam(r *http.Request) (map[string]any, error) {
+	given := map[string]any{}
+	if s := r.URL.Query().Get("answers"); s != "" {
+		if err := json.Unmarshal([]byte(s), &given); err != nil || given == nil {
+			return nil, api.Detail(400, "answers must be a JSON object.")
+		}
+	}
+	return given, nil
+}
+
+var choiceSourceTypes = map[string]bool{"hosts": true, "groups": true, "git_refs": true, "resource": true, "source": true}
 
 // maxSurveyChoices bounds a dynamic choice list.
 const maxSurveyChoices = 500
@@ -59,9 +151,9 @@ const maxSurveyChoices = 500
 func validateChoicesFrom(src map[string]any) error {
 	typ := str(src["type"])
 	if !choiceSourceTypes[typ] {
-		return fmt.Errorf("'choices_from' type %q is not one of hosts, groups, git_refs, resource", typ)
+		return fmt.Errorf("'choices_from' type %q is not one of hosts, groups, git_refs, resource, source", typ)
 	}
-	for _, k := range []string{"inventory", "project"} {
+	for _, k := range []string{"inventory", "project", "source"} {
 		if v, ok := src[k]; ok && v != nil {
 			if _, ok := api.ID(v); !ok {
 				return fmt.Errorf("'choices_from' %s must be an id", k)
@@ -69,6 +161,10 @@ func validateChoicesFrom(src map[string]any) error {
 		}
 	}
 	switch typ {
+	case "source":
+		if _, ok := api.ID(src["source"]); !ok {
+			return errors.New("'choices_from' of type source needs the source's id")
+		}
 	case "git_refs":
 		if r := str(src["refs"]); r != "" && r != "tags" && r != "branches" && r != "all" {
 			return fmt.Errorf("'choices_from' refs must be tags, branches or all")
@@ -228,11 +324,18 @@ func projectRefs(ctx context.Context, root string, project int64, kind string) (
 // handleSurveyChoices serves /<templates>/<id>/survey_choices/?variable=x
 // with the choices the requesting user may pick for question x. An
 // inventory parameter lists hosts and groups of the inventory chosen at
-// launch, when the template prompts for one.
+// launch, when the template prompts for one; answers (JSON) are the earlier
+// answers a choice source may use.
 func handleSurveyChoices(c *Ctx, w http.ResponseWriter, r *http.Request, tpl Obj) {
 	id, _ := api.ID(tpl["id"])
 	variable := r.URL.Query().Get("variable")
-	for _, q := range surveyQuestions(templateSurvey(c, id)) {
+	given, err := answersParam(r)
+	if err != nil {
+		api.WriteError(w, err)
+		return
+	}
+	spec := templateSurvey(c, id)
+	for _, q := range surveyQuestions(spec) {
 		if str(q["variable"]) != variable {
 			continue
 		}
@@ -241,12 +344,12 @@ func handleSurveyChoices(c *Ctx, w http.ResponseWriter, r *http.Request, tpl Obj
 		if inv, ok := api.ID(r.URL.Query().Get("inventory")); ok && boolv(tpl["ask_inventory_on_launch"]) {
 			sc.Inventory = inv
 		}
-		choices, err := resolveChoices(c, q, sc)
+		opts, err := sc.options(c, q, earlierAnswers(spec, variable, given))
 		if err != nil {
 			api.WriteJSON(w, 200, Obj{"variable": variable, "choices": []string{}, "error": err.Error()})
 			return
 		}
-		api.WriteJSON(w, 200, Obj{"variable": variable, "choices": choices})
+		api.WriteJSON(w, 200, choicesReply(variable, opts))
 		return
 	}
 	api.WriteError(w, api.Detail(404, fmt.Sprintf("The survey has no question for %q.", variable)))

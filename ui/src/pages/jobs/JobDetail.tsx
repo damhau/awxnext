@@ -135,7 +135,7 @@ function JobView({ type, job }: { type: string; job: Job }) {
           <div>
             <dt>{tr('Launched by')}</dt>
             <dd className="sans">
-              {job.launch_type === 'scheduled' ? tr('schedule') : job.launch_type === 'workflow' ? tr('workflow') : job.launch_type === 'webhook' ? tr('webhook') : job.launched_by?.name ?? userName(sf.created_by)}
+              {job.launch_type === 'scheduled' ? tr('schedule') : job.launch_type === 'workflow' ? tr('workflow') : job.launch_type === 'webhook' ? tr('webhook') : job.launch_type === 'choice_source' && !sf.created_by ? tr('choice source') : job.launched_by?.name ?? userName(sf.created_by)}
             </dd>
           </div>
           {job.scm_revision && (

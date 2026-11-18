@@ -661,6 +661,23 @@ export const settingsPages: SettingsPage[] = [
         ],
       },
       {
+        id: 'choice-sources',
+        title: tr('Choice sources'),
+        intro: tr('An http choice source lists a survey\'s choices from a JSON API that awxnext calls, at the address its organization\'s admins give.'),
+        rows: [
+          row('CHOICE_SOURCE_HOSTS', {
+            label: tr('Hosts choice sources may call'),
+            help: tr('Their APIs and their OAuth token endpoints. One host per entry: netbox.example.com, *.example.com, or http://cmdb.cmdb.svc:8080 for plain HTTP. Empty: none.'),
+            consequence: tr('Anyone who may create a choice source can then make awxnext call these hosts, with a credential they may use.'),
+          }),
+          row('CHOICE_SOURCE_ALLOWED_LOCAL_ADDRESSES', {
+            label: tr('Local addresses choice sources may reach'),
+            help: tr('Loopback and link-local addresses and cloud metadata services are refused, even for a listed host: they are awxnext\'s own host. One per entry: an address, a network, or an address and port.'),
+            consequence: tr('Anyone who may create a choice source can then make awxnext send requests to these addresses.'),
+          }),
+        ],
+      },
+      {
         id: 'limits',
         title: tr('Limits and timeouts'),
         rows: [

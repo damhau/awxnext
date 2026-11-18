@@ -185,7 +185,7 @@ function LaunchForm({ kind, tpl, info, survey, operator }: { kind: Kind; tpl: Te
   const set = (k: string, v: unknown) => setFields((p) => ({ ...p, [k]: v }))
 
   const questions = survey?.spec ?? []
-  const dynamic = useSurveyChoices(res, tpl.id, questions, asks('inventory') ? inventory?.id : null)
+  const dynamic = useSurveyChoices(res, tpl.id, questions, asks('inventory') ? inventory?.id : null, answers)
   const surveyErrors = validateSurvey(questions, answers, dynamic)
   const shownQuestions = visibleQuestions(questions, answers)
   const [touched, setTouched] = useState(false)

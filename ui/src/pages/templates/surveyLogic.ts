@@ -4,8 +4,9 @@ import { tr } from '../../lib/i18n'
 
 /** Where a choice question's choices come from, instead of a fixed list. */
 export interface ChoicesFrom {
-  type: 'hosts' | 'groups' | 'git_refs' | 'resource'
+  type: 'hosts' | 'groups' | 'git_refs' | 'resource' | 'source'
   inventory?: number | null
+  source?: number
   project?: number | null
   refs?: 'tags' | 'branches' | 'all'
   resource?: string
@@ -73,5 +74,19 @@ export function describeSource(src: ChoicesFrom): string {
       return `${src.refs === 'branches' ? 'branches' : src.refs === 'all' ? 'tags and branches' : 'tags'} of ${project}`
     case 'resource':
       return `${src.field || 'name'} of ${src.resource}`
+    case 'source':
+      return `choice source #${src.source}`
   }
+}
+
+/** The answers a question's dynamic list may use: those to the questions
+ * shown before it, without passwords, as the server reads them. */
+export function earlierAnswers<Q extends Conditional & { type: string }>(questions: Q[], variable: string, values: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  for (const q of visibleQuestions(questions, values)) {
+    if (q.variable === variable) break
+    const v = values[q.variable] ?? q.default
+    if (q.type !== 'password' && !empty(v)) out[q.variable] = v
+  }
+  return out
 }

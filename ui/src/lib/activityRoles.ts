@@ -18,6 +18,7 @@ const objectTypes: Record<string, string> = {
   eventconnector: 'event connector',
   collectionnamespace: 'collection namespace',
   catalogitem: 'catalog item',
+  choicesource: 'choice source',
 }
 
 /** "Execute role on job template Deploy" from a role's summary, '' without a role field. */

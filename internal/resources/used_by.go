@@ -54,6 +54,7 @@ var dependencies = map[string][]dependency{
 		{"credential", "cleared", `SELECT 'instance_groups', g.id, g.name FROM instance_groups g WHERE g.credential_id = $1`},
 		{"credential", "cleared", `SELECT 'event_streams', s.id, s.name FROM event_streams s WHERE s.credential_id = $1`},
 		{"credentials", "cleared", `SELECT 'event_connectors', c.id, c.name FROM event_connectors c WHERE c.credentials @> jsonb_build_array($1::bigint)`},
+		{"credential", "cleared", `SELECT 'choice_sources', s.id, s.name FROM choice_sources s WHERE s.credential_id = $1`},
 	},
 	"projects": {
 		{"source_project", "deleted", `SELECT ` + ujtResource + `, t.id, t.name FROM unified_job_templates t WHERE t.source_project_id = $1`},
@@ -95,6 +96,7 @@ var templateDependencies = []dependency{
 		JOIN unified_job_templates t ON t.id = n.workflow_job_template_id WHERE n.unified_job_template_id = $1 AND n.workflow_job_template_id <> $1`},
 	{"unified_job_template", "deleted", `SELECT 'event_rules', r.id, r.name FROM event_rules r WHERE r.unified_job_template_id = $1`},
 	{"unified_job_template", "deleted", `SELECT 'catalog_items', i.id, i.name FROM catalog_items i WHERE i.unified_job_template_id = $1`},
+	{"job_template", "cleared", `SELECT 'choice_sources', s.id, s.name FROM choice_sources s WHERE s.job_template_id = $1`},
 }
 
 const maxDependents = 500

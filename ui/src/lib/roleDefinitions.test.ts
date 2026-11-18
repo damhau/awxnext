@@ -12,6 +12,7 @@ describe('role definitions', () => {
     expect(modelLabel('awx.maintenancewindow', true)).toBe('Maintenance windows')
     expect(modelLabel('awx.eventconnector', false)).toBe('Event connector')
     expect(modelLabel('awx.catalogitem', true)).toBe('Catalog items')
+    expect(modelLabel('awx.choicesource', false)).toBe('Choice source')
     expect(actionLabel(parsePerm('awx.request_catalogitem'))).toBe('Request')
   })
   it('groups by kind of object, the role’s own first', () => {

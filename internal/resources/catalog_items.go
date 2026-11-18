@@ -122,6 +122,7 @@ func registerCatalogItems() {
 			{Name: "status", Type: api.TChoice, ReadOnly: true, Choices: labelled(requestPending, "Pending", requestRunning, "Running",
 				requestSuccessful, "Successful", requestFailed, "Failed", requestCanceled, "Canceled")},
 			{Name: "answers", Type: api.TJSON, ReadOnly: true, Help: "What the requester answered, passwords masked, and the fixed answers they were shown."},
+			{Name: "answer_labels", Type: api.TJSON, ReadOnly: true, Help: "What the requester saw for the answers picked in labelled lists, such as a choice source's, as they were when the request was made."},
 			{Name: "reason", Type: api.TText, ReadOnly: true, Help: "Why the requester needs it."},
 			{Name: "lifetime_days", Type: api.TInt, ReadOnly: true, Nullable: true, Help: "How long to keep the deployment, in days. Empty: for good, or an item that runs once."},
 			{Name: "job", Column: "unified_job_id", Type: api.TFK, Ref: "unified_jobs", ReadOnly: true, Nullable: true,
@@ -697,7 +698,9 @@ func RequestCatalogItem(c *Ctx, ci *catalogItem, body Obj) (Obj, error) {
 	if err := fe.Err(); err != nil {
 		return nil, err
 	}
-	sv, pw, errs := ApplySurvey(c, ci.view.spec, answers, ci.surveyContext(c))
+	sc := ci.surveyContext(c)
+	sc.Labels = map[string]any{}
+	sv, pw, errs := ApplySurvey(c, ci.view.spec, answers, sc)
 	if len(errs) > 0 {
 		return nil, &api.Error{Status: 400, Body: Obj{"variables_needed_to_start": errs}}
 	}
@@ -718,13 +721,20 @@ func RequestCatalogItem(c *Ctx, ci *catalogItem, body Obj) (Obj, error) {
 			}
 		}
 	}
+	labels := map[string]any{}
+	for k, l := range sc.Labels {
+		if keep[k] {
+			labels[k] = l
+		}
+	}
 	answersJSON, _ := json.Marshal(shown)
+	labelsJSON, _ := json.Marshal(labels)
 	var req Obj
 	err = c.WithTx(func(c *Ctx) error {
 		var id int64
 		if err := c.DB().QueryRow(c, `INSERT INTO catalog_requests (created_by_id, modified_by_id, catalog_item_id, item_name, organization_id, team_id,
-			answers, reason, lifetime_days) VALUES ($1, $1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
-			nullID(c.User.UserID), ci.item["id"], ci.item["name"], ci.item["organization"], team, string(answersJSON), reason, lifetime).Scan(&id); err != nil {
+			answers, answer_labels, reason, lifetime_days) VALUES ($1, $1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
+			nullID(c.User.UserID), ci.item["id"], ci.item["name"], ci.item["organization"], team, string(answersJSON), string(labelsJSON), reason, lifetime).Scan(&id); err != nil {
 			return err
 		}
 		lc := *c
@@ -816,7 +826,9 @@ func requestLifetime(item Obj, body Obj) (any, error) {
 
 // handleItemChoices serves /catalog_items/<id>/survey_choices/?variable=x
 // with the choices of a dynamic question that the item asks, narrowed by
-// its filter; answers (JSON) are the earlier answers the filter may use.
+// its filter; answers (JSON) are the earlier answers the filter and a
+// choice source may use, with the item's fixed answers in place of any
+// given for them.
 func handleItemChoices(c *Ctx, w http.ResponseWriter, r *http.Request, item Obj) {
 	ci, err := loadCatalogItem(c, item)
 	if err != nil {
@@ -824,23 +836,26 @@ func handleItemChoices(c *Ctx, w http.ResponseWriter, r *http.Request, item Obj)
 		return
 	}
 	variable := r.URL.Query().Get("variable")
-	answered := map[string]any{}
-	if s := r.URL.Query().Get("answers"); s != "" {
-		if err := json.Unmarshal([]byte(s), &answered); err != nil {
-			api.WriteError(w, api.Detail(400, "answers must be a JSON object."))
-			return
+	given, err := answersParam(r)
+	if err != nil {
+		api.WriteError(w, err)
+		return
+	}
+	for _, q := range surveyQuestions(ci.view.spec) {
+		if v := str(q["variable"]); ci.view.locked[v] {
+			given[v] = q["default"]
 		}
 	}
 	for _, q := range ci.view.asked {
 		if str(q["variable"]) != variable {
 			continue
 		}
-		choices, err := ci.surveyContext(c).choices(c, q, answered)
+		opts, err := ci.surveyContext(c).options(c, q, earlierAnswers(ci.view.spec, variable, given))
 		if err != nil {
 			api.WriteJSON(w, 200, Obj{"variable": variable, "choices": []string{}, "error": err.Error()})
 			return
 		}
-		api.WriteJSON(w, 200, Obj{"variable": variable, "choices": choices})
+		api.WriteJSON(w, 200, choicesReply(variable, opts))
 		return
 	}
 	api.WriteError(w, api.Detail(404, fmt.Sprintf("The item asks no question for %q.", variable)))

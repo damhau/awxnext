@@ -35,12 +35,22 @@ func Validate(src string) error {
 
 // Render evaluates src against ctx.
 func Render(src string, ctx map[string]any) (string, error) {
+	return renderWith(src, ctx, "None")
+}
+
+// RenderBlank is Render with missing values as empty text rather than None,
+// for values sent to an API.
+func RenderBlank(src string, ctx map[string]any) (string, error) {
+	return renderWith(src, ctx, "")
+}
+
+func renderWith(src string, ctx map[string]any, none string) (string, error) {
 	nodes, err := parse(src)
 	if err != nil {
 		return "", err
 	}
 	var b strings.Builder
-	if err := render(&b, nodes, ctx); err != nil {
+	if err := render(&b, nodes, ctx, none); err != nil {
 		return "", err
 	}
 	return b.String(), nil
@@ -114,7 +124,7 @@ func parse(src string) ([]node, error) {
 	return root, nil
 }
 
-func render(b *strings.Builder, nodes []node, ctx map[string]any) error {
+func render(b *strings.Builder, nodes []node, ctx map[string]any, none string) error {
 	for _, n := range nodes {
 		switch x := n.(type) {
 		case textNode:
@@ -124,7 +134,11 @@ func render(b *strings.Builder, nodes []node, ctx map[string]any) error {
 			if err != nil {
 				return err
 			}
-			b.WriteString(toString(v))
+			if v == nil {
+				b.WriteString(none)
+			} else {
+				b.WriteString(toString(v))
+			}
 		case *ifNode:
 			for _, br := range x.branches {
 				ok := br.cond == ""
@@ -135,7 +149,7 @@ func render(b *strings.Builder, nodes []node, ctx map[string]any) error {
 					}
 				}
 				if ok {
-					if err := render(b, br.body, ctx); err != nil {
+					if err := render(b, br.body, ctx, none); err != nil {
 						return err
 					}
 					break

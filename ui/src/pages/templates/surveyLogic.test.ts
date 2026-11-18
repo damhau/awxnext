@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { describeSource, patternError, visibleQuestions } from './surveyLogic'
+import { describeSource, earlierAnswers, patternError, visibleQuestions } from './surveyLogic'
 
 const qs = [
   { variable: 'env', default: 'dev' },
@@ -44,5 +44,18 @@ describe('choice sources', () => {
     expect(describeSource({ type: 'hosts' })).toBe('hosts of the launch inventory')
     expect(describeSource({ type: 'git_refs', refs: 'branches', project: 4 })).toBe('branches of project #4')
     expect(describeSource({ type: 'resource', resource: 'inventories' })).toBe('name of inventories')
+    expect(describeSource({ type: 'source', source: 4 })).toBe('choice source #4')
+  })
+  it('gives a list the earlier answers shown, without passwords', () => {
+    const survey = [
+      { variable: 'site', type: 'multiplechoice', default: 'dc1' },
+      { variable: 'pin', type: 'password' },
+      { variable: 'ticket', type: 'text', show_if: { variable: 'site', values: ['dc2'] } },
+      { variable: 'vlan', type: 'multiplechoice' },
+      { variable: 'late', type: 'text' },
+    ]
+    expect(earlierAnswers(survey, 'vlan', { pin: 's3cret', ticket: 'CHG-1', late: 'x' })).toEqual({ site: 'dc1' })
+    expect(earlierAnswers(survey, 'vlan', { site: 'dc2', ticket: 'CHG-1', vlan: '100' })).toEqual({ site: 'dc2', ticket: 'CHG-1' })
+    expect(earlierAnswers(survey, 'site', { site: 'dc2' })).toEqual({})
   })
 })

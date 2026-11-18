@@ -2,6 +2,7 @@ package resources
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"regexp"
@@ -73,10 +74,19 @@ func ValidateSurveySpec(c *Ctx, raw any, previous map[string]any) (map[string]an
 		return nil, bad("'spec' must be a list of items.")
 	}
 	prevDefaults := map[string]string{}
+	prevSources := map[int64]bool{}
 	if pq, ok := previous["spec"].([]any); ok {
 		for _, q := range pq {
-			if qm, ok := q.(map[string]any); ok && qm["type"] == "password" {
+			qm, ok := q.(map[string]any)
+			if !ok {
+				continue
+			}
+			if qm["type"] == "password" {
 				prevDefaults[str(qm["variable"])] = str(qm["default"])
+			}
+			if src, ok := qm["choices_from"].(map[string]any); ok && str(src["type"]) == "source" {
+				id, _ := api.ID(src["source"])
+				prevSources[id] = true
 			}
 		}
 	}
@@ -119,6 +129,14 @@ func ValidateSurveySpec(c *Ctx, raw any, previous map[string]any) (map[string]an
 			}
 			if err := validateChoicesFrom(src); err != nil {
 				return nil, bad(fmt.Sprintf("%v in survey question %d.", err, i))
+			}
+			if id, _ := api.ID(src["source"]); str(src["type"]) == "source" {
+				src["source"] = id
+				if !prevSources[id] {
+					if err := canUseSource(c, id, i); err != nil {
+						return nil, err
+					}
+				}
 			}
 		}
 		if si := qm["show_if"]; si != nil {
@@ -241,6 +259,22 @@ func shown(q map[string]any, answers map[string]any) bool {
 	return false
 }
 
+// canUseSource lets a survey list a choice source's choices: its owners
+// need Use on the source, as they need Use on a template's credentials.
+func canUseSource(c *Ctx, id int64, i int) error {
+	ok, err := api.HasPermID(c, "choice_sources", id, "use")
+	if errors.Is(err, api.ErrNotFound) {
+		return api.Detail(400, fmt.Sprintf("'choices_from' source %d does not exist in survey question %d.", id, i))
+	}
+	if err != nil && !errors.Is(err, api.ErrForbidden) {
+		return err
+	}
+	if !ok {
+		return api.Detail(403, fmt.Sprintf("You need Use on choice source %d to list its choices in survey question %d.", id, i))
+	}
+	return nil
+}
+
 // ApplySurvey validates answers and fills defaults. It returns the survey
 // variables (password answers encrypted) and the names of password variables.
 // Questions hidden by show_if are skipped and their answers dropped; dynamic
@@ -248,6 +282,7 @@ func shown(q map[string]any, answers map[string]any) bool {
 func ApplySurvey(c *Ctx, spec map[string]any, answers map[string]any, sc SurveyContext) (map[string]any, []string, []string) {
 	out := map[string]any{}
 	answered := map[string]any{} // valid answers so far, for show_if
+	secret := map[string]bool{}
 	var passwords, errs []string
 	qs, _ := spec["spec"].([]any)
 	for _, q := range qs {
@@ -316,6 +351,9 @@ func ApplySurvey(c *Ctx, spec map[string]any, answers map[string]any, sc SurveyC
 				}
 			}
 			answered[v] = s
+			if typ == "password" {
+				secret[v] = true
+			}
 			if typ == "password" && s != "" {
 				enc, err := c.App.Crypto.Encrypt(s)
 				if err == nil {
@@ -351,15 +389,19 @@ func ApplySurvey(c *Ctx, spec map[string]any, answers map[string]any, sc SurveyC
 			}
 			out[v], answered[v] = n, n
 		case "multiplechoice":
-			choices, err := sc.choices(c, qm, answered)
+			opts, err := sc.options(c, qm, publicAnswers(answered, secret))
 			if err != nil {
 				errs = append(errs, fmt.Sprintf("Could not list the choices for '%s': %v", v, err))
 				continue
 			}
 			s := fmt.Sprint(ans)
-			if !contains(choices, s) {
-				errs = append(errs, fmt.Sprintf("Value %s for '%s' expected to be one of %v.", s, v, choices))
+			label, ok := optionLabel(opts, s)
+			if !ok {
+				errs = append(errs, notAChoice(v, s, opts))
 				continue
+			}
+			if sc.Labels != nil && label != s {
+				sc.Labels[v] = label
 			}
 			out[v], answered[v] = s, s
 		case "multiselect":
@@ -368,20 +410,44 @@ func ApplySurvey(c *Ctx, spec map[string]any, answers map[string]any, sc SurveyC
 				errs = append(errs, fmt.Sprintf("'%s' value is expected to be a list.", v))
 				continue
 			}
-			choices, err := sc.choices(c, qm, answered)
+			opts, err := sc.options(c, qm, publicAnswers(answered, secret))
 			if err != nil {
 				errs = append(errs, fmt.Sprintf("Could not list the choices for '%s': %v", v, err))
 				continue
 			}
+			labels, labelled := []any{}, false
 			for _, x := range list {
-				if !contains(choices, fmt.Sprint(x)) {
-					errs = append(errs, fmt.Sprintf("Value %v for '%s' expected to be one of %v.", x, v, choices))
+				label, ok := optionLabel(opts, fmt.Sprint(x))
+				if !ok {
+					errs = append(errs, notAChoice(v, fmt.Sprint(x), opts))
 				}
+				labels = append(labels, label)
+				labelled = labelled || label != fmt.Sprint(x)
+			}
+			if sc.Labels != nil && labelled {
+				sc.Labels[v] = labels
 			}
 			out[v], answered[v] = list, list
 		}
 	}
 	return out, passwords, errs
+}
+
+func optionLabel(opts []choiceOption, value string) (string, bool) {
+	for _, o := range opts {
+		if o.Value == value {
+			return o.Label, true
+		}
+	}
+	return "", false
+}
+
+// notAChoice refuses an answer outside a list, naming the list when it is short.
+func notAChoice(variable, value string, opts []choiceOption) string {
+	if len(opts) > 20 {
+		return fmt.Sprintf("Value %s for '%s' is not one of its %d choices.", value, variable, len(opts))
+	}
+	return fmt.Sprintf("Value %s for '%s' expected to be one of %v.", value, variable, optionValues(opts))
 }
 
 func toAnyList(s []string) []any {
@@ -399,6 +465,21 @@ func surveyVariables(spec map[string]any) map[string]bool {
 	for _, q := range qs {
 		if qm, ok := q.(map[string]any); ok {
 			out[str(qm["variable"])] = true
+		}
+	}
+	return out
+}
+
+// publicAnswers leaves out password answers: dynamic lists and filters,
+// which can send answers to an API, never see them.
+func publicAnswers(answered map[string]any, secret map[string]bool) map[string]any {
+	if len(secret) == 0 {
+		return answered
+	}
+	out := make(map[string]any, len(answered))
+	for k, v := range answered {
+		if !secret[k] {
+			out[k] = v
 		}
 	}
 	return out

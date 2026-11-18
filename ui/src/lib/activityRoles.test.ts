@@ -15,6 +15,7 @@ describe('activity entries of roles', () => {
     expect(assignmentTarget('role_definition', { content_type: 'awx.maintenancewindow', object_id: 3, object_name: 'Patch night' })).toBe('on maintenance window Patch night')
     expect(assignmentTarget('role_definition', { content_type: 'awx.eventconnector', object_id: 4, object_name: 'orders' })).toBe('on event connector orders')
     expect(assignmentTarget('role_definition', { content_type: 'awx.catalogitem', object_id: 5, object_name: 'Small VM' })).toBe('on catalog item Small VM')
+    expect(assignmentTarget('role_definition', { content_type: 'awx.choicesource', object_id: 6, object_name: 'VLANs' })).toBe('on choice source VLANs')
     expect(assignmentTarget('role_definition', { content_type: null, object_id: null })).toBe('everywhere')
     expect(assignmentTarget('role', {})).toBe('')
   })
