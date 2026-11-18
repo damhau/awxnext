@@ -455,7 +455,7 @@ func (m *Manager) run(parent context.Context, id int64) {
 				res = Result{Status: "error", Explanation: fmt.Sprint(p), Traceback: string(debug.Stack())}
 			}
 		}()
-		res = sp.Runner.Run(ctx, &RunContext{M: m, Job: row, Out: out})
+		res = sp.Runner.Run(WithOutput(ctx, out), &RunContext{M: m, Job: row, Out: out})
 	}()
 	if err := out.Close(); err != nil && res.Status == "successful" {
 		res = Result{Status: "error", Explanation: "Failed to store job events: " + err.Error()}

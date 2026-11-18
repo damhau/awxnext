@@ -319,6 +319,41 @@ operator configures, is not affected.
 Testing a credential type with values not saved yet (`POST /api/v2/credential_types/N/test/`) is
 for superusers, as in AWX; anyone who may use a credential tests it at `credentials/N/test/`.
 
+## Secrets in job output
+
+A task that prints a secret, such as a `debug`, `-vvv`, or a failing `uri` or `command` that
+echoes its arguments, would show it to anyone who may read the job. awxnext replaces each secret
+it hands a run with `$encrypted$` before the output is stored, published on websockets, sent to
+the log aggregator or archived (roadmap M12-02). AWX hides only the SCM password in project
+updates.
+
+What awxnext masks:
+
+- **Values:** the fields a credential type marks secret, in every credential the run uses,
+  including values a secret lookup fetched; survey password answers; and the passwords prompted
+  at launch (SSH, privilege escalation, vault). The credentials a run uses on its own are
+  masked too: an inventory source's credential, a project's SCM credential, the execution
+  environment's registry credential and the organization's Galaxy credentials.
+- **Runs:** jobs, ad hoc commands, project updates and inventory updates.
+- **Fields:** each event's stdout, its task and play names, and its event data, keys and values.
+- **Forms:** the value as given; JSON-escaped, as Go writes it and as Python's `json.dumps` does
+  by default (`\u00fc` for `ü`); each of those escaped a second time, as a `to_json` inside a
+  `debug` message is; and each line of a multi-line value, such as a private key.
+
+What it doesn't mask:
+
+- **Values under 4 characters,** such as a PIN, which would hide ordinary text.
+- **Transformed values:** base64, a hash, part of a value, or a value written with other
+  escaping, such as a YAML string or a Python `repr`. Set `no_log: true` on tasks that print
+  them.
+- **What the run keeps rather than prints:** the job's artifacts (`set_stats`), which a workflow
+  passes to its next nodes, and the facts it caches keep their values. Host names aren't masked.
+- **Values awxnext didn't hand the run:** fields that aren't secret, such as a username, and
+  secrets that the playbook reads itself, from a file or a lookup plugin.
+
+Masking costs one pass over each event, whatever the number of secrets; see
+[Benchmarks](benchmarks.md#secrets-in-job-output).
+
 ## rvav sources
 
 [rvav](https://github.com/damhau/rvav), a self-service VM portal, lists the VMs it manages for

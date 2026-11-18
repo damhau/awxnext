@@ -3,6 +3,8 @@ package ansible
 import (
 	"context"
 	"fmt"
+	"maps"
+	"slices"
 	"strings"
 	"time"
 
@@ -36,6 +38,7 @@ func runAdHoc(ctx context.Context, rc *jobs.RunContext) jobs.Result {
 		return fail("Inventory: " + err.Error())
 	}
 	sa := LoadStartArgs(app, row)
+	rc.Out.Mask(slices.Collect(maps.Values(sa.CredentialPasswords))...)
 	var creds []*resources.ResolvedCredential
 	if cid := row.Int("credential_id"); cid != 0 {
 		cred, err := resources.ResolveCredential(ctx, app, cid)

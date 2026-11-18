@@ -119,6 +119,11 @@ func (c *client) create(ctx context.Context, path string, body any) (int64, erro
 	return out.ID, err
 }
 
+func newClient(t Target) *client {
+	return &client{t: t, http: &http.Client{Timeout: time.Minute, Transport: &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: t.Insecure}, MaxIdleConnsPerHost: 64}}} //nolint:gosec // Target.Insecure
+}
+
 // Run sets up its objects (named bench-<time>) and measures.
 func Run(ctx context.Context, t Target, o Options) (*Result, error) {
 	if o.Log == nil {
@@ -130,8 +135,7 @@ func Run(ctx context.Context, t Target, o Options) (*Result, error) {
 	if o.ConcurrentLaunches <= 0 {
 		o.ConcurrentLaunches = 10
 	}
-	c := &client{t: t, http: &http.Client{Timeout: time.Minute, Transport: &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: t.Insecure}, MaxIdleConnsPerHost: 64}}} //nolint:gosec // Target.Insecure
+	c := newClient(t)
 	res := &Result{Target: t.URL}
 	var ping struct {
 		Version string `json:"version"`
@@ -140,59 +144,13 @@ func Run(ctx context.Context, t Target, o Options) (*Result, error) {
 		return nil, err
 	}
 	res.Version = ping.Version
-	name := fmt.Sprintf("bench-%d", time.Now().Unix())
-	org, err := c.create(ctx, "organizations/", map[string]any{"name": name})
+	fx, err := setUp(ctx, c, o)
 	if err != nil {
 		return nil, err
 	}
-	local, err := c.create(ctx, "inventories/", map[string]any{"name": name + "-local", "organization": org,
-		"variables": "ansible_connection: local\nansible_python_interpreter: '{{ ansible_playbook_python }}'\n"})
-	if err != nil {
-		return nil, err
-	}
-	if _, err := c.create(ctx, "hosts/", map[string]any{"name": "localhost", "inventory": local}); err != nil {
-		return nil, err
-	}
-	project, err := c.create(ctx, "projects/", map[string]any{"name": name, "organization": org, "scm_type": "git",
-		"scm_url": o.ProjectURL, "scm_branch": o.ProjectBranch})
-	if err != nil {
-		return nil, err
-	}
-	o.Log("syncing the project")
-	if err := waitFor(ctx, o.Timeout, func() (bool, error) {
-		var p struct{ Status string }
-		if _, err := c.do(ctx, "GET", fmt.Sprintf("projects/%d/", project), nil, &p); err != nil {
-			return false, err
-		}
-		if p.Status == "failed" || p.Status == "error" {
-			return false, fmt.Errorf("project sync %s", p.Status)
-		}
-		return p.Status == "successful", nil
-	}); err != nil {
-		return nil, err
-	}
-	var group int64
-	if o.ContainerGroup {
-		if group, err = c.create(ctx, "instance_groups/", map[string]any{"name": name + "-pods", "is_container_group": true}); err != nil {
-			return nil, err
-		}
-	}
+	name, org := fx.name, fx.org
 	template := func(playbook string, extra map[string]any) (int64, error) {
-		if extra == nil {
-			extra = map[string]any{}
-		}
-		ev, _ := json.Marshal(extra)
-		id, err := c.create(ctx, "job_templates/", map[string]any{"name": name + "-" + strings.TrimSuffix(playbook, ".yml"), "inventory": local,
-			"project": project, "playbook": "bench/playbooks/" + playbook, "extra_vars": string(ev), "allow_simultaneous": true})
-		if err != nil {
-			return 0, err
-		}
-		if group != 0 {
-			if _, err := c.do(ctx, "POST", fmt.Sprintf("job_templates/%d/instance_groups/", id), map[string]any{"id": group}, nil); err != nil {
-				return 0, err
-			}
-		}
-		return id, nil
+		return fx.template(ctx, c, playbook, extra)
 	}
 
 	// Event ingestion.
@@ -201,46 +159,11 @@ func Run(ctx context.Context, t Target, o Options) (*Result, error) {
 		return nil, err
 	}
 	o.Log("event job: %d events", o.Events)
-	job, err := c.create(ctx, fmt.Sprintf("job_templates/%d/launch/", events), map[string]any{})
+	ev, err := eventJob(ctx, c, o, events)
 	if err != nil {
 		return nil, err
 	}
-	var started, done time.Time
-	if err := waitFor(ctx, o.Timeout, func() (bool, error) {
-		var j struct {
-			Status                  string
-			Started                 *time.Time
-			EventProcessingFinished bool `json:"event_processing_finished"`
-		}
-		if _, err := c.do(ctx, "GET", fmt.Sprintf("jobs/%d/", job), nil, &j); err != nil {
-			return false, err
-		}
-		if j.Started != nil {
-			started = *j.Started
-		}
-		switch j.Status {
-		case "failed", "error", "canceled":
-			return false, fmt.Errorf("event job %s", j.Status)
-		case "successful":
-			if j.EventProcessingFinished {
-				done = time.Now()
-				return true, nil
-			}
-		}
-		return false, nil
-	}); err != nil {
-		return nil, err
-	}
-	var count struct {
-		Count int `json:"count"`
-	}
-	if _, err := c.do(ctx, "GET", fmt.Sprintf("jobs/%d/job_events/?page_size=1", job), nil, &count); err != nil {
-		return nil, err
-	}
-	res.Events, res.EventSeconds = count.Count, done.Sub(started).Seconds()
-	if res.EventSeconds > 0 {
-		res.EventsPerSecond = float64(res.Events) / res.EventSeconds
-	}
+	res.Events, res.EventSeconds, res.EventsPerSecond = ev.Events, ev.Seconds, ev.PerSecond
 
 	// List latency at scale.
 	big, err := c.create(ctx, "inventories/", map[string]any{"name": name + "-hosts", "organization": org})
@@ -335,6 +258,122 @@ func Run(ctx context.Context, t Target, o Options) (*Result, error) {
 	res.LaunchesPerSecond = float64(o.Launches) / submitted.Seconds()
 	res.JobsPerMinute = float64(o.Launches) / finished.Minutes()
 	return res, nil
+}
+
+// fixture is what a run sets up: an organization, a local inventory, a
+// synced project and, with Options.ContainerGroup, a container group.
+type fixture struct {
+	name                       string
+	org, local, project, group int64
+}
+
+func setUp(ctx context.Context, c *client, o Options) (*fixture, error) {
+	fx := &fixture{name: fmt.Sprintf("bench-%d", time.Now().Unix())}
+	var err error
+	if fx.org, err = c.create(ctx, "organizations/", map[string]any{"name": fx.name}); err != nil {
+		return nil, err
+	}
+	if fx.local, err = c.create(ctx, "inventories/", map[string]any{"name": fx.name + "-local", "organization": fx.org,
+		"variables": "ansible_connection: local\nansible_python_interpreter: '{{ ansible_playbook_python }}'\n"}); err != nil {
+		return nil, err
+	}
+	if _, err := c.create(ctx, "hosts/", map[string]any{"name": "localhost", "inventory": fx.local}); err != nil {
+		return nil, err
+	}
+	if fx.project, err = c.create(ctx, "projects/", map[string]any{"name": fx.name, "organization": fx.org, "scm_type": "git",
+		"scm_url": o.ProjectURL, "scm_branch": o.ProjectBranch}); err != nil {
+		return nil, err
+	}
+	o.Log("syncing the project")
+	if err := waitFor(ctx, o.Timeout, func() (bool, error) {
+		var p struct{ Status string }
+		if _, err := c.do(ctx, "GET", fmt.Sprintf("projects/%d/", fx.project), nil, &p); err != nil {
+			return false, err
+		}
+		if p.Status == "failed" || p.Status == "error" {
+			return false, fmt.Errorf("project sync %s", p.Status)
+		}
+		return p.Status == "successful", nil
+	}); err != nil {
+		return nil, err
+	}
+	if o.ContainerGroup {
+		if fx.group, err = c.create(ctx, "instance_groups/", map[string]any{"name": fx.name + "-pods", "is_container_group": true}); err != nil {
+			return nil, err
+		}
+	}
+	return fx, nil
+}
+
+func (fx *fixture) template(ctx context.Context, c *client, playbook string, extra map[string]any) (int64, error) {
+	if extra == nil {
+		extra = map[string]any{}
+	}
+	ev, _ := json.Marshal(extra)
+	id, err := c.create(ctx, "job_templates/", map[string]any{"name": fx.name + "-" + strings.TrimSuffix(playbook, ".yml"), "inventory": fx.local,
+		"project": fx.project, "playbook": "bench/playbooks/" + playbook, "extra_vars": string(ev), "allow_simultaneous": true})
+	if err != nil {
+		return 0, err
+	}
+	if fx.group != 0 {
+		if _, err := c.do(ctx, "POST", fmt.Sprintf("job_templates/%d/instance_groups/", id), map[string]any{"id": fx.group}, nil); err != nil {
+			return 0, err
+		}
+	}
+	return id, nil
+}
+
+// EventRun is an event job's ingestion: events stored, and the seconds from
+// the job's start until all were (event_processing_finished).
+type EventRun struct {
+	Events    int     `json:"events"`
+	Seconds   float64 `json:"seconds"`
+	PerSecond float64 `json:"events_per_second"`
+}
+
+// eventJob launches a template and measures its event ingestion.
+func eventJob(ctx context.Context, c *client, o Options, template int64) (EventRun, error) {
+	job, err := c.create(ctx, fmt.Sprintf("job_templates/%d/launch/", template), map[string]any{})
+	if err != nil {
+		return EventRun{}, err
+	}
+	var started, done time.Time
+	if err := waitFor(ctx, o.Timeout, func() (bool, error) {
+		var j struct {
+			Status                  string
+			Started                 *time.Time
+			EventProcessingFinished bool `json:"event_processing_finished"`
+		}
+		if _, err := c.do(ctx, "GET", fmt.Sprintf("jobs/%d/", job), nil, &j); err != nil {
+			return false, err
+		}
+		if j.Started != nil {
+			started = *j.Started
+		}
+		switch j.Status {
+		case "failed", "error", "canceled":
+			return false, fmt.Errorf("event job %s", j.Status)
+		case "successful":
+			if j.EventProcessingFinished {
+				done = time.Now()
+				return true, nil
+			}
+		}
+		return false, nil
+	}); err != nil {
+		return EventRun{}, err
+	}
+	var count struct {
+		Count int `json:"count"`
+	}
+	if _, err := c.do(ctx, "GET", fmt.Sprintf("jobs/%d/job_events/?page_size=1", job), nil, &count); err != nil {
+		return EventRun{}, err
+	}
+	r := EventRun{Events: count.Count, Seconds: done.Sub(started).Seconds()}
+	if r.Seconds > 0 {
+		r.PerSecond = float64(r.Events) / r.Seconds
+	}
+	return r, nil
 }
 
 func latency(ms []float64) Latency {

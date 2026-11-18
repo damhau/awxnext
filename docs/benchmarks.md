@@ -110,3 +110,47 @@ AWXBENCH_PASSWORD=... ./awxbench rules --url https://awxnext.example.com --event
 
 `--batch` and `--concurrency` set the events per request and the requests at a time, and
 `--keys` the number of hosts.
+
+## Secrets in job output
+
+AWX doesn't mask secrets in job output, so this measure is awxnext's alone
+([what awxnext masks](operations.md#secrets-in-job-output)). Each event goes through one
+`strings.Replacer` that holds every form of every secret the run was handed. The replacer is a
+trie, so it reads each event once, however many secrets there are.
+
+**Per event:** `BenchmarkMask` ([internal/jobs](../internal/jobs/mask_test.go)) masks the events
+of a `debug` loop, one in 100 of them printing a secret:
+
+| Secrets | Time per event | Allocations per event |
+|---|---|---|
+| None | 16 ns | 0 |
+| 1 | 0.86 µs | 13 |
+| 20, and a 27-line private key | 2.5 µs | 94 |
+
+**Per job:** `awxbench masking` runs `events.yml` over 100,000 items twice: without secrets, and
+with a credential of 20 secret fields whose first one every 100th item prints. Then it measures
+event ingestion as `awxbench run` does: events stored, divided by the time from the job's start
+to `event_processing_finished`.
+
+### Results
+
+2026-11-18, the Compose stack of `compat/` (awxnext and PostgreSQL 16, one node) on an AMD Ryzen
+9 7950X under WSL 2, with awxbench in the awxnext container and the jobs run in it. The second
+run launched the same two templates in the opposite order:
+
+| Run | Job | Events/s | Ansible's loop | Last item to all events stored |
+|---|---|---|---|---|
+| 1 | Without secrets | 347 (100,006 in 288.3 s) | 282.6 s | 4.2 s |
+| 1 | With 20 secrets | 320 (100,006 in 312.7 s) | 306.4 s | 4.7 s |
+| 2 | With 20 secrets | 312 (100,006 in 320.3 s) | 314.5 s | 4.2 s |
+| 2 | Without secrets | 269 (100,006 in 371.2 s) | 364.9 s | 4.7 s |
+
+Ansible's loop takes about 3 ms per item, and the job that runs second is the slower one, with or
+without secrets. Masking costs 2.5 µs per event, about 0.25 s for 100,000 events, which is less
+than the variation between runs. The event rate is bound by Ansible, not by masking. To run it:
+
+```sh
+AWXBENCH_PASSWORD=... ./awxbench masking --url https://awxnext.example.com --events 100000 --secrets 20
+```
+
+`--secrets` sets the number of secret fields. Against AWX, both jobs do the same work.

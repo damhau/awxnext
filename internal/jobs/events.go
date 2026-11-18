@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/damhau/awxnext/internal/api"
@@ -70,6 +71,11 @@ type Output struct {
 	refill  time.Time
 	shifted int
 	folded  int
+
+	// The secrets Mask hides, and the replacer built from them.
+	maskMu   sync.Mutex
+	secrets  map[string]struct{}
+	replacer atomic.Pointer[strings.Replacer]
 }
 
 // foldMax bounds the output a folded event holds; past it, a new one starts.
@@ -91,6 +97,7 @@ func NewOutput(db *pgxpool.Pool, jobID int64, jobCreated time.Time, hostIDs map[
 
 // Emit records an event. Counter and line numbers are assigned when missing.
 func (o *Output) Emit(e Event) {
+	e = o.masked(e)
 	o.mu.Lock()
 	if e.Created.IsZero() {
 		e.Created = time.Now()

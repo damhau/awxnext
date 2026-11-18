@@ -1,8 +1,10 @@
 # One task looping over `count` items: an event per item, as fast as
-# ansible-runner reports them (awxbench's event ingestion).
+# ansible-runner reports them (awxbench's event ingestion). With a
+# credential that sets bench_secret (awxbench masking), one item in a
+# hundred prints it.
 - hosts: all
   gather_facts: false
   tasks:
     - ansible.builtin.debug:
-        msg: "event {{ item }}"
+        msg: "event {{ item }}{{ (' ' ~ bench_secret) if (bench_secret is defined and item % 100 == 0) else '' }}"
       loop: "{{ range(count | default(2000) | int) | list }}"

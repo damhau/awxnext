@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -170,6 +172,7 @@ func runJob(ctx context.Context, rc *jobs.RunContext) jobs.Result {
 	}
 
 	sa := LoadStartArgs(app, row)
+	rc.Out.Mask(slices.Collect(maps.Values(sa.CredentialPasswords))...)
 	creds, err := jobCredentials(ctx, app, id)
 	if err != nil {
 		return fail(err.Error())
@@ -425,6 +428,7 @@ func jobExtraVars(ctx context.Context, app *api.App, row jobs.Row, inj *Injectio
 		if s, ok := v.(string); ok && crypto.IsEncrypted(s) {
 			if plain, err := app.Crypto.Decrypt(s); err == nil {
 				ev[k] = plain
+				jobs.MaskSecrets(ctx, plain)
 			}
 		}
 	}

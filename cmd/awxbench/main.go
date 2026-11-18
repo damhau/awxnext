@@ -4,6 +4,7 @@
 //	awxbench run --url https://awx.example.com --user admin --password ... --out awx.json
 //	awxbench table awx=awx.json awxnext=awxnext.json
 //	awxbench rules --url https://awxnext.example.com --events 20000
+//	awxbench masking --url https://awxnext.example.com --events 100000 --secrets 20
 //
 // The jobs run bench/playbooks from --project (this repository by default).
 package main
@@ -31,13 +32,15 @@ func main() {
 		table(os.Args[2:])
 	case "rules":
 		rulesRun(os.Args[2:])
+	case "masking":
+		maskingRun(os.Args[2:])
 	default:
 		usage()
 	}
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: awxbench run --url URL --user U --password P [--out FILE] | awxbench table NAME=FILE... | awxbench rules --url URL [--events N]")
+	fmt.Fprintln(os.Stderr, "usage: awxbench run --url URL --user U --password P [--out FILE] | awxbench table NAME=FILE... | awxbench rules --url URL [--events N] | awxbench masking --url URL [--events N] [--secrets N]")
 	os.Exit(2)
 }
 
@@ -127,6 +130,37 @@ func rulesRun(args []string) {
 		fmt.Fprintf(os.Stderr, time.Now().Format("15:04:05 ")+format+"\n", a...)
 	}
 	r, err := bench.Rules(context.Background(), t, o)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "awxbench:", err)
+		os.Exit(1)
+	}
+	b, _ := json.MarshalIndent(r, "", "  ")
+	fmt.Println(string(b))
+}
+
+// maskingRun measures what masking a job's secrets in its output costs.
+func maskingRun(args []string) {
+	fs := flag.NewFlagSet("masking", flag.ExitOnError)
+	var t bench.Target
+	o := bench.Options{}
+	fs.StringVar(&t.URL, "url", "", "the API's base URL")
+	fs.StringVar(&t.User, "user", "admin", "user")
+	fs.StringVar(&t.Password, "password", os.Getenv("AWXBENCH_PASSWORD"), "password (or AWXBENCH_PASSWORD)")
+	fs.BoolVar(&t.Insecure, "insecure", false, "skip TLS verification")
+	fs.IntVar(&o.Events, "events", 100000, "events of each event job")
+	secrets := fs.Int("secrets", 20, "secrets of the credential the second job uses")
+	fs.StringVar(&o.ProjectURL, "project", "https://github.com/damhau/awxnext", "git repository holding bench/playbooks")
+	fs.StringVar(&o.ProjectBranch, "branch", "main", "its branch")
+	fs.BoolVar(&o.ContainerGroup, "container-group", false, "run the jobs in a container group (pods)")
+	fs.DurationVar(&o.Timeout, "timeout", 30*time.Minute, "longest wait for a job")
+	fs.Parse(args)
+	if t.URL == "" {
+		usage()
+	}
+	o.Log = func(format string, a ...any) {
+		fmt.Fprintf(os.Stderr, time.Now().Format("15:04:05 ")+format+"\n", a...)
+	}
+	r, err := bench.Masking(context.Background(), t, o, *secrets)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "awxbench:", err)
 		os.Exit(1)

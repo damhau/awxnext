@@ -11,6 +11,7 @@ import (
 	"github.com/damhau/awxnext/internal/credtypes"
 	"github.com/damhau/awxnext/internal/crypto"
 	"github.com/damhau/awxnext/internal/eventstreams"
+	"github.com/damhau/awxnext/internal/jobs"
 )
 
 var credentialKinds = labelled(
@@ -159,7 +160,20 @@ func ResolveCredential(ctx context.Context, app *api.App, id int64) (*ResolvedCr
 		}
 		rc.Inputs[s.field] = v
 	}
+	jobs.MaskSecrets(ctx, rc.secretValues()...)
 	return rc, nil
+}
+
+// secretValues are the values of the credential's secret fields, looked up
+// or not.
+func (rc *ResolvedCredential) secretValues() []string {
+	var out []string
+	for _, f := range rc.Schema.Fields {
+		if s, ok := rc.Inputs[f.ID].(string); ok && f.Secret && s != "ASK" {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 func registerCredentials() {
