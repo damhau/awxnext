@@ -1819,8 +1819,8 @@ from APIs and jobs, approvals by rule, quotas, and deployments that their
 owners manage and that expire. It is served by the same server, with the
 same sign-in, API and RBAC; `/run` stays the operator view. Four stages:
 items, their forms and outputs (M15-01 to M15-03); approvals (M15-04); deployments,
-their lifetime and quotas (M15-05 to M15-07); the portal and other front
-doors (M15-08 to M15-10). **Exit:** a user with only the request role
+their lifetime and quotas (M15-05 to M15-07); the portal, other front
+doors and the portal's admin pages (M15-08 to M15-11). **Exit:** a user with only the request role
 requests an item from the portal, picking a VLAN that a choice source lists
 from an API; the item's rule sends the request to their Team Admins, one
 approves, and the deployment is provisioned with its outputs, extended
@@ -2028,6 +2028,36 @@ Backstage.
 **Done when:** a test requests an item through the API, follows it to ready
 and gets a webhook for each change of state, and the operator guide has the
 ServiceNow example.
+
+### M15-11 Catalog items in the admin UI, and a Portal section
+**Labels:** feature, ui · **Size:** L · [#185](https://github.com/damhau/awxnext/issues/185)
+
+Without it, publishing an item takes the API or GitOps. A Portal section in
+the side nav groups catalog items, requests, deployments, catalog quotas
+(moved from Admin) and a link to the portal; choice sources stay under
+Resources, since any survey uses them. An item's admins publish a template
+from the list or from the template's page, in a form in sections:
+
+- **the item:** name, description, template, kind, icon, category and owner
+  team;
+- **its questions,** from the template's survey: reword, hide, narrow, filter
+  a dynamic list, set a default, or fix the answer;
+- **approvals:** its rules, the freeze exception team and the email
+  notification template;
+- **for a deployment:** its name, its lifetime and extensions, its teardown,
+  how to connect, its actions, and whether expiry waits for a freeze;
+- **quotas,** and the step labels.
+
+An item's page shows its requests, notifications and access. Requests and
+Deployments list those of the items the user administers, linking to the
+portal. Added on 2026-11-18, before M15 closed.
+
+**Done when:** an admin publishes a template as a deployment item from the UI
+alone, with a reworded question, a fixed answer, an approval rule, a lifetime
+with extensions, a connection layout, an action and a request webhook, and a
+requester requests it in the portal; a user without Admin on the template
+gets no Publish button; the API's errors show on their fields; the side nav
+has the Portal section; and `tsc` and Vitest pass.
 
 ---
 
@@ -2270,5 +2300,6 @@ after M9. M10-04 (#129) and M11 (#130 to #132) were added on 2026-11-08
 19): #157 to #162 were rewritten, and M14-07 to M14-10 (#168 to #171)
 added. M15 was redesigned on 2026-11-18 (Decision 21): #163 to #167 were
 rewritten, and M15-02, M15-03, M15-06, M15-09 and M15-10 (#180 to #184)
-added. This file stays the index;
+added. M15-11 (#185) was added on 2026-11-18, before M15 closed, for the
+portal's admin pages. This file stays the index;
 when a task changes, change its issue too.
