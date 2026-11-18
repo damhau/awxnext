@@ -106,6 +106,8 @@ func registerCatalogItems() {
 				Help: "For an item that creates a deployment, how many of its deployments each team, or each user requesting for no team, may have at once: those not deleted, a failed teardown included, and the requests on their way to one. Empty: no limit."},
 			{Name: "max_requests_per_day", Type: api.TInt, Nullable: true, Validate: optionalBetween(1, maxQuota),
 				Help: "How many requests of the item each team, or each user requesting for no team, may make in 24 hours, denied ones aside. Empty: no limit."},
+			{Name: "step_labels", Type: api.TJSON, Default: Obj{}, Validate: checkStepLabels,
+				Help: "How the portal names a request's steps: each play of the playbook, or node of the workflow, by name, with the label requesters see. A step without one shows under its own name."},
 			{Name: "over_quota", Type: api.TChoice, Default: overQuotaRefuse, Choices: labelled(overQuotaRefuse, "Refuse the request", overQuotaApprove, "Wait for approval"),
 				Help: "What a request over quota does: refuse, or wait for one approval by a member of the item's owner team (the organization's admins without one)."},
 		},
@@ -124,6 +126,12 @@ func registerCatalogItems() {
 				rel["survey_choices"] = base + "survey_choices/"
 				rel["notification_templates_reminders"] = base + "notification_templates_reminders/"
 				rel["quota_usage"] = base + "quota_usage/"
+				rel["preview"] = base + "preview/"
+			}
+			if sf, ok := o["summary_fields"].(Obj); ok {
+				if f, err := itemFreeze(c, o["id"], int64Of(o["organization"]), time.Now()); err == nil && f != nil {
+					sf["freeze"] = Obj{"id": f.id, "name": f.name, "kind": f.kind, "until": api.FormatTime(f.end)}
+				}
 			}
 		},
 		AfterDelete: removeFromWindows("catalog_items"),
@@ -132,6 +140,7 @@ func registerCatalogItems() {
 			{Name: "request", Methods: []string{"GET", "POST"}, Perm: "request", Handler: handleCatalogRequest},
 			{Name: "survey_choices", Methods: []string{"GET"}, Perm: "request", Handler: handleItemChoices},
 			{Name: "quota_usage", Methods: []string{"GET"}, Perm: "change", Handler: handleQuotaUsage},
+			{Name: "preview", Methods: []string{"POST"}, Perm: "request", Handler: handleRequestPreview},
 		},
 	})
 
@@ -182,6 +191,14 @@ func registerCatalogItems() {
 				o["approvals"] = requestApprovals(c, o["id"])
 			}
 			return nil
+		},
+		Serialize: func(c *Ctx, o Obj) {
+			if rel, ok := o["related"].(Obj); ok {
+				rel["progress"] = api.Lookup("catalog_requests").URL(o["id"]) + "progress/"
+			}
+		},
+		Actions: []*api.Action{
+			{Name: "progress", Methods: []string{"GET"}, Handler: handleRequestProgress},
 		},
 	})
 }
@@ -747,6 +764,25 @@ func handleCatalogRequest(c *Ctx, w http.ResponseWriter, r *http.Request, item O
 
 // RequestCatalogItem checks a request against the item's form and runs it.
 func RequestCatalogItem(c *Ctx, ci *catalogItem, body Obj) (Obj, error) {
+	id, created, err := nextRequest(c)
+	if err != nil {
+		return nil, err
+	}
+	p, err := prepareRequest(c, ci, body, id, created)
+	if err != nil {
+		return nil, err
+	}
+	req, approvals, err := p.submit(c, id, created)
+	if err != nil {
+		return nil, err
+	}
+	announceApprovals(c, ci, id, approvals)
+	return req, nil
+}
+
+// prepareRequest checks a request against the item's form and applies its
+// answers, as request id: 0 for a preview.
+func prepareRequest(c *Ctx, ci *catalogItem, body Obj, id int64, created time.Time) (*pendingRequest, error) {
 	fe := api.FieldErrors{}
 	var keys []string
 	for k := range body {
@@ -795,11 +831,6 @@ func RequestCatalogItem(c *Ctx, ci *catalogItem, body Obj) (Obj, error) {
 	if err := fe.Err(); err != nil {
 		return nil, err
 	}
-	var id int64
-	if err := c.DB().QueryRow(c, "SELECT nextval(pg_get_serial_sequence('catalog_requests', 'id'))").Scan(&id); err != nil {
-		return nil, err
-	}
-	created := time.Now().UTC().Truncate(time.Microsecond)
 	sc := ci.surveyContext(c)
 	sc.Labels, sc.Picked = map[string]any{}, map[string]any{}
 	sc.Request, sc.Team = requestEnv(id, created, lifetime), teamEnv(c, team)
@@ -835,14 +866,8 @@ func RequestCatalogItem(c *Ctx, ci *catalogItem, body Obj) (Obj, error) {
 		delete(answered, k)
 	}
 	env := &ruleEnv{answers: answered, picked: sc.Picked, team: sc.Team, user: userEnv(c, c.User.UserID), request: sc.Request, kind: requestNew}
-	p := &pendingRequest{ci: ci, kind: requestNew, team: team, reason: reason, lifetime: lifetime, shown: shown, labels: labels,
-		launch: requestLaunch{Vars: sv, Passwords: pw, ActivityVars: keep}, env: env}
-	req, approvals, err := p.submit(c, id, created)
-	if err != nil {
-		return nil, err
-	}
-	announceApprovals(c, ci, id, approvals)
-	return req, nil
+	return &pendingRequest{ci: ci, kind: requestNew, team: team, reason: reason, lifetime: lifetime, shown: shown, labels: labels,
+		launch: requestLaunch{Vars: sv, Passwords: pw, ActivityVars: keep}, env: env}, nil
 }
 
 // launchRequest runs a request's template with its answers, as c's user.

@@ -13,6 +13,7 @@ import { automationRoutes } from './pages/automation'
 import { eventRoutes } from './pages/events'
 import { hubRoutes } from './pages/hub'
 import { jobRoutes } from './pages/jobs'
+import { portalRoutes } from './pages/portal'
 import { resourceRoutes } from './pages/resources'
 import { templateRoutes } from './pages/templates'
 import { tr } from './lib/i18n'
@@ -66,6 +67,7 @@ function RouteError() {
 // settings do when changes are not saved.
 const routes = createRoutesFromElements(
   <Route element={<Root />} errorElement={<RouteError />}>
+    {portalRoutes()}
     <Route element={<Shell />}>
       <Route index element={<Now />} />
       {templateRoutes()}

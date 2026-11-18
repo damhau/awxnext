@@ -1,7 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { Suspense, useEffect, useRef, useState } from 'react'
-import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router'
-import { useList, useUiSettings } from '../api/hooks'
+import { Link, Navigate, NavLink, Outlet, useLocation, useNavigate } from 'react-router'
+import { useList, usePortal, useUiSettings } from '../api/hooks'
 import { live, useLive } from '../api/live'
 import type { RecentJob } from '../api/types'
 import { ErrorBoundary } from '../components/ErrorBoundary'
@@ -208,25 +208,12 @@ function OrgSwitcher() {
   )
 }
 
-function Account({ onAbout, onShortcuts }: { onAbout: () => void; onShortcuts: () => void }) {
-  const { me, logout } = useSession()
+/** The account menu's language and theme choices, shared with the portal. */
+export function LanguageAndTheme() {
   const [theme, setTheme] = useTheme()
   const language = languageChoice()
-  const name = userName(me)
   return (
-    <Menu label={tr('Account: {name}', { name })} className="avatar" trigger={<Avatar name={name} />}>
-      <div className="head">{name}</div>
-      <Link to={`/users/${me.id}`}>{tr('Profile and tokens')}</Link>
-      <Link to="/run">{tr('Operator view')}</Link>
-      <Link to="/api/docs">{tr('API docs')}</Link>
-      <button onClick={onShortcuts}>
-        {tr('Keyboard shortcuts')}
-        <kbd className="keycap" style={{ marginLeft: 'auto' }}>
-          ?
-        </kbd>
-      </button>
-      <button onClick={onAbout}>{tr('About awxnext')}</button>
-      <hr />
+    <>
       <div className="head">{tr('Language')}</div>
       <div className="menu-segmented" role="radiogroup" aria-label={tr('Language')}>
         {[{ value: 'system' as const, label: tr('Browser') }, ...LOCALES].map((l) => (
@@ -243,6 +230,29 @@ function Account({ onAbout, onShortcuts }: { onAbout: () => void; onShortcuts: (
           </button>
         ))}
       </div>
+    </>
+  )
+}
+
+function Account({ onAbout, onShortcuts }: { onAbout: () => void; onShortcuts: () => void }) {
+  const { me, logout } = useSession()
+  const name = userName(me)
+  return (
+    <Menu label={tr('Account: {name}', { name })} className="avatar" trigger={<Avatar name={name} />}>
+      <div className="head">{name}</div>
+      <Link to={`/users/${me.id}`}>{tr('Profile and tokens')}</Link>
+      <Link to="/portal">{tr('Self-service portal')}</Link>
+      <Link to="/run">{tr('Operator view')}</Link>
+      <Link to="/api/docs">{tr('API docs')}</Link>
+      <button onClick={onShortcuts}>
+        {tr('Keyboard shortcuts')}
+        <kbd className="keycap" style={{ marginLeft: 'auto' }}>
+          ?
+        </kbd>
+      </button>
+      <button onClick={onAbout}>{tr('About awxnext')}</button>
+      <hr />
+      <LanguageAndTheme />
       <hr />
       <button onClick={logout}>
         <Icon name="logout" size={14} />
@@ -252,7 +262,15 @@ function Account({ onAbout, onShortcuts }: { onAbout: () => void; onShortcuts: (
   )
 }
 
+/** The admin shell, for all but those who only request: they land on the portal. */
 export function Shell() {
+  const portal = usePortal()
+  if (portal.isPending) return <div className="shell" aria-busy="true" />
+  if (portal.data?.request_only) return <Navigate to="/portal" replace />
+  return <AdminShell />
+}
+
+function AdminShell() {
   const [palette, setPalette] = useState(false)
   const [menu, setMenu] = useState(false)
   const [about, setAbout] = useState<null | 'about' | 'shortcuts'>(null)

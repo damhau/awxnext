@@ -170,8 +170,6 @@
 .settings .kv.kv-search { grid-template-columns: minmax(0, 1.4fr) auto minmax(0, 1.2fr) auto; max-width: 640px; }
 .settings .kv.kv-ro { grid-template-columns: auto minmax(0, 1fr); gap: 4px 12px; }
 .settings .kv.kv-ro code { font-size: 12px; overflow-wrap: anywhere; }
-.settings .s-image { display: flex; align-items: center; gap: 10px; }
-.settings .s-image img { max-width: 200px; max-height: 48px; padding: 4px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
 .settings details.s-value summary { cursor: pointer; color: var(--muted); }
 .settings details.s-value pre { max-height: 320px; overflow: auto; margin: 6px 0 0; }
 .settings .amount .check { font-size: 13px; color: var(--ink); }

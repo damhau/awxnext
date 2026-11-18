@@ -2368,6 +2368,7 @@ To publish a template, post to `/api/v2/catalog_items/` with these fields:
 | `deployment_name`, `connection`, `actions`, `teardown_template` | For a `deployment` item, what its deployments are named, how to connect to them, their day-2 actions and what deleting one runs ([Deployments](#deployments)). |
 | `max_deployments`, `max_requests_per_day`, `over_quota` | The deployments each team can keep at once, the requests it can make in 24 hours, and whether a request over quota is refused or waits for approval ([Quotas](#quotas)). |
 | `extension_days`, `max_extensions`, `expiry_waits_for_freeze` | For a `deployment` item, the extensions its deployments' owners can ask for, how many, and whether an expiry waits for a freeze's end ([Lifetime](#lifetime)). |
+| `step_labels` | The portal's names for the template's plays, or a workflow's nodes, by their name: `{"Create the VM": "Creating your VM"}` ([The portal](#the-portal)). |
 
 The item's creator gets `CatalogItem Admin` on it. These roles give access to items:
 
@@ -2700,6 +2701,52 @@ or change freeze too. To have it wait for the window's end, set the item's
 `expiry_waits_for_freeze`. An extension that still waits for approval is canceled; a request on
 the deployment that runs is waited for. When the item was deleted, no teardown can run: the
 expired deployment is `delete_failed`, for its admins to delete once what it provisioned is gone.
+
+### The portal
+
+The portal, at `/portal` in the UI, is where requesters find items, request them and follow
+their requests. It has its own top bar, without the admin navigation, and fits a phone. A user
+whose roles all come with requesting, such as `CatalogItem Requester`, `Organization CatalogItem
+Requester`, `Organization Member` or `Team Member`, lands there after signing in, and the admin
+pages send them back to it. The others open it from the account menu, and go back through
+**Admin view**. `GET /api/v2/portal/` tells the UI which case applies (`request_only`).
+
+The portal's home lists the catalog by category, with a search, and what needs the user
+(`needs_you` in `GET /api/v2/portal/`):
+
+- `requests`: their requests that wait or run;
+- `deployments`: the deployments they own, or their teams own, that expire within 3 days;
+- `approvals`: how many requests wait for their approval.
+
+An item in a maintenance window or change freeze shows it, and when it ends, from its
+`summary_fields.freeze` (`id`, `name`, `kind`, `until`).
+
+To brand the portal, set the organization's **Portal title** and **Portal logo** in its form. In
+the API, they're `portal_title`, at most 128 characters, and `portal_logo`, an image as a `data:`
+URL (`data:image/png;base64,...`) in PNG, JPEG, WebP or SVG of at most 64 KB. The portal takes them from the first organization, by id, that the user sees
+and that sets one; without one, it shows awxnext's.
+
+The request form shows, as the requester answers, the approvals the request will need and why,
+the quota left and when the deployment expires. It gets them from
+`POST catalog_items/N/preview/`, which takes the body of a request and runs the same checks
+without creating it. It answers `approvals` (each rule that holds, with its condition, its
+approvers by name, how many approvals it needs and its timeout), `refused` (why the request would
+be refused, from a freeze or a quota) and `quota` (the usage). Invalid answers get `400`, as for a
+request.
+
+**My requests** shows each request's steps, sent, approval, running and done, and what happens
+next: who it waits for and until when, who denied it and their comment, or that it failed, with a
+link to request it again with the same answers. `GET catalog_requests/N/progress/` gives the run's
+progress:
+
+| Field | What it holds |
+|---|---|
+| `steps` | The plays of the job, as its events start them, then the plays of the last successful run of the template that haven't started yet. For a workflow, its nodes. Each has its `name`, its `label` from the item's `step_labels` (the name without one), and its `state`: `done`, `running`, `pending`, `failed` or `canceled`. |
+| `percent` | `100` once the request succeeded. While it runs, the tasks started so far against the task count of the template's last successful run, at most `99`. Empty without such a run. |
+| `job` | The job's `id`, `type` and `status`, and `can_see`: whether the user can see the job. The portal links to the job only then. |
+
+Steps follow plays because Ansible tags don't reach job events. To show a step per stage, give
+each stage its own play, and reword the plays in the item's `step_labels`.
 
 ## Settings
 

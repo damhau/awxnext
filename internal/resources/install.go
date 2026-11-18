@@ -20,6 +20,7 @@ func Install(app *api.App) {
 	installUsedBy()
 	installBulk(app)
 	installDashboard(app)
+	installPortal(app)
 	installLicense(app)
 	app.Handle("GET", "/api/v2/role_metadata/", roleMetadata)
 	app.HandlePublic("GET", "/api/v2/ping/", ping)

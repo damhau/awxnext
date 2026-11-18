@@ -232,11 +232,11 @@ func extensionOptions(c *Ctx, d, item Obj) (Obj, error) {
 			step["refused"] = errorText(err)
 		}
 		for _, g := range gates {
-			names, err := usernames(c, g.approvers)
+			o, err := gatePreview(c, g)
 			if err != nil {
 				return nil, err
 			}
-			step["approvals"] = append(step["approvals"].([]Obj), Obj{"rule": g.rule, "approvers": names, "required": g.required, "fallback": g.fallback})
+			step["approvals"] = append(step["approvals"].([]Obj), o)
 		}
 		steps = append(steps, step)
 	}
@@ -248,23 +248,6 @@ func extensionOptions(c *Ctx, d, item Obj) (Obj, error) {
 		out["until"] = api.FormatTime(*until)
 	}
 	return out, nil
-}
-
-func usernames(c *Ctx, ids []int64) ([]string, error) {
-	rows, err := c.DB().Query(c, "SELECT username FROM users WHERE id = ANY($1) ORDER BY username", ids)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	out := []string{}
-	for rows.Next() {
-		var u string
-		if err := rows.Scan(&u); err != nil {
-			return nil, err
-		}
-		out = append(out, u)
-	}
-	return out, rows.Err()
 }
 
 // extensionEnv is what the item's rules read of an extension: its kind,

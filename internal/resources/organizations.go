@@ -20,6 +20,9 @@ func registerOrganizations() {
 		Fields: []*Field{
 			{Name: "max_hosts", Type: api.TInt, Default: 0, Help: "Maximum number of hosts allowed to be managed by this organization."},
 			{Name: "default_environment", Type: api.TFK, Ref: "execution_environments", Nullable: true, Help: "The default execution environment for jobs run by this organization."},
+			{Name: "portal_title", Type: api.TString, Default: "", MaxLength: 128, Help: "The name the self-service portal shows its members. Empty: the organization's name."},
+			{Name: "portal_logo", Type: api.TText, Default: "", Validate: checkPortalLogo,
+				Help: "The logo the self-service portal shows its members: a data URL of a PNG, JPEG, WebP or SVG image, in base64, of 64 KB at most."},
 		},
 		CanAdd: func(c *Ctx, data Obj) error {
 			if !c.User.Superuser {

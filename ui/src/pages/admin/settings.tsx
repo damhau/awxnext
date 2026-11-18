@@ -5,7 +5,7 @@ import { api, ApiError, getAll } from '../../api/client'
 import { useInvalidate, useObject } from '../../api/hooks'
 import type { FieldMeta, OptionsMeta, Ref } from '../../api/types'
 import { useSession } from '../../app/context'
-import { FormError, Picker } from '../../components/form'
+import { FormError, ImagePicker, Picker } from '../../components/form'
 import { Icon } from '../../components/icons'
 import { useConfirm, useLeaveGuard, useToast } from '../../components/overlay'
 import { Empty, ErrorNote, Loading, PageHead, Panel } from '../../components/ui'
@@ -865,7 +865,7 @@ function SettingControl({ k, row, ctx }: { k: string; row: Row; ctx: Ctx }) {
     case 'ldap-search':
       return <SearchControl id={id} value={value} onChange={onChange} disabled={disabled} multiple={row.multiple} />
     case 'image':
-      return <ImageControl id={id} value={value} onChange={onChange} disabled={disabled} />
+      return <ImagePicker id={id} value={typeof value === 'string' ? value : ''} onChange={onChange} disabled={disabled} accept="image/gif,image/png,image/jpeg" />
     case 'lines':
       return <LinesControl id={id} value={value} onChange={onChange} disabled={disabled} mono={/CERT|KEY/.test(k)} />
     case 'json':
@@ -1762,40 +1762,6 @@ function SearchControl({ id, value, onChange, disabled, multiple }: { id: string
       {multiple && !disabled && (
         <button type="button" className="btn sm ghost" onClick={() => update([...shown, blank])}>
           + {tr('Add a search')}
-        </button>
-      )}
-    </div>
-  )
-}
-
-/** An image, stored as a data URL. */
-function ImageControl({ id, value, onChange, disabled }: { id: string; value: unknown; onChange: (v: unknown) => void; disabled: boolean }) {
-  const src = typeof value === 'string' ? value : ''
-  return (
-    <div className="s-image">
-      {src ? <img src={src} alt={tr('The logo')} /> : <span className="note">{tr('None.')}</span>}
-      {!disabled && (
-        <label className="btn sm">
-          {src ? tr('Replace…') : tr('Choose an image…')}
-          <input
-            id={id}
-            type="file"
-            accept="image/gif,image/png,image/jpeg"
-            hidden
-            onChange={(e) => {
-              const f = e.target.files?.[0]
-              e.target.value = ''
-              if (!f) return
-              const r = new FileReader()
-              r.onload = () => onChange(String(r.result))
-              r.readAsDataURL(f)
-            }}
-          />
-        </label>
-      )}
-      {!disabled && src && (
-        <button type="button" className="link-btn" onClick={() => onChange('')}>
-          {tr('Remove')}
         </button>
       )}
     </div>

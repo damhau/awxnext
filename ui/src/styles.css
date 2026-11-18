@@ -401,6 +401,8 @@ table.data tbody tr.clickable { cursor: pointer; }
 .field .opt { color: var(--muted-2); font-weight: 400; }
 .field .help { color: var(--muted-2); font-size: 12px; }
 .field .err { color: var(--fail-ink); font-size: 12px; }
+.image-pick { display: flex; align-items: center; gap: 10px; }
+.image-pick img { max-width: 200px; max-height: 48px; padding: 4px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
 .input, .select, .textarea {
   height: 34px; padding: 0 10px; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--surface);
   width: 100%; min-width: 0;

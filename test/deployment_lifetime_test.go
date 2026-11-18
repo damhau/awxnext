@@ -95,7 +95,7 @@ func TestDeploymentLifetime(t *testing.T) {
 	if one := steps[0].(map[string]any); len(one["approvals"].([]any)) != 0 || one["refused"] != "" {
 		t.Errorf("one day: %v", one)
 	}
-	if apps := five["approvals"].([]any); len(apps) != 1 || fmt.Sprint(apps[0].(map[string]any)["approvers"]) != fmt.Sprintf("[%s]", f.lead.user) {
+	if apps := five["approvals"].([]any); len(apps) != 1 || apps[0].(map[string]any)["approvers"].([]any)[0].(map[string]any)["username"] != f.lead.user {
 		t.Errorf("five days: %v", five)
 	}
 

@@ -34,6 +34,39 @@ export function Field({
   )
 }
 
+/** An image, stored as a data URL. */
+export function ImagePicker({ id, value, onChange, disabled, accept }: { id: string; value: string; onChange: (v: string) => void; disabled?: boolean; accept: string }) {
+  return (
+    <div className="image-pick">
+      {value ? <img src={value} alt={tr('The logo')} /> : <span className="note">{tr('None.')}</span>}
+      {!disabled && (
+        <label className="btn sm">
+          {value ? tr('Replace…') : tr('Choose an image…')}
+          <input
+            id={id}
+            type="file"
+            accept={accept}
+            hidden
+            onChange={(e) => {
+              const f = e.target.files?.[0]
+              e.target.value = ''
+              if (!f) return
+              const r = new FileReader()
+              r.onload = () => onChange(String(r.result))
+              r.readAsDataURL(f)
+            }}
+          />
+        </label>
+      )}
+      {!disabled && value && (
+        <button type="button" className="link-btn" onClick={() => onChange('')}>
+          {tr('Remove')}
+        </button>
+      )}
+    </div>
+  )
+}
+
 export function TextInput({
   label,
   value,

@@ -34,7 +34,7 @@ export interface Question {
 export type DynamicChoices = Record<string, { choices: string[]; labels?: Record<string, string>; error?: string; pending?: boolean }>
 
 /** v once it has stopped changing for ms. */
-function useSettled<T>(v: T, ms: number): T {
+export function useSettled<T>(v: T, ms: number): T {
   const key = JSON.stringify(v)
   const [settled, setSettled] = useState(v)
   useEffect(() => {

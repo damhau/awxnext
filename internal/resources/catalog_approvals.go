@@ -917,15 +917,9 @@ func requestApprovalInfo(c *Ctx, approval any) Obj {
 		approval).Scan(&kind, &rule, &condition, &approvers, &fallback, &required) != nil {
 		return nil
 	}
-	people := []Obj{}
-	if rows, err := c.DB().Query(c, "SELECT id, username FROM users WHERE id = ANY($1) ORDER BY username", approvers); err == nil {
-		for rows.Next() {
-			var id int64
-			var name string
-			rows.Scan(&id, &name)
-			people = append(people, Obj{"id": id, "username": name})
-		}
-		rows.Close()
+	who, err := people(c, approvers)
+	if err != nil {
+		who = []Obj{}
 	}
 	answers := []Obj{}
 	approved := 0
@@ -944,7 +938,7 @@ func requestApprovalInfo(c *Ctx, approval any) Obj {
 		}
 		rows.Close()
 	}
-	return Obj{"kind": kind, "rule": rule, "condition": condition, "approvers": people, "fallback": fallback, "required": required,
+	return Obj{"kind": kind, "rule": rule, "condition": condition, "approvers": who, "fallback": fallback, "required": required,
 		"approved": approved, "answers": answers}
 }
 

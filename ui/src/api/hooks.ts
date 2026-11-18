@@ -1,6 +1,7 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient, type UseQueryOptions } from '@tanstack/react-query'
 import { api, type Page, type Params } from './client'
 import type { OptionsMeta } from './types'
+import type { PortalInfo } from '../lib/portal'
 
 /** List query keyed by resource path and params. */
 export function useList<T>(path: string | null, params?: Params, opts: Partial<UseQueryOptions<Page<T>>> = {}) {
@@ -11,6 +12,11 @@ export function useList<T>(path: string | null, params?: Params, opts: Partial<U
     placeholderData: keepPreviousData,
     ...opts,
   })
+}
+
+/** The portal's view of the user: whether they only request, the organization's name and logo, and what needs them. */
+export function usePortal() {
+  return useObject<PortalInfo>('portal/', { staleTime: 30_000 })
 }
 
 /** Detail query; path like "job_templates/7/". */

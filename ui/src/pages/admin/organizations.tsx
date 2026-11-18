@@ -6,7 +6,7 @@ import { useInvalidate, useList, useObject } from '../../api/hooks'
 import type { Base, Ref } from '../../api/types'
 import { useSession } from '../../app/context'
 import { AccessTab, roleShort, useRoleDefinitions, type Assignment } from '../../components/access/Access'
-import { FormError, Lookup, MultiLookup, TextArea, TextInput, useForm } from '../../components/form'
+import { Field, FormError, ImagePicker, Lookup, MultiLookup, TextArea, TextInput, useForm } from '../../components/form'
 import { Icon } from '../../components/icons'
 import { Dialog, useConfirm, useToast } from '../../components/overlay'
 import { DataTable } from '../../components/table'
@@ -16,7 +16,7 @@ import { ListPage, useDelete } from './common'
 import { NotificationsTab } from '../../components/NotificationsTab'
 import { tr, trn } from '../../lib/i18n'
 
-type Org = Base & { max_hosts: number; default_environment: number | null }
+type Org = Base & { max_hosts: number; default_environment: number | null; portal_title: string; portal_logo: string }
 
 export function OrganizationList() {
   const nav = useNavigate()
@@ -70,6 +70,8 @@ interface OrgValues extends Record<string, unknown> {
   default_environment: Ref | null
   galaxy: Ref[]
   groups: Ref[]
+  portal_title: string
+  portal_logo: string
 }
 
 /** Replaces the members of an association sublist, keeping order when it matters. */
@@ -96,6 +98,8 @@ function OrgForm({ org, galaxy, groups, ee }: { org?: Org; galaxy?: Ref[]; group
     default_environment: ee ?? null,
     galaxy: galaxy ?? [],
     groups: groups ?? [],
+    portal_title: org?.portal_title ?? '',
+    portal_logo: org?.portal_logo ?? '',
   })
   const [error, setError] = useState<unknown>(null)
   const [busy, setBusy] = useState(false)
@@ -107,6 +111,8 @@ function OrgForm({ org, galaxy, groups, ee }: { org?: Org; galaxy?: Ref[]; group
       description: f.values.description,
       max_hosts: Number(f.values.max_hosts) || 0,
       default_environment: f.values.default_environment?.id ?? null,
+      portal_title: f.values.portal_title,
+      portal_logo: f.values.portal_logo,
     }
     try {
       const saved = org ? await api.patch<Org>(`organizations/${org.id}/`, body) : await api.post<Org>('organizations/', body)
@@ -168,6 +174,22 @@ function OrgForm({ org, galaxy, groups, ee }: { org?: Org; galaxy?: Ref[]; group
           onChange={(v) => f.set('groups', v)}
           help={tr('Preferred capacity for this organization\'s jobs, in order.')}
         />
+        <TextInput
+          label={tr('Portal title')}
+          optional
+          value={f.values.portal_title}
+          onChange={(v) => f.set('portal_title', v)}
+          error={f.errors.portal_title}
+          help={tr('The name at the top of the self-service portal.')}
+        />
+        <Field label={tr('Portal logo')} optional htmlFor="org-portal-logo" error={f.errors.portal_logo} help={tr('PNG, JPEG, WebP or SVG, 64 KB at most.')}>
+          <ImagePicker
+            id="org-portal-logo"
+            value={f.values.portal_logo}
+            onChange={(v) => f.set('portal_logo', v)}
+            accept="image/png,image/jpeg,image/webp,image/svg+xml"
+          />
+        </Field>
       </div>
       <FormError error={error} />
       <div className="form-actions">
