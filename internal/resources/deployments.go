@@ -792,13 +792,6 @@ func (p *pendingRequest) submit(c *Ctx, id int64, created time.Time) (Obj, []int
 	}
 	answersJSON, _ := json.Marshal(p.shown)
 	labelsJSON, _ := json.Marshal(p.labels)
-	status, launch := requestPending, []byte(nil)
-	if len(gates) > 0 {
-		status = requestAwaiting
-		if launch, err = json.Marshal(p.launch); err != nil {
-			return nil, nil, err
-		}
-	}
 	var req Obj
 	var approvals []int64
 	err = c.WithTx(func(c *Ctx) error {
@@ -808,6 +801,24 @@ func (p *pendingRequest) submit(c *Ctx, id int64, created time.Time) (Obj, []int
 				return err
 			}
 			if err := deploymentReady(c, d, p.statuses...); err != nil {
+				return err
+			}
+		}
+		gates := gates
+		if p.kind == requestNew && !p.ungated {
+			g, err := quotaGate(c, p.ci, p.team, c.User.UserID, created)
+			if err != nil {
+				return err
+			}
+			if g != nil {
+				gates = append(gates, g)
+			}
+		}
+		status, launch := requestPending, []byte(nil)
+		if len(gates) > 0 {
+			status = requestAwaiting
+			var err error
+			if launch, err = json.Marshal(p.launch); err != nil {
 				return err
 			}
 		}
@@ -1272,6 +1283,9 @@ func handOver(c *Ctx, w http.ResponseWriter, r *http.Request, d Obj) error {
 	var updated Obj
 	err = c.WithTx(func(c *Ctx) error {
 		if _, err := lockDeployment(c, int64Of(d["id"])); err != nil {
+			return err
+		}
+		if err := handOverRoom(c, d, item, owner, team, admin); err != nil {
 			return err
 		}
 		if _, err := c.DB().Exec(c, "UPDATE deployments SET owner_id = $2, team_id = $3, modified = now(), modified_by_id = $4 WHERE id = $1",

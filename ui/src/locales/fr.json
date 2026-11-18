@@ -3885,5 +3885,22 @@
   "{n} catalog items": {
     "one": "{n} élément du catalogue",
     "other": "{n} éléments du catalogue"
-  }
+  },
+  "Catalog quotas": "Quotas du catalogue",
+  "{used}, no limit": "{used}, sans limite",
+  "{used} of {max}": "{used} sur {max}",
+  "{who}: {used} of {max}": "{who} : {used} sur {max}",
+  "{n} deployments each": "{n} déploiements chacun",
+  "{n} requests in 24 hours": "{n} demandes en 24 heures",
+  "over quota, the owner team approves": "au-delà du quota, l’équipe propriétaire approuve",
+  "over quota, refused": "au-delà du quota, refusée",
+  "Quota usage of {name}": "Utilisation des quotas de {name}",
+  "Team or user": "Équipe ou utilisateur",
+  "Deployments": "Déploiements",
+  "Requests in 24 hours": "Demandes en 24 heures",
+  "Nothing used yet": "Rien d’utilisé pour l’instant",
+  "Its requests and deployments count here.": "Ses demandes et ses déploiements comptent ici.",
+  "What each team, or each user requesting for no team, uses of the quotas of the catalog items you administer: the deployments it keeps and its requests of the last 24 hours.": "Ce que chaque équipe, ou chaque utilisateur qui demande sans équipe, utilise des quotas des éléments du catalogue que vous administrez : les déploiements qu’il garde et ses demandes des dernières 24 heures.",
+  "No item with a quota": "Aucun élément avec un quota",
+  "An item’s max_deployments and max_requests_per_day set its quotas.": "Les champs max_deployments et max_requests_per_day d’un élément fixent ses quotas."
 }

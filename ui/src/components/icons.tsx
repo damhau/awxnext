@@ -54,6 +54,7 @@ const paths: Record<string, string> = {
   bolt: 'M9 1.5 3.5 9H8l-1 5.5L12.5 7H8z',
   window: 'M2.5 3.5h11v9h-11zM2.5 6h11M6 8.5l1.5 1.5L10.5 7.5',
   plug: 'M6 1.5v3M10 1.5v3M4.5 4.5h7v3a3.5 3.5 0 0 1-7 0zM8 11v3.5',
+  gauge: 'M2.5 11.5a5.5 5.5 0 0 1 11 0M8 11.5l2.5-3.5M2.5 13.5h11',
 }
 
 export type IconName = keyof typeof paths

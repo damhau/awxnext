@@ -2366,6 +2366,7 @@ To publish a template, post to `/api/v2/catalog_items/` with these fields:
 | `questions` | What the item makes of the template's survey ([The item's form](#the-items-form)). |
 | `max_lifetime_days`, `default_lifetime_days` | For a `deployment` item, the longest a requester can keep the deployment and the lifetime the form proposes, in days. Empty `max_lifetime_days`: requesters can keep it for good. |
 | `deployment_name`, `connection`, `actions`, `teardown_template` | For a `deployment` item, what its deployments are named, how to connect to them, their day-2 actions and what deleting one runs ([Deployments](#deployments)). |
+| `max_deployments`, `max_requests_per_day`, `over_quota` | The deployments each team can keep at once, the requests it can make in 24 hours, and whether a request over quota is refused or waits for approval ([Quotas](#quotas)). |
 | `extension_days`, `max_extensions`, `expiry_waits_for_freeze` | For a `deployment` item, the extensions its deployments' owners can ask for, how many, and whether an expiry waits for a freeze's end ([Lifetime](#lifetime)). |
 
 The item's creator gets `CatalogItem Admin` on it. These roles give access to items:
@@ -2412,8 +2413,8 @@ the item no longer matches it, a request answers `400` until the item's admins u
 
 `GET /api/v2/catalog_items/N/request/` returns the form as the requester sees it: the questions
 it asks, with the item's changes; the fixed answers it shows; the requester's teams in the item's
-organization (`teams`, and `team_required` when they're in several); and, for a `deployment`
-item, its lifetime. `catalog_items/N/survey_choices/?variable=x` lists the choices of a dynamic
+organization (`teams`, and `team_required` when they're in several); for a `deployment` item, its
+lifetime; and, when the item has [quotas](#quotas), what each of those teams uses of them. `catalog_items/N/survey_choices/?variable=x` lists the choices of a dynamic
 question, narrowed by the item's filter, as the item's publisher set them: the requester needs no
 role on the inventory or project they come from. `answers` (a JSON object) gives the filter the
 answers so far.
@@ -2532,6 +2533,30 @@ approved, denied, or approved but unable to run. Approvers without an email addr
 mail. To notify a fixed list as well, attach notification templates to the organization's
 `notification_templates_approvals`: they are sent as for any workflow approval.
 
+### Quotas
+
+An item's quotas limit what each team uses of it: `max_deployments`, how many of its deployments
+a team keeps at once, and `max_requests_per_day`, how many requests it makes in 24 hours. A
+request for no team counts for its requester alone. Empty: no limit.
+
+- **Deployments:** a deployment counts until it's deleted, including when its teardown failed
+  (`delete_failed`). A new request counts as well while it waits or runs. A failed provisioning
+  creates no deployment, so its place is free again.
+- **Requests:** the item's new requests of the last 24 hours count, except the denied ones. Day-2
+  actions, extensions and deletions don't count.
+
+Over quota, awxnext refuses the request with `400`, the reason and the usage (`quota`). A request
+over its day's quota also says when the next one fits. With the item's `over_quota` set to
+`approve`, the request waits instead for one approval by a member of the item's `owner_team`, or
+the organization's admins without one, under the rule `Over quota`, with `kind` `quota`. An
+approved request goes past the quota, and its deployment counts until it's deleted.
+
+The request form (`GET catalog_items/N/request/`) gives the usage in `quota`: the item's
+`max_deployments`, `max_requests_per_day` and `over_quota`, and in `usage`, the `deployments` and
+`requests` of each of the requester's teams in the item's organization, or of the requester when
+they have none. The item's admins see every team's and user's usage at
+`GET /api/v2/catalog_items/N/quota_usage/`, and in the UI under **Admin > Catalog quotas**.
+
 ### Deployments
 
 When a request for a `deployment` item succeeds, awxnext records what it provisioned, such as a
@@ -2621,7 +2646,8 @@ To give a deployment to someone else, post `user`, `team` or both to `deployment
 owning user. Whoever gets it must be able to request the item: a requester role on the item or
 its organization, held by the team or by a team it is in. With the item's `notification_template`
 set, the new owner, or the team's members, are mailed a link to it. The activity stream records
-the hand-over.
+the hand-over. When the item has a deployment [quota](#quotas), whoever gets the deployment needs
+room in it: the item's admins can hand over past it, its owners can't.
 
 #### Deleting
 

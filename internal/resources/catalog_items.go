@@ -102,6 +102,12 @@ func registerCatalogItems() {
 				Help: "How many times a deployment may be extended. Empty: as often as max_lifetime_days allows."},
 			{Name: "expiry_waits_for_freeze", Type: api.TBool, Default: false,
 				Help: "Whether a deployment that expires inside a maintenance window or change freeze that lists the item waits for the window's end before its teardown runs."},
+			{Name: "max_deployments", Type: api.TInt, Nullable: true, Validate: optionalBetween(1, maxQuota),
+				Help: "For an item that creates a deployment, how many of its deployments each team, or each user requesting for no team, may have at once: those not deleted, a failed teardown included, and the requests on their way to one. Empty: no limit."},
+			{Name: "max_requests_per_day", Type: api.TInt, Nullable: true, Validate: optionalBetween(1, maxQuota),
+				Help: "How many requests of the item each team, or each user requesting for no team, may make in 24 hours, denied ones aside. Empty: no limit."},
+			{Name: "over_quota", Type: api.TChoice, Default: overQuotaRefuse, Choices: labelled(overQuotaRefuse, "Refuse the request", overQuotaApprove, "Wait for approval"),
+				Help: "What a request over quota does: refuse, or wait for one approval by a member of the item's owner team (the organization's admins without one)."},
 		},
 		CanAdd:     func(c *Ctx, data Obj) error { return requireUJTPerm(c, data["unified_job_template"], "change") },
 		CanChange:  changeCatalogItem,
@@ -117,6 +123,7 @@ func registerCatalogItems() {
 				rel["request"] = base + "request/"
 				rel["survey_choices"] = base + "survey_choices/"
 				rel["notification_templates_reminders"] = base + "notification_templates_reminders/"
+				rel["quota_usage"] = base + "quota_usage/"
 			}
 		},
 		AfterDelete: removeFromWindows("catalog_items"),
@@ -124,6 +131,7 @@ func registerCatalogItems() {
 		Actions: []*api.Action{
 			{Name: "request", Methods: []string{"GET", "POST"}, Perm: "request", Handler: handleCatalogRequest},
 			{Name: "survey_choices", Methods: []string{"GET"}, Perm: "request", Handler: handleItemChoices},
+			{Name: "quota_usage", Methods: []string{"GET"}, Perm: "change", Handler: handleQuotaUsage},
 		},
 	})
 
@@ -277,6 +285,9 @@ func saveCatalogItem(c *Ctx, old, data Obj) error {
 	_, rulesGiven := data["approval_rules"]
 	_, actionsGiven := data["actions"]
 	if err := checkDeploymentFields(c, old, data, pick, *org); err != nil {
+		return err
+	}
+	if err := checkQuotaFields(pick, data); err != nil {
 		return err
 	}
 	if err := checkLifetimeFields(pick, data); err != nil {
@@ -689,6 +700,9 @@ func (ci *catalogItem) form(c *Ctx) (Obj, error) {
 		"teams":         teams,
 		"team_required": len(teams) > 1,
 		"lifetime":      nil,
+	}
+	if out["quota"], err = formQuota(c, ci.item, teams); err != nil {
+		return nil, err
 	}
 	if ci.item["kind"] == itemDeployment {
 		out["lifetime"] = Obj{"max_days": ci.item["max_lifetime_days"], "default_days": ci.item["default_lifetime_days"]}

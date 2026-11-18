@@ -349,6 +349,8 @@ spec:
   teardown_template: {kind: JobTemplate, name: %[1]s}
   extension_days: [1, 3]
   max_extensions: 2
+  max_deployments: 3
+  over_quota: approve
   actions:
     - {id: restart, name: Restart, template: {kind: JobTemplate, name: %[1]s}}
 `, jtName, teamName)
@@ -365,7 +367,8 @@ spec:
 	if it["managed_by"] != fmt.Sprintf("gitops:%d", sid) || it["unified_job_template"] != float64(f.jt) || it["owner_team"] != float64(team) ||
 		it["kind"] != "deployment" || it["max_lifetime_days"] != float64(14) || it["teardown_template"] != float64(f.jt) ||
 		fmt.Sprint(it["actions"]) != fmt.Sprintf("[map[description: id:restart name:Restart template:%d]]", f.jt) ||
-		fmt.Sprint(it["extension_days"]) != "[1 3]" || it["max_extensions"] != float64(2) {
+		fmt.Sprint(it["extension_days"]) != "[1 3]" || it["max_extensions"] != float64(2) ||
+		it["max_deployments"] != float64(3) || it["over_quota"] != "approve" {
 		t.Fatalf("item: %v", it)
 	}
 	must(t, a.patch(fmt.Sprintf("catalog_items/%v/", it["id"]), map[string]any{"description": "x"}), 409)
