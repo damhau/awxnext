@@ -574,3 +574,13 @@ suppressions:
   expires: '2026-12-17'
   created: '2026-11-17'
   source: triage
+- id: 7bba2a01e3a4
+  reason: 'secubot triage: false positive (high confidence, single pass). gosec G101
+    matched the key name "bench_secret" at internal/bench/masking.go:56. The value
+    assigned to it is the Jinja template reference "{{ secret_00 }}", not a credential.
+    It is the injector definition for a credential type the benchmark creates on the
+    AWX target. The real secret values are generated at runtime with crypto/rand (12
+    random bytes, hex-encoded, lines 51-53). The env injector values'
+  expires: '2026-12-18'
+  created: '2026-11-18'
+  source: triage
