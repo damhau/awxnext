@@ -69,7 +69,14 @@ func LaunchWorkflowJobTemplate(c *Ctx, wf Obj, body Obj, launchType string, ov *
 	surveyPasswords := map[string]any{}
 	spec := templateSurvey(c, id)
 	surveyVars := map[string]bool{}
-	if boolv(wf["survey_enabled"]) && len(spec) > 0 {
+	if ov != nil && ov.Survey != nil {
+		for k, v := range ov.Survey.Vars {
+			base[k] = v
+		}
+		for _, p := range ov.Survey.Passwords {
+			surveyPasswords[p] = "$encrypted$"
+		}
+	} else if boolv(wf["survey_enabled"]) && len(spec) > 0 {
 		invID, _ := api.ID(inv)
 		sv, pw, errs := ApplySurvey(c, spec, launchVars, SurveyContext{Template: wf, Inventory: invID})
 		if len(errs) > 0 {
@@ -462,7 +469,7 @@ func createSlices(c *Ctx, jt Obj, values map[string]any, n int, createJob func(c
 		"extra_vars": values["extra_vars"], "inventory_id": values["inventory_id"], "limit": values["limit"], "allow_simultaneous": values["allow_simultaneous"],
 		"schedule_id": values["schedule_id"], "launched_by": values["launched_by"],
 	}
-	for _, k := range []string{"created_by_id", "modified_by_id", "webhook_service", "webhook_credential_id", "webhook_guid"} {
+	for _, k := range []string{"created_by_id", "modified_by_id", "webhook_service", "webhook_credential_id", "webhook_guid", "catalog_request_id"} {
 		if v, ok := values[k]; ok {
 			wf[k] = v
 		}

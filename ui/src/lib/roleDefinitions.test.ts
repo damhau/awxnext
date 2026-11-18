@@ -11,6 +11,8 @@ describe('role definitions', () => {
     expect(actionLabel(parsePerm('awx.automate_eventrule'))).toBe('Automate')
     expect(modelLabel('awx.maintenancewindow', true)).toBe('Maintenance windows')
     expect(modelLabel('awx.eventconnector', false)).toBe('Event connector')
+    expect(modelLabel('awx.catalogitem', true)).toBe('Catalog items')
+    expect(actionLabel(parsePerm('awx.request_catalogitem'))).toBe('Request')
   })
   it('groups by kind of object, the role’s own first', () => {
     const g = groupPerms(['awx.view_inventory', 'awx.change_jobtemplate', 'awx.view_jobtemplate', 'shared.view_organization'], 'shared.organization')

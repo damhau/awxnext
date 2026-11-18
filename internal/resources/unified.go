@@ -252,7 +252,9 @@ func registerJobResource(js jobSpec) *Resource {
 			if c.User.Superuser || c.User.Auditor {
 				return "TRUE"
 			}
-			return fmt.Sprintf("t.created_by_id = %s OR (%s)", arg(c.User.UserID), js.visible(c, arg))
+			// A catalog request's jobs carry its item's hidden answers: the
+			// requester follows the request, not its jobs.
+			return fmt.Sprintf("(t.created_by_id = %s AND t.catalog_request_id IS NULL) OR (%s)", arg(c.User.UserID), js.visible(c, arg))
 		},
 		CanChange: func(c *Ctx, old, data Obj) error {
 			return api.Detail(405, "Jobs cannot be modified.")

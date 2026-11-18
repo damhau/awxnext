@@ -768,8 +768,9 @@ func launchNodeJob(c *Ctx, wf jobs.Row, n *wfNode, node Obj, vars map[string]any
 				return err
 			}
 		}
-		_, err := c.DB().Exec(c, "UPDATE unified_jobs SET launched_by = $2, created_by_id = coalesce(created_by_id, $3) WHERE id = $1",
-			jobID, string(launchedBy), nullID(wf.Int("created_by_id")))
+		_, err := c.DB().Exec(c, `UPDATE unified_jobs SET launched_by = $2, created_by_id = coalesce(created_by_id, $3),
+			catalog_request_id = coalesce(catalog_request_id, $4) WHERE id = $1`,
+			jobID, string(launchedBy), nullID(wf.Int("created_by_id")), nullID(wf.Int("catalog_request_id")))
 		return err
 	})
 	if err == nil && launchErr != nil {

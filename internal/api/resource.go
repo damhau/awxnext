@@ -232,6 +232,9 @@ type Resource struct {
 	Copyable bool
 	// Versioned records a snapshot on every change and exposes /history/.
 	Versioned bool
+	// HistoryPerm, when set, is required on the object to read its history
+	// (view otherwise).
+	HistoryPerm string
 	// Managed adds a read-only managed_by field; objects with a non-empty
 	// managed_by can only be changed by that source (see Ctx.Extra["managed_by"]).
 	Managed bool

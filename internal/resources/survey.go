@@ -351,7 +351,7 @@ func ApplySurvey(c *Ctx, spec map[string]any, answers map[string]any, sc SurveyC
 			}
 			out[v], answered[v] = n, n
 		case "multiplechoice":
-			choices, err := resolveChoices(c, qm, sc)
+			choices, err := sc.choices(c, qm, answered)
 			if err != nil {
 				errs = append(errs, fmt.Sprintf("Could not list the choices for '%s': %v", v, err))
 				continue
@@ -368,7 +368,7 @@ func ApplySurvey(c *Ctx, spec map[string]any, answers map[string]any, sc SurveyC
 				errs = append(errs, fmt.Sprintf("'%s' value is expected to be a list.", v))
 				continue
 			}
-			choices, err := resolveChoices(c, qm, sc)
+			choices, err := sc.choices(c, qm, answered)
 			if err != nil {
 				errs = append(errs, fmt.Sprintf("Could not list the choices for '%s': %v", v, err))
 				continue

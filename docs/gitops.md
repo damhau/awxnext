@@ -137,11 +137,24 @@ spec:
   credentials: [Kafka orders]      # credentials, by name
   execution_environment: Decision environment
   restart_policy: always
+---
+kind: CatalogItem
+name: Small VM
+description: A VM for a few days
+spec:
+  template: {kind: JobTemplate, name: Create VM}   # or WorkflowJobTemplate
+  kind: deployment
+  category: Compute
+  owner_team: Platform             # a team, by name
+  max_lifetime_days: 14
+  questions:                       # the item's form, a view over the survey
+    env: {question_name: Stage, choices: [dev, staging]}
+    size: {value: small, visible: true}
 ```
 
 Kinds are applied in dependency order (Label, Team, Project, Inventory,
 InventorySource, NotificationTemplate, JobTemplate, WorkflowJobTemplate,
-Schedule, EventRule, MaintenanceWindow, EventConnector) and pruned in reverse. Credentials are referenced, never declared:
+Schedule, EventRule, MaintenanceWindow, EventConnector, CatalogItem) and pruned in reverse. Credentials are referenced, never declared:
 secrets stay out of git. Event streams are referenced too: create them in the
 API or the UI. An event rule runs as the user who last saved the source
 ([Event rules](operations.md#owner-and-rights)): a rule in `auto` mode takes that user's
@@ -150,6 +163,8 @@ An `EventRule` takes the API's fields: a rule that waits for a
 [pattern](operations.md#patterns) sets `pattern`, `pattern_window`, and
 `conditions` or `pattern_count`. A rule that [checks its fixes](operations.md#checking-fixes)
 with a template names it as `template` does: `check_template: {kind: JobTemplate, name: Check service}`.
+A `CatalogItem` names its template as a schedule does. Its `questions` are written in the file
+whole, fixed password answers included: give secrets to the template through credentials instead.
 Documents of kind `EventRuleTest` are tests of the rules, which
 `awxnext rules test` runs in your CI ([Testing rules offline](operations.md#testing-rules-offline)):
 a sync skips them.

@@ -4,7 +4,9 @@ import (
 	"fmt"
 
 	"github.com/damhau/awxnext/internal/api"
+	"github.com/damhau/awxnext/internal/crypto"
 	"github.com/damhau/awxnext/internal/rbac"
+	"github.com/damhau/awxnext/internal/vars"
 )
 
 func registerActivity() {
@@ -95,6 +97,9 @@ func jobLaunched(c *Ctx, resName string, id int64) error {
 	changes := api.ActivityFields(res, obj)
 	if ev, ok := changes["extra_vars"].(string); ok {
 		changes["extra_vars"] = maskSurveyPasswords(ev)
+		if keep, ok := c.Extra["activity_vars"].(map[string]bool); ok {
+			changes["extra_vars"] = maskVarsBut(changes["extra_vars"].(string), keep)
+		}
 	}
 	names := func(sql string) []string {
 		out := []string{}
@@ -115,8 +120,27 @@ func jobLaunched(c *Ctx, resName string, id int64) error {
 		changes["credentials"] = names(`SELECT cr.name || ' (' || cr.id || ')' FROM unified_job_credentials x JOIN credentials cr ON cr.id = x.credential_id
 			WHERE x.unified_job_id = $1 ORDER BY cr.id`)
 		changes["labels"] = names("SELECT l.name FROM unified_job_labels x JOIN labels l ON l.id = x.label_id WHERE x.unified_job_id = $1 ORDER BY l.name")
+		if _, catalog := c.Extra["activity_vars"]; catalog {
+			delete(changes, "credentials")
+		}
 	}
 	return api.Activity(c, "create", res, obj, changes, nil, nil, "")
+}
+
+// maskVarsBut masks every variable but those kept: a catalog request's
+// activity entry is its requester's, and shows only what they answered or
+// were shown, not the template's variables or the item's hidden answers.
+func maskVarsBut(ev string, keep map[string]bool) string {
+	m, err := vars.Parse(ev)
+	if err != nil {
+		return ev
+	}
+	for k := range m {
+		if !keep[k] {
+			m[k] = crypto.Placeholder
+		}
+	}
+	return vars.PyJSON(m)
 }
 
 // assignmentActivity records a role given or taken away through the role

@@ -29,6 +29,7 @@ func init() {
 	registerCollections()
 	registerCollectionSigning()
 	registerCollectionRemotes()
+	registerCatalogItems()
 	registerRoles()
 	registerActivity()
 	registerRelatedLists()

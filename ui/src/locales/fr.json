@@ -3778,5 +3778,8 @@
   "The role has no argument specs.": "Le rôle n’a pas de spécification d’arguments.",
   "Entry point": "Point d’entrée",
   "Examples": "Exemples",
-  "Return values": "Valeurs renvoyées"
+  "Return values": "Valeurs renvoyées",
+  "Catalog item": "Élément du catalogue",
+  "Catalog items": "Éléments du catalogue",
+  "Request": "Demander"
 }

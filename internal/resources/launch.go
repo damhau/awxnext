@@ -456,6 +456,17 @@ type LaunchOverrides struct {
 	ExtraJob map[string]any
 	// Credentials replaces the credential set entirely (relaunch).
 	Credentials []int64
+	// Survey, when set, holds survey answers already checked, as
+	// ApplySurvey returns them: the template's survey is not applied again
+	// (a catalog item's request, checked against the item's view of it).
+	Survey *SurveyAnswers
+}
+
+// SurveyAnswers are survey variables checked by ApplySurvey, their password
+// answers encrypted, and the names of the password variables.
+type SurveyAnswers struct {
+	Vars      map[string]any
+	Passwords []string
 }
 
 // LaunchJobTemplate validates launch input and creates a pending job.
@@ -585,7 +596,15 @@ func LaunchJobTemplate(c *Ctx, jt Obj, body Obj, launchType string, ov *LaunchOv
 	var launchVarNames []string
 	surveyPasswords := map[string]any{}
 	spec := templateSurvey(c, id)
-	if boolv(jt["survey_enabled"]) && len(spec) > 0 {
+	if ov != nil && ov.Survey != nil {
+		for k, v := range ov.Survey.Vars {
+			base[k] = v
+			launchVarNames = append(launchVarNames, k)
+		}
+		for _, p := range ov.Survey.Passwords {
+			surveyPasswords[p] = "$encrypted$"
+		}
+	} else if boolv(jt["survey_enabled"]) && len(spec) > 0 {
 		invID, _ := api.ID(inv)
 		sv, pw, errs := ApplySurvey(c, spec, launchVars, SurveyContext{Template: jt, Inventory: invID})
 		if len(errs) > 0 {

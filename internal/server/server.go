@@ -161,8 +161,8 @@ func StartJobs(ctx context.Context, app *api.App) (*jobs.Manager, error) {
 	m.TickHooks = append(m.TickHooks, resources.ScheduleTick, resources.WorkflowTick, resources.InstanceTick, resources.ConnectorTick)
 	m.MaintainHooks = append(m.MaintainHooks, resources.MaintainEventStreams, resources.MaintainHub)
 	m.Rejoin = func(ctx context.Context, node string) error { return resources.Rejoin(ctx, app, node) }
-	m.StartedHooks = append(m.StartedHooks, resources.JobStartedNotifications, resources.WebhookStatusStarted)
-	m.FinishedHooks = append(m.FinishedHooks, resources.JobFinishedNotifications, resources.WebhookStatusFinished, resources.WorkflowJobFinished, gitops.ProjectUpdated)
+	m.StartedHooks = append(m.StartedHooks, resources.JobStartedNotifications, resources.WebhookStatusStarted, resources.CatalogJobStarted)
+	m.FinishedHooks = append(m.FinishedHooks, resources.JobFinishedNotifications, resources.WebhookStatusFinished, resources.WorkflowJobFinished, gitops.ProjectUpdated, resources.CatalogJobFinished)
 	resources.Jobs = m
 	m.Start(ctx)
 	resources.Rules = resources.NewRuleEngine(app, app.Cfg.NodeName)

@@ -7,7 +7,8 @@
 // WorkflowJobTemplate (with nodes), NotificationTemplate, Schedule, Team,
 // EventRule (its streams by name), MaintenanceWindow (its rules by name, its
 // groups by inventory and name), EventConnector (its stream and credentials
-// by name).
+// by name), CatalogItem (its template as {kind, name}, its owner team by
+// name).
 //
 //	kind: JobTemplate
 //	name: Deploy web
@@ -119,7 +120,7 @@ type kind struct {
 }
 
 // order is the apply order (dependencies first); pruning runs in reverse.
-var order = []string{"Label", "Team", "Project", "Inventory", "InventorySource", "NotificationTemplate", "JobTemplate", "WorkflowJobTemplate", "Schedule", "EventRule", "MaintenanceWindow", "EventConnector"}
+var order = []string{"Label", "Team", "Project", "Inventory", "InventorySource", "NotificationTemplate", "JobTemplate", "WorkflowJobTemplate", "Schedule", "EventRule", "MaintenanceWindow", "EventConnector", "CatalogItem"}
 
 var kinds = map[string]kind{
 	"Label":                {res: "labels"},
@@ -134,6 +135,7 @@ var kinds = map[string]kind{
 	"EventRule":            {res: "event_rules", relations: map[string]bool{"check_template": true}},
 	"MaintenanceWindow":    {res: "maintenance_windows", relations: map[string]bool{"event_rules": true, "groups": true}},
 	"EventConnector":       {res: "event_connectors"},
+	"CatalogItem":          {res: "catalog_items"},
 }
 
 var errDryRun = errors.New("dry run")
@@ -629,7 +631,7 @@ func (r *reconciler) applyDoc(d *Document) error {
 			data["variables"] = string(b)
 		}
 	}
-	if d.Kind == "Schedule" {
+	if d.Kind == "Schedule" || d.Kind == "CatalogItem" {
 		ref, err := templateRef(d.Spec["template"])
 		if err != nil {
 			return err
@@ -738,6 +740,10 @@ func (r *reconciler) applyDoc(d *Document) error {
 				}
 			}
 		}
+		if qs, ok := old["questions"].(map[string]any); ok && d.Kind == "CatalogItem" {
+			old = maps.Clone(old)
+			old["questions"] = r.plainAnswers(qs)
+		}
 		for k, v := range vals {
 			if !same(old[k], v) {
 				ch.Fields = append(ch.Fields, k)
@@ -773,6 +779,25 @@ func (r *reconciler) applyDoc(d *Document) error {
 }
 
 func id(v any) int64 { n, _ := api.ID(v); return n }
+
+// plainAnswers decrypts the password answers a catalog item fixes, to
+// compare them with a file's.
+func (r *reconciler) plainAnswers(qs map[string]any) map[string]any {
+	out := map[string]any{}
+	for k, q := range qs {
+		if m, ok := q.(map[string]any); ok {
+			if p, _ := m["value"].(string); crypto.IsEncrypted(p) {
+				if plain, err := r.c.App.Crypto.Decrypt(p); err == nil {
+					m = maps.Clone(m)
+					m["value"] = plain
+				}
+			}
+			q = m
+		}
+		out[k] = q
+	}
+	return out
+}
 
 // resetUndeclared returns writable fields missing from a declaration to their
 // defaults, so removing a line from a file reverts the setting.

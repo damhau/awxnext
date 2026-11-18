@@ -736,6 +736,10 @@ func (a *App) handleSub(c *Ctx, w http.ResponseWriter, r *http.Request) {
 		}
 	case "history":
 		if res.Versioned && r.Method == "GET" {
+			if err := historyAllowed(c, res, obj); err != nil {
+				writeError(w, err)
+				return
+			}
 			a.handleHistory(c, w, r, res, obj)
 			return
 		}

@@ -24,6 +24,7 @@ var typePerms = map[string][]string{
 	"maintenancewindow":    {"view", "change", "delete"},
 	"eventconnector":       {"view", "change", "delete"},
 	"collectionnamespace":  {"view", "change", "delete", "upload", "approve"},
+	"catalogitem":          {"view", "change", "delete", "request"},
 }
 
 // Types that can live in a folder.
@@ -102,6 +103,8 @@ func buildManaged() []ManagedRole {
 		{"Organization JobTemplate Admin", "Can manage all job templates of the organization", "organization", concat([]string{"view_organization"}, all("jobtemplate")), "job_template_admin_role"},
 		{"Organization ExecutionEnvironment Admin", "Can manage all execution environments of the organization", "organization", concat([]string{"view_organization", "add_executionenvironment"}, all("executionenvironment")), "execution_environment_admin_role"},
 		{"Organization Approval", "Can approve or deny a workflow approval node", "organization", concat([]string{"view_organization"}, perms("workflowjobtemplate", "view", "approve"), perms("eventrule", "view", "approve"), perms("collectionnamespace", "view", "approve")), "approval_role"},
+		// No legacy field: AWX's organizations have no such role.
+		{"Organization CatalogItem Requester", "May request every catalog item of the organization, without any role on their templates", "organization", concat([]string{"view_organization"}, perms("catalogitem", "view", "request")), ""},
 
 		{"Team Admin", "Can manage a single team and its membership", "team", all("team"), "admin_role"},
 		{"Team Member", "Inherits permissions assigned to this team", "team", []string{"view_team", "member_team"}, "member_role"},
@@ -152,6 +155,10 @@ func buildManaged() []ManagedRole {
 		{"CollectionNamespace Upload", "May publish collections to the namespace, and see them before approval", "collectionnamespace", perms("collectionnamespace", "view", "upload"), "upload_role"},
 		{"CollectionNamespace Approve", "May approve or reject the collections uploaded to the namespace", "collectionnamespace", perms("collectionnamespace", "view", "approve"), "approval_role"},
 		{"CollectionNamespace Read", "May view and install the collections of the namespace", "collectionnamespace", perms("collectionnamespace", "view"), "read_role"},
+
+		{"CatalogItem Admin", "Has all permissions to a single catalog item", "catalogitem", all("catalogitem"), "admin_role"},
+		{"CatalogItem Requester", "May request the catalog item, without any role on its template", "catalogitem", perms("catalogitem", "view", "request"), "requester_role"},
+		{"CatalogItem Read", "May view the catalog item", "catalogitem", perms("catalogitem", "view"), "read_role"},
 
 		{"Folder Admin", "Has all permissions to a folder, its subfolders and every object inside", "folder", folderAdmin(), "admin_role"},
 		{"Folder Execute", "May run any job or workflow template in the folder", "folder", concat([]string{"view_folder"}, perms("jobtemplate", "view", "execute"), perms("workflowjobtemplate", "view", "execute")), "execute_role"},

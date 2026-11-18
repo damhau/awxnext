@@ -94,6 +94,7 @@ var templateDependencies = []dependency{
 	{"node_template", "cleared", `SELECT 'workflow_job_templates', t.id, t.name FROM workflow_job_template_nodes n
 		JOIN unified_job_templates t ON t.id = n.workflow_job_template_id WHERE n.unified_job_template_id = $1 AND n.workflow_job_template_id <> $1`},
 	{"unified_job_template", "deleted", `SELECT 'event_rules', r.id, r.name FROM event_rules r WHERE r.unified_job_template_id = $1`},
+	{"unified_job_template", "deleted", `SELECT 'catalog_items', i.id, i.name FROM catalog_items i WHERE i.unified_job_template_id = $1`},
 }
 
 const maxDependents = 500

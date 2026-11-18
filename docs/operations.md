@@ -2305,6 +2305,97 @@ bucket or container, the endpoint, the region and the credential. Objects are na
 version's object is deleted at the next maintenance (every 10 minutes). A backup holds the
 database only: keep the bucket's own backups or versioning.
 
+## Self-service portal
+
+The self-service portal is for people who request automation rather than run it (roadmap M15). A
+catalog item publishes a job or workflow template to people with no role on the template: they
+fill in the item's form, and awxnext runs the template for them.
+
+### Catalog items
+
+To publish a template, post to `/api/v2/catalog_items/` with these fields:
+
+| Field | What it sets |
+|---|---|
+| `unified_job_template` | The job or workflow template the item publishes. It must belong to an organization, which becomes the item's. Publishing takes the right to change the template: `JobTemplate Admin`, `WorkflowJobTemplate Admin` or `Organization Admin`; `Execute` isn't enough. A template can have several items. |
+| `name`, `description` | The item's name, unique in its organization, and its description. |
+| `kind` | `run_once` for a request that runs once, such as a firewall rule; `deployment` for one that creates a deployment that its owners keep. |
+| `icon`, `category` | The icon the portal shows, by name (`server`), and the category it lists the item under. |
+| `owner_team` | The team of the organization that owns the item. |
+| `questions` | What the item makes of the template's survey ([The item's form](#the-items-form)). |
+| `max_lifetime_days`, `default_lifetime_days` | For a `deployment` item, the longest a requester can keep the deployment and the lifetime the form proposes, in days. Empty `max_lifetime_days`: requesters can keep it for good. |
+
+The item's creator gets `CatalogItem Admin` on it. These roles give access to items:
+
+| Role | What it gives |
+|---|---|
+| `CatalogItem Admin` | Changes and deletes the item, and sees its requests. Changing what runs, the template or the questions, also takes the right to change the template. |
+| `CatalogItem Requester` | Requests the item. It gives no role on the template, its inventory, its project or its credentials. |
+| `CatalogItem Read` | Sees the item. |
+| `Organization CatalogItem Requester` | Requests every item of the organization. |
+
+An item has a version history (`/history/`), readable by those who can change the item, since it
+holds the item's fixed answers. The template's `used_by/` lists its items. When the template moves
+to another organization, its items move with it; deleting the template deletes them. GitOps declares items as `CatalogItem` ([GitOps](gitops.md#declarations)).
+
+### The item's form
+
+An item's form is a view over the template's survey. It adds no variable, so a request sets only
+what the survey asks. `questions` maps survey variables to what the item changes about each:
+
+| Key | What it does |
+|---|---|
+| `question_name`, `question_description` | Rewords the question. |
+| `choices` | Narrows a `multiplechoice` or `multiselect` question to some of its choices. |
+| `filter` | Narrows a dynamic list (`choices_from`) with an expression that keeps a choice when true. It reads `value` (the choice), `answers` (the answers so far, by variable) and `user` (the requester's `id`, `username` and `teams`, by name): `value startsWith "web"`. |
+| `default` | Sets the question's default. |
+| `value` | Fixes the answer: the form doesn't ask the question, and a request that answers it is refused. A password answer is stored encrypted and read back as `$encrypted$`; send `$encrypted$` to keep it. |
+| `visible` | With `value`, shows the fixed answer to requesters. A password answer is never shown. |
+| `hidden` | Leaves the question to its default. A required question needs a default or a `value`. |
+
+```json
+{
+  "env": {"question_name": "Stage", "choices": ["dev", "staging"]},
+  "token": {"value": "s3cret"},
+  "owner": {"value": "platform", "visible": true},
+  "target": {"filter": "value != \"db1\""}
+}
+```
+
+Only those who can change the item see its `questions`. When the template's survey changes so that
+the item no longer matches it, a request answers `400` until the item's admins update it.
+
+### Requests
+
+`GET /api/v2/catalog_items/N/request/` returns the form as the requester sees it: the questions
+it asks, with the item's changes; the fixed answers it shows; the requester's teams in the item's
+organization (`teams`, and `team_required` when they're in several); and, for a `deployment`
+item, its lifetime. `catalog_items/N/survey_choices/?variable=x` lists the choices of a dynamic
+question, narrowed by the item's filter, as the item's publisher set them: the requester needs no
+role on the inventory or project they come from. `answers` (a JSON object) gives the filter the
+answers so far.
+
+To request the item, post to the same URL:
+
+| Field | What it sets |
+|---|---|
+| `answers` | The answers to the questions the form asks, by variable. An answer to a fixed or hidden question, or to a variable the form doesn't ask, is refused. |
+| `team` | The team the request is for: one of the requester's teams in the item's organization. Required when they're in several; with one, that team; with none, no team. |
+| `reason` | Why the requester needs it. |
+| `lifetime_days` | For a `deployment` item, how long to keep the deployment, up to `max_lifetime_days`. Empty: the item's `default_lifetime_days`. An item that runs once refuses it. |
+
+awxnext then runs the template with the item's answers, the requester as the launcher, and
+answers `201` with the request (`/api/v2/catalog_requests/N/`). The request records the item, the
+team, the reason, the lifetime, the answers the requester gave (passwords masked) and the fixed
+answers they were shown, its job, and a `status` that follows the job's: `pending`, `running`,
+`successful`, `failed` or `canceled`.
+
+The requester sees their requests, not the jobs that run them: a request's jobs, the workflow's
+nodes included, carry the item's hidden answers, and stay visible to those with a role on the
+template. In the requester's activity stream, the job's entry shows only what they answered or
+were shown. An item's admins and the organization's auditors see its requests in
+`/api/v2/catalog_items/N/requests/` and `/api/v2/catalog_requests/`.
+
 ## Settings
 
 The Settings pages group AWX's settings by what they set up rather than by AWX's categories:

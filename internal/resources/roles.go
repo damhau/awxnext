@@ -153,6 +153,8 @@ func ctLabel(ct string) string {
 		return "Event Connector"
 	case "collectionnamespace":
 		return "Collection Namespace"
+	case "catalogitem":
+		return "Catalog Item"
 	}
 	return strings.ToUpper(ct[:1]) + ct[1:]
 }

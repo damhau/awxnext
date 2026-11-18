@@ -60,6 +60,7 @@ const typeLabels: Record<string, string> = {
   maintenancewindow: tr('Maintenance window'),
   eventconnector: tr('Event connector'),
   collectionnamespace: tr('Collection namespace'),
+  catalogitem: tr('Catalog item'),
 }
 
 export function typeName(ct: string | null | undefined): string {
@@ -124,6 +125,7 @@ export const grantable: { resource: string; ct: string; label: string; plural: s
   { resource: 'maintenance_windows', ct: 'maintenancewindow', label: tr('Maintenance window'), plural: tr('Maintenance windows') },
   { resource: 'event_connectors', ct: 'eventconnector', label: tr('Event connector'), plural: tr('Event connectors') },
   { resource: 'collection_namespaces', ct: 'collectionnamespace', label: tr('Collection namespace'), plural: tr('Collection namespaces') },
+  { resource: 'catalog_items', ct: 'catalogitem', label: tr('Catalog item'), plural: tr('Catalog items') },
 ]
 
 export interface RoleDef {
@@ -181,6 +183,7 @@ export function roleShort(name: string, ct?: string | null): string {
     maintenancewindow: ['MaintenanceWindow '],
     eventconnector: ['EventConnector '],
     collectionnamespace: ['CollectionNamespace '],
+    catalogitem: ['CatalogItem '],
   }
   for (const p of prefixes[t] ?? []) if (name.startsWith(p)) return name.slice(p.length)
   return name

@@ -117,6 +117,21 @@ func RecordVersion(c *Ctx, res *Resource, id int64, op string, changes Obj) erro
 	return recordVersion(c, res, obj, op, changes)
 }
 
+// historyAllowed checks the resource's HistoryPerm on the object.
+func historyAllowed(c *Ctx, res *Resource, obj Obj) error {
+	if res.HistoryPerm == "" {
+		return nil
+	}
+	ok, err := HasPerm(c, res, obj, res.HistoryPerm)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return ErrForbidden
+	}
+	return nil
+}
+
 func (a *App) historyRoutes(r chi.Router) {
 	r.Get("/api/v2/{res}/{id}/history/{version}/", a.wrap(a.handleVersion))
 	r.Post("/api/v2/{res}/{id}/history/{version}/revert/", a.wrap(a.handleRevert))
@@ -136,6 +151,9 @@ func (a *App) loadVersion(c *Ctx, r *http.Request) (*Resource, Obj, int64, Obj, 
 	}
 	if !res.Versioned {
 		return nil, nil, 0, nil, ErrNotFound
+	}
+	if err := historyAllowed(c, res, obj); err != nil {
+		return nil, nil, 0, nil, err
 	}
 	v, err := strconv.ParseInt(chi.URLParam(r, "version"), 10, 64)
 	if err != nil {

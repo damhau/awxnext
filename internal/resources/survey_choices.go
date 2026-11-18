@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/damhau/awxnext/internal/api"
+	"github.com/damhau/awxnext/internal/rbac"
 )
 
 // Survey questions of type multiplechoice or multiselect can take their
@@ -32,6 +33,21 @@ type SurveyContext struct {
 	Template Obj
 	// Inventory is the inventory the job will use (0 if none).
 	Inventory int64
+	// System lists dynamic choices as the system rather than as the user:
+	// a catalog item's requester has no role on what its template uses,
+	// and the item's publisher chose what its form lists.
+	System bool
+	// Filter, when set, narrows a dynamic list with the answers so far.
+	Filter func(variable string, choices []string, answered map[string]any) ([]string, error)
+}
+
+// choices lists a question's choices, narrowed by the context's filter.
+func (sc SurveyContext) choices(c *Ctx, q map[string]any, answered map[string]any) ([]string, error) {
+	choices, err := resolveChoices(c, q, sc)
+	if err != nil || sc.Filter == nil || q["choices_from"] == nil {
+		return choices, err
+	}
+	return sc.Filter(str(q["variable"]), choices, answered)
 }
 
 var choiceSourceTypes = map[string]bool{"hosts": true, "groups": true, "git_refs": true, "resource": true}
@@ -101,6 +117,11 @@ func resolveChoices(c *Ctx, q map[string]any, sc SurveyContext) ([]string, error
 	src, ok := q["choices_from"].(map[string]any)
 	if !ok {
 		return surveyChoices(q["choices"]), nil
+	}
+	if sc.System {
+		sys := *c
+		sys.User = rbac.System()
+		c = &sys
 	}
 	switch typ := str(src["type"]); typ {
 	case "hosts", "groups":
