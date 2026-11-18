@@ -569,7 +569,7 @@ func (d *dag) nodeStates(c *Ctx) map[string]any {
 		case n.job == 0:
 			status = "pending"
 		}
-		st := map[string]any{"status": status, "failed": failedStatus(status), "artifacts": d.ownArtifacts(c, n), "job": nil}
+		st := map[string]any{"status": status, "failed": failedStatus(status), "artifacts": redactEncrypted(d.ownArtifacts(c, n)), "job": nil}
 		if n.job > 0 {
 			st["job"] = n.job
 		}
@@ -864,7 +864,7 @@ func launchNode(c *Ctx, wf jobs.Row, n *wfNode, node Obj, extra map[string]any) 
 		if err := nodeLabelsAndGroups(c, trusted, wf.ID(), n.id, tpl); err != nil {
 			return 0, err
 		}
-		ov := &LaunchOverrides{Trusted: trusted}
+		ov := &LaunchOverrides{Trusted: trusted, UserID: wf.Int("created_by_id"), RequestID: wf.Int("catalog_request_id")}
 		if aa := n.artifacts; aa["job_slice"] != nil {
 			ov.ExtraJob = map[string]any{"job_slice_number": aa["job_slice"]}
 		}
@@ -884,7 +884,8 @@ func launchNode(c *Ctx, wf jobs.Row, n *wfNode, node Obj, extra map[string]any) 
 		if err := nodeLabelsAndGroups(c, trusted, wf.ID(), n.id, tpl); err != nil {
 			return 0, err
 		}
-		id, _, err := LaunchWorkflowJobTemplate(c, tpl, Obj{"extra_vars": extra}, "workflow", &LaunchOverrides{Trusted: trusted})
+		id, _, err := LaunchWorkflowJobTemplate(c, tpl, Obj{"extra_vars": extra}, "workflow",
+			&LaunchOverrides{Trusted: trusted, UserID: wf.Int("created_by_id"), RequestID: wf.Int("catalog_request_id")})
 		return id, err
 	case "system_job_template":
 		// Only the node's own days and dry_run: management jobs take no other variables.

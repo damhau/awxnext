@@ -21,9 +21,17 @@ func decls(t *testing.T, src string) []Decl {
 }
 
 func TestParse(t *testing.T) {
-	d := decls(t, `[{"name": "regions", "type": "list", "required": true}, {"name": "replicas", "type": "integer"}]`)
-	if len(d) != 2 || d[0] != (Decl{"regions", "list", true}) || d[1] != (Decl{"replicas", "integer", false}) {
+	d := decls(t, `[{"name": "regions", "type": "list", "required": true}, {"name": "replicas", "type": "integer"}, {"name": "db_password", "type": "string", "secret": true}]`)
+	if len(d) != 3 || d[0] != (Decl{Name: "regions", Type: "list", Required: true}) || d[1] != (Decl{Name: "replicas", Type: "integer"}) ||
+		d[2] != (Decl{Name: "db_password", Type: "string", Secret: true}) {
 		t.Fatalf("%+v", d)
+	}
+	if s := Secrets(d); len(s) != 1 || s[0] != "db_password" {
+		t.Errorf("Secrets: %v", s)
+	}
+	enc, _ := json.Marshal(Encode(d))
+	if want := `[{"name":"regions","required":true,"type":"list"},{"name":"replicas","required":false,"type":"integer"},{"name":"db_password","required":false,"secret":true,"type":"string"}]`; string(enc) != want {
+		t.Errorf("Encode: %s", enc)
 	}
 	for _, empty := range []any{nil, map[string]any{}, []any{}} {
 		if d, err := Parse(empty); err != nil || len(d) != 0 {
@@ -38,6 +46,8 @@ func TestParse(t *testing.T) {
 		`[{"name": "a", "type": "array"}]`:                                 `type must be one of string, integer, float, boolean, list, object`,
 		`[{"name": "a", "type": "list", "required": "yes"}]`:               "required must be true or false",
 		`[{"name": "a", "type": "list", "description": "x"}]`:              `unknown key "description"`,
+		`[{"name": "a", "type": "string", "secret": "yes"}]`:               "secret must be true or false",
+		`[{"name": "a", "type": "object", "secret": true}]`:                "only a string output can be secret",
 	} {
 		var v any
 		json.Unmarshal([]byte(src), &v)

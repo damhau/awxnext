@@ -18,7 +18,10 @@ const outputs: Record<number, OutputDecl[]> = {
     { name: 'regions', type: 'list', required: true },
     { name: 'replicas', type: 'integer', required: false },
   ],
-  20: [{ name: 'image_tag', type: 'string', required: true }],
+  20: [
+    { name: 'image_tag', type: 'string', required: true },
+    { name: 'registry_token', type: 'string', required: true, secret: true },
+  ],
 }
 
 describe('outputRef', () => {
@@ -41,7 +44,7 @@ describe('ancestors', () => {
 
 describe('outputSuggestions', () => {
   const of = (t: number) => outputs[t]
-  it('offers the outputs of earlier steps', () => {
+  it('offers the outputs of earlier steps, but secret ones', () => {
     expect(outputSuggestions(3, nodes, of).map((s) => s.ref)).toEqual([
       'nodes.build.artifacts.image_tag',
       'nodes.cleanup.artifacts.regions',
@@ -66,6 +69,19 @@ describe('cleanOutputs', () => {
         { name: '  ', type: 'string', required: false },
       ]),
     ).toEqual([{ name: 'regions', type: 'list', required: true }])
+  })
+  it('keeps secret on strings only', () => {
+    expect(
+      cleanOutputs([
+        { name: 'token', type: 'string', required: false, secret: true },
+        { name: 'hosts', type: 'list', required: false, secret: true },
+        { name: 'tag', type: 'string', required: false, secret: false },
+      ]),
+    ).toEqual([
+      { name: 'token', type: 'string', required: false, secret: true },
+      { name: 'hosts', type: 'list', required: false },
+      { name: 'tag', type: 'string', required: false },
+    ])
   })
 })
 

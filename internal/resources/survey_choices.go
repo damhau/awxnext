@@ -46,6 +46,24 @@ type SurveyContext struct {
 	// Labels, when not nil, gets the labels of the answers picked in
 	// labelled lists, by variable: a string, or a list for a multiselect.
 	Labels map[string]any
+	// Trusted variables come from a workflow or a schedule, not from
+	// whoever launches: one given for a computed question is ignored
+	// rather than refused.
+	Trusted bool
+	// User is who computed questions see as the user (userEnv); nil: the
+	// user of the context.
+	User map[string]any
+	// Request and Team are the portal request and its team, for computed
+	// questions; nil outside a request.
+	Request, Team map[string]any
+}
+
+func (sc SurveyContext) computeEnv(c *Ctx, picked map[string]any) *computeEnv {
+	user := sc.User
+	if user == nil {
+		user = userEnv(c, c.User.UserID)
+	}
+	return &computeEnv{picked: picked, user: user, team: sc.Team, request: sc.Request}
 }
 
 // options lists a question's choices and their labels, narrowed by the

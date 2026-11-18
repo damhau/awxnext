@@ -119,6 +119,34 @@ Every job of the template is checked, inside a workflow or not, including each
 item of a loop and each slice of a sliced job. A loop node merges its items'
 artifacts as before.
 
+### Secret outputs
+
+An output can be `secret`, for a value the playbook makes that has to come
+back out without landing in its output, such as a database password:
+
+```json
+"outputs": [
+  {"name": "db_password", "type": "string", "secret": true}
+]
+```
+
+Only a `string` output can be secret. For a secret output:
+
+- the server removes its value from the `set_stats` task's events, and from the
+  stats event, before they are stored, and masks it in every event after them,
+  as it masks credentials
+  ([Secrets in job output](operations.md#secrets-in-job-output));
+- the job's artifacts keep it encrypted and show it as `$encrypted$`;
+- the next nodes of a workflow get the value as a variable, as they get a
+  survey password: decrypted for the job, `$encrypted$` in its variables, and
+  masked in its output;
+- a node's condition or loop reads it as `$encrypted$`, so the workflow editor
+  doesn't offer it there.
+
+Output from the tasks before `set_stats` isn't masked: make the value in the
+`set_stats` task itself, or in a task with `no_log: true`. Values under 4
+characters are removed from the events but not masked in the output text.
+
 ### Expressions
 
 Saving a node checks its condition and loop against the outputs declared by

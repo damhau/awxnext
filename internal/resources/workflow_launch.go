@@ -78,7 +78,7 @@ func LaunchWorkflowJobTemplate(c *Ctx, wf Obj, body Obj, launchType string, ov *
 		}
 	} else if boolv(wf["survey_enabled"]) && len(spec) > 0 {
 		invID, _ := api.ID(inv)
-		sv, pw, errs := ApplySurvey(c, spec, launchVars, SurveyContext{Template: wf, Inventory: invID})
+		sv, pw, errs := ApplySurvey(c, spec, launchVars, ov.surveyContext(c, wf, invID))
 		if len(errs) > 0 {
 			return 0, nil, &api.Error{Status: 400, Body: Obj{"variables_needed_to_start": errs}}
 		}
@@ -239,7 +239,7 @@ func workflowLaunchInfo(c *Ctx, wf Obj) Obj {
 	if boolv(wf["survey_enabled"]) {
 		qs, _ := spec["spec"].([]any)
 		for _, q := range qs {
-			if qm, ok := q.(map[string]any); ok && boolv(qm["required"]) && (qm["default"] == nil || qm["default"] == "") {
+			if qm, ok := q.(map[string]any); ok && qm["value_from"] == nil && boolv(qm["required"]) && (qm["default"] == nil || qm["default"] == "") {
 				needed = append(needed, str(qm["variable"]))
 			}
 		}

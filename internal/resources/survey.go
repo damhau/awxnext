@@ -91,6 +91,7 @@ func ValidateSurveySpec(c *Ctx, raw any, previous map[string]any) (map[string]an
 		}
 	}
 	seen := map[string]bool{}
+	earlier := map[string]string{}
 	for i, q := range qs {
 		qm, ok := q.(map[string]any)
 		if !ok {
@@ -117,6 +118,14 @@ func ValidateSurveySpec(c *Ctx, raw any, previous map[string]any) (map[string]an
 		if _, ok := qm["required"].(bool); !ok {
 			return nil, bad(fmt.Sprintf("'required' missing from survey question %d.", i))
 		}
+		if vf, ok := qm["value_from"]; ok {
+			if vf == nil || vf == "" {
+				delete(qm, "value_from")
+			} else if err := checkValueFrom(qm, earlier, i); err != nil {
+				return nil, bad(err.Error())
+			}
+		}
+		earlier[v] = typ
 		def, hasDef := qm["default"]
 		if def == "" {
 			hasDef = false
@@ -283,6 +292,8 @@ func ApplySurvey(c *Ctx, spec map[string]any, answers map[string]any, sc SurveyC
 	out := map[string]any{}
 	answered := map[string]any{} // valid answers so far, for show_if
 	secret := map[string]bool{}
+	picked := map[string]any{}
+	var env *computeEnv
 	var passwords, errs []string
 	qs, _ := spec["spec"].([]any)
 	for _, q := range qs {
@@ -297,6 +308,43 @@ func ApplySurvey(c *Ctx, spec map[string]any, answers map[string]any, sc SurveyC
 		}
 		required, _ := qm["required"].(bool)
 		ans, given := answers[v]
+		if qm["value_from"] != nil {
+			if typ == "password" {
+				passwords = append(passwords, v)
+			}
+			if s, _ := ans.(string); given && !sc.Trusted && !(typ == "password" && s == crypto.Placeholder) {
+				errs = append(errs, fmt.Sprintf("'%s' is computed by the server and can't be set at launch.", v))
+				continue
+			}
+			if env == nil {
+				env = sc.computeEnv(c, picked)
+			}
+			env.answers = publicAnswers(answered, secret)
+			val, err := computeAnswer(qm, env)
+			switch {
+			case err != nil:
+				errs = append(errs, fmt.Sprintf("Could not compute '%s': %v", v, err))
+				continue
+			case val == nil && required:
+				errs = append(errs, fmt.Sprintf("Could not compute '%s': its expression gives nothing.", v))
+				continue
+			case val == nil:
+				continue
+			}
+			answered[v] = val
+			if typ != "password" {
+				out[v] = val
+				continue
+			}
+			secret[v] = true
+			enc, err := c.App.Crypto.Encrypt(val.(string))
+			if err != nil {
+				errs = append(errs, fmt.Sprintf("Could not compute '%s': %v", v, err))
+				continue
+			}
+			out[v] = enc
+			continue
+		}
 		if typ == "password" {
 			passwords = append(passwords, v)
 			if s, _ := ans.(string); s == crypto.Placeholder {
@@ -395,14 +443,15 @@ func ApplySurvey(c *Ctx, spec map[string]any, answers map[string]any, sc SurveyC
 				continue
 			}
 			s := fmt.Sprint(ans)
-			label, ok := optionLabel(opts, s)
+			o, ok := pickOption(opts, s)
 			if !ok {
 				errs = append(errs, notAChoice(v, s, opts))
 				continue
 			}
-			if sc.Labels != nil && label != s {
-				sc.Labels[v] = label
+			if sc.Labels != nil && o.Label != s {
+				sc.Labels[v] = o.Label
 			}
+			picked[v] = o.item()
 			out[v], answered[v] = s, s
 		case "multiselect":
 			list, ok := ans.([]any)
@@ -415,31 +464,32 @@ func ApplySurvey(c *Ctx, spec map[string]any, answers map[string]any, sc SurveyC
 				errs = append(errs, fmt.Sprintf("Could not list the choices for '%s': %v", v, err))
 				continue
 			}
-			labels, labelled := []any{}, false
+			labels, items, labelled := []any{}, []any{}, false
 			for _, x := range list {
-				label, ok := optionLabel(opts, fmt.Sprint(x))
+				o, ok := pickOption(opts, fmt.Sprint(x))
 				if !ok {
 					errs = append(errs, notAChoice(v, fmt.Sprint(x), opts))
 				}
-				labels = append(labels, label)
-				labelled = labelled || label != fmt.Sprint(x)
+				labels, items = append(labels, o.Label), append(items, o.item())
+				labelled = labelled || o.Label != fmt.Sprint(x)
 			}
 			if sc.Labels != nil && labelled {
 				sc.Labels[v] = labels
 			}
+			picked[v] = items
 			out[v], answered[v] = list, list
 		}
 	}
 	return out, passwords, errs
 }
 
-func optionLabel(opts []choiceOption, value string) (string, bool) {
+func pickOption(opts []choiceOption, value string) (choiceOption, bool) {
 	for _, o := range opts {
 		if o.Value == value {
-			return o.Label, true
+			return o, true
 		}
 	}
-	return "", false
+	return choiceOption{}, false
 }
 
 // notAChoice refuses an answer outside a list, naming the list when it is short.

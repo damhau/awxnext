@@ -1,8 +1,9 @@
 // Package outputs checks what a job template's playbook publishes with
 // set_stats against the outputs the template declares (docs/workflows.md):
-// each output has a name, a type and whether it is required. A job whose
-// artifacts do not match fails; matching artifacts are converted to their
-// declared types, so the workflow nodes after it get typed values.
+// each output has a name, a type, whether it is required and whether it is
+// secret. A job whose artifacts do not match fails; matching artifacts are
+// converted to their declared types, so the workflow nodes after it get typed
+// values.
 package outputs
 
 import (
@@ -19,11 +20,13 @@ import (
 // Types are the output types, in the order the UI offers them.
 var Types = []string{"string", "integer", "float", "boolean", "list", "object"}
 
-// Decl is a declared output.
+// Decl is a declared output. A secret output is a string the job keeps
+// encrypted and hides from its output.
 type Decl struct {
 	Name     string `json:"name"`
 	Type     string `json:"type"`
 	Required bool   `json:"required"`
+	Secret   bool   `json:"secret,omitempty"`
 }
 
 var nameRe = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
@@ -43,11 +46,11 @@ func Parse(v any) ([]Decl, error) {
 	for i, it := range items {
 		m, ok := it.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf("Output %d: expected an object with name, type and required.", i+1)
+			return nil, fmt.Errorf("Output %d: expected an object with name, type, required and secret.", i+1)
 		}
 		for k := range m {
-			if k != "name" && k != "type" && k != "required" {
-				return nil, fmt.Errorf("Output %d: unknown key %q (expected name, type and required).", i+1, k)
+			if k != "name" && k != "type" && k != "required" && k != "secret" {
+				return nil, fmt.Errorf("Output %d: unknown key %q (expected name, type, required and secret).", i+1, k)
 			}
 		}
 		name, _ := m["name"].(string)
@@ -68,7 +71,16 @@ func Parse(v any) ([]Decl, error) {
 				return nil, fmt.Errorf("Output %q: required must be true or false.", name)
 			}
 		}
-		out = append(out, Decl{Name: name, Type: typ, Required: req})
+		secret := false
+		if v, ok := m["secret"]; ok && v != nil {
+			if secret, ok = v.(bool); !ok {
+				return nil, fmt.Errorf("Output %q: secret must be true or false.", name)
+			}
+		}
+		if secret && typ != "string" {
+			return nil, fmt.Errorf("Output %q: only a string output can be secret.", name)
+		}
+		out = append(out, Decl{Name: name, Type: typ, Required: req, Secret: secret})
 	}
 	return out, nil
 }
@@ -84,11 +96,27 @@ func Load(raw []byte) []Decl {
 	return d
 }
 
-// Encode gives declarations in their stored form, every key present.
+// Encode gives declarations in their stored form, every key present but
+// secret, which is there only when true.
 func Encode(decls []Decl) []any {
 	out := make([]any, len(decls))
 	for i, d := range decls {
-		out[i] = map[string]any{"name": d.Name, "type": d.Type, "required": d.Required}
+		m := map[string]any{"name": d.Name, "type": d.Type, "required": d.Required}
+		if d.Secret {
+			m["secret"] = true
+		}
+		out[i] = m
+	}
+	return out
+}
+
+// Secrets lists the names of the secret outputs.
+func Secrets(decls []Decl) []string {
+	var out []string
+	for _, d := range decls {
+		if d.Secret {
+			out = append(out, d.Name)
+		}
 	}
 	return out
 }

@@ -400,7 +400,7 @@ func launchInfo(c *Ctx, jt Obj) Obj {
 	if boolv(jt["survey_enabled"]) {
 		qs, _ := spec["spec"].([]any)
 		for _, q := range qs {
-			if qm, ok := q.(map[string]any); ok && qm["required"] == true && (qm["default"] == nil || qm["default"] == "") {
+			if qm, ok := q.(map[string]any); ok && qm["value_from"] == nil && qm["required"] == true && (qm["default"] == nil || qm["default"] == "") {
 				varsNeeded = append(varsNeeded, str(qm["variable"]))
 			}
 		}
@@ -460,6 +460,27 @@ type LaunchOverrides struct {
 	// ApplySurvey returns them: the template's survey is not applied again
 	// (a catalog item's request, checked against the item's view of it).
 	Survey *SurveyAnswers
+	// UserID is who computed questions see as the user when it isn't the
+	// user of the context: a workflow's launcher, for its nodes.
+	UserID int64
+	// RequestID is the portal request a workflow's node runs for.
+	RequestID int64
+}
+
+// surveyContext is what a launch's survey is applied with.
+func (ov *LaunchOverrides) surveyContext(c *Ctx, tpl Obj, inv int64) SurveyContext {
+	sc := SurveyContext{Template: tpl, Inventory: inv}
+	if ov == nil {
+		return sc
+	}
+	sc.Trusted = ov.Trusted != nil
+	if ov.UserID != 0 {
+		sc.User = userEnv(c, ov.UserID)
+	}
+	if ov.RequestID != 0 {
+		sc.Request, sc.Team = loadRequestEnv(c, ov.RequestID)
+	}
+	return sc
 }
 
 // SurveyAnswers are survey variables checked by ApplySurvey, their password
@@ -606,7 +627,7 @@ func LaunchJobTemplate(c *Ctx, jt Obj, body Obj, launchType string, ov *LaunchOv
 		}
 	} else if boolv(jt["survey_enabled"]) && len(spec) > 0 {
 		invID, _ := api.ID(inv)
-		sv, pw, errs := ApplySurvey(c, spec, launchVars, SurveyContext{Template: jt, Inventory: invID})
+		sv, pw, errs := ApplySurvey(c, spec, launchVars, ov.surveyContext(c, jt, invID))
 		if len(errs) > 0 {
 			return 0, nil, &api.Error{Status: 400, Body: Obj{"variables_needed_to_start": errs}}
 		}

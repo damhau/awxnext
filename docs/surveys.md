@@ -77,7 +77,7 @@ the API's reply, or the job's `set_stats` data, as `data`:
 | `items` | The list, from `data`. Empty: `data` itself must be a list. | `data.results` |
 | `value` | An item's answer, a string or a number, from `item`. Empty: the item itself. | `string(item.vid)` |
 | `label` | What people see, from `item` and `value`. Empty: the value. | `item.name + " (" + value + ")"` |
-| `filter` | Whether to list an item, from `item`, `value`, `label`, `answers` (the earlier answers, by variable) and `user` (the user's `id`, `username` and `teams`, by name). Empty: all. | `item.site == answers.datacenter` |
+| `filter` | Whether to list an item, from `item`, `value`, `label`, `answers` (the earlier answers, by variable) and `user` (the user's `id`, `username`, `first_name`, `last_name`, `email` and `teams`, by name). Empty: all. | `item.site == answers.datacenter` |
 
 Duplicate and empty values are left out. A list holds at most 500 items.
 
@@ -142,3 +142,77 @@ regular expression (`pattern`, matched against the whole answer, RE2 syntax).
 pattern: "CHG-[0-9]+"
 pattern_hint: Use a change number like CHG-123
 ```
+
+## Computed questions (`value_from`)
+
+A question with `value_from` is never asked: the server computes its answer
+when the template launches, from an
+[expr](https://expr-lang.org/docs/language-definition) expression. Use it for
+values worked out rather than asked, such as a hostname built from the
+requester's name or the gateway of a picked VLAN:
+
+```yaml
+- question_name: VLAN
+  variable: vlan
+  type: multiplechoice
+  required: true
+  choices_from: {type: source, source: 12}
+- question_name: Hostname
+  variable: hostname
+  type: text
+  required: true
+  value_from: 'answers.env + "-" + user.username + "-" + string(item("vlan").vid)'
+- question_name: Gateway
+  variable: gateway
+  type: text
+  required: true
+  value_from: 'item("vlan").gateway'
+- question_name: Database password
+  variable: db_password
+  type: password
+  required: true
+  value_from: password(24)
+```
+
+An expression reads:
+
+| Name | What it is |
+|---|---|
+| `item("vlan")` | The item picked in an earlier `multiplechoice` question, as its choice source listed it (`item.vid`, `item.gateway`). For a `multiselect`, the list of picked items. For a list that isn't from a choice source, the answer itself. |
+| `answers` | The answers to the earlier questions, by variable, computed ones included. Password answers aren't in it. |
+| `user` | Who launches: `id`, `username`, `first_name`, `last_name`, `email` and `teams` (names). For a workflow's node, the user who launched the workflow. |
+| `team` | For a portal request, the team it's for: `id` and `name`. Otherwise `nil`. |
+| `request` | For a portal request, and the nodes of its workflow: `id`, `lifetime_days` and `expires_at` (RFC 3339, `nil` when the item keeps nothing). Otherwise `nil`. |
+| `password(n)` | A random password of `n` letters and digits, from 8 to 128. Only on a `password` question. |
+
+Use `?.` and `??` where a value can be `nil`: `team?.name ?? user.username`,
+`request?.expires_at ?? "never"`.
+
+When you save the survey, the server refuses:
+
+- `value_from` on a `multiplechoice` or `multiselect` question, or with a
+  `default`;
+- `item()` of a question that isn't an earlier list, and `answers` of a question
+  that isn't earlier or is a password;
+- `password()` outside a `password` question, and a length outside 8 to 128.
+
+At launch:
+
+- The answer is converted to the question's type: a number or a boolean
+  becomes text for `text`, `textarea` and `password`; `integer` and `float`
+  take numbers. `min`, `max` and `pattern` don't apply.
+- An expression that fails, or gives `nil` for a required question, refuses
+  the launch: `Could not compute 'hostname': …`. For a question that isn't
+  required, `nil` leaves the variable unset.
+- A launch, a schedule, a portal request or a catalog item that sets a
+  computed variable is refused: `'hostname' is computed by the server and
+  can't be set at launch.` A workflow's node, a webhook or a callback that
+  passes one is ignored, and the computed value wins.
+- `show_if` applies as to any question.
+
+A generated password is stored encrypted, shown as `$encrypted$` in the job's
+variables, and masked in its output, as a password answer is
+([Secrets in job output](operations.md#secrets-in-job-output)). A relaunch
+reuses it. AWX clients ignore `value_from`, as they ignore `choices_from`: the
+launch form of the `awx` CLI and the collection doesn't ask computed questions,
+because they aren't in `variables_needed_to_start`.

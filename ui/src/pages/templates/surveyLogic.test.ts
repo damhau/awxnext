@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { describeSource, earlierAnswers, patternError, visibleQuestions } from './surveyLogic'
+import { askedQuestions, describeSource, earlierAnswers, patternError, visibleQuestions } from './surveyLogic'
 
 const qs = [
   { variable: 'env', default: 'dev' },
@@ -22,6 +22,17 @@ describe('survey visibility', () => {
   it('matches any answer of a multiselect', () => {
     expect(vars({ regions: ['us', 'eu'] })).toContain('eu_only')
     expect(vars({ regions: [] })).not.toContain('eu_only')
+  })
+})
+
+describe('computed questions', () => {
+  const withComputed = [{ variable: 'vlan' }, { variable: 'hostname', value_from: 'item("vlan").name' }, { variable: 'owner' }]
+  it('are never asked', () => {
+    expect(askedQuestions(withComputed).map((q) => q.variable)).toEqual(['vlan', 'owner'])
+    expect(visibleQuestions(withComputed, { hostname: 'given' }).map((q) => q.variable)).toEqual(['vlan', 'owner'])
+  })
+  it('are not earlier answers', () => {
+    expect(earlierAnswers([...withComputed, { variable: 'site' }].map((q) => ({ ...q, type: 'text' })), 'site', { vlan: '12', hostname: 'h', owner: 'me' })).toEqual({ vlan: '12', owner: 'me' })
   })
 })
 

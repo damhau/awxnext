@@ -7,7 +7,7 @@ import { Icon } from '../../components/icons'
 import { Dialog, useToast } from '../../components/overlay'
 import { useInvalidate } from '../../api/hooks'
 import { typeLabel } from '../../lib/format'
-import { describeSource, type ChoicesFrom } from '../templates/surveyLogic'
+import { askedQuestions, describeSource, type ChoicesFrom } from '../templates/surveyLogic'
 import './automation.css'
 import { SavedLabelsAndGroupsFields, useSavedLabelsAndGroups } from './SavedLabelsAndGroups'
 import { browserZone, DAY_NAMES, DAYS, defaultModel, describe, MONTHS, parseRRule, toRRule, type Day, type Freq, type RuleModel } from './rrule'
@@ -417,6 +417,7 @@ export interface SurveyQuestion {
   choices_from?: ChoicesFrom
   min?: number
   max?: number
+  value_from?: string
 }
 
 function surveyChoices(q: SurveyQuestion): string[] {
@@ -437,7 +438,7 @@ export function useTemplatePrompts(type: string | undefined, id: number | undefi
     queryFn: () => api.get<{ spec?: SurveyQuestion[] }>(`${templateResource(type!)}/${id}/survey_spec/`),
     enabled: surveyOn,
   })
-  return { template: tpl.data, survey: surveyOn ? survey.data?.spec ?? [] : [], loading: tpl.isPending && !!type }
+  return { template: tpl.data, survey: surveyOn ? askedQuestions(survey.data?.spec ?? []) : [], loading: tpl.isPending && !!type }
 }
 
 type PromptValues = Record<string, unknown>

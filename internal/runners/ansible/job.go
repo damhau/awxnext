@@ -264,6 +264,7 @@ func runJob(ctx context.Context, rc *jobs.RunContext) jobs.Result {
 	if app.DB.QueryRow(ctx, "SELECT outputs FROM unified_job_templates WHERE id = $1 AND type = 'job_template'", row.Int("unified_job_template_id")).Scan(&raw) == nil {
 		declared = outputs.Load(raw)
 	}
+	rc.Out.HideOutputs(outputs.Secrets(declared)...)
 
 	oc, err := run.Execute(ctx, app, rc.Out)
 	if oc != nil && oc.Stats != nil {
@@ -278,6 +279,7 @@ func runJob(ctx context.Context, rc *jobs.RunContext) jobs.Result {
 		saveFactCache(ctx, app, row, oc.Artifacts, fmt.Sprint(id), facts)
 	}
 	if err != nil {
+		sealOutputs(app, declared, update)
 		return jobs.Result{Status: "error", Explanation: err.Error(), Update: update}
 	}
 	res := jobs.Result{Update: update}
@@ -303,7 +305,37 @@ func runJob(ctx context.Context, rc *jobs.RunContext) jobs.Result {
 			update["artifacts"] = typed
 		}
 	}
+	sealOutputs(app, declared, update)
 	return res
+}
+
+// sealOutputs encrypts the secret outputs among a job's artifacts. A value
+// that can't be encrypted is dropped for the placeholder, never stored in
+// clear.
+func sealOutputs(app *api.App, declared []outputs.Decl, update map[string]any) {
+	art, _ := update["artifacts"].(map[string]any)
+	names := outputs.Secrets(declared)
+	if len(art) == 0 || len(names) == 0 {
+		return
+	}
+	art = maps.Clone(art)
+	for _, name := range names {
+		v, ok := art[name]
+		if !ok || v == nil {
+			continue
+		}
+		s, isStr := v.(string)
+		if !isStr {
+			b, _ := json.Marshal(v)
+			s = string(b)
+		}
+		enc, err := app.Crypto.Encrypt(s)
+		if err != nil {
+			enc = crypto.Placeholder
+		}
+		art[name] = enc
+	}
+	update["artifacts"] = art
 }
 
 func redactArgs(args []string) []string {

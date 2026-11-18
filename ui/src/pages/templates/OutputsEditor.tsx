@@ -26,6 +26,10 @@ export function OutputsEditor({ value, onChange, error }: { value: OutputDecl[];
                 <input type="checkbox" checked={o.required} onChange={(e) => update(i, { required: e.target.checked })} />
                 {tr('required')}
               </label>
+              <label className="check small" title={tr('Kept encrypted, hidden from the job output from the set_stats task on, and handed to the next workflow steps as a password.')}>
+                <input type="checkbox" disabled={o.type !== 'string'} checked={!!o.secret && o.type === 'string'} onChange={(e) => update(i, { secret: e.target.checked })} />
+                {tr('secret')}
+              </label>
               <button type="button" className="btn ghost sm icon" aria-label={tr('Remove output {name}', { name: o.name })} onClick={() => onChange(value.filter((_, j) => j !== i))}>
                 <Icon name="x" size={12} />
               </button>

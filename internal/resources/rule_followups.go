@@ -230,7 +230,7 @@ func (e *RuleEngine) postArtifacts(ctx context.Context, tx pgx.Tx, r *eventRule,
 		}
 		return "", err
 	}
-	data, err := json.Marshal(f.artifacts)
+	data, err := json.Marshal(redactEncrypted(f.artifacts))
 	if err != nil {
 		return "", err
 	}

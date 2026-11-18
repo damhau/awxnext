@@ -24,16 +24,27 @@ interface Conditional {
   variable: string
   default?: unknown
   show_if?: ShowIf
+  value_from?: string
+}
+
+/** The answer types the server can compute (value_from). */
+export const COMPUTABLE_TYPES = ['text', 'textarea', 'password', 'integer', 'float']
+
+/** The questions someone answers: computed questions (value_from) are
+ * never asked. */
+export function askedQuestions<Q extends { value_from?: string }>(questions: Q[]): Q[] {
+  return questions.filter((q) => !q.value_from)
 }
 
 const empty = (v: unknown) => v === undefined || v === null || v === '' || (Array.isArray(v) && v.length === 0)
 
 /** The questions shown for these answers (or defaults), in order. A question
- * whose show_if names a hidden question is hidden too. */
+ * whose show_if names a hidden question is hidden too. Computed questions
+ * are never shown. */
 export function visibleQuestions<Q extends Conditional>(questions: Q[], values: Record<string, unknown>): Q[] {
   const answered: Record<string, unknown> = {}
   const out: Q[] = []
-  for (const q of questions) {
+  for (const q of askedQuestions(questions)) {
     if (q.show_if) {
       const ans = answered[q.show_if.variable]
       if (empty(ans)) continue

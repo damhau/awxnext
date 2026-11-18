@@ -330,8 +330,10 @@ updates.
 What awxnext masks:
 
 - **Values:** the fields a credential type marks secret, in every credential the run uses,
-  including values a secret lookup fetched; survey password answers; and the passwords prompted
-  at launch (SSH, privilege escalation, vault). The credentials a run uses on its own are
+  including values a secret lookup fetched; survey password answers, generated ones included
+  ([computed questions](surveys.md#computed-questions-value_from)); the passwords prompted at
+  launch (SSH, privilege escalation, vault); and a template's secret outputs, from the
+  `set_stats` task that publishes them on ([secret outputs](workflows.md#secret-outputs)). The credentials a run uses on its own are
   masked too: an inventory source's credential, a project's SCM credential, the execution
   environment's registry credential and the organization's Galaxy credentials.
 - **Runs:** jobs, ad hoc commands, project updates and inventory updates.
@@ -347,7 +349,8 @@ What it doesn't mask:
   escaping, such as a YAML string or a Python `repr`. Set `no_log: true` on tasks that print
   them.
 - **What the run keeps rather than prints:** the job's artifacts (`set_stats`), which a workflow
-  passes to its next nodes, and the facts it caches keep their values. Host names aren't masked.
+  passes to its next nodes, and the facts it caches keep their values, except secret outputs,
+  which are kept encrypted. Host names aren't masked.
 - **Values awxnext didn't hand the run:** fields that aren't secret, such as a username, and
   secrets that the playbook reads itself, from a file or a lookup plugin.
 

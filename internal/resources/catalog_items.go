@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/damhau/awxnext/internal/api"
 	"github.com/damhau/awxnext/internal/crypto"
@@ -328,11 +329,16 @@ type itemView struct {
 func newItemView(survey map[string]any, overrides map[string]any) (*itemView, error) {
 	v := &itemView{locked: map[string]bool{}, visible: map[string]bool{}, filters: map[string]string{}}
 	var qs []any
-	known := map[string]bool{}
+	known, computed := map[string]bool{}, map[string]bool{}
 	for _, q := range surveyQuestions(survey) {
 		q = maps.Clone(q)
 		variable := str(q["variable"])
 		known[variable] = true
+		if q["value_from"] != nil {
+			computed[variable] = true
+			qs = append(qs, q)
+			continue
+		}
 		ov, _ := overrides[variable].(map[string]any)
 		for _, k := range []string{"question_name", "question_description"} {
 			if s, ok := ov[k]; ok {
@@ -413,6 +419,9 @@ func newItemView(survey map[string]any, overrides map[string]any) (*itemView, er
 		qs = append(qs, q)
 	}
 	for variable := range overrides {
+		if computed[variable] {
+			return nil, fmt.Errorf("%s is computed by the server (value_from): an item can't change it", variable)
+		}
 		if !known[variable] {
 			return nil, fmt.Errorf("%s is not a question of the template's survey", variable)
 		}
@@ -456,7 +465,7 @@ func (v *itemView) checkAnswers(c *Ctx) error {
 // filter narrows dynamic choices with the item's filter expressions, over
 // each choice, the answers so far and the requester.
 func (v *itemView) filter(c *Ctx) func(variable string, choices []string, answered map[string]any) ([]string, error) {
-	user := requesterEnv(c)
+	user := userEnv(c, c.User.UserID)
 	return func(variable string, choices []string, answered map[string]any) ([]string, error) {
 		src := v.filters[variable]
 		if src == "" {
@@ -478,22 +487,6 @@ func (v *itemView) filter(c *Ctx) func(variable string, choices []string, answer
 		}
 		return out, nil
 	}
-}
-
-// requesterEnv is the requester as filters see them.
-func requesterEnv(c *Ctx) map[string]any {
-	teams := []any{}
-	rows, err := c.DB().Query(c, "SELECT name FROM teams WHERE id = ANY($1) ORDER BY name", c.User.Teams)
-	if err == nil {
-		for rows.Next() {
-			var n string
-			if rows.Scan(&n) == nil {
-				teams = append(teams, n)
-			}
-		}
-		rows.Close()
-	}
-	return map[string]any{"id": c.User.UserID, "username": c.User.Username, "teams": teams}
 }
 
 // redactItemQuestions masks the password answers an item fixes.
@@ -698,8 +691,14 @@ func RequestCatalogItem(c *Ctx, ci *catalogItem, body Obj) (Obj, error) {
 	if err := fe.Err(); err != nil {
 		return nil, err
 	}
+	var id int64
+	if err := c.DB().QueryRow(c, "SELECT nextval(pg_get_serial_sequence('catalog_requests', 'id'))").Scan(&id); err != nil {
+		return nil, err
+	}
+	created := time.Now().UTC().Truncate(time.Microsecond)
 	sc := ci.surveyContext(c)
 	sc.Labels = map[string]any{}
+	sc.Request, sc.Team = requestEnv(id, created, lifetime), teamEnv(c, team)
 	sv, pw, errs := ApplySurvey(c, ci.view.spec, answers, sc)
 	if len(errs) > 0 {
 		return nil, &api.Error{Status: 400, Body: Obj{"variables_needed_to_start": errs}}
@@ -731,10 +730,9 @@ func RequestCatalogItem(c *Ctx, ci *catalogItem, body Obj) (Obj, error) {
 	labelsJSON, _ := json.Marshal(labels)
 	var req Obj
 	err = c.WithTx(func(c *Ctx) error {
-		var id int64
-		if err := c.DB().QueryRow(c, `INSERT INTO catalog_requests (created_by_id, modified_by_id, catalog_item_id, item_name, organization_id, team_id,
-			answers, answer_labels, reason, lifetime_days) VALUES ($1, $1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
-			nullID(c.User.UserID), ci.item["id"], ci.item["name"], ci.item["organization"], team, string(answersJSON), string(labelsJSON), reason, lifetime).Scan(&id); err != nil {
+		if _, err := c.DB().Exec(c, `INSERT INTO catalog_requests (id, created, modified, created_by_id, modified_by_id, catalog_item_id, item_name, organization_id, team_id,
+			answers, answer_labels, reason, lifetime_days) VALUES ($1, $2, $2, $3, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+			id, created, nullID(c.User.UserID), ci.item["id"], ci.item["name"], ci.item["organization"], team, string(answersJSON), string(labelsJSON), reason, lifetime); err != nil {
 			return err
 		}
 		lc := *c

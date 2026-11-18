@@ -7,9 +7,9 @@ import { Check, FormError, Lookup, SelectField, TextArea, TextInput } from '../.
 import { Icon } from '../../components/icons'
 import { Dialog, useConfirm, useToast } from '../../components/overlay'
 import { Empty, Loading, Panel } from '../../components/ui'
-import { describeSource, earlierAnswers, patternError, visibleQuestions, type ChoicesFrom, type ShowIf } from './surveyLogic'
+import { COMPUTABLE_TYPES, describeSource, earlierAnswers, patternError, visibleQuestions, type ChoicesFrom, type ShowIf } from './surveyLogic'
 import { resOf, type Kind } from './TemplateDetail'
-import { tr } from '../../lib/i18n'
+import { asIs, tr } from '../../lib/i18n'
 
 export interface Question {
   question_name: string
@@ -25,6 +25,7 @@ export interface Question {
   show_if?: ShowIf
   pattern?: string
   pattern_hint?: string
+  value_from?: string
   new_question?: boolean
 }
 
@@ -236,8 +237,21 @@ export function SurveyEditor({ kind, tpl }: { kind: Kind; tpl: Template }) {
                       {typeLabels[q.type]}
                       {(q.type === 'multiplechoice' || q.type === 'multiselect') && <span className="faint"> · {q.choices_from ? describeSource(q.choices_from) : tr('{count} choices', { count: choicesOf(q).length })}</span>}
                       {q.pattern && <span className="faint"> {tr('· format checked')}</span>}
+                      {q.value_from && <span className="faint"> {tr('· computed')}</span>}
                     </td>
-                    <td className="mono small">{q.type === 'password' ? (q.default ? '••••••' : '') : Array.isArray(q.default) ? q.default.join(', ') : String(q.default ?? '')}</td>
+                    <td className="mono small">
+                      {q.value_from ? (
+                        <span className="faint" title={tr('Computed by the server at launch')}>
+                          = {q.value_from}
+                        </span>
+                      ) : q.type === 'password' ? (
+                        q.default ? '••••••' : ''
+                      ) : Array.isArray(q.default) ? (
+                        q.default.join(', ')
+                      ) : (
+                        String(q.default ?? '')
+                      )}
+                    </td>
                     <td className="end nowrap">
                       {!readOnly && (
                         <>
@@ -329,7 +343,9 @@ function QuestionDialog({
   const set = <K extends keyof Question>(k: K, v: Question[K]) => setQ((p) => ({ ...p, [k]: v }))
   const isChoice = q.type === 'multiplechoice' || q.type === 'multiselect'
   const isNumber = q.type === 'integer' || q.type === 'float'
-  const isText = q.type === 'text' || q.type === 'textarea' || q.type === 'password'
+  const computable = COMPUTABLE_TYPES.includes(q.type)
+  const computed = computable && !!q.value_from?.trim()
+  const isText = !computed && (q.type === 'text' || q.type === 'textarea' || q.type === 'password')
   const src = isChoice ? q.choices_from : undefined
   const setSrc = (patch: Partial<ChoicesFrom> | null) => set('choices_from', patch === null ? undefined : ({ ...(q.choices_from ?? {}), ...patch } as ChoicesFrom))
   const dep = earlier.find((e) => e.variable === showVar)
@@ -370,13 +386,19 @@ function QuestionDialog({
     if (isNumber) {
       out.default = q.default === '' || q.default === undefined ? '' : Number(q.default)
     }
-    if (!isNumber && !isText) {
+    if ((!isNumber && !isText) || computed) {
       delete out.min
       delete out.max
     }
     if (!isText || !q.pattern) {
       delete out.pattern
       delete out.pattern_hint
+    }
+    if (computed) {
+      out.value_from = q.value_from!.trim()
+      delete out.default
+    } else {
+      delete out.value_from
     }
     if (showVar) out.show_if = { variable: showVar, values: showValues }
     else delete out.show_if
@@ -406,6 +428,18 @@ function QuestionDialog({
         <div className="field" style={{ justifyContent: 'flex-end' }}>
           <Check label={tr('An answer is required')} checked={q.required} onChange={(v) => set('required', v)} />
         </div>
+        {computable && (
+          <TextInput
+            label={tr('Computed value')}
+            value={q.value_from ?? ''}
+            onChange={(v) => set('value_from', v)}
+            mono
+            optional
+            full
+            placeholder={asIs(q.type === 'password' ? 'password(24)' : 'item("vlan").name + "-" + user.username')}
+            help={tr('An expression the server computes the answer from at launch; the question is then never asked. It can read item("variable") for the item picked in an earlier list, answers, user, team and request. password(24) generates a password.')}
+          />
+        )}
         {isChoice && (
           <SelectField
             label={tr('Choices come from')}
@@ -451,7 +485,7 @@ function QuestionDialog({
             help={tr('A list from an API or a job, set up by your organization’s admins. Picking one takes Use on it. Its parameters and filter can use the answers to earlier questions.')}
           />
         )}
-        {(isNumber || isText) && (
+        {((isNumber && !computed) || isText) && (
           <>
             <TextInput label={isNumber ? tr('Minimum') : tr('Minimum length')} type="number" value={q.min ?? ''} onChange={(v) => set('min', v === '' ? null : Number(v))} optional />
             <TextInput label={isNumber ? tr('Maximum') : tr('Maximum length')} type="number" value={q.max ?? ''} onChange={(v) => set('max', v === '' ? null : Number(v))} optional />
@@ -472,7 +506,7 @@ function QuestionDialog({
             <TextInput label={tr('Format hint')} value={q.pattern_hint ?? ''} onChange={(v) => set('pattern_hint', v)} optional placeholder={tr('Use a change number like CHG-123')} help={tr('Shown when an answer does not match.')} />
           </>
         )}
-        {q.type === 'textarea' || q.type === 'multiselect' ? (
+        {computed ? null : q.type === 'textarea' || q.type === 'multiselect' ? (
           <TextArea label={tr('Default')} value={Array.isArray(q.default) ? q.default.join('\n') : String(q.default ?? '')} onChange={(v) => set('default', v)} optional rows={3} help={q.type === 'multiselect' ? tr('One choice per line.') : undefined} />
         ) : q.type === 'multiplechoice' && !src ? (
           <SelectField label={tr('Default')} value={String(q.default ?? '')} onChange={(v) => set('default', v)} options={[['', tr('No default')], ...choicesOf({ ...q }).map((c): [string, string] => [c, c])]} optional />
@@ -536,6 +570,16 @@ export function SurveyFields({
     <div className="form" style={{ gap: 16 }}>
       {shown.map((q) => {
         const id = `sq-${q.variable}`
+        if (q.value_from) {
+          return (
+            <div key={q.variable} className="field">
+              <span className="label">{q.question_name}</span>
+              <span className="help">
+                {tr('Computed by the server at launch:')} <span className="mono">{q.value_from}</span>
+              </span>
+            </div>
+          )
+        }
         const v = values[q.variable] ?? (q.type === 'password' && q.default ? '$encrypted$' : q.default ?? (q.type === 'multiselect' ? [] : ''))
         const dyn = q.choices_from ? dynamic[q.variable] : undefined
         const choices = q.choices_from ? dyn?.choices ?? [] : choicesOf(q)

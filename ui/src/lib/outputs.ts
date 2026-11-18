@@ -11,11 +11,19 @@ export interface OutputDecl {
   name: string
   type: OutputType
   required: boolean
+  /** A string the job keeps encrypted and hides from its output. */
+  secret?: boolean
 }
 
-/** The declarations to save: names trimmed, empty rows dropped. */
+/** The declarations to save: names trimmed, empty rows dropped, secret
+ * only on strings, where it is set. */
 export function cleanOutputs(rows: OutputDecl[]): OutputDecl[] {
-  return rows.map((r) => ({ ...r, name: r.name.trim() })).filter((r) => r.name !== '')
+  return rows
+    .map((r) => {
+      const { secret, ...rest } = { ...r, name: r.name.trim() }
+      return secret && r.type === 'string' ? { ...rest, secret: true } : rest
+    })
+    .filter((r) => r.name !== '')
 }
 
 const IDENT = /^[A-Za-z_][A-Za-z0-9_]*$/
@@ -76,7 +84,8 @@ export function outputSuggestions(id: number, nodes: GraphNode[], outputsOf: (te
   for (const n of ancestors(id, nodes)) {
     if (!n.identifier || n.unified_job_template == null) continue
     for (const o of outputsOf(n.unified_job_template) ?? []) {
-      if (listsOnly && o.type !== 'list') continue
+      // An expression reads a secret output as $encrypted$.
+      if (o.secret || (listsOnly && o.type !== 'list')) continue
       out.push({ ref: outputRef(n.identifier, o.name), step: n.identifier, output: o })
     }
   }

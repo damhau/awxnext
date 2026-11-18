@@ -76,6 +76,8 @@ type Output struct {
 	maskMu   sync.Mutex
 	secrets  map[string]struct{}
 	replacer atomic.Pointer[strings.Replacer]
+	// The outputs HideOutputs hides, by name.
+	hidden atomic.Pointer[map[string]bool]
 }
 
 // foldMax bounds the output a folded event holds; past it, a new one starts.
@@ -97,7 +99,7 @@ func NewOutput(db *pgxpool.Pool, jobID int64, jobCreated time.Time, hostIDs map[
 
 // Emit records an event. Counter and line numbers are assigned when missing.
 func (o *Output) Emit(e Event) {
-	e = o.masked(e)
+	e = o.masked(o.hideOutputs(e))
 	o.mu.Lock()
 	if e.Created.IsZero() {
 		e.Created = time.Now()

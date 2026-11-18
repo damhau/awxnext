@@ -192,10 +192,13 @@ func validateSchedulePrompts(c *Ctx, ujt int64, merged Obj, data Obj, old Obj) e
 	qs, _ := spec["spec"].([]any)
 	for _, q := range qs {
 		qm, _ := q.(map[string]any)
+		v := str(qm["variable"])
+		if _, given := extra[v]; given && qm["value_from"] != nil && surveyVars[v] {
+			return api.FieldError("extra_data", fmt.Sprintf("'%s' is computed by the server and can't be set at launch.", v))
+		}
 		if str(qm["type"]) != "password" {
 			continue
 		}
-		v := str(qm["variable"])
 		s, ok := extra[v].(string)
 		if !ok {
 			continue

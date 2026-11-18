@@ -3866,5 +3866,12 @@
   "item.site == answers.datacenter": "item.site == answers.datacenter",
   "Lists an item when true. It reads item, value, label, answers and user.": "Liste un élément quand elle est vraie. Elle lit item, value, label, answers et user.",
   "A choice source": "Une source de choix",
-  "A list from an API or a job, set up by your organization’s admins. Picking one takes Use on it. Its parameters and filter can use the answers to earlier questions.": "Une liste depuis une API ou une tâche, mise en place par les administrateurs de votre organisation. En choisir une demande le droit Utiliser dessus. Ses paramètres et son filtre peuvent utiliser les réponses aux questions précédentes."
+  "A list from an API or a job, set up by your organization’s admins. Picking one takes Use on it. Its parameters and filter can use the answers to earlier questions.": "Une liste depuis une API ou une tâche, mise en place par les administrateurs de votre organisation. En choisir une demande le droit Utiliser dessus. Ses paramètres et son filtre peuvent utiliser les réponses aux questions précédentes.",
+  "Kept encrypted, hidden from the job output from the set_stats task on, and handed to the next workflow steps as a password.": "Conservée chiffrée, masquée dans la sortie de la tâche à partir de la tâche set_stats, et transmise aux étapes suivantes du workflow comme un mot de passe.",
+  "secret": "secrète",
+  "· computed": "· calculée",
+  "Computed by the server at launch": "Calculée par le serveur au lancement",
+  "Computed value": "Valeur calculée",
+  "An expression the server computes the answer from at launch; the question is then never asked. It can read item(\"variable\") for the item picked in an earlier list, answers, user, team and request. password(24) generates a password.": "Une expression dont le serveur calcule la réponse au lancement ; la question n’est alors jamais posée. Elle peut lire item(\"variable\") pour l’élément choisi dans une liste précédente, answers, user, team et request. password(24) génère un mot de passe.",
+  "Computed by the server at launch:": "Calculée par le serveur au lancement :"
 }

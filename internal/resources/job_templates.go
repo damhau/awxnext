@@ -182,7 +182,7 @@ func registerJobTemplates() {
 			{Name: "prevent_instance_group_fallback", Type: api.TBool, Default: false},
 			{Name: "survey_spec", Type: api.TJSON, ReadOnly: true, Hidden: true, NoFilter: true},
 			{Name: "outputs", Type: api.TJSON, Default: []any{}, NoFilter: true,
-				Help: "Variables the playbook publishes with set_stats, each with a name, a type (string, integer, float, boolean, list or object) and whether it is required. A job whose outputs are missing or of the wrong type fails.",
+				Help: "Variables the playbook publishes with set_stats, each with a name, a type (string, integer, float, boolean, list or object), whether it is required and, for a string, whether it is secret: kept encrypted and hidden from the output. A job whose outputs are missing or of the wrong type fails.",
 				Validate: func(c *Ctx, v any, data Obj) error {
 					_, err := outputs.Parse(v)
 					return err
@@ -467,6 +467,7 @@ func registerJobTemplates() {
 	jobsRes.Serialize = func(c *Ctx, o Obj) {
 		prev(c, o)
 		o["extra_vars"] = maskSurveyPasswords(str(o["extra_vars"]))
+		o["artifacts"] = redactEncrypted(o["artifacts"])
 		o["passwords_needed_to_start"] = []string{}
 	}
 	prevSummary := jobsRes.Summary
@@ -649,6 +650,30 @@ func maskSurveyPasswords(ev string) string {
 		return ev
 	}
 	return encryptedValueRe.ReplaceAllString(ev, `"$$encrypted$$"`)
+}
+
+// redactEncrypted copies v with its encrypted strings (secret outputs)
+// replaced by the placeholder.
+func redactEncrypted(v any) any {
+	switch x := v.(type) {
+	case string:
+		if crypto.IsEncrypted(x) {
+			return crypto.Placeholder
+		}
+	case map[string]any:
+		out := make(map[string]any, len(x))
+		for k, y := range x {
+			out[k] = redactEncrypted(y)
+		}
+		return out
+	case []any:
+		out := make([]any, len(x))
+		for i, y := range x {
+			out[i] = redactEncrypted(y)
+		}
+		return out
+	}
+	return v
 }
 
 func redactSurvey(spec any) any {

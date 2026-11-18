@@ -338,6 +338,18 @@ type sourceEntry struct {
 type choiceOption struct {
 	Value string `json:"value"`
 	Label string `json:"label"`
+	// Item is what the source listed for the choice, for item() in
+	// computed questions.
+	Item any `json:"-"`
+}
+
+// item is what item() gives for a picked choice: the source's item, or
+// the value of a list that has no items.
+func (o choiceOption) item() any {
+	if o.Item != nil {
+		return o.Item
+	}
+	return o.Value
 }
 
 // sourceOptions lists a source's choices for the user of c, given the
@@ -347,7 +359,7 @@ func sourceOptions(c *Ctx, id int64, answered map[string]any) ([]choiceOption, e
 	if err != nil {
 		return nil, err
 	}
-	user := requesterEnv(c)
+	user := userEnv(c, c.User.UserID)
 	entries, err := src.entries(c, answered, user, false)
 	if err != nil {
 		return nil, err
@@ -358,7 +370,7 @@ func sourceOptions(c *Ctx, id int64, answered map[string]any) ([]choiceOption, e
 	}
 	out := make([]choiceOption, len(entries))
 	for i, e := range entries {
-		out[i] = choiceOption{Value: e.Value, Label: e.Label}
+		out[i] = choiceOption{Value: e.Value, Label: e.Label, Item: e.Item}
 	}
 	return out, nil
 }
@@ -687,7 +699,7 @@ func jobSourceEntries(c *Ctx, s *choiceSource, job int64) ([]sourceEntry, error)
 	if err := c.DB().QueryRow(c, "SELECT artifacts FROM unified_jobs WHERE id = $1", job).Scan(&artifacts); err != nil {
 		return nil, fmt.Errorf("job %d: %v", job, err)
 	}
-	return s.read(artifacts)
+	return s.read(redactEncrypted(artifacts).(map[string]any))
 }
 
 // testChoiceSourceView lists a source as its admins set it up: a fresh call
@@ -708,7 +720,7 @@ func testChoiceSourceView(c *Ctx, w http.ResponseWriter, r *http.Request, obj Ob
 		answered = map[string]any{}
 	}
 	src := sourceFrom(obj)
-	user := requesterEnv(c)
+	user := userEnv(c, c.User.UserID)
 	out := Obj{"count": 0, "choices": []choiceOption{}, "sample": []any{}}
 	var entries []sourceEntry
 	if src.kind == sourceHTTP {
