@@ -2258,8 +2258,8 @@ events at `events/`. Creating a remote doesn't sync it. Schedules (`schedules/`)
 notification templates (`notification_templates_started/`, `_success/`, `_error/`) attach to
 the remote as to a project.
 
-A sync adds what is new: it never deletes a version, and a version the server no longer has
-stays. A version is mirrored once: when the hub has it already, in any repository, with the
+A sync adds what is new, and a version the server no longer has stays: only the
+[signature check](#signatures) takes a version out of the repository. A version is mirrored once: when the hub has it already, in any repository, with the
 same SHA-256, the sync adds it to the repository; with another SHA-256, the hub keeps its own,
 and the sync fails and says so. A version waiting in `staging`, or rejected, makes the sync fail
 until an approver decides. A collection the server doesn't have, or no version of it in the
@@ -2285,6 +2285,19 @@ version at the end. A skipped version doesn't fail the sync while its range has 
 
 A requirement or a dependency left with no version in its range that passed the check fails the
 sync, after the rest is mirrored: the job explanation names it as unmet.
+
+A sync with `signature_validation_credential` also checks the versions already in the
+repository, as it checks new ones, before it judges any requirement. Setting the credential, or
+changing its keys, is enough to hold what earlier syncs mirrored to them:
+
+- A version loses the signatures the keys don't verify.
+- A version left with none leaves the repository. The output's first lines say so, and it is
+  listed with the skipped versions. When no other repository holds it, the hub deletes the
+  version and its artifact.
+
+A version that another repository holds too keeps all its signatures, even when it leaves the
+remote's repository. Signatures belong to the version, so one these keys don't verify can be
+the one that the other repository's clients check, such as awxnext's own in `published`.
 
 Versions in a remote's repository aren't signed by awxnext's own key: to install them with
 `--keyring`, give the keyring of their signers.

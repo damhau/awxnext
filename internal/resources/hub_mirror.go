@@ -249,6 +249,103 @@ func (m *hubMirror) addArtifact(ctx context.Context, data []byte, sigs []string,
 	}
 }
 
+// heldVersion is a version in the mirror's repository; shared when another
+// repository holds it too.
+type heldVersion struct {
+	id     int64
+	key    string
+	shared bool
+}
+
+// heldVersions lists the versions in the mirror's repository.
+func (m *hubMirror) heldVersions(ctx context.Context) ([]heldVersion, error) {
+	rows, err := m.app.DB.Query(ctx, `SELECT v.id, t.name || '.' || c.name || ' ' || v.version,
+		EXISTS (SELECT 1 FROM collection_repository_contents o WHERE o.version_id = v.id AND o.repository_id <> rc.repository_id)
+		FROM collection_repository_contents rc JOIN collection_versions v ON v.id = rc.version_id
+		JOIN collections c ON c.id = v.collection_id JOIN collection_namespaces t ON t.id = c.namespace_id
+		WHERE rc.repository_id = $1 ORDER BY t.name, c.name, v.id`, m.repoID)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (heldVersion, error) {
+		var h heldVersion
+		return h, row.Scan(&h.id, &h.key, &h.shared)
+	})
+}
+
+// recheckVersion checks the signatures of a version in the repository
+// with the keys. It takes the version out of the repository when none
+// verifies, and drops those that don't. A shared version keeps them all:
+// a signature these keys don't verify may be the one another repository's
+// clients check, awxnext's own in published for one.
+func (m *hubMirror) recheckVersion(ctx context.Context, v heldVersion) (kept bool, dropped int, err error) {
+	manifest, err := versionManifest(ctx, m.app, m.app.DB, v.id)
+	if err != nil {
+		return false, 0, err
+	}
+	rows, err := m.app.DB.Query(ctx, "SELECT id, signature FROM collection_version_signatures WHERE collection_version_id = $1", v.id)
+	if err != nil {
+		return false, 0, err
+	}
+	var bad []int64
+	for rows.Next() {
+		var id int64
+		var sig string
+		if err := rows.Scan(&id, &sig); err != nil {
+			rows.Close()
+			return false, 0, err
+		}
+		if _, _, err := hubsign.Verify(m.keys, manifest, sig); err != nil {
+			bad = append(bad, id)
+		} else {
+			kept = true
+		}
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return false, 0, err
+	}
+	if !kept {
+		_, err = m.app.DB.Exec(ctx, "DELETE FROM collection_repository_contents WHERE repository_id = $1 AND version_id = $2", m.repoID, v.id)
+		return false, 0, err
+	}
+	if len(bad) == 0 || v.shared {
+		return true, 0, nil
+	}
+	err = pgx.BeginFunc(ctx, m.app.DB, func(tx pgx.Tx) error {
+		tag, err := tx.Exec(ctx, "DELETE FROM collection_version_signatures WHERE id = ANY($1)", bad)
+		if err != nil {
+			return err
+		}
+		dropped = int(tag.RowsAffected())
+		_, err = tx.Exec(ctx, `UPDATE collections SET modified = now() WHERE id = (SELECT collection_id FROM collection_versions WHERE id = $1)`, v.id)
+		return err
+	})
+	return true, dropped, err
+}
+
+// deleteUnheldVersions deletes those of the versions no repository holds,
+// with their artifacts, and the collections left with none. The
+// versions' collections are marked modified.
+func deleteUnheldVersions(ctx context.Context, db api.DBTX, versions []int64) error {
+	rows, err := db.Query(ctx, `UPDATE collections SET modified = now() WHERE id IN (SELECT collection_id FROM collection_versions WHERE id = ANY($1))
+		RETURNING id`, versions)
+	if err != nil {
+		return err
+	}
+	colls, err := pgx.CollectRows(rows, pgx.RowTo[int64])
+	if err != nil {
+		return err
+	}
+	if _, err := db.Exec(ctx, `DELETE FROM collection_versions v WHERE v.id = ANY($1)
+		AND NOT EXISTS (SELECT 1 FROM collection_repository_contents rc WHERE rc.version_id = v.id)`, versions); err != nil {
+		return err
+	}
+	_, err = db.Exec(ctx, `DELETE FROM collections c WHERE c.id = ANY($1)
+		AND NOT EXISTS (SELECT 1 FROM collection_versions v WHERE v.collection_id = c.id)`, colls)
+	return err
+}
+
 func (m *hubMirror) addSignatures(ctx context.Context, db api.DBTX, versionID int64, sigs []mirroredSignature) (int, error) {
 	n := 0
 	for _, s := range sigs {

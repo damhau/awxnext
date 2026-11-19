@@ -535,6 +535,66 @@ func TestHubRemoteSync(t *testing.T) {
 		t.Errorf("tools signed by %v, want %s", got, other.Fingerprint)
 	}
 
+	// Keys given after a sync hold the versions the repository has to them,
+	// as new ones are. A version none of whose signatures the keys verify
+	// leaves the repository, and the hub, unless another repository holds
+	// it: there it keeps its signatures.
+	ns4 := galaxyName("late")
+	g.add(t, ns4, "kit", "1.0.0", nil, upstream, other)
+	g.add(t, ns4, "tools", "1.0.0", nil, other)
+	late := must(t, a.post("collection_remotes/", map[string]any{"name": uniq("late"), "organization": org, "credential": cred,
+		"requirements_file": "collections:\n  - " + ns3 + ".tools\n  - " + ns4 + ".kit\n  - " + ns4 + ".tools\n", "repository": galaxyName("late")}), 201)
+	lateRepo := fmt.Sprint(late.Body["repository"])
+	if job, out := syncRemote(t, a, late.id()); job.Body["status"] != "successful" {
+		t.Fatalf("sync without keys: %s\n%s", job.Raw, out)
+	}
+	if got := repoSignatures(t, memberPAT, lateRepo, ns4, "kit", "1.0.0"); len(got) != 2 {
+		t.Fatalf("kit signed by %v, want both keys", got)
+	}
+	must(t, a.patch(fmt.Sprintf("collection_remotes/%d/", late.id()), map[string]any{"signature_validation_credential": keys}), 200)
+	job, out = syncRemote(t, a, late.id())
+	t.Logf("sync with new keys:\n%s", out)
+	explanation = fmt.Sprint(job.Body["job_explanation"])
+	if job.Body["status"] != "failed" || !strings.Contains(explanation, "2 problems") ||
+		!strings.Contains(explanation, ns3+".tools * is unmet: no version in its range has a signature that verifies with the keys of "+keysName) ||
+		!strings.Contains(explanation, ns4+".tools * is unmet") {
+		t.Errorf("sync with new keys: %s", job.Raw)
+	}
+	for _, want := range []string{
+		"Checking the repository's 3 versions with the keys of " + keysName + ":\n",
+		"  " + ns4 + ".kit 1.0.0: 1 signature dropped, which the keys don't verify\n",
+		"  " + ns4 + ".tools 1.0.0: taken out of the repository, no signature verifies with the keys of " + keysName + "\n",
+		"  " + ns3 + ".tools 1.0.0: taken out of the repository, no signature verifies with the keys of " + keysName + "\n",
+		"  " + ns4 + ".tools 1.0.0: skipped, no signature verifies with the keys of " + keysName + "\n",
+		"Synced: 0 versions added, 1 already in the repository, 2 skipped, 0 signatures added.",
+		"Skipped, with no signature that verifies with the keys of " + keysName + ": " + ns4 + ".tools 1.0.0, " + ns3 + ".tools 1.0.0.\n",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output lacks %q", want)
+		}
+	}
+	for _, c := range []struct {
+		ns, name string
+		want     []string
+	}{{ns4, "kit", []string{"1.0.0"}}, {ns4, "tools", nil}, {ns3, "tools", nil}} {
+		if got := repoVersions(t, memberPAT, lateRepo, c.ns, c.name); !slices.Equal(got, c.want) {
+			t.Errorf("%s.%s in %s: %v, want %v", c.ns, c.name, lateRepo, got, c.want)
+		}
+	}
+	if got := repoSignatures(t, memberPAT, lateRepo, ns4, "kit", "1.0.0"); !slices.Equal(got, []string{upstream.Fingerprint}) {
+		t.Errorf("kit signed by %v, want the upstream key %s only", got, upstream.Fingerprint)
+	}
+	if hasVersion(t, ns4, "tools", "1.0.0") {
+		t.Error("tools 1.0.0, in no repository, is still in the hub")
+	}
+	if got := repoSignatures(t, memberPAT, fmt.Sprint(loose.Body["repository"]), ns3, "tools", "1.0.0"); !slices.Equal(got, []string{other.Fingerprint}) {
+		t.Errorf("the loose remote's tools signed by %v, want %s", got, other.Fingerprint)
+	}
+	job, out = syncRemote(t, a, late.id())
+	if job.Body["status"] != "failed" || !strings.Contains(out, "Checking the repository's 1 version with the keys of "+keysName+":\n  Each has a signature the keys verify.\n") {
+		t.Errorf("a sync after the re-check: %s\n%s", job.Raw, out)
+	}
+
 	// Deleting a remote deletes its repository, the versions only it held,
 	// and its credential.
 	must(t, a.delete(fmt.Sprintf("collection_remotes/%d/", loose.id())), 204)

@@ -438,24 +438,7 @@ func deleteRemoteRepository(c *Ctx, remote Obj) error {
 	if _, err := c.DB().Exec(c, "DELETE FROM collection_repositories WHERE remote_id = $1", id); err != nil {
 		return err
 	}
-	var colls []int64
-	rows, err = c.DB().Query(c, `UPDATE collections SET modified = now() WHERE id IN (SELECT collection_id FROM collection_versions WHERE id = ANY($1))
-		RETURNING id`, versions)
-	if err != nil {
-		return err
-	}
-	for rows.Next() {
-		var id int64
-		rows.Scan(&id)
-		colls = append(colls, id)
-	}
-	rows.Close()
-	if _, err := c.DB().Exec(c, `DELETE FROM collection_versions v WHERE v.id = ANY($1)
-		AND NOT EXISTS (SELECT 1 FROM collection_repository_contents rc WHERE rc.version_id = v.id)`, versions); err != nil {
-		return err
-	}
-	if _, err := c.DB().Exec(c, `DELETE FROM collections c WHERE c.id = ANY($1)
-		AND NOT EXISTS (SELECT 1 FROM collection_versions v WHERE v.collection_id = c.id)`, colls); err != nil {
+	if err := deleteUnheldVersions(c, c.DB(), versions); err != nil {
 		return err
 	}
 	_, err = c.DB().Exec(c, "DELETE FROM credentials WHERE managed AND inputs->>'url' = $1", RemoteCredentialPath(str(remote["repository"])))
@@ -494,6 +477,59 @@ func (s *remoteSync) problem(format string, args ...any) {
 	msg := fmt.Sprintf(format, args...)
 	s.problems = append(s.problems, msg)
 	s.line("  ERROR: %s", msg)
+}
+
+// skip lists a version among the skipped ones, once: a version the
+// re-check takes out is skipped again when its range comes.
+func (s *remoteSync) skip(key string) {
+	if !slices.Contains(s.skipped, key) {
+		s.skipped = append(s.skipped, key)
+	}
+}
+
+// recheck holds the versions already in the repository to the keys, as
+// new ones are, before any requirement is judged: the keys may be new, or
+// changed, since they came.
+func (s *remoteSync) recheck(ctx context.Context) error {
+	m := s.mirror
+	held, err := m.heldVersions(ctx)
+	if err != nil || len(held) == 0 {
+		return err
+	}
+	what := fmt.Sprintf("%d versions", len(held))
+	if len(held) == 1 {
+		what = "1 version"
+	}
+	s.line("Checking the repository's %s with the keys of %s:", what, m.keysName)
+	var out []int64
+	dropped, failed := 0, 0
+	for _, h := range held {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		kept, n, err := m.recheckVersion(ctx, h)
+		switch {
+		case err != nil:
+			failed++
+			s.problem("%s: %v", h.key, err)
+		case !kept:
+			out = append(out, h.id)
+			s.skip(h.key)
+			s.line("  %s: taken out of the repository, %s", h.key, m.unsigned())
+		case n == 1:
+			s.line("  %s: 1 signature dropped, which the keys don't verify", h.key)
+		case n > 1:
+			s.line("  %s: %d signatures dropped, which the keys don't verify", h.key, n)
+		}
+		dropped += n
+	}
+	if len(out) == 0 {
+		if dropped == 0 && failed == 0 {
+			s.line("  Each has a signature the keys verify.")
+		}
+		return nil
+	}
+	return deleteUnheldVersions(ctx, s.app.DB, out)
 }
 
 func runCollectionSync(ctx context.Context, rc *jobs.RunContext) jobs.Result {
@@ -554,6 +590,14 @@ func runCollectionSync(ctx context.Context, rc *jobs.RunContext) jobs.Result {
 		versions: map[string][]string{}, done: map[string]mirrorResult{},
 	}
 	rc.Out.Line(fmt.Sprintf("Syncing the remote %s into the repository %s.", name, m.repo))
+	if m.keys != "" {
+		if err := s.recheck(ctx); err != nil {
+			if ctx.Err() != nil {
+				return jobs.Result{Status: "canceled"}
+			}
+			return fail("Checking the repository's versions: %v", err)
+		}
+	}
 	if err := s.client.Connect(ctx); err != nil {
 		return fail("%v", err)
 	}
@@ -723,7 +767,7 @@ func (s *remoteSync) mirrorVersion(ctx context.Context, ns, name, ver string) mi
 	s.sigs += outcome.signatures
 	switch {
 	case outcome.skipped != "":
-		s.skipped = append(s.skipped, key)
+		s.skip(key)
 		s.done[key] = mirrorSkipped
 		s.line("  %s: skipped, %s", key, outcome.skipped)
 		return mirrorSkipped
