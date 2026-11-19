@@ -854,12 +854,10 @@
   "Delivered": "Envoyé",
   "Sending": "Envoi en cours",
   "Test sent with {name}. The result appears under Deliveries.": "Test envoyé avec {name}. Le résultat apparaît sous Envois.",
-  "Emails, Slack messages and webhooks sent when jobs start, succeed or fail, and when approvals need a decision.": "E-mails, messages Slack et webhooks envoyés quand des tâches démarrent, réussissent ou échouent, et quand des approbations attendent une décision.",
   "Filter notification templates…": "Filtrer les modèles de notification…",
   "Last delivery": "Dernier envoi",
   "Send test": "Envoyer un test",
   "Copy…": "Copier…",
-  "Create an email, a Slack message or a webhook, then attach it to templates, projects or organizations.": "Créez un e-mail, un message Slack ou un webhook, puis rattachez-le à des modèles, projets ou organisations.",
   "notification": "notification",
   "Deliveries": "Envois",
   "Email": "E-mail",
@@ -4382,5 +4380,14 @@
   "Not a channel: {list}. Write #name, or #name, <message ts>.": "Pas un canal : {list}. Écrivez #nom, ou #nom, <ts du message>.",
   "One per line, as #name or a channel ID. To reply in a thread, add the message’s ts after a comma: #ops, 1700000000.000100.": "Un par ligne, en #nom ou par l’ID du canal. Pour répondre dans un fil, ajoutez le ts du message après une virgule : #ops, 1700000000.000100.",
   "Customize the message per event": "Personnaliser le message par événement",
-  "Empty events use the default message.": "Les événements vides utilisent le message par défaut."
+  "Empty events use the default message.": "Les événements vides utilisent le message par défaut.",
+  "Emails, Slack and Teams messages, and webhooks sent when jobs start, succeed or fail, and when approvals need a decision.": "E-mails, messages Slack et Teams, et webhooks envoyés quand des jobs démarrent, réussissent ou échouent, et quand des approbations attendent une décision.",
+  "Create an email, a Slack or Teams message, or a webhook, then attach it to templates, projects or organizations.": "Créez un e-mail, un message Slack ou Teams, ou un webhook, puis attachez-le à des templates, des projets ou des organisations.",
+  "Microsoft Teams": "Microsoft Teams",
+  "Workflow URL": "URL du workflow",
+  "Card": "Carte",
+  "The message as its title, the job’s status, template, launcher and times, and a button to the job or approval": "Le message en titre, le statut du job, son template, qui l’a lancé et ses heures, et un bouton vers le job ou l’approbation",
+  "Its signature lets anyone who has it post to the channel, so it is stored encrypted.": "Sa signature permet à quiconque la possède de publier dans le canal : elle est donc stockée chiffrée.",
+  "To make it, open the channel’s ⋯ menu in Teams, then Workflows, and pick “Send webhook alerts to a channel” (earlier “Post to a channel when a webhook request is received”). Copy the URL the workflow shows once saved.": "Pour la créer, ouvrez le menu ⋯ du canal dans Teams, puis Workflows, et choisissez « Send webhook alerts to a channel » (auparavant « Post to a channel when a webhook request is received »). Copiez l’URL que le workflow affiche une fois enregistré.",
+  "Each event posts a card: the message as its title, the job’s status, template, launcher and times, and a button to the job or approval.": "Chaque événement publie une carte : le message en titre, le statut du job, son template, qui l’a lancé et ses heures, et un bouton vers le job ou l’approbation."
 }

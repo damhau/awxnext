@@ -108,9 +108,9 @@ export function slackChannel(s: string): { channel: string; thread: string } | n
   return { channel: name, thread: thread.trim() }
 }
 
-/** Whether a type's messages have a subject, and a body. */
-export const hasSubject = (type: string) => type === 'email' || type === 'slack'
-export const hasBody = (type: string) => type !== 'slack'
+/** Whether a type's messages have a subject, and a body. Slack and Teams post only the message. */
+export const hasSubject = (type: string) => type === 'email' || type === 'slack' || type === 'teams'
+export const hasBody = (type: string) => type !== 'slack' && type !== 'teams'
 
 export type Message = { message?: string | null; body?: string | null } | null
 export type Messages = {
@@ -159,7 +159,7 @@ export function messageEntries(m: Messages): Record<string, MessageEntry> {
 
 /**
  * The messages to save: an event's subject and body when set (webhooks have
- * no subject, Slack no body), or null when nothing is customized.
+ * no subject, Slack and Teams no body), or null when nothing is customized.
  */
 export function buildMessages(type: string, entries: Record<string, MessageEntry>): Messages {
   const m: Record<string, unknown> = {}

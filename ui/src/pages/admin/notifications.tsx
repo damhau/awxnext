@@ -63,6 +63,7 @@ function destination(n: NT): string {
   const cfg = n.notification_configuration ?? {}
   if (n.notification_type === 'email') return `Email to ${(cfg.recipients ?? []).join(', ')}`
   if (n.notification_type === 'slack') return `Slack to ${(cfg.channels ?? []).join(' · ')}`
+  if (n.notification_type === 'teams') return tr('Microsoft Teams')
   return `${cfg.http_method ?? 'POST'} ${cfg.url ?? ''}`
 }
 
@@ -104,7 +105,7 @@ export function NotificationList() {
   return (
     <ListPage<NT>
       title={tr('Notifications')}
-      subtitle={tr('Emails, Slack messages and webhooks sent when jobs start, succeed or fail, and when approvals need a decision.')}
+      subtitle={tr('Emails, Slack and Teams messages, and webhooks sent when jobs start, succeed or fail, and when approvals need a decision.')}
       path="notification_templates/"
       params={scope}
       placeholder={tr('Filter notification templates…')}
@@ -150,7 +151,7 @@ export function NotificationList() {
           ),
         },
       ]}
-      empty={<Empty title={tr('No notifications yet')}>{tr('Create an email, a Slack message or a webhook, then attach it to templates, projects or organizations.')}</Empty>}
+      empty={<Empty title={tr('No notifications yet')}>{tr('Create an email, a Slack or Teams message, or a webhook, then attach it to templates, projects or organizations.')}</Empty>}
     >
       {copy.dialog}
     </ListPage>
@@ -182,6 +183,7 @@ export function NotificationDetail() {
   const custom = hasCustomMessages(n.messages)
   const isEmail = n.notification_type === 'email'
   const isSlack = n.notification_type === 'slack'
+  const isTeams = n.notification_type === 'teams'
   return (
     <div className="page">
       {copy.dialog}
@@ -228,9 +230,15 @@ export function NotificationDetail() {
             element={
               <div className="split">
                 <div className="wide">
-                  <Panel title={isEmail ? tr('Email') : isSlack ? tr('Slack') : tr('Webhook')}>
+                  <Panel title={isEmail ? tr('Email') : isSlack ? tr('Slack') : isTeams ? tr('Microsoft Teams') : tr('Webhook')}>
                     <KV
-                      items={isSlack ? [
+                      items={isTeams ? [
+                        [tr('Workflow URL'), cfg.url ? tr('Set') : <span className="fail-text">{tr('Not set')}</span>],
+                        [tr('Card'), tr('The message as its title, the job’s status, template, launcher and times, and a button to the job or approval')],
+                        [tr('Messages'), custom ? tr('Custom') : tr('Default messages')],
+                        [tr('Organization'), <Link to={`/organizations/${n.organization}`}>{n.summary_fields.organization?.name}</Link>],
+                        [tr('Changed'), <Ago at={n.modified} />],
+                      ] : isSlack ? [
                         [tr('Channels'), <span className="chips">{(cfg.channels ?? []).map((c) => <span key={c} className="chip">{c}</span>)}</span>],
                         [tr('Token'), cfg.token ? tr('Set') : <span className="fail-text">{tr('Not set')}</span>],
                         [tr('Color'), cfg.hex_color ? <SlackColor color={cfg.hex_color} /> : <span className="faint">{tr('None')}</span>],
@@ -326,6 +334,7 @@ interface NTValues extends Record<string, unknown> {
   disable_ssl_verification: boolean
   email: EmailValues
   slack: SlackValues
+  teamsUrl: string
   custom: boolean
   entries: Record<string, MessageEntry>
 }
@@ -336,19 +345,22 @@ function NTForm({ nt }: { nt?: NT }) {
   const cfg = nt?.notification_configuration ?? {}
   const wasEmail = nt?.notification_type === 'email'
   const wasSlack = nt?.notification_type === 'slack'
+  const wasTeams = nt?.notification_type === 'teams'
+  const notWebhook = wasEmail || wasSlack || wasTeams
   const f = useForm<NTValues>({
     name: nt?.name ?? '',
     description: nt?.description ?? '',
     organization: nt?.summary_fields.organization ?? org,
     type: nt?.notification_type ?? 'email',
-    url: wasEmail || wasSlack ? '' : cfg.url ?? '',
+    url: notWebhook ? '' : cfg.url ?? '',
     http_method: cfg.http_method ?? 'POST',
     headers: Object.entries(cfg.headers ?? {}),
-    username: wasEmail || wasSlack ? '' : cfg.username ?? '',
-    password: wasEmail || wasSlack ? '' : cfg.password ?? '',
+    username: notWebhook ? '' : cfg.username ?? '',
+    password: notWebhook ? '' : cfg.password ?? '',
     disable_ssl_verification: !!cfg.disable_ssl_verification,
     email: emailValues(wasEmail ? cfg : {}),
     slack: slackValues(wasSlack ? cfg : {}),
+    teamsUrl: wasTeams ? cfg.url ?? '' : '',
     custom: hasCustomMessages(nt?.messages ?? null),
     entries: messageEntries(nt?.messages ?? null),
   })
@@ -358,6 +370,8 @@ function NTForm({ nt }: { nt?: NT }) {
   const invalidate = useInvalidate()
   const isEmail = f.values.type === 'email'
   const isSlack = f.values.type === 'slack'
+  const isTeams = f.values.type === 'teams'
+  const messageOnly = isSlack || isTeams
   const e = f.values.email
   const sl = f.values.slack
   const setEmail = (patch: Partial<EmailValues>) => f.set('email', { ...f.values.email, ...patch })
@@ -369,7 +383,9 @@ function NTForm({ nt }: { nt?: NT }) {
     ? !!e.host.trim() && !!e.sender.trim() && parseRecipients(e.recipients).length > 0
     : isSlack
       ? !!sl.token && sl.channels.length > 0 && !badChannels.length
-      : !!f.values.url.trim()
+      : isTeams
+        ? !!f.values.teamsUrl.trim()
+        : !!f.values.url.trim()
   const save = async () => {
     setBusy(true)
     setError(null)
@@ -384,7 +400,9 @@ function NTForm({ nt }: { nt?: NT }) {
         ? emailConfig(e)
         : isSlack
           ? slackConfig(sl)
-          : {
+          : isTeams
+            ? { url: f.values.teamsUrl.trim() }
+            : {
             url: f.values.url,
             http_method: f.values.http_method,
             headers,
@@ -427,6 +445,7 @@ function NTForm({ nt }: { nt?: NT }) {
           options={[
             ['email', tr('Email')],
             ['slack', tr('Slack')],
+            ['teams', tr('Microsoft Teams')],
             ['webhook', tr('Webhook')],
           ]}
           error={f.errors.notification_type}
@@ -500,6 +519,27 @@ function NTForm({ nt }: { nt?: NT }) {
             </Field>
           </div>
         </section>
+      ) : isTeams ? (
+        <section className="form-section">
+          <h2>{tr('Microsoft Teams')}</h2>
+          <div className="form-grid">
+            <TextInput
+              label={tr('Workflow URL')}
+              type="password"
+              mono
+              full
+              value={f.values.teamsUrl}
+              onChange={(v) => f.set('teamsUrl', v)}
+              placeholder={asIs('https://…/workflows/…/triggers/manual/paths/invoke?…&sig=…')}
+              error={f.errors.notification_configuration}
+              help={nt && wasTeams && cfg.url ? tr('Stored encrypted; leave as is to keep it.') : tr('Its signature lets anyone who has it post to the channel, so it is stored encrypted.')}
+            />
+          </div>
+          <div className="help">
+            {tr('To make it, open the channel’s ⋯ menu in Teams, then Workflows, and pick “Send webhook alerts to a channel” (earlier “Post to a channel when a webhook request is received”). Copy the URL the workflow shows once saved.')}{' '}
+            {tr('Each event posts a card: the message as its title, the job’s status, template, launcher and times, and a button to the job or approval.')}
+          </div>
+        </section>
       ) : (
         <section className="form-section">
           <h2>{tr('Webhook')}</h2>
@@ -534,21 +574,21 @@ function NTForm({ nt }: { nt?: NT }) {
       <section className="form-section">
         <h2>{tr('Messages')}</h2>
         <Check
-          label={isEmail ? tr('Customize the subject and body per event') : isSlack ? tr('Customize the message per event') : tr('Customize the request body per event')}
+          label={isEmail ? tr('Customize the subject and body per event') : messageOnly ? tr('Customize the message per event') : tr('Customize the request body per event')}
           checked={f.values.custom}
           onChange={(v) => f.set('custom', v)}
           help={
             <>
-              {isEmail ? tr('Subjects and bodies') : isSlack ? tr('Messages') : tr('Bodies')} {tr('are templates:')} <span className="mono">{tr('{{ job.name }}')}</span>, <span className="mono">{tr('{{ job.status }}')}</span>, <span className="mono">{tr('{{ url }}')}</span>,{' '}
+              {isEmail ? tr('Subjects and bodies') : messageOnly ? tr('Messages') : tr('Bodies')} {tr('are templates:')} <span className="mono">{tr('{{ job.name }}')}</span>, <span className="mono">{tr('{{ job.status }}')}</span>, <span className="mono">{tr('{{ url }}')}</span>,{' '}
               <span className="mono">{tr('{{ job_metadata }}')}</span>, <span className="mono">{tr('{{ approval_node_name }}')}</span>.{' '}
-              {isEmail ? tr('Empty fields use the default subject and body.') : isSlack ? tr('Empty events use the default message.') : tr('Empty events use the default JSON body.')}
+              {isEmail ? tr('Empty fields use the default subject and body.') : messageOnly ? tr('Empty events use the default message.') : tr('Empty events use the default JSON body.')}
             </>
           }
         />
         {f.values.custom && (
           <div className="form-grid">
             {MESSAGE_EVENTS.map((ev) =>
-              isSlack ? (
+              messageOnly ? (
                 <TextInput key={ev.key} label={ev.label} optional mono value={f.values.entries[ev.key]?.subject ?? ''} onChange={(v) => setEntry(ev.key, { subject: v })} />
               ) : isEmail ? (
                 <div key={ev.key} className="stack" style={{ gap: 6 }}>

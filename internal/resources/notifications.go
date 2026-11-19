@@ -22,12 +22,12 @@ import (
 	"github.com/damhau/awxnext/internal/tmpl"
 )
 
-// Notification types: AWX's email, Slack and webhook.
-var notificationTypeChoices = labelled("email", "Email", "slack", "Slack", "webhook", "Webhook")
+// Notification types: AWX's email, Slack and webhook, and awxnext's Teams.
+var notificationTypeChoices = labelled("email", "Email", "slack", "Slack", "teams", "Microsoft Teams", "webhook", "Webhook")
 
 // notificationSecrets is each type's secret configuration field, stored
 // encrypted and shown as $encrypted$.
-var notificationSecrets = map[string]string{"email": "password", "slack": "token", "webhook": "password"}
+var notificationSecrets = map[string]string{"email": "password", "slack": "token", "teams": "url", "webhook": "password"}
 
 // webhookFields describes the webhook notification_configuration.
 var webhookFields = map[string]string{
@@ -46,6 +46,8 @@ func validateNotificationConfig(c *Ctx, typ string, cfg map[string]any, old map[
 		return validateEmailConfig(c, cfg, old)
 	case "slack":
 		return validateSlackConfig(c, cfg, old)
+	case "teams":
+		return validateTeamsConfig(c, cfg, old)
 	}
 	return validateWebhookConfig(c, cfg, old)
 }
@@ -118,17 +120,18 @@ func checkConfigFields(kind string, fields []configField, cfg map[string]any) (m
 // back keeps the stored value.
 func sealSecret(c *Ctx, out, old map[string]any, key string) error {
 	s, _ := out[key].(string)
-	switch {
-	case s == "":
-	case s == crypto.Placeholder:
-		out[key], _ = old[key].(string)
-	case !crypto.IsEncrypted(s):
-		enc, err := c.App.Crypto.Encrypt(s)
-		if err != nil {
-			return err
-		}
-		out[key] = enc
+	if s == crypto.Placeholder {
+		s, _ = old[key].(string)
+		out[key] = s
 	}
+	if s == "" || crypto.IsEncrypted(s) {
+		return nil
+	}
+	enc, err := c.App.Crypto.Encrypt(s)
+	if err != nil {
+		return err
+	}
+	out[key] = enc
 	return nil
 }
 
@@ -458,14 +461,17 @@ func createNotification(ctx context.Context, db api.DBTX, ntID int64, jobID *int
 	if err := db.QueryRow(ctx, "SELECT notification_type, notification_configuration FROM notification_templates WHERE id = $1", ntID).Scan(&typ, &cfg); err != nil {
 		return 0, err
 	}
-	b, _ := json.Marshal(body)
 	recipients := str(cfg["url"])
 	switch typ {
 	case "email":
 		recipients = listRecipients(cfg, "recipients")
 	case "slack":
 		recipients = listRecipients(cfg, "channels")
+	case "teams":
+		card, _ := body.(teamsCard)
+		recipients, body = "", teamsMessage(subject, card)
 	}
+	b, _ := json.Marshal(body)
 	var id int64
 	err := db.QueryRow(ctx, `INSERT INTO notifications (notification_template_id, unified_job_id, notification_type, recipients, subject, body)
 		VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`, ntID, jobID, typ, recipients, subject, string(b)).Scan(&id)
@@ -493,6 +499,8 @@ func deliver(ctx context.Context, app *api.App, id int64) {
 			err = sendEmail(ctx, app, cfg, subject, text)
 		} else if typ == "slack" {
 			err = sendSlack(ctx, app, cfg, subject)
+		} else if typ == "teams" {
+			err = sendTeams(ctx, app, cfg, body)
 		} else {
 			err = sendWebhook(ctx, app, cfg, body)
 		}
@@ -653,12 +661,12 @@ var approvalMessages = map[string]string{
 // An event rule's approval notifies its organization's.
 func notifyApproval(c *Ctx, approvalID int64, status string) {
 	var wfJob, wfjt, org, request int64
-	var name string
-	if err := c.App.DB.QueryRow(c, `SELECT coalesce(w.id, 0), coalesce(w.unified_job_template_id, 0), coalesce(w.organization_id, r.organization_id, q.organization_id, 0), a.name, coalesce(q.id, 0)
+	var name, wfName string
+	if err := c.App.DB.QueryRow(c, `SELECT coalesce(w.id, 0), coalesce(w.unified_job_template_id, 0), coalesce(w.organization_id, r.organization_id, q.organization_id, 0), a.name, coalesce(q.id, 0), coalesce(w.name, '')
 		FROM unified_jobs a LEFT JOIN workflow_job_nodes n ON n.job_id = a.id LEFT JOIN unified_jobs w ON w.id = n.workflow_job_id
 		LEFT JOIN event_rules r ON r.id = a.event_rule_id LEFT JOIN catalog_requests q ON q.id = a.catalog_request_id
 		WHERE a.id = $1 AND (w.id IS NOT NULL OR r.id IS NOT NULL OR q.id IS NOT NULL)`, approvalID).
-		Scan(&wfJob, &wfjt, &org, &name, &request); err != nil {
+		Scan(&wfJob, &wfjt, &org, &name, &request, &wfName); err != nil {
 		return
 	}
 	rows, err := c.App.DB.Query(c, `SELECT DISTINCT notification_template_id FROM notification_template_links WHERE event = 'approvals' AND
@@ -712,6 +720,12 @@ func notifyApproval(c *Ctx, approvalID int64, status string) {
 			body = renderEmailBody(bodyT, tctx)
 		} else if typ == "slack" {
 			body = ""
+		} else if typ == "teams" {
+			link := workflowURL
+			if status == "running" && request == 0 {
+				link = approvalsURL(c.App)
+			}
+			body = teamsApprovalCard(name, status, wfName, link)
 		} else if strings.TrimSpace(bodyT) != "" {
 			var parsed any
 			rendered, err := tmpl.Render(bodyT, tctx)
@@ -786,6 +800,9 @@ func notifyJob(ctx context.Context, m *jobs.Manager, row jobs.Row, event string)
 			body = renderEmailBody(bodyT, tctx)
 		} else if typ == "slack" {
 			body = ""
+		} else if typ == "teams" {
+			job, _ := tctx["job"].(map[string]any)
+			body = teamsJobCard(job, meta)
 		} else if strings.TrimSpace(bodyT) != "" {
 			rendered, err := tmpl.Render(bodyT, tctx)
 			var parsed any

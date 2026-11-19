@@ -972,8 +972,8 @@ its decisions.
   fired for. `GET /api/v2/jobs/?event_rule=N` lists the jobs of rule N.
 - **`notify`** sends a notification with the template. A `webhook` posts the message when it is
   an object, and otherwise the rule, the event and the message (`message`). An `email` has the
-  message as its subject and body. `slack` posts a text message as it is, and otherwise
-  `Event rule <name>: <type>`.
+  message as its subject and body. `slack` posts a text message as it is, and `teams` as its
+  card's title; otherwise both post `Event rule <name>: <type>`.
 - **`post_event`** posts an event to the target stream, with the ID
   `rule-<rule>-<stream>-<sequence>` and the source `/api/v2/event_rules/<rule>/`. Other rules
   can read it. The extension `awxnextdepth` counts the rules an event went through: past 8,
@@ -2794,7 +2794,8 @@ Reminders go out 24 hours and 2 hours before expiry, once per expiry: an extensi
 `expires_at` sends them again. The owners are mailed at their own addresses through the item's
 `notification_template`, with a link to the deployment. Each notification template in the item's
 `notification_templates_reminders` gets the reminders too: an email template at its own
-recipients, a Slack template as the subject, and a webhook template as JSON, with `subject`,
+recipients, a Slack template as the subject, a Teams template as a card with the expiry and a
+button to the deployment, and a webhook template as JSON, with `subject`,
 `body`, `hours_left` and the `deployment` (`id`, `name`, `url`, `expires_at`, `catalog_item`,
 `item_name`, `owner`, `team`). The item's [request webhooks](#requests-from-another-catalog)
 get them as `expiring` events.
@@ -3035,6 +3036,46 @@ other channels still get the message.
 
 awxnext calls `https://slack.com/api/` directly: behind an egress proxy, set `HTTPS_PROXY` for the
 server, or let the server reach `slack.com` on port 443.
+
+## Teams notifications
+
+AWX has no Microsoft Teams type, so awxnext adds its own, `teams`: it posts an Adaptive Card to a
+Teams workflow, which posts the card in its channel.
+
+1. **Make the workflow.** In Teams, open the channel's **⋯** menu, then **Workflows**, and pick
+   **Send webhook alerts to a channel** (earlier **Post to a channel when a webhook request is
+   received**). Pick the team and the channel, save, and copy the URL the workflow shows. Its
+   signature (`sig=`) lets anyone who has the URL post to the channel: awxnext sends no other
+   credential, so leave the trigger open to anyone with the URL.
+2. **Create the template** (Notifications, **New notification**, type Microsoft Teams), or
+   through the API with the `teams` type:
+
+   ```json
+   {"name": "ops-teams", "organization": 1, "notification_type": "teams",
+    "notification_configuration": {"url": "https://.../workflows/.../triggers/manual/paths/invoke?api-version=1&sp=...&sv=1.0&sig=..."}}
+   ```
+
+   The URL is stored encrypted and reads back as `$encrypted$`; send `$encrypted$` to keep it.
+3. **Send a test** (**Send test**, or `POST notification_templates/N/test/`), then attach the
+   template to job templates, workflows, projects, inventory sources or organizations.
+
+The card's title is the message: AWX's default messages, as for Slack, or the custom
+`messages`, which have no body. Under the title, a job's card shows its status, template,
+launcher, start, end and elapsed time, with an **Open the job** button. The title is green for a
+successful job and red for a failed one. An approval's card shows its status, the approval and
+the workflow. Its button opens **Approvals** while the approval waits, and the workflow job once
+it is decided; a portal request's approval opens in the portal. Teams reads basic Markdown in
+the card's text.
+
+An answer other than 2xx fails the notification with Teams' status and message, such as
+`Teams answered 404 Not Found: WorkflowNotFound: ...`, under the template's **Deliveries**. A
+workflow that was turned off or deleted answers this way. awxnext doesn't post again. Teams
+takes cards of up to 28 KB, and throttles a workflow that gets more than 4 posts a second.
+
+AWX's clients see one more `notification_type` choice, `teams`. The `awx` CLI reads the choices
+from awxnext, so it creates Teams templates. The `awx.awx` collection's
+`notification_template` module checks the type against its own list, so it can't manage them:
+use the API, the UI or the CLI. A GitOps declaration would keep the URL in Git in clear.
 
 ## Settings
 

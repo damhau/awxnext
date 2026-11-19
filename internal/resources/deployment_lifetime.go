@@ -588,8 +588,13 @@ func remind(c *Ctx, id, hours int64, expires time.Time) error {
 			continue
 		}
 		var body any = payload
-		if typ == "email" {
+		switch typ {
+		case "email":
 			body = text
+		case "teams":
+			dep := payload["deployment"].(Obj)
+			body = teamsCard{color: "Warning", facts: [][2]string{{"Expires", expires.UTC().Format("2006-01-02 15:04:05 UTC")}, {"Owner", str(dep["owner"])}, {"Team", str(dep["team"])}},
+				link: link, action: "Open the deployment"}
 		}
 		nid, err := createNotification(c, c.App.DB, nt, nil, subject, body)
 		if err != nil {

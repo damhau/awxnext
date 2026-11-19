@@ -62,6 +62,11 @@ describe('custom messages', () => {
       started: { message: '{{ job.name }} started', body: null },
     })
   })
+  it('keeps only the message for Teams, whose card awxnext builds', () => {
+    expect(buildMessages('teams', { running: { subject: 'Review {{ approval_node_name }}', body: 'ignored' } })).toEqual({
+      workflow_approval: { running: { message: 'Review {{ approval_node_name }}', body: null } },
+    })
+  })
   it('drops subjects for webhooks and returns null when nothing is set', () => {
     expect(buildMessages('webhook', { success: { subject: 'ignored', body: ' {"ok": true} ' } })).toEqual({ success: { message: null, body: '{"ok": true}' } })
     expect(buildMessages('webhook', { success: { subject: 'ignored', body: '' } })).toBeNull()
