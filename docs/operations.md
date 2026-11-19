@@ -20,6 +20,11 @@ Whatever the install, choose the **master key** first (see [Master key](#master-
 the default local provider it is `AWXNEXT_SECRET_KEY`, and losing it makes every stored
 secret unreadable.
 
+A new install starts with one organization, `Default`, whose Galaxy credential is the public
+`Ansible Galaxy`, as in AWX. AWX's demo project, inventory, credential and job template aren't
+created. Each start creates `Default` again when no organization is left. An
+[import from AWX](#migrate-from-awx) merges AWX's own `Default` into it.
+
 ### Docker Compose
 
 For one machine: PostgreSQL and awxnext ([deploy/compose](../deploy/compose/docker-compose.yml)).

@@ -86,6 +86,15 @@ func Bootstrap(ctx context.Context, app *api.App) error {
 		HubCredentialName, "awxnext's collection hub, its published repository: each install gets a read token of its own.", HubCredentialPath); err != nil {
 		return err
 	}
+	// AWX's create_preload_data, without its demo objects: Default comes back
+	// whenever no organization is left, as in AWX.
+	if _, err := app.DB.Exec(ctx, `WITH org AS (
+			INSERT INTO organizations (name) SELECT 'Default' WHERE NOT EXISTS (SELECT 1 FROM organizations)
+			ON CONFLICT (name) DO NOTHING RETURNING id)
+		INSERT INTO organization_galaxy_credentials (organization_id, credential_id, position)
+		SELECT org.id, c.id, 0 FROM org, credentials c WHERE c.managed AND c.name = 'Ansible Galaxy'`); err != nil {
+		return err
+	}
 	if !app.Settings.IsSet(ctx, "INSTALL_UUID") {
 		var uuid string
 		if err := app.DB.QueryRow(ctx, "SELECT gen_random_uuid()::text").Scan(&uuid); err != nil {
