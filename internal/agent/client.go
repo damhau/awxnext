@@ -24,6 +24,7 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/damhau/awxnext/internal/connectors"
+	"github.com/damhau/awxnext/internal/hubdocs"
 	"github.com/damhau/awxnext/internal/runnercmd"
 )
 
@@ -237,16 +238,24 @@ func (cfg *Config) runUnit(ctx context.Context, client *http.Client, url string)
 		return done(-1, "invalid work ident")
 	}
 	rs := runnerSpec(*cfg, spec)
-	connector := spec.Kind == KindConnector
+	connector, docs := spec.Kind == KindConnector, spec.Kind == KindDocs
+	if docs && !hubdocs.ValidName(spec.Collection) {
+		return done(-1, "invalid collection name")
+	}
 	var site []byte
-	if connector {
+	switch {
+	case docs:
+		// In a container of its own, the collection's code gets no network;
+		// a pod's is limited by the chart's NetworkPolicy.
+		rs.Name, rs.Network = "awxnext_docs_"+spec.Ident, "none"
+	case connector:
 		rs.Name = "awxnext_connector_" + spec.Ident
 		s, err := connectors.SiteFor(url, cfg.CACert, cfg.InsecureSkipVerify)
 		if err != nil {
 			return done(-1, err.Error())
 		}
 		site = s.Line()
-	} else {
+	default:
 		switch {
 		case (rs.Runtime == "none" || rs.Runtime == "") && cfg.ExactWorkDir:
 			rs.WorkDir = cfg.WorkDir
@@ -264,9 +273,12 @@ func (cfg *Config) runUnit(ctx context.Context, client *http.Client, url string)
 	}
 	var args []string
 	var cleanup func()
-	if connector {
+	switch {
+	case connector:
 		args, cleanup, err = runnercmd.Run(rs, connectors.Argv(spec.Python))
-	} else {
+	case docs:
+		args, cleanup, err = runnercmd.Run(rs, hubdocs.Argv(spec.Collection))
+	default:
 		args, cleanup, err = runnercmd.Command(rs)
 	}
 	if err != nil {

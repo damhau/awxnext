@@ -1,0 +1,33 @@
+{{- if .Values.collectionDocs.networkPolicy.enabled }}
+# The pods that read collection docs run the collection's code. They may
+# reach only this release's control pods, which their shim streams the docs
+# to, and DNS, to find them. Nothing may connect to them.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "awxnext.fullname" . }}-collection-docs
+  labels: {{- include "awxnext.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchExpressions:
+      - key: awxnext-collection-docs
+        operator: Exists
+  policyTypes: [Ingress, Egress]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "awxnext.selector" . | nindent 14 }}
+              app.kubernetes.io/component: control
+      ports:
+        - protocol: TCP
+          port: 8052
+    {{- with .Values.collectionDocs.networkPolicy.dns }}
+    - to: {{- toYaml . | nindent 8 }}
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    {{- end }}
+{{- end }}

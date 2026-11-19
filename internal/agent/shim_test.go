@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/damhau/awxnext/internal/hubdocs"
 	"github.com/damhau/awxnext/internal/runnercmd"
 )
 
@@ -45,5 +46,28 @@ func TestPodMountsShowPaths(t *testing.T) {
 	}
 	if certs == nil || certs["readOnly"] != true {
 		t.Fatalf("mount of /certs: %v", certs)
+	}
+}
+
+// A docs unit names its collection, which the shim passes to the script as
+// one argument: anything but namespace.name is refused, and each kind's
+// pull secret is its own.
+func TestDocsUnit(t *testing.T) {
+	for _, name := range []string{"ns.kit", "my_ns.kit_2"} {
+		if !hubdocs.ValidName(name) {
+			t.Errorf("%s refused", name)
+		}
+	}
+	for _, name := range []string{"", "ns", "ns.kit.x", "ns.kit; rm -rf /", "../x.y", "NS.kit"} {
+		if hubdocs.ValidName(name) {
+			t.Errorf("%q accepted", name)
+		}
+	}
+	names := map[string]bool{}
+	for _, req := range []PodRequest{{JobID: 7}, {ConnectorID: 7}, {DocsVersionID: 7}} {
+		names[pullSecretName(req)] = true
+	}
+	if len(names) != 3 {
+		t.Fatalf("pull secrets: %v", names)
 	}
 }

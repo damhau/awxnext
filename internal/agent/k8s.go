@@ -29,14 +29,27 @@ type KubeCredential struct {
 	VerifySSL                 bool
 }
 
+// DocsPodLabel marks the pods that read a collection version's docs, with
+// the version's ID: the chart's NetworkPolicy selects them by it.
+const DocsPodLabel = "awxnext-collection-docs"
+
+// InCluster says whether this process runs in a Kubernetes pod, whose
+// service account StartPod uses when given no credential.
+func InCluster() bool {
+	return os.Getenv("KUBERNETES_SERVICE_HOST") != ""
+}
+
 // PodRequest describes a job pod for a container group.
 type PodRequest struct {
 	JobID int64
 	// ConnectorID is set, and JobID not, for an event connector's pod.
 	ConnectorID int64
-	Spec        WorkSpec
-	PodSpec     string // instance group pod_spec_override (YAML or JSON)
-	Credential  *KubeCredential
+	// DocsVersionID is set, and JobID not, for a pod reading a collection
+	// version's docs.
+	DocsVersionID int64
+	Spec          WorkSpec
+	PodSpec       string // instance group pod_spec_override (YAML or JSON)
+	Credential    *KubeCredential
 	// ServiceURL is how the pod reaches the control plane.
 	ServiceURL string
 	ShimImage  string
@@ -155,10 +168,14 @@ func BuildPod(req PodRequest, unitURL, token string) (map[string]any, string, er
 		labels = map[string]any{}
 	}
 	labels["ansible-awx"] = req.InstallID
-	if req.ConnectorID != 0 {
+	switch {
+	case req.ConnectorID != 0:
 		meta["generateName"] = fmt.Sprintf("event-connector-%d-", req.ConnectorID)
 		labels["awxnext-event-connector-id"] = fmt.Sprint(req.ConnectorID)
-	} else {
+	case req.DocsVersionID != 0:
+		meta["generateName"] = fmt.Sprintf("collection-docs-%d-", req.DocsVersionID)
+		labels[DocsPodLabel] = fmt.Sprint(req.DocsVersionID)
+	default:
 		meta["generateName"] = fmt.Sprintf("automation-job-%d-", req.JobID)
 		labels["ansible-awx-job-id"] = fmt.Sprint(req.JobID)
 	}
@@ -293,7 +310,7 @@ func (b *Broker) StartPod(ctx context.Context, req PodRequest) (Worker, error) {
 	if req.Spec.RegistryUser != "" {
 		auth := base64.StdEncoding.EncodeToString([]byte(req.Spec.RegistryUser + ":" + req.Spec.RegistryPassword))
 		cfg, _ := json.Marshal(map[string]any{"auths": map[string]any{req.Spec.RegistryHost: map[string]string{"auth": auth}}})
-		pw.pull = fmt.Sprintf("automation-%d-image-pull-secret", req.JobID)
+		pw.pull = pullSecretName(req)
 		secret := map[string]any{"apiVersion": "v1", "kind": "Secret", "type": "kubernetes.io/dockerconfigjson",
 			"metadata": map[string]any{"name": pw.pull, "namespace": ns},
 			"data":     map[string]any{".dockerconfigjson": base64.StdEncoding.EncodeToString(cfg)}}
@@ -341,6 +358,18 @@ func (b *Broker) StartPod(ctx context.Context, req PodRequest) (Worker, error) {
 			}
 		}
 	}
+}
+
+// pullSecretName is the name of a pod's image pull secret, which is kept
+// while the pod runs: one per job, connector or collection version.
+func pullSecretName(req PodRequest) string {
+	switch {
+	case req.ConnectorID != 0:
+		return fmt.Sprintf("event-connector-%d-image-pull-secret", req.ConnectorID)
+	case req.DocsVersionID != 0:
+		return fmt.Sprintf("collection-docs-%d-image-pull-secret", req.DocsVersionID)
+	}
+	return fmt.Sprintf("automation-%d-image-pull-secret", req.JobID)
 }
 
 // podProblem reports why a pod cannot run (image pull errors, failed init, ...).

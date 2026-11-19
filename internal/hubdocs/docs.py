@@ -4,7 +4,7 @@ awxnext sends the collection's artifact on stdin. The script extracts it into
 a temporary directory of its own, runs ansible-doc --metadata-dump on it, and
 prints the docs as JSON. ansible-doc imports some of the collection's Python
 code (doc fragments, filter and test plugins): awxnext runs the script where
-that code can't reach the server, in a container or as a job user.
+that code can't reach the server: in a container, as a job user, or in a pod.
 """
 
 import json

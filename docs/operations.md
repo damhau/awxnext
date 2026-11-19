@@ -1979,9 +1979,24 @@ afterwards, and gives up after 10 minutes. Versions uploaded before awxnext read
 
 | Value | Where `ansible-doc` runs |
 |---|---|
-| `isolated` (default) | In the organization's default execution environment (`AWXNEXT_DEFAULT_EE_IMAGE` without one), with podman or docker and no network; or, with runtime `none`, as a job user of its own. A node with neither, such as the Helm chart's replicas, reads no docs. |
-| `server_user` | Also as the server's own user, on a node with neither. Set it only when you trust uploaders as you trust the server. |
+| `isolated` (default) | In the organization's default execution environment (`AWXNEXT_DEFAULT_EE_IMAGE` without one), with podman or docker and no network; or, with runtime `none`, as a job user of its own. A node with neither that runs in a Kubernetes cluster, such as the Helm chart's replicas, reads them in a pod of that image. Any other node reads no docs. |
+| `server_user` | Also as the server's own user, on a node with none of these. Set it only when you trust uploaders as you trust the server. |
 | `off` | Nowhere: no docs are read. |
+
+A docs pod runs as a container group's job pod does: in the node's namespace, created with
+the node's service account (the chart's Role allows it), with the shim streaming the artifact in
+and the docs out. It's named `collection-docs-<version id>-…`, labelled
+`awxnext-collection-docs: "<version id>"`, and deleted once the docs are read or the 10 minutes
+are up, `AWXNEXT_KEEP_JOB_PODS` aside. The registry credential of the organization's execution
+environment becomes the pod's image pull secret.
+
+The chart's NetworkPolicy `<release>-collection-docs` selects these pods by that label. It lets
+nothing connect to them, and lets them connect only to the release's control pods on port 8052,
+which their shim streams to, and to the cluster's DNS (`collectionDocs.networkPolicy.dns`,
+CoreDNS's `k8s-app: kube-dns` by default). It holds only where the cluster's network plugin
+enforces NetworkPolicy, as Calico and Cilium do; on a cluster whose plugin doesn't, the pods
+have the network of any pod. To ship your own policy, set
+`collectionDocs.networkPolicy.enabled: false`.
 
 A version whose docs can't be read still installs; its docs say why. They are on
 `/api/v2/collection_versions/<id>/docs/`: `state` (`pending`, `reading`, `read`, `none` when

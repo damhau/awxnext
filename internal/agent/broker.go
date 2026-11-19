@@ -50,10 +50,17 @@ type WorkSpec struct {
 	Kind string `json:"kind,omitempty"`
 	// Python is a connector's interpreter, empty to pick one.
 	Python string `json:"python,omitempty"`
+	// Collection is the namespace.name whose docs a KindDocs unit reads.
+	Collection string `json:"collection,omitempty"`
 }
 
-// KindConnector is the kind of an event connector's work unit.
-const KindConnector = "connector"
+// The kinds of work units besides a job's ansible-runner worker: an event
+// connector's runner, and the script that reads a collection's docs
+// (hubdocs), with the artifact on stdin.
+const (
+	KindConnector = "connector"
+	KindDocs      = "docs"
+)
 
 type message struct {
 	Type string `json:"type"`

@@ -51,6 +51,26 @@ func (a *api) create(path string, body any) int64 {
 	return int64(m["id"].(float64))
 }
 
+// connect waits for the install whose URL is in the environment variable env,
+// and skips the test without it.
+func connect(t *testing.T, env string) *api {
+	t.Helper()
+	base := os.Getenv(env)
+	if base == "" {
+		t.Skipf("%s is not set (CI's helm job)", env)
+	}
+	a := &api{t: t, base: strings.TrimRight(base, "/"), pass: os.Getenv("AWXNEXT_TEST_KIND_PASSWORD")}
+	for deadline := time.Now().Add(2 * time.Minute); ; time.Sleep(2 * time.Second) {
+		if status, _, _ := a.call("GET", "ping/", nil); status == 200 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("awxnext is not answering")
+		}
+	}
+	return a
+}
+
 // wait polls a unified job until it finishes.
 func (a *api) wait(path string, timeout time.Duration) map[string]any {
 	a.t.Helper()
@@ -71,19 +91,7 @@ func (a *api) wait(path string, timeout time.Duration) map[string]any {
 // The chart's install runs a job in a container group: a pod per job, in
 // the release's namespace, created with the control plane's service account.
 func TestContainerGroupJob(t *testing.T) {
-	base := os.Getenv("AWXNEXT_TEST_KIND_URL")
-	if base == "" {
-		t.Skip("AWXNEXT_TEST_KIND_URL is not set (CI's helm job)")
-	}
-	a := &api{t: t, base: strings.TrimRight(base, "/"), pass: os.Getenv("AWXNEXT_TEST_KIND_PASSWORD")}
-	for deadline := time.Now().Add(2 * time.Minute); ; time.Sleep(2 * time.Second) {
-		if status, _, _ := a.call("GET", "ping/", nil); status == 200 {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("awxnext is not answering")
-		}
-	}
+	a := connect(t, "AWXNEXT_TEST_KIND_URL")
 	suffix := fmt.Sprint(time.Now().UnixNano())
 	org := a.create("organizations/", map[string]any{"name": "kind-" + suffix})
 	inv := a.create("inventories/", map[string]any{"name": "kind-" + suffix, "organization": org,
@@ -120,19 +128,7 @@ func TestContainerGroupJob(t *testing.T) {
 // and restore): the templates of the backed up install launch, their
 // projects checked out again by the restore's project updates.
 func TestRestoredInstall(t *testing.T) {
-	base := os.Getenv("AWXNEXT_TEST_KIND_RESTORED_URL")
-	if base == "" {
-		t.Skip("AWXNEXT_TEST_KIND_RESTORED_URL is not set (CI's helm job)")
-	}
-	a := &api{t: t, base: strings.TrimRight(base, "/"), pass: os.Getenv("AWXNEXT_TEST_KIND_PASSWORD")}
-	for deadline := time.Now().Add(2 * time.Minute); ; time.Sleep(2 * time.Second) {
-		if status, _, _ := a.call("GET", "ping/", nil); status == 200 {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("awxnext is not answering")
-		}
-	}
+	a := connect(t, "AWXNEXT_TEST_KIND_RESTORED_URL")
 	_, list, raw := a.call("GET", "job_templates/?name__startswith=kind-&order_by=id", nil)
 	results, _ := list["results"].([]any)
 	if len(results) == 0 {

@@ -2,12 +2,16 @@ package test
 
 import (
 	"fmt"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/damhau/awxnext/internal/agent"
+	"github.com/damhau/awxnext/internal/resources"
 )
 
 // waitDocs waits until the hub has read a version's docs, or found it
@@ -234,5 +238,58 @@ class LookupModule(LookupBase):
 	}
 	if !found {
 		t.Errorf("docs-blob: %v", blob)
+	}
+}
+
+// TestHubDocsPod: a node in a Kubernetes cluster, which runs jobs neither in
+// containers nor as job users, reads docs in a pod of the execution
+// environment, as a container group runs a job, and deletes the pod after.
+func TestHubDocsPod(t *testing.T) {
+	requireAnsible(t)
+	if _, err := exec.LookPath("ansible-doc"); err != nil {
+		t.Skip("ansible-doc not installed")
+	}
+	a := adminClient(t)
+	k := &fakeKube{t: t, pods: map[string]map[string]any{}, dir: t.TempDir()}
+	kube := httptest.NewServer(k)
+	t.Cleanup(kube.Close)
+	resources.DocsPodCredential = &agent.KubeCredential{Host: kube.URL, BearerToken: "kube-token"}
+	t.Cleanup(func() { resources.DocsPodCredential = nil })
+	org := newOrg(t, a)
+	ns := galaxyName("poddocs")
+	must(t, a.post("collection_namespaces/", map[string]any{"name": ns, "organization": org, "auto_approve": true}), 201)
+	files := map[string]string{
+		"plugins/modules/hello.py":        fmt.Sprintf(docsModule, ns+".kit", ns+".kit"),
+		"plugins/doc_fragments/common.py": docsFragment,
+	}
+	if imp := publish(t, writePAT(t, a), collectionTarball(t, ns, "kit", "1.0.0", nil, files)); imp["state"] != "completed" {
+		t.Fatalf("upload: %v", imp)
+	}
+	id := versionID(t, ns, "kit", "1.0.0")
+	d := waitDocs(t, a, id)
+	if d.Body["state"] != "read" || !strings.HasPrefix(fmt.Sprint(d.Body["message"]), "ansible-doc read 1 modules and plugins in a pod of the execution environment quay.io/ansible/awx-ee:latest") {
+		t.Fatalf("docs: %s", d.Raw)
+	}
+	hello := must(t, a.get(fmt.Sprintf("collection_versions/%d/docs/?type=module&name=hello", id)), 200)
+	if !strings.Contains(hello.Raw, "Who to greet.") {
+		t.Fatalf("hello's docs: %s", hello.Raw)
+	}
+
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	if len(k.pods) != 1 {
+		t.Fatalf("pods: %v", k.pods)
+	}
+	for name, pod := range k.pods {
+		meta := pod["metadata"].(map[string]any)
+		spec := pod["spec"].(map[string]any)
+		worker := spec["containers"].([]any)[0].(map[string]any)
+		if meta["generateName"] != fmt.Sprintf("collection-docs-%d-", id) || meta["labels"].(map[string]any)[agent.DocsPodLabel] != fmt.Sprint(id) ||
+			worker["image"] != "quay.io/ansible/awx-ee:latest" || spec["automountServiceAccountToken"] != false || spec["restartPolicy"] != "Never" {
+			t.Fatalf("pod: %v", pod)
+		}
+		if len(k.deleted) != 1 || k.deleted[0] != name {
+			t.Fatalf("pod %s deleted: %v", name, k.deleted)
+		}
 	}
 }

@@ -6,7 +6,6 @@ import (
 	"compress/gzip"
 	"context"
 	"crypto/rand"
-	_ "embed"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -25,7 +24,9 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/damhau/awxnext/internal/agent"
 	"github.com/damhau/awxnext/internal/api"
+	"github.com/damhau/awxnext/internal/hubdocs"
 	"github.com/damhau/awxnext/internal/jobexec"
 	"github.com/damhau/awxnext/internal/runnercmd"
 )
@@ -35,25 +36,11 @@ import (
 // import: the upload doesn't wait for an execution environment's image.
 // ansible-doc imports some of the collection's Python code (doc fragments,
 // filter and test plugins), so it runs where jobs run on this node, in a
-// container or as a job user, and as the server's own user only when
+// container or as a job user, else in a pod when the node is in a
+// Kubernetes cluster, and as the server's own user only when
 // HUB_COLLECTION_DOCS allows it.
 
-//go:embed hub_docs.py
-var docsScript string
-
-// docsPick runs the script with ansible-doc's Python, which has Ansible's
-// libraries, else python3.
-const docsPick = `d=$(command -v ansible-doc) || exit 3
-IFS= read -r p < "$d"
-p=${p#\#!}
-case "$p" in *python*) ;; *) p= ;; esac
-exec ${p:-python3} -I -c "$0" "$d" "$1"`
-
 const (
-	docsNoAnsibleDoc = 3
-	docsBadArtifact  = 4
-	docsFailed       = 5
-
 	docsTimeout   = 10 * time.Minute
 	docsStale     = time.Hour
 	docsMaxOutput = 64 << 20
@@ -242,21 +229,28 @@ func artifactReadme(data []byte, name string) (string, string) {
 	}
 }
 
-// docsPlace is where ansible-doc runs: the command and its environment.
+// docsPlace is where ansible-doc runs: a command and its environment, or a
+// pod.
 type docsPlace struct {
 	args, env []string
 	cleanup   func()
 	stop      func(cmd *exec.Cmd)
+	pod       *agent.PodRequest
 	where     string
 	group     bool
 }
 
-func (d *CollectionDocs) place(ctx context.Context, id, org int64) (*docsPlace, string, error) {
+// DocsPodCredential connects docs pods to a cluster other than the one this
+// node runs in, for tests: without it, pods are made only in this node's
+// cluster, with its service account.
+var DocsPodCredential *agent.KubeCredential
+
+func (d *CollectionDocs) place(ctx context.Context, id, org int64, fqcn string) (*docsPlace, string, error) {
 	mode := d.app.Settings.String(ctx, "HUB_COLLECTION_DOCS")
 	if mode == docsOff {
 		return nil, "Reading them is off (HUB_COLLECTION_DOCS).", nil
 	}
-	argv := []string{"sh", "-c", docsPick, docsScript}
+	argv := hubdocs.Argv(fqcn)
 	switch rt := d.app.Cfg.ContainerRuntime; rt {
 	case "podman", "docker":
 		if _, err := exec.LookPath(rt); err != nil {
@@ -290,8 +284,19 @@ func (d *CollectionDocs) place(ctx context.Context, id, org int64) (*docsPlace, 
 			},
 			where: fmt.Sprintf("on node %s as job user %s", d.node, u.Name)}, "", nil
 	}
+	if agent.Default != nil && (DocsPodCredential != nil || agent.InCluster()) {
+		var spec runnercmd.Spec
+		if err := d.docsImage(ctx, &spec, org); err != nil {
+			return nil, "", err
+		}
+		req := &agent.PodRequest{DocsVersionID: id, Credential: DocsPodCredential, ServiceURL: d.app.Cfg.ServiceURL, ShimImage: d.app.Cfg.ShimImage,
+			Spec: agent.WorkSpec{Ident: fmt.Sprintf("docs-%d", id), Kind: agent.KindDocs, Collection: fqcn, Image: spec.Image, Pull: spec.Pull,
+				RegistryHost: spec.RegistryHost, RegistryUser: spec.RegistryUser, RegistryPassword: spec.RegistryPassword}}
+		d.app.DB.QueryRow(ctx, "SELECT value #>> '{}' FROM settings WHERE key = 'INSTALL_UUID'").Scan(&req.InstallID)
+		return &docsPlace{pod: req, cleanup: func() {}, where: "in a pod of the execution environment " + spec.Image}, "", nil
+	}
 	if mode != docsServerUser {
-		return nil, fmt.Sprintf("Node %s runs jobs neither in containers nor as job users, and HUB_COLLECTION_DOCS doesn't let ansible-doc run as the server's user.", d.node), nil
+		return nil, fmt.Sprintf("Node %s runs jobs neither in containers nor as job users, isn't in a Kubernetes cluster, and HUB_COLLECTION_DOCS doesn't let ansible-doc run as the server's user.", d.node), nil
 	}
 	tmp, err := os.MkdirTemp("", "awxnext-docs-")
 	if err != nil {
@@ -347,25 +352,27 @@ func (b *cappedBuffer) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-func (d *CollectionDocs) docs(ctx context.Context, id int64, fqcn string, org int64, data []byte) docsOutcome {
-	p, refused, err := d.place(ctx, id, org)
-	if err != nil {
-		return docsOutcome{state: "failed", message: "ansible-doc couldn't start: " + err.Error()}
-	}
-	if p == nil {
-		return docsOutcome{state: "none", message: "Not read. " + refused}
-	}
-	defer p.cleanup()
-	cmd := exec.Command(p.args[0], append(p.args[1:], fqcn)...)
+// docsRun is how ansible-doc's run ended.
+type docsRun struct {
+	stdout             *cappedBuffer
+	stderr             string
+	code               int
+	timedOut, canceled bool
+}
+
+// run runs the script as a command on this node.
+func (p *docsPlace) run(ctx context.Context, data []byte) (docsRun, error) {
+	cmd := exec.Command(p.args[0], p.args[1:]...)
 	cmd.Env = p.env
 	cmd.Stdin = bytes.NewReader(data)
 	if p.group {
 		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	}
-	stdout, stderr := &cappedBuffer{max: docsMaxOutput}, &cappedBuffer{max: 8 << 10}
-	cmd.Stdout, cmd.Stderr = stdout, stderr
+	r := docsRun{stdout: &cappedBuffer{max: docsMaxOutput}, code: -1}
+	stderr := &cappedBuffer{max: 8 << 10}
+	cmd.Stdout, cmd.Stderr = r.stdout, stderr
 	if err := cmd.Start(); err != nil {
-		return docsOutcome{state: "failed", message: fmt.Sprintf("ansible-doc couldn't start %s: %v", p.where, err)}
+		return r, err
 	}
 	done := make(chan struct{})
 	go func() {
@@ -374,37 +381,108 @@ func (d *CollectionDocs) docs(ctx context.Context, id int64, fqcn string, org in
 	}()
 	timer := time.NewTimer(docsTimeout)
 	defer timer.Stop()
-	timedOut := false
 	select {
 	case <-done:
 	case <-timer.C:
-		timedOut = true
+		r.timedOut = true
 		p.stop(cmd)
 		<-done
 	case <-ctx.Done():
+		r.canceled = true
 		p.stop(cmd)
 		<-done
+	}
+	r.stderr = strings.TrimSpace(stderr.String())
+	if cmd.ProcessState != nil {
+		r.code = cmd.ProcessState.ExitCode()
+	}
+	return r, nil
+}
+
+// runPod runs the script in a pod, as a container group runs a job: the
+// pod's shim streams the artifact in and the docs out, and the pod is
+// deleted once it ends. The timeout counts from the pod's creation, as a
+// container's counts its image's pull.
+func (p *docsPlace) runPod(ctx context.Context, data []byte) (docsRun, error) {
+	r := docsRun{stdout: &cappedBuffer{max: docsMaxOutput}, code: -1}
+	limit, cancel := context.WithTimeout(ctx, docsTimeout)
+	defer cancel()
+	w, err := agent.Default.StartPod(limit, *p.pod)
+	if err != nil {
+		r.canceled = ctx.Err() != nil
+		r.timedOut = !r.canceled && limit.Err() != nil
+		if r.canceled || r.timedOut {
+			return r, nil
+		}
+		return r, err
+	}
+	go func() {
+		w.Stdin().Write(data)
+		w.Stdin().Close()
+	}()
+	copied := make(chan struct{})
+	go func() {
+		io.Copy(r.stdout, w.Stdout())
+		// Past the limit, the rest is drained so the worker isn't blocked.
+		io.Copy(io.Discard, w.Stdout())
+		close(copied)
+	}()
+	done := make(chan string, 1)
+	go func() {
+		diag, _ := w.Wait()
+		done <- diag
+	}()
+	select {
+	case r.stderr = <-done:
+	case <-limit.Done():
+		r.canceled = ctx.Err() != nil
+		r.timedOut = !r.canceled
+		w.Kill()
+		r.stderr = <-done
+	}
+	<-copied
+	r.stderr = strings.TrimSpace(r.stderr)
+	if e, ok := w.(interface{ ExitCode() int }); ok {
+		r.code = e.ExitCode()
+	}
+	return r, nil
+}
+
+func (d *CollectionDocs) docs(ctx context.Context, id int64, fqcn string, org int64, data []byte) docsOutcome {
+	p, refused, err := d.place(ctx, id, org, fqcn)
+	if err != nil {
+		return docsOutcome{state: "failed", message: "ansible-doc couldn't start: " + err.Error()}
+	}
+	if p == nil {
+		return docsOutcome{state: "none", message: "Not read. " + refused}
+	}
+	defer p.cleanup()
+	run := p.run
+	if p.pod != nil {
+		run = p.runPod
+	}
+	r, err := run(ctx, data)
+	if err != nil {
+		return docsOutcome{state: "failed", message: fmt.Sprintf("ansible-doc couldn't start %s: %v", p.where, err)}
+	}
+	if r.canceled {
 		return docsOutcome{}
 	}
-	tail := strings.TrimSpace(stderr.String())
-	code := -1
-	if cmd.ProcessState != nil {
-		code = cmd.ProcessState.ExitCode()
-	}
 	switch {
-	case timedOut:
+	case r.timedOut:
 		return docsOutcome{state: "failed", message: fmt.Sprintf("ansible-doc didn't finish %s within %s.", p.where, docsTimeout)}
-	case code == docsNoAnsibleDoc:
+	case r.code == hubdocs.NoAnsibleDoc:
 		return docsOutcome{state: "none", message: "Not read: ansible-doc isn't installed " + p.where + "."}
-	case code != 0:
+	case r.code != 0:
+		tail := r.stderr
 		if tail == "" {
-			tail = fmt.Sprintf("exit code %d", code)
+			tail = fmt.Sprintf("exit code %d", r.code)
 		}
 		return docsOutcome{state: "failed", message: fmt.Sprintf("ansible-doc failed %s: %s", p.where, tail)}
-	case stdout.over:
+	case r.stdout.over:
 		return docsOutcome{state: "failed", message: fmt.Sprintf("ansible-doc's output is larger than %s.", humanBytes(docsMaxOutput))}
 	}
-	plugins, err := parseDocs(stdout.Bytes(), fqcn)
+	plugins, err := parseDocs(r.stdout.Bytes(), fqcn)
 	if err != nil {
 		return docsOutcome{state: "failed", message: "ansible-doc's output can't be read: " + err.Error()}
 	}

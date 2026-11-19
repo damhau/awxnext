@@ -1420,8 +1420,9 @@ jobs neither in containers nor as job users, so on Kubernetes no version's
 docs are read. A node that can't run `ansible-doc` isolated reads the docs
 in a pod instead, as a container group runs a job. The pod uses the
 organization's execution environment, has the same limits, and is deleted
-afterwards. A NetworkPolicy shipped by the chart denies it egress, where the
-cluster enforces NetworkPolicy.
+afterwards. A NetworkPolicy shipped by the chart limits its egress to the
+control pods, which its shim streams the docs to, and DNS, where the cluster
+enforces NetworkPolicy.
 
 **Done when:** in the kind test, a collection uploaded to the chart's
 install has its module docs read in a pod and served on its `docs/`. The pod
@@ -2279,10 +2280,14 @@ Taken on 2026-11-15:
     collection's Python code. So it runs after the import, in the
     background, where jobs run: in the organization's execution environment
     with no network, or as a job user. It runs as the server's user only
-    when `HUB_COLLECTION_DOCS` is `server_user`, so the Helm chart's
-    replicas read no docs by default. A version whose docs can't be read
-    still installs. galaxy_ng's `docs-blob/` is served from the same docs,
-    with the README as text rather than rendered HTML.
+    when `HUB_COLLECTION_DOCS` is `server_user`. A node with neither that
+    runs in a Kubernetes cluster, such as the Helm chart's replicas, reads
+    them in a pod of the execution environment, as a container group runs a
+    job (M10-07, on 2026-11-19). The chart's NetworkPolicy lets that pod
+    reach only the control pods and DNS: the pod's shim connects to the
+    control plane, so its egress can't be cut entirely. A version whose
+    docs can't be read still installs. galaxy_ng's `docs-blob/` is served
+    from the same docs, with the README as text rather than rendered HTML.
 
 Taken on 2026-11-18:
 

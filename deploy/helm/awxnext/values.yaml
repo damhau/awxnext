@@ -108,6 +108,23 @@ containerGroups:
   # The Role letting the service account create and delete job pods.
   rbac: true
 
+# On Kubernetes, the hub reads each collection version's module docs with
+# ansible-doc in a pod of the organization's execution environment, created
+# with the Role above (HUB_COLLECTION_DOCS). ansible-doc runs some of the
+# collection's code, so this NetworkPolicy lets those pods reach only this
+# release's control pods and DNS. It holds only where the cluster's network
+# plugin enforces NetworkPolicy.
+collectionDocs:
+  networkPolicy:
+    enabled: true
+    # The cluster's DNS pods, which the docs pods ask for the control pods'
+    # service.
+    dns:
+      - namespaceSelector: {}
+        podSelector:
+          matchLabels:
+            k8s-app: kube-dns
+
 # A remote execution node: an agent dialing back to the control plane, with
 # the token of its instance (`POST /api/v2/instances/N/agent_token/`).
 agent:
