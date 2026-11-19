@@ -1492,8 +1492,10 @@ Closed on 2026-11-19, with its 11 tasks done, after green runs of
 positive. Its triage noted that an execution environment's image starting
 with `-` would be read as a `podman run` or `docker run` option: filed as
 [#190](https://github.com/damhau/awxnext/issues/190), with no milestone.
-The permanent instance runs M10-07's pod mode, but its chart, vendored in
-k8s-argocd on 2026-11-01, has no NetworkPolicy for the docs pods yet.
+The permanent instance runs M10-07's pod mode. Since then, `main` publishes
+the chart with each image, as `0.1.0-main.<commit time>` on GHCR, and the
+instance takes it from there instead of a vendored copy, with the docs
+pods' NetworkPolicy. Its own namespace-wide policy leaves those pods out.
 
 ---
 
