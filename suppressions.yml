@@ -584,3 +584,15 @@ suppressions:
   expires: '2026-12-18'
   created: '2026-11-18'
   source: triage
+- id: ade82b9cdd8b
+  reason: 'secubot triage: false positive (high confidence, single pass). This code
+    does run in production. The background CollectionDocs worker (hub_docs.go:79)
+    picks up each uploaded collection version, and readVersionDocs (hub_docs.go:608)
+    can also trigger it. But no one can inject a command at line 365. `p.args` is
+    built in only three ways in `place()`:
+
+    (1) Container runtime: `runnercmd.Run` (runnercmd.go:115-128) produces `[<podman|docker>,
+    "run", ..., image, "sh",'
+  expires: '2026-12-19'
+  created: '2026-11-19'
+  source: triage
