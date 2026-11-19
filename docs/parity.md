@@ -13,31 +13,35 @@ from an audit of the code on 2026-10-27 (not of the docs). Status words:
 The core of AWX is there and tested end to end: the `/api/v2` resource model
 with AWX's filtering, OPTIONS metadata and object roles; inventories (regular,
 smart, constructed) and cloud inventory sources; credentials with custom types
-and every AWX secret lookup; git projects; job templates with every
+and every AWX secret lookup; git and archive projects; job templates with every
 launch prompt, surveys, slicing, callbacks and webhooks; ad hoc commands;
 workflows with approvals and convergence; schedules; management jobs; remote
 execution nodes and Kubernetes container groups; HA on PostgreSQL alone.
 
-The gaps fall in four groups:
+The audit found four groups of gaps. Three are closed:
 
-1. **Settings that do nothing** (fixed in roadmap M1, 2026-10-28). Every
+1. **Settings that do nothing**: closed in roadmap M1 (2026-10-28). Every
    setting now has an effect, or says "No effect in awxnext" and why in its
    help (analytics, subscriptions, OAuth2, custom virtualenvs, and
    `LOG_AGGREGATOR_*` until M6-03). A test fails CI when a setting is neither.
-2. **API endpoints that AWX clients call**: done (the bulk API, the
+2. **API endpoints that AWX clients call**: closed (the bulk API, the
    dashboard, host metrics, the subscription endpoints and instance health
    checks, roadmap M2-02 to M2-06).
    Compatibility with the collection, awxkit and the Terraform provider is
    tested nightly since roadmap M2-01 ([compat/](../compat/README.md)); the
    gaps those suites found are roadmap M2-14 to M2-26.
-3. **Deferred by plan**: RADIUS and TACACS+ login (LDAP, SAML, GitHub, Google and Azure AD are done, roadmap M5-02 to M5-05);
-   notification types other than email, webhook and Slack (Slack, and a
-   Teams type of awxnext's own, are roadmap M11)
-   (backup and restore, and the Helm chart, are done, roadmap M6-09 and M6-10; CyberArk, Thycotic, AWS Secrets Manager and Centrify lookups are done,
-   roadmap M4-07; archive projects, roadmap M4-10).
-4. **UI holes over a finished API**: a few, listed below (inventory instance
-   groups, inventory source schedules, `start_at_task` and credential type
-   management are done, roadmap M7-01 to M7-04).
+3. **UI holes over a finished API**: closed (inventory instance groups,
+   inventory source schedules, `start_at_task` and credential type management
+   were the last, roadmap M7-01 to M7-04).
+4. **What is left**: the table's four rows that are neither Done nor By design.
+   - Slack notifications (Missing), and a Teams type of awxnext's own:
+     roadmap M11.
+   - RADIUS and TACACS+ login (Missing, not in the plan). LDAP, SAML, GitHub,
+     Google, Azure AD and OIDC login are done (roadmap M5-02 to M5-05).
+   - An operator (Partial). Backup and restore and the Helm chart are done
+     (roadmap M6-09 and M6-10).
+   - PagerDuty, Twilio, Grafana, IRC, Mattermost, Rocket.Chat and AWS SNS
+     notifications (Out of scope since 2026-10-27).
 
 ## Fixed during the audit
 
@@ -73,7 +77,7 @@ The gaps fall in four groups:
 11. ~~Password policy settings; activity stream entries for job launches and for role grants made through the role assignment API~~ (done, roadmap M5-06 and M6-04).
 12. ~~Dashboard endpoints (`/dashboard/`, `/dashboard/graphs/jobs/`)~~ (done, roadmap M2-03).
 13. ~~Managed credential types for Insights and RHV~~ (done, roadmap M4-01); ~~CA file injection for the OpenShift/Kubernetes token type~~ (done, roadmap M4-02).
-14. Project refspec is not used when a job checks out an overridden branch, so jobs on refs only the refspec fetches (pull requests) can fail.
+14. ~~Project refspec is not used when a job checks out an overridden branch, so jobs on refs only the refspec fetches (pull requests) can fail~~ (done, roadmap M1-12).
 
 **P3: completeness**
 
@@ -90,7 +94,6 @@ The gaps fall in four groups:
 |---|---|---|---|
 | Password rules (`LOCAL_PASSWORD_MIN_LENGTH`, `_MIN_DIGITS`, `_MIN_UPPER`, `_MIN_SPECIAL`) | Yes | Done | Roadmap M5-06. Checked as AWX checks them, in its order and words, when a user's password is set through the API (create and update; `$encrypted$` keeps the password) and by `createsuperuser` (which AWX's Django command does not check); special means neither a letter nor a digit. Readable by every user, so the user form shows the rules and checks the password as it is typed. The container's entrypoint starts the server even when `AWXNEXT_ADMIN_PASSWORD` breaks the rules, saying so |
 | Local users, superuser and system auditor | Yes | Done | `createsuperuser` CLI also resets a password. As in AWX, only superusers create users at `/users/`; organization admins create them through `organizations/N/users/` (the UI's new-user form asks for the organization), where they join it |
-| Password policy settings | Yes | Missing | |
 | Organizations: max_hosts, default EE, Galaxy credentials, instance groups | Yes | Done | max_hosts also stops inventory source imports. AWX's public `Ansible Galaxy` credential exists from the start, read-only. A new install starts with the `Default` organization, as AWX's `create_preload_data` makes it, without its demo objects; it comes back when no organization is left (roadmap M10-11) |
 | Organization notification attachments | Yes | Done | |
 | Teams | Yes | Done | Plus nested teams |
@@ -108,7 +111,7 @@ The gaps fall in four groups:
 | GitHub login (GitHub, organization, team, Enterprise and its organization and team) | Yes | Done | Roadmap M5-04. AWX's `SOCIAL_AUTH_GITHUB*` settings in their six categories, callback URLs read-only from `TOWER_URL_BASE`, each login listed in `/api/v2/auth/` and on the login page once its required settings are set, as in AWX. python-social-auth's backends: OAuth2 with the `user:email,read:org` scope, `/user` then the primary email of `/user/emails` when none is public, the name split into first and last, organization and team logins refused unless `orgs/<name>/members/<login>` or `teams/<id>/members/<login>` answers 2xx ("User doesn't belong to the organization" or "to the team"). Users made as python-social-auth makes them, the names updated at each login, the login's own organization and team maps applied (not the global ones, as in AWX). A GitHub user is one account across GitHub's three logins (and across Enterprise's), found by GitHub's user ID. The importer keeps AWX's GitHub users GitHub users. Deliberate difference: an email already used by another account refuses the login instead of linking to that account (AWX's `associate_by_email` would log the GitHub user in as it) |
 | Google and Azure AD login | Yes | Done | Roadmap M5-05. AWX's `SOCIAL_AUTH_GOOGLE_OAUTH2_*` and `SOCIAL_AUTH_AZUREAD_OAUTH2_*` settings, so imported AWX settings work without editing: the same callback URLs (`/sso/complete/google-oauth2/`, `/sso/complete/azuread-oauth2/`), read-only from `TOWER_URL_BASE`. python-social-auth's backends: Google with AWX's `profile` scope and the backend's `openid email profile`, `AUTH_EXTRA_ARGUMENTS` (such as `hd`), the userinfo endpoint, the email as the user ID and its local part as the username, `WHITELISTED_DOMAINS` ("Your credentials aren't allowed"); Azure AD (`common` tenant, v1 endpoints, `openid profile user_impersonation email`) with the ID token's claims, the `upn` as the user ID and the email when there is none, the name as the username. Each login's own maps, as in AWX. Built on the OAuth2 logins of M5-04 rather than on the OIDC login, which has its own callback URL and settings |
 | RADIUS, TACACS+ | Yes | Missing | Not in the plan |
-| Session, token and login settings | Yes | Partial | Stored but ignored, see P1 |
+| Session and login settings (`SESSION_COOKIE_AGE`, `SESSIONS_PER_USER`, `AUTH_BASIC_ENABLED`, `LOGIN_REDIRECT_OVERRIDE`, `CUSTOM_LOGO`, `CUSTOM_LOGIN_INFO`) | Yes | Done | Roadmap M1-02. A session ends after `SESSION_COOKIE_AGE` without activity, a login beyond `SESSIONS_PER_USER` ends the oldest session, basic authentication is refused with `AUTH_BASIC_ENABLED` off, people who are not logged in go to `LOGIN_REDIRECT_OVERRIDE` (`?login=local` reaches the login page), and the login page shows the logo and text. `OAUTH2_PROVIDER`'s token lifetimes have no effect: awxnext has personal tokens and OIDC, not OAuth2 applications |
 | UI: users, teams, organizations, access tabs | Yes | Done | |
 
 ## Inventories and credentials
@@ -132,15 +135,14 @@ The gaps fall in four groups:
 | Inventory updates: cancel, stdout, events, notifications, schedules | Yes | Done | Notifications and schedules are in the source's menu; a source's schedules have their own page under the inventory's Sources tab (roadmap M7-03), created, edited and switched off as a template's |
 | Bulk host create/delete | Yes | Done | `bulk/host_create` (each host created as through `/hosts/`, all or none) and `bulk/host_delete`, with AWX's limits, checks and messages |
 | Host metrics | Yes | Done | Collected per job and cleaned up. `/host_metrics/` (list, filter, soft delete) and `/host_metric_summary_monthly/`, for superusers and auditors, as in AWX; the summary is the `host_metric_summary_monthly` management job (weekly), where AWX runs a periodic task. The Host metrics page (Admin, for superusers and auditors; roadmap M7-08) lists the hosts with their first and last automation and counts, soft deletes them (superusers), and shows the last twelve months of the summary |
-| Managed credential types | Yes | Partial | All of AWX's, Insights and Red Hat Virtualization included (M4-01), and awxnext's own `rvav`, for rvav sources (M4-11). The Kubernetes bearer token is injected in code as in AWX, its CA data as a file in `K8S_AUTH_SSL_CA_CERT` (M4-02); unlike AWX, `verify_ssl` without CA data keeps verifying, against the system's CAs. As in AWX, an encrypted SSH key (OpenSSH with a cipher, PKCS#8 `ENCRYPTED PRIVATE KEY`, PEM `Proc-Type: 4,ENCRYPTED`) needs its passphrase and a passphrase needs an encrypted key, checked against the stored key on update |
+| Managed credential types | Yes | Done | All of AWX's, Insights and Red Hat Virtualization included (M4-01), and awxnext's own `rvav`, for rvav sources (M4-11). The Kubernetes bearer token is injected in code as in AWX, its CA data as a file in `K8S_AUTH_SSL_CA_CERT` (M4-02); unlike AWX, `verify_ssl` without CA data keeps verifying, against the system's CAs. As in AWX, an encrypted SSH key (OpenSSH with a cipher, PKCS#8 `ENCRYPTED PRIVATE KEY`, PEM `Proc-Type: 4,ENCRYPTED`) needs its passphrase and a passphrase needs an encrypted key, checked against the stored key on update |
 | Custom credential types | Yes | Done | Injectors are Jinja2 (gonja), sandboxed like AWX and checked when saved; `2 ** n` gives a float and `None` prints empty. The Credential types page (Admin, roadmap M7-04) lists the types, built-in ones read-only, and creates and edits custom types with YAML or JSON input and injector editors: injector variables no field defines are pointed out as you type, the API's errors shown under each editor, and the inputs locked once credentials use the type |
 | Lookups: HashiCorp Vault KV and SSH, Azure Key Vault | Yes | Done | Vault logs in with a token, username and password, AppRole, Kubernetes or a TLS client certificate (`client_cert_public`, `client_cert_private`, `client_cert_role`), with AWX 24.6's inputs (roadmap M4-06); an auth path left at AWX's default `approle` uses the method's own mount (`userpass`, `kubernetes`, `cert`). Azure falls back to workload or managed identity. Deliberate difference (roadmap M9-06): a lookup authenticates as awxnext itself (Vault's Kubernetes login with the pod's service account token, Azure Key Vault without a client secret) only towards the hosts listed in `CREDENTIAL_LOOKUP_SERVER_IDENTITY_HOSTS`, empty by default, and an Azure `authority_host` other than the cloud's must be listed too; AWX sends that identity to any URL a credential gives. A refused lookup sends nothing |
 | Lookups: addresses reached | Yes | Done | Deliberate difference (roadmap M9-06): every lookup refuses loopback, link-local and unspecified addresses and cloud metadata services (169.254.169.254 and the like), checked on the address connected to, unless listed in `CREDENTIAL_LOOKUP_ALLOWED_LOCAL_ADDRESSES` (an address, a network, or an address and port). Azure's managed identity endpoint, which awxnext calls itself, is not affected |
 | Lookups: CyberArk Central Credential Provider and Conjur, Centrify Vault, Thycotic DevOps Secrets Vault and Secret Server, AWS Secrets Manager | Yes | Done | AWX 24.6's types (namespaces, inputs, metadata), test buttons and importer mapping, making the requests AWX's plugins (or their Delinea and AWS SDKs) make (roadmap M4-07). Secret Server follows python-tss-sdk 1.2 (Secret Server, not Delinea Platform); Centrify names are quoted in its query |
-| Lookups: CyberArk, Conjur, Thycotic, AWS Secrets Manager, Centrify | Yes | Later | |
 | Credentials: owners, input sources, test, copy, ASK | Yes | Done | As in AWX, `credentials/N/test/` needs the use role on the credential, and `credential_types/N/test/`, which runs a lookup with any inputs, is for superusers (AWX checks the right to add a credential type). The credential form offers others the test once the credential is saved |
 | Execution environments: pull policy, registry auth, org scope, resolution order | Yes | Done | Plus each environment's contents (roadmap M7-07, awxnext's `execution_environments/N/contents/`): its collections and versions, ansible-core and Python versions, platform and `ansible.cfg`, read from the image's registry with the environment's registry credential, without running the image or needing a container runtime, and reused for the same digest |
-| UI: inventories, hosts, groups, sources, credentials, EEs | Yes | Done | No credential types page |
+| UI: inventories, hosts, groups, sources, credentials, credential types, EEs | Yes | Done | The credential types page is under Admin (roadmap M7-04) |
 
 ## Projects, jobs and workflows
 
@@ -168,12 +170,11 @@ The gaps fall in four groups:
 | Node labels and instance groups prompts; workflow labels passed to nodes | Yes | Done | Saved on nodes by whoever may see the labels and use the instance groups, copied to workflow job nodes, and given to the node's job when its template prompts for them (ignored otherwise, as in AWX); a workflow job's labels are added to the jobs of nodes whose template prompts for labels (roadmap M3-03). Editable in the step editor |
 | Schedules: rrule with exclusions, timezones, saved prompts, preview | Yes | Done | Labels and ordered instance groups saved as prompts (`schedules/N/labels/`, `schedules/N/instance_groups/`), by whoever may see and use them, used when the template prompts for them (roadmap M3-03), and credentials (`schedules/N/credentials/`), which replace the template's of the same type. All three editable in the schedule dialog (roadmap M7-06) |
 | Notifications: email and webhook, started/success/error/approval events, custom messages | Yes | Done | Email over SMTP in clear, with STARTTLS or TLS from the start, with a login when a username and password are set, AWX's fields, defaults and messages (roadmap M3-01). The server's certificate is verified against the system's CAs; sender and recipient addresses are checked when saved. Attaching needs change on the notification too, as in AWX; `used_by` (awxnext) lists where one is attached |
-| Email | Yes | Later | Roadmap M3-01 |
 | Slack | Yes | Missing | Taken back on 2026-11-08: roadmap M11-02 |
 | PagerDuty, Twilio, Grafana, IRC, Mattermost, Rocket.Chat, AWS SNS | Yes | Out of scope | Dropped on 2026-10-27 |
 | GitHub/GitLab/Bitbucket DC webhooks with status posting | Yes | Done | Plus a generic JSONPath-mapped webhook |
 | Provisioning callbacks | Yes | Done | |
-| Management jobs (cleanups) with schedules | Yes | Done | `host_metric_summary_monthly` missing |
+| Management jobs (cleanups) with schedules | Yes | Done | All of AWX's, `host_metric_summary_monthly` included (roadmap M2-04) |
 | Dependencies, capacity-aware placement, `allow_simultaneous` | Yes | Done | |
 
 ## Platform and operations
