@@ -387,6 +387,15 @@ export const settingsPages: SettingsPage[] = [
           row('SOCIAL_AUTH_OIDC_KEY', { label: tr('Client ID') }),
           row('SOCIAL_AUTH_OIDC_SECRET', { label: tr('Client secret') }),
           row('SOCIAL_AUTH_OIDC_VERIFY_SSL', { label: tr('Provider\'s certificate'), states: [tr('Not checked'), tr('Checked')] }),
+          row('OIDC_PROMPT', {
+            label: tr('At each login'),
+            help: tr('What the provider asks before it signs someone in. Not set: the provider decides, and signs in with the account the browser already uses, if any.'),
+            options: [
+              ['select_account', tr('Ask which account to use')],
+              ['login', tr('Ask to sign in again')],
+              ['consent', tr('Ask for consent again')],
+            ],
+          }),
         ],
       },
       {

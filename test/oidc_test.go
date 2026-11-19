@@ -208,6 +208,19 @@ func TestOIDCBrowserLogin(t *testing.T) {
 	if authz.Query().Get("code_challenge_method") != "S256" || authz.Query().Get("nonce") == "" {
 		t.Fatalf("missing PKCE/nonce: %s", authz)
 	}
+	if authz.Query().Has("prompt") {
+		t.Fatalf("prompt without OIDC_PROMPT: %s", authz)
+	}
+	must(t, a.patch("settings/oidc/", map[string]any{"OIDC_PROMPT": "none"}), 400)
+	must(t, a.patch("settings/oidc/", map[string]any{"OIDC_PROMPT": "select_account"}), 200)
+	res, err = noFollow.Get(srv.URL + "/sso/login/oidc/?next=/jobs/42")
+	if err != nil || res.StatusCode != 302 {
+		t.Fatalf("login start with a prompt: %v %v", err, res.StatusCode)
+	}
+	authz, _ = url.Parse(res.Header.Get("Location"))
+	if got := authz.Query().Get("prompt"); got != "select_account" {
+		t.Fatalf("prompt = %q: %s", got, authz)
+	}
 	res, err = noFollow.Get(authz.String())
 	if err != nil || res.StatusCode != 302 {
 		t.Fatalf("authorize: %v", err)

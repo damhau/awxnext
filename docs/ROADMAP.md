@@ -1443,6 +1443,20 @@ then sets a credential that doesn't verify it. The next sync takes the
 version out of the repository, lists it, and fails when it was its
 requirement's only version.
 
+### M10-09 Choose the account at each OIDC login
+**Labels:** feature, auth, ui · **Size:** S · [#186](https://github.com/damhau/awxnext/issues/186)
+
+Asked on 2026-11-19. Microsoft Entra ID, signed in through the OIDC login,
+reuses the browser's current account without asking which one. A setting,
+`OIDC_PROMPT`, sets the authorization request's `prompt` parameter:
+`select_account`, `login` or `consent`, unset by default. The OpenID Connect
+settings page has it, and the guide says how Entra ID is set up through the
+OIDC login.
+
+**Done when:** `TestOIDCBrowserLogin` finds the setting's value in the
+authorization URL, and no `prompt` when it's unset; the OpenID Connect
+settings page sets it.
+
 ---
 
 ## M11 Notifications

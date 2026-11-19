@@ -47,6 +47,7 @@ type oidcConfig struct {
 	ClientID      string
 	ClientSecret  string
 	VerifySSL     bool
+	Prompt        string
 	Scopes        []string
 	UsernameClaim string
 	GroupsClaim   string
@@ -66,6 +67,7 @@ func (o *OIDC) config(ctx context.Context) (*oidcConfig, error) {
 		Issuer:        strings.TrimSuffix(strings.TrimSuffix(s.String(ctx, "SOCIAL_AUTH_OIDC_OIDC_ENDPOINT"), "/.well-known/openid-configuration"), "/"),
 		ClientID:      s.String(ctx, "SOCIAL_AUTH_OIDC_KEY"),
 		VerifySSL:     s.Bool(ctx, "SOCIAL_AUTH_OIDC_VERIFY_SSL"),
+		Prompt:        s.String(ctx, "OIDC_PROMPT"),
 		UsernameClaim: s.String(ctx, "OIDC_USERNAME_CLAIM"),
 		GroupsClaim:   s.String(ctx, "OIDC_GROUPS_CLAIM"),
 		AllowBearer:   s.Bool(ctx, "OIDC_ALLOW_BEARER"),
@@ -177,8 +179,11 @@ func (o *OIDC) login(c *api.Ctx, w http.ResponseWriter, r *http.Request) {
 	}
 	http.SetCookie(w, &http.Cookie{Name: stateCookie, Value: url.QueryEscape(sealed), Path: "/sso/", HttpOnly: true,
 		Secure: r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https", SameSite: http.SameSiteLaxMode, MaxAge: 600})
-	u := o.oauthConfig(p, cfg).AuthCodeURL(st.State, oidc.Nonce(st.Nonce), oauth2.S256ChallengeOption(st.Verifier))
-	http.Redirect(w, r, u, http.StatusFound)
+	opts := []oauth2.AuthCodeOption{oidc.Nonce(st.Nonce), oauth2.S256ChallengeOption(st.Verifier)}
+	if cfg.Prompt != "" {
+		opts = append(opts, oauth2.SetAuthURLParam("prompt", cfg.Prompt))
+	}
+	http.Redirect(w, r, o.oauthConfig(p, cfg).AuthCodeURL(st.State, opts...), http.StatusFound)
 }
 
 func (o *OIDC) complete(c *api.Ctx, w http.ResponseWriter, r *http.Request) {

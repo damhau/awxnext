@@ -204,6 +204,7 @@ clients and imports keep working.
 | `SOCIAL_AUTH_OIDC_SECRET` | string | `""` | The OIDC secret (Client Secret) from your IDP. (secret) |
 | `SOCIAL_AUTH_OIDC_OIDC_ENDPOINT` | string | `""` | The URL for your OIDC provider including the path up to /.well-known/openid-configuration |
 | `SOCIAL_AUTH_OIDC_VERIFY_SSL` | boolean | `true` | Check the OIDC provider's TLS certificate. Turn it off only for a test provider with a self-signed certificate. |
+| `OIDC_PROMPT` | choice | null | The prompt parameter of the login's authorization request: select_account shows the provider's account picker (Microsoft Entra ID, Google) instead of signing in with the browser's current account, login asks for the password again, consent shows the consent screen again. Not set: the provider decides, and reuses its session when it has one. |
 | `OIDC_SCOPES` | list | `["openid","profile","email","groups"]` | The scopes asked of the OIDC provider at login. Most providers send the groups claim only with the groups scope. |
 | `OIDC_USERNAME_CLAIM` | string | `"preferred_username"` | The claim that gives the username. When a token lacks it, preferred_username, upn, email, the client ID and sub are tried in turn. |
 | `OIDC_GROUPS_CLAIM` | string | `"groups"` | Claim holding group names. Dotted paths are supported, e.g. realm_access.roles. |
@@ -427,6 +428,7 @@ clients and imports keep working.
 | `SOCIAL_AUTH_OIDC_SECRET` | string | `""` | The OIDC secret (Client Secret) from your IDP. (secret) |
 | `SOCIAL_AUTH_OIDC_OIDC_ENDPOINT` | string | `""` | The URL for your OIDC provider including the path up to /.well-known/openid-configuration |
 | `SOCIAL_AUTH_OIDC_VERIFY_SSL` | boolean | `true` | Check the OIDC provider's TLS certificate. Turn it off only for a test provider with a self-signed certificate. |
+| `OIDC_PROMPT` | choice | null | The prompt parameter of the login's authorization request: select_account shows the provider's account picker (Microsoft Entra ID, Google) instead of signing in with the browser's current account, login asks for the password again, consent shows the consent screen again. Not set: the provider decides, and reuses its session when it has one. |
 | `OIDC_SCOPES` | list | `["openid","profile","email","groups"]` | The scopes asked of the OIDC provider at login. Most providers send the groups claim only with the groups scope. |
 | `OIDC_USERNAME_CLAIM` | string | `"preferred_username"` | The claim that gives the username. When a token lacks it, preferred_username, upn, email, the client ID and sub are tried in turn. |
 | `OIDC_GROUPS_CLAIM` | string | `"groups"` | Claim holding group names. Dotted paths are supported, e.g. realm_access.roles. |

@@ -195,6 +195,7 @@
     "OIDC_GROUPS_CLAIM": {"category": "oidc"},
     "OIDC_LINK_EXISTING_USERS": {"category": "oidc"},
     "OIDC_MAPPING": {"category": "oidc"},
+    "OIDC_PROMPT": {"category": "oidc"},
     "OIDC_SCOPES": {"category": "oidc"},
     "OIDC_USERNAME_CLAIM": {"category": "oidc"},
     "ORG_ADMINS_CAN_SEE_ALL_USERS": {"category": "system"},

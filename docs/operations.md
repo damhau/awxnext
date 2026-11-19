@@ -2990,6 +2990,20 @@ form shows what to give the provider, with a copy button, where the provider ask
 callback URL before the client ID, OIDC's redirect URI once OIDC is on, and SAML's metadata URL
 once the service provider's certificate is set.
 
+To sign in with Microsoft Entra ID, use the OpenID Connect page, unless the settings come from
+AWX. Its provider URL is your tenant's, `https://login.microsoftonline.com/<tenant ID>/v2.0`, so
+only your tenant's accounts sign in, guests included, and awxnext checks the ID token. The
+Microsoft Entra ID page is AWX's `azuread-oauth2`: the `common` tenant's v1 endpoints, which need
+a multi-tenant app registration, and the display name as the username.
+
+- **At each login** (`OIDC_PROMPT`) sets the authorization request's `prompt`. `select_account`
+  shows Entra's account picker instead of signing in with the browser's current account. `login`
+  asks for the password again, and `consent` shows the consent screen again. When it's not set,
+  the provider decides.
+- **Groups:** Entra's `groups` claim holds the groups' object IDs, not their names, and a user in
+  more than 200 groups gets no `groups` claim at all. To map access by name, define app roles on
+  the app registration, assign them to groups, and set `OIDC_GROUPS_CLAIM` to `roles`.
+
 | AWX category | Page |
 |---|---|
 | `system`, `named-url` | System |
