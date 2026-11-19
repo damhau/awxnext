@@ -440,8 +440,12 @@ func (s *SAML) serviceProvider(cfg *samlConfig, idp *samlIdP) *saml.ServiceProvi
 		EntityID: cfg.entityID, Key: cfg.key, Certificate: cfg.cert, MetadataURL: cfg.metaURL, AcsURL: cfg.acsURL,
 		AuthnNameIDFormat: saml.UnspecifiedNameIDFormat,
 		// As AWX (python3-saml without a request ID), responses the
-		// identity provider starts are accepted.
+		// identity provider starts are accepted, and InResponseTo isn't
+		// checked: the requests awxnext starts aren't tracked. crewjam/saml
+		// 0.6 checks a non-empty InResponseTo even with AllowIDPInitiated,
+		// which would refuse every login started here.
 		AllowIDPInitiated: true,
+		ValidateRequestID: func(saml.Response, []string) error { return nil },
 		IDPMetadata: &saml.EntityDescriptor{EntityID: idp.entityID, IDPSSODescriptors: []saml.IDPSSODescriptor{{
 			SSODescriptor: saml.SSODescriptor{RoleDescriptor: saml.RoleDescriptor{
 				ProtocolSupportEnumeration: "urn:oasis:names:tc:SAML:2.0:protocol",
