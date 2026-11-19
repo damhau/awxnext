@@ -115,6 +115,10 @@ jobs:
       # it fails, not skips, when galaxy.ansible.com can't be reached.
       - name: collection remote of galaxy.ansible.com, verbose
         run: go test -count=1 -run 'TestHubRemoteGalaxyAnsibleCom' -v ./test/
+      # Its log shows the lookup ran against moto. With
+      # AWXNEXT_TEST_MOTO_ENDPOINT set it fails, not skips, when moto is down.
+      - name: AWS Secrets Manager lookup against moto, verbose
+        run: go test -count=1 -run 'TestAWSSecretsManagerMoto' -v ./test/
 
   helm:
     uses: ./.github/workflows/helm.yml
