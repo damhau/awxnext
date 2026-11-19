@@ -35,7 +35,7 @@ be matched.
 | [M9 Security](#m9-security) | Known vulnerabilities found by CI and fixed through reviewed PRs | 5 |
 | [M10 Small fixes](#m10-small-fixes) | The importer tested on a real AWX, parity.md matching the code, the deployed image scanned, the AWS lookup tested on moto, M14-10's leftovers, a job's first lines live, M13's leftovers, OIDC account choice, translations, the Default organization | 11 |
 | [M11 Notifications](#m11-notifications) | Email tested on a real mail server, Slack as in AWX, a Teams type, notifications when a result changes | 4 |
-| [M12 Beyond AWX](#m12-beyond-awx) | What changed before a failure, secrets kept out of job output, an MCP server, drifted hosts | 4 |
+| [M12 Beyond AWX](#m12-beyond-awx) | What changed before a failure, secrets kept out of job output, an MCP server, drifted hosts, failure notifications that say why and get through | 5 |
 | [M13 Collection hub](#m13-collection-hub) | A private Galaxy in awxnext: publish, approve, sign, mirror and install collections | 5 |
 | [M14 Event-driven automation](#m14-event-driven-automation) | Event streams into a durable log, rules evaluated by awxnext with guardrails, connectors, rulebooks imported | 10 |
 | [M15 Self-service portal](#m15-self-service-portal) | A portal of its own: requestable items with forms fed by APIs and jobs, approvals by rule, quotas, and deployments that expire | 10 |
@@ -1578,7 +1578,9 @@ to a channel"; the guide gives both names.
 Features AWX lacks, proposed on 2026-11-15 (Decision 18). **Exit:** a failed
 job says what changed since the last success, credential secrets don't appear
 in job output, an assistant can use awxnext over MCP with its user's rights,
-and hosts that drift from their playbooks are listed.
+hosts that drift from their playbooks are listed, and a failure's
+notification says what failed, is retried until it is delivered, and keeps a
+failure in one Slack thread. M12-05 was added on 2026-11-19.
 
 ### M12-01 What changed since the last good run
 **Labels:** feature, jobs, ui · **Size:** M · [#148](https://github.com/damhau/awxnext/issues/148)
@@ -1636,6 +1638,27 @@ until a run leaves it unchanged. A Drift page lists drifted hosts.
 **Done when:** a test's runs raise each flag, a check-mode run marks drift
 and an unchanged run clears it, and the Host screen and the Drift page show
 them.
+
+### M12-05 Failure notifications: why it failed, retries, Slack threads
+**Labels:** feature, notifications, ui · **Size:** L · [#194](https://github.com/damhau/awxnext/issues/194)
+
+A failure notification says "X failed" and gives a link. Messages get the
+first failed task, its play, hosts, message and path, as the job page's "Why
+it failed" panel finds them, from the events M12-02 masked:
+`{{ failure.task }}` and the others. Teams cards and `first_error`'s default
+message show them, and AWX's events keep AWX's default messages. A network
+error, a 429, a 5xx, Slack's `ratelimited` or an SMTP 4xx is retried up to 3
+more times; other errors fail at once. A failed notification can be resent,
+and a notification template whose last 3 sends failed is marked failing
+until a success. A Slack notification's `thread_failures` option keeps one
+thread per failure: the first failure after a success starts it, the later
+failures and the recovery reply in it, and the first message is edited to
+say which run recovered.
+
+**Done when:** a failed job's notifications name what failed, masked;
+against fake servers, retryable errors are retried, others aren't, Resend
+works and 3 failures mark the template failing; with threads on, a failure
+keeps to one Slack thread that says when it recovered.
 
 ---
 
