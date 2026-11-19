@@ -1995,8 +1995,11 @@ nothing connect to them, and lets them connect only to the release's control pod
 which their shim streams to, and to the cluster's DNS (`collectionDocs.networkPolicy.dns`,
 CoreDNS's `k8s-app: kube-dns` by default). It holds only where the cluster's network plugin
 enforces NetworkPolicy, as Calico and Cilium do; on a cluster whose plugin doesn't, the pods
-have the network of any pod. To ship your own policy, set
-`collectionDocs.networkPolicy.enabled: false`.
+have the network of any pod. NetworkPolicies add up: a policy of your own that selects every pod
+of the namespace, as a default-deny policy with egress rules often does, gives the docs pods its
+egress too. Leave them out of it with a `matchExpressions` entry
+`{key: awxnext-collection-docs, operator: DoesNotExist}` in its `podSelector`. To ship your own
+policy for them instead, set `collectionDocs.networkPolicy.enabled: false`.
 
 A version whose docs can't be read still installs; its docs say why. They are on
 `/api/v2/collection_versions/<id>/docs/`: `state` (`pending`, `reading`, `read`, `none` when
