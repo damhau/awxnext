@@ -3292,7 +3292,7 @@ branch protection: the owner's pushes go straight to it, and nothing but the own
 stands between a PR and `main`. The PRs carry the `dependencies` label.
 
 The Dockerfile's base images keep floating tags (`golang:1.26`, `node:22`,
-`python:3.12-slim-bookworm`, distroless's `static-debian12:nonroot`), not digests. Each build
+`python:3.14-slim-bookworm`, distroless's `static-debian12:nonroot`), not digests. Each build
 takes their latest patch release, so a fix in Go's standard library, which is compiled into the
 binaries, or in Debian reaches the next image without waiting for a PR. Digests would make
 builds reproducible, but the all-in-one image already upgrades its Debian packages and

@@ -58,7 +58,7 @@ updates:
         update-types: [minor, patch]
 
   # The Dockerfile's base images keep floating tags (golang:1.26, node:22,
-  # python:3.12-slim-bookworm): each build takes the latest patch release.
+  # python:3.14-slim-bookworm): each build takes the latest patch release.
   # Dependabot proposes the next lines (Go 1.27, Python 3.13...).
   - package-ecosystem: docker
     directory: /
