@@ -9,6 +9,7 @@ import (
 	"io"
 	"log/slog"
 	"maps"
+	"math"
 	"net/http"
 	"net/url"
 	"strings"
@@ -21,8 +22,12 @@ import (
 	"github.com/damhau/awxnext/internal/tmpl"
 )
 
-// Notification types: email and webhook (other AWX types are out of scope).
-var notificationTypeChoices = labelled("email", "Email", "webhook", "Webhook")
+// Notification types: AWX's email, Slack and webhook.
+var notificationTypeChoices = labelled("email", "Email", "slack", "Slack", "webhook", "Webhook")
+
+// notificationSecrets is each type's secret configuration field, stored
+// encrypted and shown as $encrypted$.
+var notificationSecrets = map[string]string{"email": "password", "slack": "token", "webhook": "password"}
 
 // webhookFields describes the webhook notification_configuration.
 var webhookFields = map[string]string{
@@ -34,12 +39,110 @@ var messageEvents = []string{"started", "success", "error"}
 
 const defaultMessage = "{{ job_friendly_name }} #{{ job.id }} '{{ job.name }}' {{ job.status }}: {{ url }}"
 
-// validateNotificationConfig checks a configuration for its type and encrypts its password.
+// validateNotificationConfig checks a configuration for its type and encrypts its secret.
 func validateNotificationConfig(c *Ctx, typ string, cfg map[string]any, old map[string]any) (map[string]any, error) {
-	if typ == "email" {
+	switch typ {
+	case "email":
 		return validateEmailConfig(c, cfg, old)
+	case "slack":
+		return validateSlackConfig(c, cfg, old)
 	}
 	return validateWebhookConfig(c, cfg, old)
+}
+
+// configField is a notification_configuration field with its AWX type. A
+// field with no default is required, unless it is optional.
+type configField struct {
+	name, typ string
+	def       any
+	optional  bool
+}
+
+// checkConfigFields checks a configuration's fields with AWX's messages and
+// fills their defaults. Unlike AWX, it refuses fields the type doesn't have.
+func checkConfigFields(kind string, fields []configField, cfg map[string]any) (map[string]any, error) {
+	known := map[string]bool{}
+	for _, f := range fields {
+		known[f.name] = true
+	}
+	for k := range cfg {
+		if !known[k] {
+			return nil, api.FieldError("notification_configuration", fmt.Sprintf("Unexpected field %q for %s notifications.", k, kind))
+		}
+	}
+	out := map[string]any{}
+	var missing []string
+	for _, f := range fields {
+		v, ok := cfg[f.name]
+		if !ok || v == nil {
+			switch {
+			case f.def != nil:
+				out[f.name] = f.def
+			case !f.optional:
+				missing = append(missing, "'"+f.name+"'")
+			}
+			continue
+		}
+		bad := false
+		switch f.typ {
+		case "string", "password":
+			_, ok := v.(string)
+			bad = !ok
+		case "int":
+			n, ok := num(v)
+			bad = !ok || n != math.Trunc(n)
+		case "bool":
+			_, ok := v.(bool)
+			bad = !ok
+		case "list":
+			l, ok := v.([]any)
+			bad = !ok
+			for _, x := range l {
+				if _, ok := x.(string); !ok {
+					bad = true
+				}
+			}
+		}
+		if bad {
+			return nil, api.FieldError("notification_configuration", fmt.Sprintf("Configuration field '%s' incorrect type, expected %s.", f.name, f.typ))
+		}
+		out[f.name] = v
+	}
+	if len(missing) > 0 {
+		return nil, api.FieldError("notification_configuration", fmt.Sprintf("Missing required fields for Notification Configuration: [%s].", strings.Join(missing, ", ")))
+	}
+	return out, nil
+}
+
+// sealSecret encrypts a configuration's secret field. The placeholder sent
+// back keeps the stored value.
+func sealSecret(c *Ctx, out, old map[string]any, key string) error {
+	s, _ := out[key].(string)
+	switch {
+	case s == "":
+	case s == crypto.Placeholder:
+		out[key], _ = old[key].(string)
+	case !crypto.IsEncrypted(s):
+		enc, err := c.App.Crypto.Encrypt(s)
+		if err != nil {
+			return err
+		}
+		out[key] = enc
+	}
+	return nil
+}
+
+// openSecret decrypts a configuration's secret field.
+func openSecret(app *api.App, cfg map[string]any, key string) (string, error) {
+	s := str(cfg[key])
+	if !crypto.IsEncrypted(s) {
+		return s, nil
+	}
+	plain, err := app.Crypto.Decrypt(s)
+	if err != nil {
+		return "", fmt.Errorf("decrypting %s: %w", key, err)
+	}
+	return plain, nil
 }
 
 // validateWebhookConfig checks a webhook configuration and encrypts its password.
@@ -55,18 +158,6 @@ func validateWebhookConfig(c *Ctx, cfg map[string]any, old map[string]any) (map[
 			s, ok := v.(string)
 			if !ok {
 				return nil, api.FieldError("notification_configuration", fmt.Sprintf("%s must be a string.", k))
-			}
-			if typ == "password" && s != "" {
-				switch {
-				case s == crypto.Placeholder:
-					s, _ = old[k].(string)
-				case !crypto.IsEncrypted(s):
-					enc, err := c.App.Crypto.Encrypt(s)
-					if err != nil {
-						return nil, err
-					}
-					s = enc
-				}
 			}
 			out[k] = s
 		case "boolean":
@@ -104,6 +195,9 @@ func validateWebhookConfig(c *Ctx, cfg map[string]any, old map[string]any) (map[
 	}
 	if _, ok := out["headers"]; !ok {
 		out["headers"] = map[string]any{}
+	}
+	if err := sealSecret(c, out, old, "password"); err != nil {
+		return nil, err
 	}
 	return out, nil
 }
@@ -228,8 +322,9 @@ func registerNotifications() {
 		},
 		Serialize: func(c *Ctx, o Obj) {
 			if cfg, ok := o["notification_configuration"].(map[string]any); ok {
-				if p, _ := cfg["password"].(string); p != "" {
-					cfg["password"] = crypto.Placeholder
+				key := notificationSecrets[str(o["notification_type"])]
+				if p, _ := cfg[key].(string); p != "" {
+					cfg[key] = crypto.Placeholder
 				}
 			}
 		},
@@ -365,8 +460,11 @@ func createNotification(ctx context.Context, db api.DBTX, ntID int64, jobID *int
 	}
 	b, _ := json.Marshal(body)
 	recipients := str(cfg["url"])
-	if typ == "email" {
-		recipients = emailRecipients(cfg)
+	switch typ {
+	case "email":
+		recipients = listRecipients(cfg, "recipients")
+	case "slack":
+		recipients = listRecipients(cfg, "channels")
 	}
 	var id int64
 	err := db.QueryRow(ctx, `INSERT INTO notifications (notification_template_id, unified_job_id, notification_type, recipients, subject, body)
@@ -393,6 +491,8 @@ func deliver(ctx context.Context, app *api.App, id int64) {
 				text = string(body)
 			}
 			err = sendEmail(ctx, app, cfg, subject, text)
+		} else if typ == "slack" {
+			err = sendSlack(ctx, app, cfg, subject)
 		} else {
 			err = sendWebhook(ctx, app, cfg, body)
 		}
@@ -610,6 +710,8 @@ func notifyApproval(c *Ctx, approvalID int64, status string) {
 		var body any = map[string]any{"body": subject, "approval_status": status, "approval_node_name": name, "workflow_url": workflowURL, "id": approvalID}
 		if typ == "email" {
 			body = renderEmailBody(bodyT, tctx)
+		} else if typ == "slack" {
+			body = ""
 		} else if strings.TrimSpace(bodyT) != "" {
 			var parsed any
 			rendered, err := tmpl.Render(bodyT, tctx)
@@ -682,6 +784,8 @@ func notifyJob(ctx context.Context, m *jobs.Manager, row jobs.Row, event string)
 		var body any = meta
 		if typ == "email" {
 			body = renderEmailBody(bodyT, tctx)
+		} else if typ == "slack" {
+			body = ""
 		} else if strings.TrimSpace(bodyT) != "" {
 			rendered, err := tmpl.Render(bodyT, tctx)
 			var parsed any

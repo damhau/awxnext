@@ -33,9 +33,8 @@ The audit found four groups of gaps. Three are closed:
 3. **UI holes over a finished API**: closed (inventory instance groups,
    inventory source schedules, `start_at_task` and credential type management
    were the last, roadmap M7-01 to M7-04).
-4. **What is left**: the table's four rows that are neither Done nor By design.
-   - Slack notifications (Missing), and a Teams type of awxnext's own:
-     roadmap M11.
+4. **What is left**: the table's three rows that are neither Done nor By design,
+   and a Teams notification type of awxnext's own (roadmap M11).
    - RADIUS and TACACS+ login (Missing, not in the plan). LDAP, SAML, GitHub,
      Google, Azure AD and OIDC login are done (roadmap M5-02 to M5-05).
    - An operator (Partial). Backup and restore and the Helm chart are done
@@ -170,7 +169,7 @@ The audit found four groups of gaps. Three are closed:
 | Node labels and instance groups prompts; workflow labels passed to nodes | Yes | Done | Saved on nodes by whoever may see the labels and use the instance groups, copied to workflow job nodes, and given to the node's job when its template prompts for them (ignored otherwise, as in AWX); a workflow job's labels are added to the jobs of nodes whose template prompts for labels (roadmap M3-03). Editable in the step editor |
 | Schedules: rrule with exclusions, timezones, saved prompts, preview | Yes | Done | Labels and ordered instance groups saved as prompts (`schedules/N/labels/`, `schedules/N/instance_groups/`), by whoever may see and use them, used when the template prompts for them (roadmap M3-03), and credentials (`schedules/N/credentials/`), which replace the template's of the same type. All three editable in the schedule dialog (roadmap M7-06) |
 | Notifications: email and webhook, started/success/error/approval events, custom messages | Yes | Done | Email over SMTP in clear, with STARTTLS or TLS from the start, with a login when a username and password are set, AWX's fields, defaults and messages (roadmap M3-01). The server's certificate is verified against the system's CAs; sender and recipient addresses are checked when saved. Attaching needs change on the notification too, as in AWX; `used_by` (awxnext) lists where one is attached |
-| Slack | Yes | Missing | Taken back on 2026-11-08: roadmap M11-02 |
+| Slack | Yes | Done | Roadmap M11-02: AWX's `token`, `channels` and `hex_color`, a `chat.postMessage` per channel, in a message's thread for `#name, <ts>`, as a colored attachment with a valid color. AWX's default and custom messages, which have no body. A channel Slack refuses fails the notification with Slack's error; unlike AWX, the other channels still get the message. Imported from AWX with the token. The token is stored encrypted |
 | PagerDuty, Twilio, Grafana, IRC, Mattermost, Rocket.Chat, AWS SNS | Yes | Out of scope | Dropped on 2026-10-27 |
 | GitHub/GitLab/Bitbucket DC webhooks with status posting | Yes | Done | Plus a generic JSONPath-mapped webhook |
 | Provisioning callbacks | Yes | Done | |

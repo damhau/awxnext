@@ -171,7 +171,7 @@ jobs keep running.
 - inventories and their sources;
 - projects, job templates and workflows;
 - system job templates and their schedules, and other schedules;
-- notification templates (email and webhook);
+- notification templates (email, Slack and webhook);
 - role grants;
 - the login settings: LDAP, SAML, OIDC, GitHub, Google and Azure AD.
 
@@ -213,8 +213,8 @@ Through `/api/v2`, the imported objects match AWX's, with these exceptions:
 - **What awxnext's install created stays.** `admin` keeps its account. `AWX EE (latest)` keeps
   the image of `AWXNEXT_DEFAULT_EE_IMAGE`, and `default` stays awxnext's instance group, however
   it was set up in AWX.
-- **Notification types.** Only email and webhook templates come along; the report lists the
-  others, and their links are lost.
+- **Notification types.** Only email, Slack and webhook templates come along; the report lists
+  the others, and their links are lost.
 - **Computed values.** The callback and metadata URLs of the login settings come from awxnext's
   URL, and a project's `local_path` from its id, which changes when awxnext already uses it.
   awxnext counts the hosts and sources of an inventory, where AWX shows a counter it hasn't
@@ -972,7 +972,8 @@ its decisions.
   fired for. `GET /api/v2/jobs/?event_rule=N` lists the jobs of rule N.
 - **`notify`** sends a notification with the template. A `webhook` posts the message when it is
   an object, and otherwise the rule, the event and the message (`message`). An `email` has the
-  message as its subject and body.
+  message as its subject and body. `slack` posts a text message as it is, and otherwise
+  `Event rule <name>: <type>`.
 - **`post_event`** posts an event to the target stream, with the ID
   `rule-<rule>-<stream>-<sequence>` and the source `/api/v2/event_rules/<rule>/`. Other rules
   can read it. The extension `awxnextdepth` counts the rules an event went through: past 8,
@@ -2793,10 +2794,10 @@ Reminders go out 24 hours and 2 hours before expiry, once per expiry: an extensi
 `expires_at` sends them again. The owners are mailed at their own addresses through the item's
 `notification_template`, with a link to the deployment. Each notification template in the item's
 `notification_templates_reminders` gets the reminders too: an email template at its own
-recipients, a webhook template as JSON, with `subject`, `body`, `hours_left` and the
-`deployment` (`id`, `name`, `url`, `expires_at`, `catalog_item`, `item_name`, `owner`, `team`).
-The item's [request webhooks](#requests-from-another-catalog) get them as `expiring` events.
-Slack notifications come with roadmap M11-02.
+recipients, a Slack template as the subject, and a webhook template as JSON, with `subject`,
+`body`, `hours_left` and the `deployment` (`id`, `name`, `url`, `expires_at`, `catalog_item`,
+`item_name`, `owner`, `team`). The item's [request webhooks](#requests-from-another-catalog)
+get them as `expiring` events.
 
 At expiry, awxnext requests the deployment's deletion itself, with the reason `It expired.` and no
 requester. The item's rules don't apply, so the teardown runs at once, inside a maintenance window
@@ -2999,6 +3000,41 @@ for `name` and `size`:
 
 The requested item then shows each step in its work notes, and closes when the database is ready
 or the request is denied or fails.
+
+## Slack notifications
+
+A Slack notification template posts to Slack channels with a bot token, as AWX's does:
+
+1. **Make a Slack app** for the workspace, give its bot the `chat:write` scope, install it,
+   and copy the bot token (`xoxb-...`). Invite the bot to each channel it posts to
+   (`/invite @<bot>`): a channel the bot isn't in fails with `not_in_channel`.
+2. **Create the template** (Notifications, **New notification**, type Slack), or through the
+   API with the `slack` type:
+
+   ```json
+   {"name": "ops-slack", "organization": 1, "notification_type": "slack",
+    "notification_configuration": {"token": "xoxb-...", "channels": ["#ops", "#deploys, 1700000000.000100"], "hex_color": "#36a64f"}}
+   ```
+
+   - `channels`: one entry per channel, `#name` or a channel ID. `#name, <message ts>` posts
+     in the thread of that message: copy its link in Slack, and the ts is the number after
+     `/p`, with a dot before its last 6 digits.
+   - `hex_color`, optional: `#RGB` or `#RRGGBB` sends the message as an attachment with a
+     color bar. Another value is kept and, as in AWX, sends the message without a color.
+   - The token is stored encrypted and reads back as `$encrypted$`; send `$encrypted$` to keep
+     it.
+3. **Send a test** (**Send test**, or `POST notification_templates/N/test/`), then attach the
+   template to job templates, workflows, projects, inventory sources or organizations.
+
+A Slack message is the template's message (the subject of an email): AWX's defaults, such as
+`{{ job_friendly_name }} #{{ job.id }} '{{ job.name }}' {{ job.status }}: {{ url }}`, or the
+custom `messages`, which have no body. Each channel gets its own `chat.postMessage`. A channel
+Slack refuses fails the notification with Slack's error, such as `channel_not_found` or
+`invalid_auth`, under the template's **Deliveries**. Unlike AWX, which stops at that channel, the
+other channels still get the message.
+
+awxnext calls `https://slack.com/api/` directly: behind an egress proxy, set `HTTPS_PROXY` for the
+server, or let the server reach `slack.com` on port 443.
 
 ## Settings
 

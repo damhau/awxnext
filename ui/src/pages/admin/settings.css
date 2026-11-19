@@ -77,7 +77,6 @@
 .settings .icon-x { border: 1px solid transparent; background: none; color: var(--muted-2); border-radius: var(--radius); width: 26px; height: 26px; cursor: pointer; }
 .settings .icon-x:hover { border-color: var(--line); color: var(--ink); }
 .settings .chips { display: flex; flex-wrap: wrap; gap: 6px; max-width: 460px; }
-.settings .chips .add { font-family: var(--mono); font-size: 12px; border: 1px dashed var(--line-strong); border-radius: 4px; padding: 1px 8px; color: var(--muted-2); background: none; }
 
 /* Values to give somewhere else, with a copy button; secrets as set or not. */
 .settings .copyval { display: flex; align-items: center; gap: 6px; width: 100%; max-width: 460px; }
@@ -152,7 +151,6 @@
 
 /* A control for each kind of value: lists as chips or checkboxes, small
    forms, named records, LDAP searches, an image, read-only values. */
-.settings .chip-input { width: 140px; height: 26px; padding: 2px 8px; font-family: var(--mono); font-size: 12px; }
 .settings .checks { display: flex; flex-direction: column; gap: 6px; }
 .settings .checks code { margin-left: 6px; font-size: 11px; color: var(--muted-2); }
 .settings .s-list { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; width: 100%; }
@@ -186,7 +184,6 @@
 .settings .map-remove { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
 .settings .map-remove .segmented label { padding: 3px 10px; font-size: 12.5px; }
 .settings .chips.lines { max-width: 560px; }
-.settings .chips.lines .chip-input { width: 100%; max-width: 420px; }
 .settings .kv.kv-teams { grid-template-columns: repeat(3, minmax(0, 1fr)) auto; max-width: 560px; }
 
 /* Search: the settings found replace the menu, each with where it is. */

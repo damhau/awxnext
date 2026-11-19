@@ -23,6 +23,9 @@ const (
 	// AUTH_LDAP_BIND_PASSWORD "svc-pw", as AWX stores conf_setting 7.
 	awxBindPassword = "$encrypted$UTF8$AESCBC$Z0FBQUFBQnE0MS1YcTRRbnJyX1dxZXZqZVZUZWppbnBSX2NZY1R3SkZOQVVCcTVoOVVyZGRTWno0cGdXaFVVdjJJXzRlVkV4TDNaMzhwTWp5MU9GSXVaU3c3TWg3a0kxNUE9PQ=="
 	awxNotifySecret = "$encrypted$UTF8$AESCBC$Z0FBQUFBQnEzN2RWcVBOQ2lxODhwMHRjaTdSTDNyUDNxWmxDbU1kNHgzWGtLMDlySkh3R2ZjWnhFYlF1VzVZVVJMc1FFM25tNTN2UzdwSHdyUUs1Y3RoeDdBX0lHUUZIcUE9PQ=="
+	// Slack token "xoxb-slack-token" of notification template 8, made with
+	// AWX's algorithm (AES-256-CBC Fernet, key sha512(SECRET_KEY + pk + field)).
+	awxSlackToken = "$encrypted$UTF8$AESCBC$Z0FBQUFBQnFfd0ZxbmIyaG9lR0hwaWs3SHAxSy1ITXNEdllPSTVTcXVZanpzSkRUeHlHVXgxTC1ZNWQ2VDJ0ckVRTlhyWUFfdmdrVEpxZmNKa1FIa2k1cDFQaWlsUmhqLS1NbE1JSGtid0t0N0R4WGg0M1RGcm89"
 )
 
 const awxSchema = `
@@ -161,7 +164,7 @@ INSERT INTO main_schedule VALUES (1,'nightly','',true,'DTSTART;TZID=UTC:20240101
   (2,'Cleanup Job Schedule','',true,'DTSTART:20240101T000000Z RRULE:FREQ=WEEKLY;BYDAY=SA','{"days":"30"}',50,%[1]s,%[1]s,NULL,NULL,NULL,NULL,'{}'),
   (3,'broken','',true,'garbage','{}',20,%[1]s,%[1]s,1,1,NULL,NULL,'{}');
 INSERT INTO main_notificationtemplate VALUES (7,'hook','',1,'webhook','{"url":"https://example.com/hook","username":"u","password":"%[6]s","http_method":"POST","headers":{},"disable_ssl_verification":false}',NULL,%[1]s,%[1]s,1,1),
-  (8,'slack','',1,'slack','{"token":"x","channels":["#a"]}',NULL,%[1]s,%[1]s,1,1),
+  (8,'slack','',1,'slack','{"token":"%[7]s","channels":["#a","#b, 1700000000.000100"],"hex_color":"#36a64f"}',NULL,%[1]s,%[1]s,1,1),
   (9,'mail','',1,'email','{"host":"smtp.example.com","port":587,"username":"","password":"","use_tls":true,"use_ssl":false,"sender":"awx@example.com","recipients":["ops@example.com"],"timeout":30}',NULL,%[1]s,%[1]s,1,1);
 INSERT INTO main_unifiedjobtemplate_notification_templates_error (unifiedjobtemplate_id, notificationtemplate_id) VALUES (20,9);
 INSERT INTO main_unifiedjobtemplate_notification_templates_started (unifiedjobtemplate_id, notificationtemplate_id) VALUES (20,9);
@@ -177,7 +180,7 @@ INSERT INTO main_rbac_roles_members (role_id, user_id) VALUES (100,2),(102,3),(1
 INSERT INTO dab_rbac_roledefinition VALUES (1,'Team Member'),(31,'System Auditor');
 INSERT INTO dab_rbac_roleuserassignment VALUES (1,31,4),(2,1,5);
 INSERT INTO main_rbac_roles_parents (from_role_id, to_role_id) VALUES (103,100),(103,102),(104,100),(104,102),(102,101);
-`, ts, org, alicePW, awxCredSecret, awxSurveySecret, awxNotifySecret)
+`, ts, org, alicePW, awxCredSecret, awxSurveySecret, awxNotifySecret, awxSlackToken)
 }
 
 func djangoHash(pw string) string {
@@ -238,7 +241,7 @@ func TestImportAWX(t *testing.T) {
 		t.Errorf("imported group members: %v", m)
 	}
 	warnings := strings.Join(rep.Warnings, "\n")
-	for _, w := range []string{`user "admin" already exists`, "svn projects are not supported", "slack notifications are not supported",
+	for _, w := range []string{`user "admin" already exists`, "svn projects are not supported",
 		`execution environment "AWX EE (latest)" already exists with the image`,
 		`schedule "broken" imported disabled`, "setting RADIUS_SERVER skipped: not supported", "setting AUTH_LDAP_GROUP_TYPE_PARAMS skipped: Invalid key(s): \"colour\"."} {
 		if !strings.Contains(warnings, w) {
@@ -401,8 +404,17 @@ func TestImportAWX(t *testing.T) {
 	}
 
 	nts := a.get(fmt.Sprintf("notification_templates/?organization=%d&order_by=name", orgID)).results()
-	if len(nts) != 2 || nts[0]["notification_configuration"].(map[string]any)["password"] != "$encrypted$" {
+	if len(nts) != 3 || nts[0]["notification_configuration"].(map[string]any)["password"] != "$encrypted$" {
 		t.Fatalf("notification templates: %v", nts)
+	}
+	if slack := nts[2]; slack["notification_type"] != "slack" || fmt.Sprint(slack["notification_configuration"]) !=
+		"map[channels:[#a #b, 1700000000.000100] hex_color:#36a64f token:$encrypted$]" {
+		t.Fatalf("Slack notification template: %v", slack)
+	}
+	var token string
+	app.DB.QueryRow(ctx, "SELECT notification_configuration->>'token' FROM notification_templates WHERE id = $1", nts[2]["id"]).Scan(&token)
+	if plain, err := app.Crypto.Decrypt(token); err != nil || plain != "xoxb-slack-token" {
+		t.Fatalf("Slack token: %q %v", plain, err)
 	}
 	if mail := nts[1]; mail["notification_type"] != "email" || fmt.Sprint(mail["notification_configuration"]) !=
 		"map[host:smtp.example.com password: port:587 recipients:[ops@example.com] sender:awx@example.com timeout:30 use_ssl:false use_tls:true username:]" {

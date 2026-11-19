@@ -1387,12 +1387,13 @@ func (e *RuleEngine) planNotify(c *Ctx, r *eventRule, members []member, vars rul
 		}
 		msg = v
 	}
-	// An email's body is text; a webhook's is the message when it is an
-	// object, else the message with the rule and the event.
+	// An email's body is text, and Slack posts its subject; a webhook's body
+	// is the message when it is an object, else the message with the rule
+	// and the event.
 	var body any = about
 	text, isText := msg.(string)
 	switch {
-	case typ == "email" && isText:
+	case (typ == "email" || typ == "slack") && isText:
 		subject, body = text, text
 	case typ == "email":
 		b, _ := json.MarshalIndent(about, "", "  ")

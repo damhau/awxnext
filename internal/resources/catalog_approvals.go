@@ -538,7 +538,7 @@ func mailUsers(c *Ctx, template any, job *int64, users []int64, subject, body st
 		slog.Warn("catalog request email", "notification_template", nt, "err", err)
 		return
 	}
-	c.App.DB.Exec(c, "UPDATE notifications SET addresses = $2, recipients = $3 WHERE id = $1", id, addrs, emailRecipients(Obj{"recipients": toAnyList(addrs)}))
+	c.App.DB.Exec(c, "UPDATE notifications SET addresses = $2, recipients = $3 WHERE id = $1", id, addrs, listRecipients(Obj{"recipients": toAnyList(addrs)}, "recipients"))
 	go deliver(context.Background(), c.App, id)
 }
 

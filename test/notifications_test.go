@@ -64,7 +64,7 @@ func TestWebhookNotifications(t *testing.T) {
 	a := f.a
 	rec, hook := newHookServer(t)
 
-	must(t, a.post("notification_templates/", map[string]any{"name": "x", "organization": f.org, "notification_type": "slack",
+	must(t, a.post("notification_templates/", map[string]any{"name": "x", "organization": f.org, "notification_type": "twilio",
 		"notification_configuration": map[string]any{"url": hook.URL}}), 400)
 	must(t, a.post("notification_templates/", map[string]any{"name": "x", "organization": f.org, "notification_type": "webhook",
 		"notification_configuration": map[string]any{"url": "ftp://x"}}), 400)

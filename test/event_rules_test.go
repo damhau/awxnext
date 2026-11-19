@@ -234,6 +234,16 @@ func TestEventRuleNotify(t *testing.T) {
 	if got := decisions(t, a, rid); !slices.Equal(got, []string{"1 notified"}) {
 		t.Errorf("decisions %v", got)
 	}
+
+	// Slack posts a text message as it is.
+	slack := newFakeSlack(t)
+	snt := newSlackTemplate(t, a, org, map[string]any{"token": slackToken, "channels": []any{"#alerts"}}, nil)
+	must(t, a.post("event_rules/", map[string]any{"name": uniq("tell"), "organization": org, "streams": []int64{am.id}, "mode": "auto",
+		"filter": "true", "action": "notify", "notification_template": snt, "message": `event.data.annotations.summary + " (Slack)"`}), 201)
+	am.alert(t, 1, testAlert{"DiskFull", "web-02", "2026-11-15T08:05:00Z", "f2"})
+	if p := slack.take(t, 1)[0]; fmt.Sprint(p.Body) != "map[as_user:true channel:alerts text:DiskFull on web-02 (Slack)]" {
+		t.Errorf("Slack post: %v", p.Body)
+	}
 }
 
 // A rule's expressions are compiled and type-checked against the schema
@@ -336,7 +346,7 @@ func TestEventRuleRights(t *testing.T) {
 	}
 
 	must(t, a.delete(fmt.Sprintf("role_user_assignments/%d/", asg)), 204)
-	am.alert(t, 2, testAlert{"DiskFull", "web-02", "2026-11-15T08:01:00Z", "f2"}, testAlert{"DiskFull", "web-03", "2026-11-15T08:02:00Z", "f3"})
+	am.alert(t, 1, testAlert{"DiskFull", "web-02", "2026-11-15T08:01:00Z", "f2"}, testAlert{"DiskFull", "web-03", "2026-11-15T08:02:00Z", "f3"})
 	waitRules(t, am.id)
 	if n := len(ruleJobs(t, a, rid)); n != 1 {
 		t.Errorf("%d jobs after the right was revoked", n)

@@ -5,7 +5,7 @@ import type { Ref } from '../api/types'
 import { moveEarlier } from '../lib/relations'
 import { Icon } from './icons'
 import { tr } from '../lib/i18n'
-import { ENCRYPTED } from '../lib/settingValues'
+import { addItems, ENCRYPTED } from '../lib/settingValues'
 
 export function Field({
   label,
@@ -595,6 +595,81 @@ export function SecretControl({ id, value, saved, onChange, disabled, lines }: {
       >
         {tr('Keep the one set')}
       </button>
+    </div>
+  )
+}
+
+/** A list of words or paths, as chips. */
+export function ChipsControl({
+  id,
+  value,
+  onChange,
+  disabled,
+  lines,
+  placeholder,
+  as,
+}: {
+  id: string
+  value: unknown
+  onChange: (v: unknown) => void
+  disabled: boolean
+  /** One item per line: distinguished names and patterns have commas. */
+  lines?: boolean
+  placeholder?: string
+  /** How an item typed is stored (a pattern between slashes). */
+  as?: (s: string) => string
+}) {
+  const list = Array.isArray(value) ? value.map(String) : []
+  const add = (t: string) => [...new Set(addItems(list, t, lines).map(as ?? ((x) => x)))]
+  const [text, setText] = useState('')
+  const [all, setAll] = useState(false)
+  const shown = all ? list : list.slice(0, 12)
+  const commit = () => {
+    if (!text.trim()) return
+    onChange(add(text))
+    setText('')
+  }
+  return (
+    <div className={`chips${lines ? ' lines' : ''}`}>
+      {shown.map((x) => (
+        <span key={x} className="chip">
+          {x}
+          {!disabled && (
+            <button type="button" aria-label={tr('Remove {item}', { item: x })} onClick={() => onChange(list.filter((y) => y !== x))}>
+              ×
+            </button>
+          )}
+        </span>
+      ))}
+      {list.length > shown.length && (
+        <button type="button" className="add" onClick={() => setAll(true)}>
+          {tr('+ {n} more', { n: list.length - shown.length })}
+        </button>
+      )}
+      {!list.length && disabled && <span className="note">{tr('None.')}</span>}
+      {!disabled && (
+        <input
+          id={id}
+          className="input chip-input"
+          value={text}
+          placeholder={placeholder ?? tr('Add…')}
+          onChange={(e) => setText(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || (e.key === ',' && !lines)) {
+              e.preventDefault()
+              commit()
+            }
+          }}
+          onPaste={(e) => {
+            const t = e.clipboardData.getData('text')
+            if (!(lines ? /\n/ : /[\n,]/).test(t)) return
+            e.preventDefault()
+            onChange(add(text + t))
+            setText('')
+          }}
+        />
+      )}
     </div>
   )
 }

@@ -1203,7 +1203,11 @@ func (i *imp) schedules() error {
 var notificationKeys = map[string][]string{
 	"webhook": {"url", "username", "password", "http_method", "headers", "disable_ssl_verification"},
 	"email":   {"host", "port", "username", "password", "use_tls", "use_ssl", "sender", "recipients", "timeout"},
+	"slack":   {"token", "channels", "hex_color"},
 }
+
+// notificationSecret is each type's encrypted configuration key.
+var notificationSecret = map[string]string{"webhook": "password", "email": "password", "slack": "token"}
 
 func (i *imp) notifications() error {
 	rows, err := i.query(`SELECT t.id, t.name, t.description, t.organization_id, t.notification_type, t.notification_configuration, t.created, t.modified,
@@ -1216,7 +1220,7 @@ func (i *imp) notifications() error {
 		typ := str(r["notification_type"])
 		keys, ok := notificationKeys[typ]
 		if !ok {
-			i.warn("notification template %q skipped: %s notifications are not supported (email and webhook only)", r["name"], typ)
+			i.warn("notification template %q skipped: %s notifications are not supported (email, Slack and webhook only)", r["name"], typ)
 			continue
 		}
 		org := i.ref("organizations", r["organization_id"])
@@ -1230,12 +1234,12 @@ func (i *imp) notifications() error {
 				clean[k] = v
 			}
 		}
-		if p, ok := clean["password"].(string); ok && p != "" {
+		if p, ok := clean[notificationSecret[typ]].(string); ok && p != "" {
 			enc, err := i.reencrypt(&old, "notification_configuration", p)
 			if err != nil {
 				return fmt.Errorf("notification template %q: %w", r["name"], err)
 			}
-			clean["password"] = enc
+			clean[notificationSecret[typ]] = enc
 		}
 		if m, _ := clean["http_method"].(string); m == "" && typ == "webhook" {
 			clean["http_method"] = "POST"

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildMessages, emailConfig, emailValues, hasCustomMessages, messageEntries, parseRecipients, securityOf } from './notifications'
+import { buildMessages, emailConfig, emailValues, hasCustomMessages, isSlackColor, messageEntries, parseRecipients, securityOf, slackChannel, slackConfig, slackValues } from './notifications'
 
 describe('email settings', () => {
   it('reads the security mode from use_tls and use_ssl', () => {
@@ -21,6 +21,24 @@ describe('email settings', () => {
   })
 })
 
+describe('Slack settings', () => {
+  it('round-trips a configuration, with hex_color only when set', () => {
+    const cfg = { token: '$encrypted$', channels: ['#ops', '#dev, 1700000000.000100'], hex_color: '#36a64f' }
+    expect(slackConfig(slackValues(cfg))).toEqual(cfg)
+    expect(slackConfig({ ...slackValues(cfg), color: ' ' })).toEqual({ token: '$encrypted$', channels: cfg.channels })
+  })
+  it('accepts the colors Slack shows', () => {
+    expect(['#36a64f', '#F00', ' #abc '].every(isSlackColor)).toBe(true)
+    expect(['36a64f', '#36a64', '#ggg', 'red', ''].some(isSlackColor)).toBe(false)
+  })
+  it('reads a channel and its thread as the server does', () => {
+    expect(slackChannel('#ops')).toEqual({ channel: 'ops', thread: '' })
+    expect(slackChannel(' #ops, 1700000000.000100 ')).toEqual({ channel: 'ops', thread: '1700000000.000100' })
+    expect(slackChannel('C0123ABC')).toEqual({ channel: 'C0123ABC', thread: '' })
+    for (const bad of ['#', '', '#ops, 1, 2', '#my ops', '##ops']) expect(slackChannel(bad)).toBeNull()
+  })
+})
+
 describe('custom messages', () => {
   const saved = {
     success: { message: '{{ job.name }} ok', body: null },
@@ -37,6 +55,11 @@ describe('custom messages', () => {
     expect(buildMessages('email', messageEntries(saved))).toEqual({
       success: { message: '{{ job.name }} ok', body: null },
       workflow_approval: { running: { message: null, body: 'Review {{ workflow_url }}' } },
+    })
+  })
+  it('keeps only the message for Slack, which has no body', () => {
+    expect(buildMessages('slack', { started: { subject: ' {{ job.name }} started ', body: 'ignored' }, error: { subject: '', body: 'ignored' } })).toEqual({
+      started: { message: '{{ job.name }} started', body: null },
     })
   })
   it('drops subjects for webhooks and returns null when nothing is set', () => {

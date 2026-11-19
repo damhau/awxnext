@@ -537,6 +537,9 @@ pre.code {
 
 /* ---------- quick-view chips ---------- */
 .chips { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.chips .add { font-family: var(--mono); font-size: 12px; border: 1px dashed var(--line-strong); border-radius: 4px; padding: 1px 8px; color: var(--muted-2); background: none; }
+.chip-input { width: 140px; height: 26px; padding: 2px 8px; font-family: var(--mono); font-size: 12px; }
+.chips.lines .chip-input { width: 100%; max-width: 420px; }
 .qchip {
   display: inline-flex; align-items: center; height: 30px; border: 1px solid var(--line-strong); background: var(--surface);
   border-radius: 999px; color: var(--ink-3); font-size: 12.5px; font-weight: 500; white-space: nowrap;

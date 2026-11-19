@@ -8,7 +8,7 @@ import { useOrg, usePreselectOrg } from '../../app/context'
 import { AccessTab } from '../../components/access/Access'
 import { useCopy } from '../../components/CopyDialog'
 import { notificationEvents } from '../../components/NotificationsTab'
-import { Check, Field, FormError, Lookup, SelectField, TextArea, TextInput, useForm } from '../../components/form'
+import { Check, ChipsControl, Field, FormError, Lookup, SelectField, TextArea, TextInput, useForm } from '../../components/form'
 import { Icon } from '../../components/icons'
 import { Menu, useToast } from '../../components/overlay'
 import { DataTable } from '../../components/table'
@@ -20,18 +20,24 @@ import {
   emailConfig,
   emailValues,
   hasCustomMessages,
+  isSlackColor,
   MESSAGE_EVENTS,
   messageEntries,
   parseRecipients,
   securityOf,
+  slackChannel,
+  slackConfig,
+  slackValues,
   type EmailConfig,
   type EmailValues,
   type MessageEntry,
   type Messages,
   type Security,
+  type SlackConfig,
+  type SlackValues,
 } from '../../lib/notifications'
 import { ListPage, useDelete } from './common'
-import { tr } from '../../lib/i18n'
+import { asIs, tr } from '../../lib/i18n'
 
 interface WebhookConfig {
   url?: string
@@ -45,7 +51,7 @@ interface WebhookConfig {
 type NT = Base & {
   organization: number
   notification_type: string
-  notification_configuration: WebhookConfig & EmailConfig
+  notification_configuration: WebhookConfig & EmailConfig & SlackConfig
   messages: Messages
   managed_by?: string
 }
@@ -56,6 +62,7 @@ const SECURITY_LABEL: Record<Security, string> = { starttls: 'STARTTLS', ssl: 'T
 function destination(n: NT): string {
   const cfg = n.notification_configuration ?? {}
   if (n.notification_type === 'email') return `Email to ${(cfg.recipients ?? []).join(', ')}`
+  if (n.notification_type === 'slack') return `Slack to ${(cfg.channels ?? []).join(' · ')}`
   return `${cfg.http_method ?? 'POST'} ${cfg.url ?? ''}`
 }
 
@@ -97,7 +104,7 @@ export function NotificationList() {
   return (
     <ListPage<NT>
       title={tr('Notifications')}
-      subtitle={tr('Emails and webhooks sent when jobs start, succeed or fail, and when approvals need a decision.')}
+      subtitle={tr('Emails, Slack messages and webhooks sent when jobs start, succeed or fail, and when approvals need a decision.')}
       path="notification_templates/"
       params={scope}
       placeholder={tr('Filter notification templates…')}
@@ -143,7 +150,7 @@ export function NotificationList() {
           ),
         },
       ]}
-      empty={<Empty title={tr('No notifications yet')}>{tr('Create an email or a webhook, then attach it to templates, projects or organizations.')}</Empty>}
+      empty={<Empty title={tr('No notifications yet')}>{tr('Create an email, a Slack message or a webhook, then attach it to templates, projects or organizations.')}</Empty>}
     >
       {copy.dialog}
     </ListPage>
@@ -174,6 +181,7 @@ export function NotificationDetail() {
   const base = `/notifications/${id}`
   const custom = hasCustomMessages(n.messages)
   const isEmail = n.notification_type === 'email'
+  const isSlack = n.notification_type === 'slack'
   return (
     <div className="page">
       {copy.dialog}
@@ -220,9 +228,16 @@ export function NotificationDetail() {
             element={
               <div className="split">
                 <div className="wide">
-                  <Panel title={isEmail ? tr('Email') : tr('Webhook')}>
+                  <Panel title={isEmail ? tr('Email') : isSlack ? tr('Slack') : tr('Webhook')}>
                     <KV
-                      items={isEmail ? [
+                      items={isSlack ? [
+                        [tr('Channels'), <span className="chips">{(cfg.channels ?? []).map((c) => <span key={c} className="chip">{c}</span>)}</span>],
+                        [tr('Token'), cfg.token ? tr('Set') : <span className="fail-text">{tr('Not set')}</span>],
+                        [tr('Color'), cfg.hex_color ? <SlackColor color={cfg.hex_color} /> : <span className="faint">{tr('None')}</span>],
+                        [tr('Messages'), custom ? tr('Custom') : tr('Default messages')],
+                        [tr('Organization'), <Link to={`/organizations/${n.organization}`}>{n.summary_fields.organization?.name}</Link>],
+                        [tr('Changed'), <Ago at={n.modified} />],
+                      ] : isEmail ? [
                         [tr('Server'), <span className="mono">{cfg.host}:{cfg.port}</span>],
                         [tr('Security'), SECURITY_LABEL[securityOf(cfg)]],
                         [tr('Sender'), <span className="mono">{cfg.sender}</span>],
@@ -257,6 +272,16 @@ export function NotificationDetail() {
         </Routes>
       </div>
     </div>
+  )
+}
+
+function SlackColor({ color }: { color: string }) {
+  if (!isSlackColor(color)) return <span className="mono">{color} <span className="faint">{tr('· not #RGB or #RRGGBB: sent without a color')}</span></span>
+  return (
+    <span className="row" style={{ gap: 6 }}>
+      <span aria-hidden style={{ width: 12, height: 12, borderRadius: 3, background: color, border: '1px solid var(--line)' }} />
+      <span className="mono">{color}</span>
+    </span>
   )
 }
 
@@ -300,6 +325,7 @@ interface NTValues extends Record<string, unknown> {
   password: string
   disable_ssl_verification: boolean
   email: EmailValues
+  slack: SlackValues
   custom: boolean
   entries: Record<string, MessageEntry>
 }
@@ -309,18 +335,20 @@ function NTForm({ nt }: { nt?: NT }) {
   const { org } = useOrg()
   const cfg = nt?.notification_configuration ?? {}
   const wasEmail = nt?.notification_type === 'email'
+  const wasSlack = nt?.notification_type === 'slack'
   const f = useForm<NTValues>({
     name: nt?.name ?? '',
     description: nt?.description ?? '',
     organization: nt?.summary_fields.organization ?? org,
     type: nt?.notification_type ?? 'email',
-    url: wasEmail ? '' : cfg.url ?? '',
+    url: wasEmail || wasSlack ? '' : cfg.url ?? '',
     http_method: cfg.http_method ?? 'POST',
     headers: Object.entries(cfg.headers ?? {}),
-    username: wasEmail ? '' : cfg.username ?? '',
-    password: wasEmail ? '' : cfg.password ?? '',
+    username: wasEmail || wasSlack ? '' : cfg.username ?? '',
+    password: wasEmail || wasSlack ? '' : cfg.password ?? '',
     disable_ssl_verification: !!cfg.disable_ssl_verification,
     email: emailValues(wasEmail ? cfg : {}),
+    slack: slackValues(wasSlack ? cfg : {}),
     custom: hasCustomMessages(nt?.messages ?? null),
     entries: messageEntries(nt?.messages ?? null),
   })
@@ -329,11 +357,19 @@ function NTForm({ nt }: { nt?: NT }) {
   const [busy, setBusy] = useState(false)
   const invalidate = useInvalidate()
   const isEmail = f.values.type === 'email'
+  const isSlack = f.values.type === 'slack'
   const e = f.values.email
+  const sl = f.values.slack
   const setEmail = (patch: Partial<EmailValues>) => f.set('email', { ...f.values.email, ...patch })
+  const setSlack = (patch: Partial<SlackValues>) => f.set('slack', { ...f.values.slack, ...patch })
+  const badChannels = sl.channels.filter((c) => !slackChannel(c))
   const setEntry = (key: string, patch: Partial<MessageEntry>) =>
     f.set('entries', { ...f.values.entries, [key]: { ...(f.values.entries[key] ?? { subject: '', body: '' }), ...patch } })
-  const ready = isEmail ? !!e.host.trim() && !!e.sender.trim() && parseRecipients(e.recipients).length > 0 : !!f.values.url.trim()
+  const ready = isEmail
+    ? !!e.host.trim() && !!e.sender.trim() && parseRecipients(e.recipients).length > 0
+    : isSlack
+      ? !!sl.token && sl.channels.length > 0 && !badChannels.length
+      : !!f.values.url.trim()
   const save = async () => {
     setBusy(true)
     setError(null)
@@ -346,7 +382,9 @@ function NTForm({ nt }: { nt?: NT }) {
       notification_type: f.values.type,
       notification_configuration: isEmail
         ? emailConfig(e)
-        : {
+        : isSlack
+          ? slackConfig(sl)
+          : {
             url: f.values.url,
             http_method: f.values.http_method,
             headers,
@@ -388,6 +426,7 @@ function NTForm({ nt }: { nt?: NT }) {
           onChange={(v) => f.set('type', v)}
           options={[
             ['email', tr('Email')],
+            ['slack', tr('Slack')],
             ['webhook', tr('Webhook')],
           ]}
           error={f.errors.notification_type}
@@ -418,6 +457,48 @@ function NTForm({ nt }: { nt?: NT }) {
           </div>
           {e.security === 'none' && e.username && <div className="help">{tr('Without STARTTLS or TLS, the password crosses the network unencrypted.')}</div>}
           {f.errors.notification_configuration && <div className="form-error">{f.errors.notification_configuration}</div>}
+        </section>
+      ) : isSlack ? (
+        <section className="form-section">
+          <h2>{tr('Slack')}</h2>
+          <div className="form-grid">
+            <TextInput
+              label={tr('Bot token')}
+              type="password"
+              mono
+              value={sl.token}
+              onChange={(v) => setSlack({ token: v })}
+              placeholder={asIs('xoxb-…')}
+              help={nt && wasSlack && cfg.token ? tr('Stored encrypted; leave as is to keep it.') : tr('A bot token with the chat:write scope. Invite the bot to each channel.')}
+            />
+            <Field
+              label={tr('Color')}
+              optional
+              htmlFor="slack-color"
+              error={sl.color.trim() && !isSlackColor(sl.color) ? tr('#RGB or #RRGGBB, or Slack sends the message without a color.') : undefined}
+              help={tr('Sends the message as an attachment with this color bar.')}
+            >
+              <div className="row" style={{ gap: 6 }}>
+                <input id="slack-color" className="input mono" value={sl.color} placeholder={asIs('#36a64f')} onChange={(ev) => setSlack({ color: ev.target.value })} />
+                <input
+                  type="color"
+                  aria-label={tr('Pick a color')}
+                  value={isSlackColor(sl.color) && sl.color.trim().length === 7 ? sl.color.trim() : '#36a64f'}
+                  onChange={(ev) => setSlack({ color: ev.target.value })}
+                  style={{ width: 36, height: 32, padding: 2, border: '1px solid var(--line)', borderRadius: 4, background: 'none' }}
+                />
+              </div>
+            </Field>
+            <Field
+              label={tr('Channels')}
+              full
+              htmlFor="slack-channels"
+              error={badChannels.length ? tr('Not a channel: {list}. Write #name, or #name, <message ts>.', { list: badChannels.join('; ') }) : f.errors.notification_configuration}
+              help={tr('One per line, as #name or a channel ID. To reply in a thread, add the message’s ts after a comma: #ops, 1700000000.000100.')}
+            >
+              <ChipsControl id="slack-channels" lines value={sl.channels} onChange={(v) => setSlack({ channels: v as string[] })} disabled={false} placeholder={asIs('#ops')} />
+            </Field>
+          </div>
         </section>
       ) : (
         <section className="form-section">
@@ -453,20 +534,23 @@ function NTForm({ nt }: { nt?: NT }) {
       <section className="form-section">
         <h2>{tr('Messages')}</h2>
         <Check
-          label={isEmail ? tr('Customize the subject and body per event') : tr('Customize the request body per event')}
+          label={isEmail ? tr('Customize the subject and body per event') : isSlack ? tr('Customize the message per event') : tr('Customize the request body per event')}
           checked={f.values.custom}
           onChange={(v) => f.set('custom', v)}
           help={
             <>
-              {isEmail ? tr('Subjects and bodies') : tr('Bodies')} {tr('are templates:')} <span className="mono">{tr('{{ job.name }}')}</span>, <span className="mono">{tr('{{ job.status }}')}</span>, <span className="mono">{tr('{{ url }}')}</span>,{' '}
-              <span className="mono">{tr('{{ job_metadata }}')}</span>, <span className="mono">{tr('{{ approval_node_name }}')}</span>. {isEmail ? tr('Empty fields use the default subject and body.') : tr('Empty events use the default JSON body.')}
+              {isEmail ? tr('Subjects and bodies') : isSlack ? tr('Messages') : tr('Bodies')} {tr('are templates:')} <span className="mono">{tr('{{ job.name }}')}</span>, <span className="mono">{tr('{{ job.status }}')}</span>, <span className="mono">{tr('{{ url }}')}</span>,{' '}
+              <span className="mono">{tr('{{ job_metadata }}')}</span>, <span className="mono">{tr('{{ approval_node_name }}')}</span>.{' '}
+              {isEmail ? tr('Empty fields use the default subject and body.') : isSlack ? tr('Empty events use the default message.') : tr('Empty events use the default JSON body.')}
             </>
           }
         />
         {f.values.custom && (
           <div className="form-grid">
             {MESSAGE_EVENTS.map((ev) =>
-              isEmail ? (
+              isSlack ? (
+                <TextInput key={ev.key} label={ev.label} optional mono value={f.values.entries[ev.key]?.subject ?? ''} onChange={(v) => setEntry(ev.key, { subject: v })} />
+              ) : isEmail ? (
                 <div key={ev.key} className="stack" style={{ gap: 6 }}>
                   <TextInput label={ev.label} optional mono value={f.values.entries[ev.key]?.subject ?? ''} onChange={(v) => setEntry(ev.key, { subject: v })} placeholder={tr('Subject')} />
                   <TextArea label={<span className="sr-only">{ev.label} {tr('body')}</span>} mono rows={4} value={f.values.entries[ev.key]?.body ?? ''} onChange={(v) => setEntry(ev.key, { body: v })} />

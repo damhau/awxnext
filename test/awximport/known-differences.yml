@@ -38,9 +38,6 @@ differences:
     reason: A prompt without a value is "", not null. A launch treats both as no value.
   - match: workflow_job_templates/*/scm_branch
     reason: A prompt without a value is "", not null. A launch treats both as no value.
-  # Not supported.
-  - match: notification_templates/Acme/ops-slack
-    reason: awxnext sends email and webhook notifications only, and the import warns about the others.
 warnings:
   - match: user "admin" already exists*
     reason: The install creates admin, and an account that exists stays as it is.
@@ -48,5 +45,3 @@ warnings:
     reason: The install creates Default, as AWX does, and AWX's merges into it.
   - match: execution environment "AWX EE (latest)" already exists *
     reason: The install creates this one. It keeps its image.
-  - match: notification template "ops-slack" skipped*
-    reason: awxnext sends email and webhook notifications only.

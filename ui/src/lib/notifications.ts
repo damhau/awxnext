@@ -1,5 +1,5 @@
 import { asIs, tr } from './i18n'
-/** Notification template forms: email settings and custom messages per event. */
+/** Notification template forms: email and Slack settings, and custom messages per event. */
 
 export type Security = 'none' | 'starttls' | 'ssl'
 
@@ -72,6 +72,46 @@ export function emailConfig(v: EmailValues): EmailConfig {
   }
 }
 
+export interface SlackConfig {
+  token?: string
+  channels?: string[]
+  hex_color?: string
+}
+
+export interface SlackValues {
+  token: string
+  channels: string[]
+  color: string
+}
+
+export function slackValues(cfg: SlackConfig): SlackValues {
+  return { token: cfg.token ?? '', channels: cfg.channels ?? [], color: cfg.hex_color ?? '' }
+}
+
+/** The notification_configuration a Slack form sends; hex_color only when set, as AWX stores it. */
+export function slackConfig(v: SlackValues): SlackConfig {
+  const cfg: SlackConfig = { token: v.token, channels: v.channels }
+  if (v.color.trim()) cfg.hex_color = v.color.trim()
+  return cfg
+}
+
+/** Whether Slack colors a message with this: #RGB or #RRGGBB. AWX sends any other value without a color. */
+export function isSlackColor(c: string): boolean {
+  return /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(c.trim())
+}
+
+/** A Slack destination as the server reads it: #name, or #name, <message ts> for a thread. */
+export function slackChannel(s: string): { channel: string; thread: string } | null {
+  const [channel, thread = '', ...rest] = s.trim().replace(/^#/, '').split(',')
+  const name = channel.trim()
+  if (!name || /[\s#]/.test(name) || rest.length) return null
+  return { channel: name, thread: thread.trim() }
+}
+
+/** Whether a type's messages have a subject, and a body. */
+export const hasSubject = (type: string) => type === 'email' || type === 'slack'
+export const hasBody = (type: string) => type !== 'slack'
+
 export type Message = { message?: string | null; body?: string | null } | null
 export type Messages = {
   started?: Message
@@ -119,15 +159,15 @@ export function messageEntries(m: Messages): Record<string, MessageEntry> {
 
 /**
  * The messages to save: an event's subject and body when set (webhooks have
- * no subject), or null when nothing is customized.
+ * no subject, Slack no body), or null when nothing is customized.
  */
 export function buildMessages(type: string, entries: Record<string, MessageEntry>): Messages {
   const m: Record<string, unknown> = {}
   const wa: Record<string, unknown> = {}
   for (const e of MESSAGE_EVENTS) {
     const entry = entries[e.key]
-    const subject = type === 'email' ? entry?.subject.trim() : ''
-    const body = entry?.body.trim()
+    const subject = hasSubject(type) ? entry?.subject.trim() : ''
+    const body = hasBody(type) ? entry?.body.trim() : ''
     if (!subject && !body) continue
     const msg = { message: subject || null, body: body || null }
     if (e.group) wa[e.key] = msg

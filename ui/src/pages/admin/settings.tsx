@@ -5,7 +5,7 @@ import { api, ApiError, getAll } from '../../api/client'
 import { useInvalidate, useObject } from '../../api/hooks'
 import type { FieldMeta, OptionsMeta, Ref } from '../../api/types'
 import { useSession } from '../../app/context'
-import { FormError, ImagePicker, Picker, SecretControl } from '../../components/form'
+import { ChipsControl, FormError, ImagePicker, Picker, SecretControl } from '../../components/form'
 import { Icon } from '../../components/icons'
 import { useConfirm, useLeaveGuard, useToast } from '../../components/overlay'
 import { Empty, ErrorNote, Loading, PageHead, Panel } from '../../components/ui'
@@ -51,7 +51,6 @@ import {
 import { aggregatorTarget, testOutcome } from '../../lib/logging'
 import { storageCredentialParams, storageOfCredential } from '../../lib/jobSettings'
 import {
-  addItems,
   amountText,
   amountValue,
   bestUnit,
@@ -1002,81 +1001,6 @@ function useDraft<T>(value: unknown, parse: (v: unknown) => T[], format: (rows: 
     if (!same(v, value)) onChange(v)
   }
   return [rows, update] as const
-}
-
-/** A list of words or paths, as chips. */
-function ChipsControl({
-  id,
-  value,
-  onChange,
-  disabled,
-  lines,
-  placeholder,
-  as,
-}: {
-  id: string
-  value: unknown
-  onChange: (v: unknown) => void
-  disabled: boolean
-  /** One item per line: distinguished names and patterns have commas. */
-  lines?: boolean
-  placeholder?: string
-  /** How an item typed is stored (a pattern between slashes). */
-  as?: (s: string) => string
-}) {
-  const list = Array.isArray(value) ? value.map(String) : []
-  const add = (t: string) => [...new Set(addItems(list, t, lines).map(as ?? ((x) => x)))]
-  const [text, setText] = useState('')
-  const [all, setAll] = useState(false)
-  const shown = all ? list : list.slice(0, 12)
-  const commit = () => {
-    if (!text.trim()) return
-    onChange(add(text))
-    setText('')
-  }
-  return (
-    <div className={`chips${lines ? ' lines' : ''}`}>
-      {shown.map((x) => (
-        <span key={x} className="chip">
-          {x}
-          {!disabled && (
-            <button type="button" aria-label={tr('Remove {item}', { item: x })} onClick={() => onChange(list.filter((y) => y !== x))}>
-              ×
-            </button>
-          )}
-        </span>
-      ))}
-      {list.length > shown.length && (
-        <button type="button" className="add" onClick={() => setAll(true)}>
-          {tr('+ {n} more', { n: list.length - shown.length })}
-        </button>
-      )}
-      {!list.length && disabled && <span className="note">{tr('None.')}</span>}
-      {!disabled && (
-        <input
-          id={id}
-          className="input chip-input"
-          value={text}
-          placeholder={placeholder ?? tr('Add…')}
-          onChange={(e) => setText(e.target.value)}
-          onBlur={commit}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' || (e.key === ',' && !lines)) {
-              e.preventDefault()
-              commit()
-            }
-          }}
-          onPaste={(e) => {
-            const t = e.clipboardData.getData('text')
-            if (!(lines ? /\n/ : /[\n,]/).test(t)) return
-            e.preventDefault()
-            onChange(add(text + t))
-            setText('')
-          }}
-        />
-      )}
-    </div>
-  )
 }
 
 /** A list of known items, each one on or off, in the options' order. */

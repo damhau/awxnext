@@ -4,7 +4,7 @@
 cli: {}
 collection:
   "application": "out of scope: OAuth2 applications (ROADMAP, Proposed out of scope)"
-  "notification_template": "out of scope: Slack and other notification types (ROADMAP, Proposed out of scope)"
+  "notification_template": "out of scope: Twilio, PagerDuty and IRC notifications (ROADMAP, Proposed out of scope); its email, Slack and webhook steps pass"
 eda: {}
 terraform:
   "TestAccGroupResource": "not an awxnext gap: Terraform wraps the expected message across lines; awxnext returns AWX's text"

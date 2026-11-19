@@ -8,7 +8,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"math"
 	"mime"
 	"mime/quotedprintable"
 	"net"
@@ -27,21 +26,17 @@ import (
 // with STARTTLS (use_tls) or over TLS from the start (use_ssl), logging in
 // when a username and password are set.
 
-// emailFields are AWX's email notification_configuration fields, with their
-// types and defaults; fields without a default are required.
-var emailFields = []struct {
-	name, typ string
-	def       any
-}{
-	{"host", "string", nil},
-	{"port", "int", nil},
-	{"username", "string", ""},
-	{"password", "password", ""},
-	{"use_tls", "bool", false},
-	{"use_ssl", "bool", false},
-	{"sender", "string", nil},
-	{"recipients", "list", nil},
-	{"timeout", "int", float64(30)},
+// emailFields are AWX's email notification_configuration fields.
+var emailFields = []configField{
+	{name: "host", typ: "string"},
+	{name: "port", typ: "int"},
+	{name: "username", typ: "string", def: ""},
+	{name: "password", typ: "password", def: ""},
+	{name: "use_tls", typ: "bool", def: false},
+	{name: "use_ssl", typ: "bool", def: false},
+	{name: "sender", typ: "string"},
+	{name: "recipients", typ: "list"},
+	{name: "timeout", typ: "int", def: float64(30)},
 }
 
 // AWX's default email messages: the subject is the webhook's message, the
@@ -65,54 +60,9 @@ var SMTPRootCAs *x509.CertPool
 // validateEmailConfig checks an email configuration as AWX does, fills its
 // defaults and encrypts its password.
 func validateEmailConfig(c *Ctx, cfg, old map[string]any) (map[string]any, error) {
-	known := map[string]bool{}
-	for _, f := range emailFields {
-		known[f.name] = true
-	}
-	for k := range cfg {
-		if !known[k] {
-			return nil, api.FieldError("notification_configuration", fmt.Sprintf("Unexpected field %q for email notifications.", k))
-		}
-	}
-	out := map[string]any{}
-	var missing []string
-	for _, f := range emailFields {
-		v, ok := cfg[f.name]
-		if !ok || v == nil {
-			if f.def == nil {
-				missing = append(missing, "'"+f.name+"'")
-			} else {
-				out[f.name] = f.def
-			}
-			continue
-		}
-		bad := false
-		switch f.typ {
-		case "string", "password":
-			_, ok := v.(string)
-			bad = !ok
-		case "int":
-			n, ok := num(v)
-			bad = !ok || n != math.Trunc(n)
-		case "bool":
-			_, ok := v.(bool)
-			bad = !ok
-		case "list":
-			l, ok := v.([]any)
-			bad = !ok
-			for _, x := range l {
-				if _, ok := x.(string); !ok {
-					bad = true
-				}
-			}
-		}
-		if bad {
-			return nil, api.FieldError("notification_configuration", fmt.Sprintf("Configuration field '%s' incorrect type, expected %s.", f.name, f.typ))
-		}
-		out[f.name] = v
-	}
-	if len(missing) > 0 {
-		return nil, api.FieldError("notification_configuration", fmt.Sprintf("Missing required fields for Notification Configuration: [%s].", strings.Join(missing, ", ")))
+	out, err := checkConfigFields("email", emailFields, cfg)
+	if err != nil {
+		return nil, err
 	}
 	if strings.TrimSpace(out["host"].(string)) == "" {
 		return nil, api.FieldError("notification_configuration", "host must not be empty.")
@@ -138,25 +88,16 @@ func validateEmailConfig(c *Ctx, cfg, old map[string]any) (map[string]any, error
 			return nil, api.FieldError("notification_configuration", fmt.Sprintf("%q is not a valid email address.", r))
 		}
 	}
-	if s := out["password"].(string); s != "" {
-		switch {
-		case s == crypto.Placeholder:
-			out["password"], _ = old["password"].(string)
-		case !crypto.IsEncrypted(s):
-			enc, err := c.App.Crypto.Encrypt(s)
-			if err != nil {
-				return nil, err
-			}
-			out["password"] = enc
-		}
+	if err := sealSecret(c, out, old, "password"); err != nil {
+		return nil, err
 	}
 	return out, nil
 }
 
-// emailRecipients lists an email configuration's recipients as AWX shows
-// them on a notification: ['a@example.com', 'b@example.com'].
-func emailRecipients(cfg map[string]any) string {
-	l, _ := cfg["recipients"].([]any)
+// listRecipients lists a configuration's recipients as AWX shows them on a
+// notification: ['a@example.com', 'b@example.com'].
+func listRecipients(cfg map[string]any, key string) string {
+	l, _ := cfg[key].([]any)
 	parts := make([]string, len(l))
 	for i, r := range l {
 		parts[i] = "'" + str(r) + "'"
