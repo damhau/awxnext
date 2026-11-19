@@ -55,6 +55,11 @@ Writing and running Go tests:
   ./test/ -run TestAWSSecretsManagerMoto`. The endpoint takes an IP address, not a host name:
   the test lists it in `CREDENTIAL_LOOKUP_ALLOWED_LOCAL_ADDRESSES`. It resets moto first, so
   it runs again on the same server.
+- **Email through Mailpit:** `TestEmailMailpit` needs the three Mailpits of `full.yml`'s
+  "Mailpit" step (run its lines by hand: they make the certificate in `/tmp/mailpit`), then
+  `AWXNEXT_TEST_MAILPIT_PLAIN=127.0.0.1:1025,http://127.0.0.1:8025`, `_STARTTLS` (ports
+  1026, 8026), `_TLS` (1027, 8027) and `AWXNEXT_TEST_MAILPIT_CA=/tmp/mailpit/cert.pem`. It
+  empties each Mailpit first.
 
 CI and the browser:
 

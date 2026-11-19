@@ -277,9 +277,9 @@ func emailMessage(from string, to []string, subject, body, host string) []byte {
 	id := make([]byte, 8)
 	rand.Read(id)
 	now := time.Now()
-	fmt.Fprintf(&b, "From: %s\r\n", from)
-	fmt.Fprintf(&b, "To: %s\r\n", strings.Join(to, ", "))
-	fmt.Fprintf(&b, "Subject: %s\r\n", mime.QEncoding.Encode("utf-8", subject))
+	foldHeader(&b, "From", from)
+	foldHeader(&b, "To", strings.Join(to, ", "))
+	foldHeader(&b, "Subject", mime.QEncoding.Encode("utf-8", subject))
 	fmt.Fprintf(&b, "Date: %s\r\n", now.Format(time.RFC1123Z))
 	fmt.Fprintf(&b, "Message-ID: <%d.%s@%s>\r\n", now.UnixNano(), hex.EncodeToString(id), host)
 	b.WriteString("MIME-Version: 1.0\r\nContent-Type: text/plain; charset=\"utf-8\"\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\n")
@@ -287,6 +287,22 @@ func emailMessage(from string, to []string, subject, body, host string) []byte {
 	qp.Write([]byte(body))
 	qp.Close()
 	return []byte(b.String()) // the DATA writer ends the last line
+}
+
+// foldHeader writes a header field folded at its spaces, as Python's email
+// package does for AWX, so that a line passes 78 characters only where no
+// space allows a break. mime puts all the encoded words of a long non-ASCII
+// subject on one line, past the 998 that RFC 5322 allows.
+func foldHeader(b *strings.Builder, name, value string) {
+	line := name + ":"
+	for i, w := range strings.Split(value, " ") {
+		if i > 0 && len(line)+1+len(w) > 78 && strings.TrimSpace(line) != "" {
+			b.WriteString(line + "\r\n")
+			line = ""
+		}
+		line += " " + w
+	}
+	b.WriteString(line + "\r\n")
 }
 
 // pickSMTPAuth picks the login mechanism Python's smtplib would among those

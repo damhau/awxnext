@@ -2,9 +2,9 @@ name: Full
 
 # Everything: the whole Go suite with the race detector (job tests, object
 # storage against MinIO and Azurite, the AWS Secrets Manager lookup against
-# moto, event connectors with ansible.eda and
-# its Kafka source against Kafka, imported rulebooks against ansible-rulebook
-# itself), the chart (helm.yml), the image with
+# moto, email notifications through Mailpit, event connectors with ansible.eda
+# and its Kafka source against Kafka, imported rulebooks against
+# ansible-rulebook itself), the chart (helm.yml), the image with
 # Compose (compose.yml), the importer against a real AWX (import-awx.yml)
 # and AWX's clients (compat.yml, a job per suite). Nightly, and by hand before
 # a milestone is closed: gh workflow run full.yml
@@ -39,6 +39,11 @@ jobs:
       AWXNEXT_TEST_S3_SECRET_KEY: awxnext-test-secret
       AWXNEXT_TEST_AZURITE_BLOB_ENDPOINT: http://127.0.0.1:10000/devstoreaccount1
       AWXNEXT_TEST_MOTO_ENDPOINT: http://127.0.0.1:5000
+      # Email notifications through Mailpit in each mode: <SMTP>,<API>.
+      AWXNEXT_TEST_MAILPIT_PLAIN: 127.0.0.1:1025,http://127.0.0.1:8025
+      AWXNEXT_TEST_MAILPIT_STARTTLS: 127.0.0.1:1026,http://127.0.0.1:8026
+      AWXNEXT_TEST_MAILPIT_TLS: 127.0.0.1:1027,http://127.0.0.1:8027
+      AWXNEXT_TEST_MAILPIT_CA: /tmp/mailpit/cert.pem
       # A real execution environment's contents, read from its registry.
       AWXNEXT_TEST_EE_IMAGE: quay.io/ansible/awx-ee:24.6.1
       AWXNEXT_TEST_KAFKA_BOOTSTRAP: localhost:9092
@@ -97,6 +102,23 @@ jobs:
           for i in $(seq 1 60); do curl -sf http://127.0.0.1:9000/minio/health/live && break; sleep 1; done
           for i in $(seq 1 60); do curl -sf http://127.0.0.1:5000/moto-api/ > /dev/null && break; sleep 1; done
           for i in $(seq 1 60); do docker exec kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list && break; sleep 1; done
+      # Mailpit for the email notification test, one per mode, each requiring
+      # the test's login: in clear, STARTTLS required, and TLS from the start,
+      # with a certificate made here that the test trusts.
+      - name: Mailpit
+        run: |
+          mkdir -p /tmp/mailpit
+          openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj /CN=mailpit \
+            -addext "subjectAltName=IP:127.0.0.1" -keyout /tmp/mailpit/key.pem -out /tmp/mailpit/cert.pem
+          chmod 644 /tmp/mailpit/key.pem
+          auth="MP_SMTP_AUTH=mailer:mailpit-test-secret"
+          tls="-v /tmp/mailpit:/certs:ro -e MP_SMTP_TLS_CERT=/certs/cert.pem -e MP_SMTP_TLS_KEY=/certs/key.pem"
+          docker run -d --name mailpit-plain -p 1025:1025 -p 8025:8025 -e "$auth" -e MP_SMTP_AUTH_ALLOW_INSECURE=true axllent/mailpit:v1.33.1
+          docker run -d --name mailpit-starttls -p 1026:1025 -p 8026:8025 -e "$auth" $tls -e MP_SMTP_REQUIRE_STARTTLS=true axllent/mailpit:v1.33.1
+          docker run -d --name mailpit-tls -p 1027:1025 -p 8027:8025 -e "$auth" $tls -e MP_SMTP_REQUIRE_TLS=true axllent/mailpit:v1.33.1
+          for p in 8025 8026 8027; do
+            for i in $(seq 1 60); do curl -sf "http://127.0.0.1:$p/readyz" > /dev/null && break; sleep 1; done
+          done
       - name: test
         # ./test/ takes 7 to 10 minutes with -race: past go test's default
         # -timeout of 10m (the nightly run of 2026-11-02 stopped at 601 s).
@@ -119,6 +141,10 @@ jobs:
       # AWXNEXT_TEST_MOTO_ENDPOINT set it fails, not skips, when moto is down.
       - name: AWS Secrets Manager lookup against moto, verbose
         run: go test -count=1 -run 'TestAWSSecretsManagerMoto' -v ./test/
+      # Its log shows the messages went through each Mailpit. With the
+      # AWXNEXT_TEST_MAILPIT_* variables set it fails, not skips, when one is down.
+      - name: email notifications through Mailpit, verbose
+        run: go test -count=1 -run 'TestEmailMailpit' -v ./test/
 
   helm:
     uses: ./.github/workflows/helm.yml
