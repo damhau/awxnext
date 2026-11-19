@@ -41,7 +41,7 @@ asIs('GitHub')                                     // a name: never translated
   - `toast()` and `Error()` messages;
   - `[label, value]` pairs and `[value, 'Label']` options;
   - label maps;
-  - any capitalised literal with a space.
+  - any capitalised literal with a space, including one that starts with "A" or "I".
 
   Wrap the string in `tr()`, or `asIs()` when it must stay as it is.
 - a catalog lacks a string, or has one the UI no longer uses;

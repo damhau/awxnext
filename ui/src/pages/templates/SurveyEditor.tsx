@@ -297,7 +297,7 @@ export function SurveyEditor({ kind, tpl }: { kind: Kind; tpl: Template }) {
 }
 
 const SOURCES: [string, string][] = [
-  ['', 'A fixed list'],
+  ['', tr('A fixed list')],
   ['hosts', tr('Hosts of an inventory')],
   ['groups', tr('Groups of an inventory')],
   ['git_refs', tr('Git tags or branches of a project')],

@@ -28,7 +28,8 @@ const CODE_TAGS = new Set(['code', 'kbd', 'pre', 'samp'])
 const WRAPPERS = new Set(['tr', 'trn', 'asIs'])
 const letters = /[A-Za-z]{2,}/
 // A capitalised word, a space and more: a sentence or label anywhere in code.
-const sentence = /^[A-Z][a-z’']+[,:]?\s+[\w“‘(]/
+// English's one-letter words, A and I, count as words.
+const sentence = /^(?:[A-Z][a-z’']+|[AI])[,:]?\s+[\w“‘(]/
 
 const tagOf = (el: ts.Node | undefined) => (el && ts.isJsxElement(el) ? el.openingElement.tagName.getText() : '')
 
@@ -64,7 +65,7 @@ function displayAnchor(node: ts.Node): string | null {
   }
 }
 
-const label = /^[A-Z][a-z]/
+const label = /^(?:[A-Z][a-z]|[AI] [a-z])/
 /** The label of a [value, 'Label'] or [key, 'Label', path] tuple, or of a
  * ['Label', <value>] pair. */
 function optionLabel(n: ts.StringLiteral): string | null {
@@ -152,6 +153,16 @@ if (process.env.I18N_REPORT) {
   writeFileSync(join(process.env.I18N_REPORT, 'keys.json'), JSON.stringify(out, null, 1))
 }
 const placeholders = (s: string) => [...s.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort().join(',')
+
+describe('what the scan counts as text', () => {
+  it('takes a first word of one letter', () => {
+    expect(['A fixed list', 'I agree', 'Fixed list'].map((t) => label.test(t))).toEqual([true, true, true])
+    expect(['A valid integer is required.', 'I have read it', 'Valid: yes'].map((t) => sentence.test(t))).toEqual([true, true, true])
+  })
+  it('leaves out codes and names', () => {
+    expect(['ASCII', 'A', 'X y', 'AWS_REGION'].map((t) => label.test(t) || sentence.test(t))).toEqual([false, false, false, false])
+  })
+})
 
 describe('translations', () => {
   it('translate every display string', () => {

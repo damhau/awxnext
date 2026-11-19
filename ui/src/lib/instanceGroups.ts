@@ -55,7 +55,7 @@ export function checkGroupForm(v: GroupFormValues): Partial<Record<keyof GroupFo
   for (const k of ['max_concurrent_jobs', 'max_forks', 'policy_instance_minimum', 'policy_instance_percentage'] as const) {
     const s = v[k].trim()
     if (s === '') continue
-    if (!/^-?\d+$/.test(s)) errors[k] = 'A valid integer is required.'
+    if (!/^-?\d+$/.test(s)) errors[k] = tr('A valid integer is required.')
     else if (Number(s) < 0) errors[k] = tr('Ensure this value is greater than or equal to 0.')
     else if (k === 'policy_instance_percentage' && Number(s) > 100) errors[k] = tr('Ensure this value is less than or equal to 100.')
   }
