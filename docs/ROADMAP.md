@@ -1457,6 +1457,20 @@ OIDC login.
 authorization URL, and no `prompt` when it's unset; the OpenID Connect
 settings page sets it.
 
+### M10-10 Translate the UI strings that start with a one-letter word
+**Labels:** bug, ui · **Size:** S · [#187](https://github.com/damhau/awxnext/issues/187)
+
+Found on 2026-11-19. The survey editor's "A fixed list" and the instance
+group form's "A valid integer is required." are never translated. The i18n
+test missed them: its `label` and `sentence` patterns need a capital followed
+by a lowercase letter, so a text whose first word is a single letter ("A",
+"I") is never checked. The patterns accept such a first word, and what they
+then find is translated.
+
+**Done when:** the i18n test fails on an untranslated option label or
+sentence starting with "A ", and passes with both strings, and anything else
+it finds, translated in French.
+
 ---
 
 ## M11 Notifications
