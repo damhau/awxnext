@@ -44,6 +44,8 @@ differences:
 warnings:
   - match: user "admin" already exists*
     reason: The install creates admin, and an account that exists stays as it is.
+  - match: organization "Default" already exists; merged into it
+    reason: The install creates Default, as AWX does, and AWX's merges into it.
   - match: execution environment "AWX EE (latest)" already exists *
     reason: The install creates this one. It keeps its image.
   - match: notification template "ops-slack" skipped*
