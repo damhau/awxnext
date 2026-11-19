@@ -28,7 +28,7 @@ RUN pkg=github.com/damhau/awxnext/internal/version \
 # All-in-one: the control plane runs jobs itself with ansible-runner (no
 # execution environment containers). Used by deploy/compose; good for small
 # installs and for trying awxnext out.
-FROM python:3.12-slim-bookworm AS all-in-one
+FROM python:3.14-slim-bookworm AS all-in-one
 COPY --from=ghcr.io/astral-sh/uv:0.13.5 /uv /usr/local/bin/uv
 # Debian's security fixes as soon as they are published, not when the base
 # image is next rebuilt (make vuln-images scans the image). PostgreSQL 16's
