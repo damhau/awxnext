@@ -1564,6 +1564,13 @@ than twice the median of the template's last 10 successful runs, once it has
 later runs that keep it, through the API and the UI's Notifications tabs,
 and the docs say what each means.
 
+Closed on 2026-11-19, with its 4 tasks done, after green runs of
+`full.yml` and secubot on bc45792. secubot selected no new finding.
+`full.yml`'s race job caught two test bugs on the way, fixed in 6355ea5 (an
+alert count changed by mistake in M11-02) and 531574e (an approval timeout
+left on). Microsoft has renamed M11-03's Teams template "Send webhook alerts
+to a channel"; the guide gives both names.
+
 ---
 
 ## M12 Beyond AWX
