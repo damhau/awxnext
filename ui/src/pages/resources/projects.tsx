@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { useState, type FormEvent } from 'react'
+import { useId, useState, type FormEvent } from 'react'
 import { Link, Outlet, useNavigate, useOutletContext, useParams } from 'react-router'
 import { api } from '../../api/client'
 import { useInvalidate, useList, useObject } from '../../api/hooks'
@@ -9,7 +9,7 @@ import { useOrg, usePreselectOrg } from '../../app/context'
 import { AccessTab } from '../../components/access/Access'
 import { useCopy } from '../../components/CopyDialog'
 import { BulkBar, BulkDelete, useBulk, useSelection } from '../../components/BulkBar'
-import { Check, FormError, Lookup, Segmented, TextInput, useForm } from '../../components/form'
+import { Check, Field, FormError, Lookup, SecretControl, Segmented, TextInput, useForm } from '../../components/form'
 import { Icon } from '../../components/icons'
 import { Menu, useToast } from '../../components/overlay'
 import { DataTable, Pager, useListState, type Column } from '../../components/table'
@@ -32,6 +32,8 @@ export interface Project extends Base {
   scm_clean: boolean
   scm_delete_on_update: boolean
   scm_track_submodules: boolean
+  scm_proxy: string
+  scm_verify_ssl: boolean
   scm_update_on_launch: boolean
   scm_update_cache_timeout: number
   allow_override: boolean
@@ -227,6 +229,21 @@ export function ProjectForm() {
   return <ProjectFormInner key={id ?? 'new'} p={existing.data} />
 }
 
+function ProxyField({ value, saved, onChange, error }: { value: string; saved?: string; onChange: (v: string) => void; error?: string }) {
+  const id = useId()
+  return (
+    <Field
+      label={tr('Proxy')}
+      optional
+      htmlFor={id}
+      error={error}
+      help={tr("The HTTP proxy git goes through, such as http://user:password@proxy.example.com:3128. Empty: the server's HTTPS_PROXY, if any.")}
+    >
+      <SecretControl id={id} value={value} saved={saved} onChange={(x) => onChange(String(x ?? ''))} disabled={false} />
+    </Field>
+  )
+}
+
 function ProjectFormInner({ p }: { p?: Project }) {
   const { org } = useOrg()
   const nav = useNavigate()
@@ -250,6 +267,8 @@ function ProjectFormInner({ p }: { p?: Project }) {
     scm_clean: p?.scm_clean ?? false,
     scm_delete_on_update: p?.scm_delete_on_update ?? false,
     scm_track_submodules: p?.scm_track_submodules ?? false,
+    scm_proxy: p?.scm_proxy ?? '',
+    scm_verify_ssl: p?.scm_verify_ssl ?? true,
     scm_update_on_launch: p?.scm_update_on_launch ?? false,
     scm_update_cache_timeout: p?.scm_update_cache_timeout ?? 0,
     allow_override: p?.allow_override ?? false,
@@ -347,6 +366,7 @@ function ProjectFormInner({ p }: { p?: Project }) {
                   <>
                     <TextInput label={tr('Branch, tag or commit')} optional mono value={v.scm_branch} onChange={(x) => f.set('scm_branch', x)} error={f.errors.scm_branch} help={tr('Empty uses the default branch.')} />
                     <TextInput label={tr('Refspec')} optional mono value={v.scm_refspec} onChange={(x) => f.set('scm_refspec', x)} help={tr('Extra refs to fetch, e.g. refs/pull/*:refs/remotes/origin/pull/*.')} />
+                    <ProxyField value={v.scm_proxy} saved={p?.scm_proxy} onChange={(x) => f.set('scm_proxy', x)} error={f.errors.scm_proxy} />
                   </>
                 )}
                 <Lookup
@@ -394,6 +414,7 @@ function ProjectFormInner({ p }: { p?: Project }) {
                       <Check label={tr('Discard local changes')} checked={v.scm_clean} onChange={(x) => f.set('scm_clean', x)} />
                       <Check label={tr('Fresh clone on every sync')} checked={v.scm_delete_on_update} onChange={(x) => f.set('scm_delete_on_update', x)} help={tr('Slower; use when the checkout gets into a bad state.')} />
                       <Check label={tr('Track submodules')} checked={v.scm_track_submodules} onChange={(x) => f.set('scm_track_submodules', x)} help={tr('Follow the latest commit of each submodule branch.')} />
+                      <Check label={tr('Check the TLS certificate')} checked={v.scm_verify_ssl} onChange={(x) => f.set('scm_verify_ssl', x)} help={tr('Off: git accepts any certificate the server presents, such as a self-signed one.')} />
                     </>
                   )}
                 </div>
@@ -549,6 +570,8 @@ export function ProjectDetailsTab() {
                 p.scm_type === 'git' ? [tr('Branch'), <span className="mono">{p.scm_branch || tr('default branch')}</span>] : [null, null],
                 p.scm_type ? [tr('Revision'), p.scm_revision ? <span className="mono" title={p.scm_revision}>{p.scm_revision}</span> : <span className="faint">{tr('not synced yet')}</span>] : [null, null],
                 p.scm_refspec ? [tr('Refspec'), <span className="mono">{p.scm_refspec}</span>] : [null, null],
+                p.scm_type === 'git' && p.scm_proxy ? [tr('Proxy'), <span className="faint">{tr('Set, stored encrypted')}</span>] : [null, null],
+                p.scm_type === 'git' && !p.scm_verify_ssl ? [tr('TLS certificate'), tr('Not verified')] : [null, null],
                 p.scm_type ? [tr('Credential'), p.summary_fields.credential ? <Link to={`/credentials/${p.credential}`}>{p.summary_fields.credential.name}</Link> : <span className="faint">{tr('none (public)')}</span>] : [null, null],
                 p.summary_fields.signature_validation_credential
                   ? [tr('Signature validation'), <Link to={`/credentials/${p.signature_validation_credential}`}>{p.summary_fields.signature_validation_credential.name}</Link>]

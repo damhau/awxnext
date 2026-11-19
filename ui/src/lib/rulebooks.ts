@@ -155,3 +155,33 @@ export function parseVariables(text: string): { vars?: Record<string, unknown>; 
 export function variablesText(v: Record<string, unknown> | null | undefined): string {
   return v && Object.keys(v).length ? stringifyYaml(v) : ''
 }
+
+/** A source of a rulebook as EDA's API lists it: its name for source mappings, __SOURCE_n when it has none. */
+export interface RulebookSource {
+  name: string
+  source_info: string
+}
+
+export interface MappingRow {
+  name: string
+  plugin: string
+  stream: number | null
+  /** A mapping of a name the rulebook no longer has: it does nothing. */
+  stale: boolean
+}
+
+/** The source mappings to edit: each source of the rulebook, in order, then the mapped names it no longer has. */
+export function mappingRows(sources: RulebookSource[], mapped: Record<string, number> | null | undefined): MappingRow[] {
+  const m = mapped ?? {}
+  const rows: MappingRow[] = sources.map((s) => ({ name: s.name, plugin: s.source_info.split('\n')[0].replace(/:.*$/, ''), stream: m[s.name] ?? null, stale: false }))
+  const known = new Set(sources.map((s) => s.name))
+  for (const [name, stream] of Object.entries(m)) if (!known.has(name)) rows.push({ name, plugin: '', stream, stale: true })
+  return rows
+}
+
+/** The rulebook's source_streams: each mapped source and its stream. */
+export function sourceStreamsBody(rows: MappingRow[]): Record<string, number> {
+  const out: Record<string, number> = {}
+  for (const r of rows) if (r.stream !== null) out[r.name] = r.stream
+  return out
+}

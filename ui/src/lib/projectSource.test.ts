@@ -10,6 +10,8 @@ const values: SourceValues = {
   scm_clean: true,
   scm_delete_on_update: false,
   scm_track_submodules: true,
+  scm_proxy: '$encrypted$',
+  scm_verify_ssl: false,
   scm_update_on_launch: true,
   scm_update_cache_timeout: 60,
   allow_override: true,
@@ -19,10 +21,12 @@ const values: SourceValues = {
 describe('project source body', () => {
   it('sends every git field', () => {
     expect(sourceBody('git', values)).toMatchObject({ scm_branch: 'main', scm_refspec: values.scm_refspec, scm_track_submodules: true, allow_override: true, credential: 3 })
+    expect(sourceBody('git', values)).toMatchObject({ scm_proxy: '$encrypted$', scm_verify_ssl: false })
   })
   it('clears what AWX refuses on archives', () => {
     const b = sourceBody('archive', values)
     expect(b).toMatchObject({ scm_url: 'https://example.com/playbooks.tar.gz', scm_branch: '', scm_refspec: '', scm_track_submodules: false, allow_override: false })
+    expect(b).toMatchObject({ scm_proxy: '', scm_verify_ssl: true })
     expect(b).toMatchObject({ credential: 3, signature_validation_credential: 7, scm_update_on_launch: true, scm_update_cache_timeout: 60 })
   })
   it('keeps only the directory for manual projects', () => {

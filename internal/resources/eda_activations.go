@@ -704,7 +704,7 @@ func applyEDAActivation(c *Ctx, a *edaActivation) error {
 			continue
 		}
 		if _, err := api.Update(c, connectors, old, data); err != nil {
-			return err
+			return activationRefusal(c, err, "event connector", old, "EventConnector Admin")
 		}
 	}
 	rules := api.Lookup("event_rules")
@@ -724,10 +724,25 @@ func applyEDAActivation(c *Ctx, a *edaActivation) error {
 			continue
 		}
 		if _, err := api.Update(c, rules, old, data); err != nil {
-			return fmt.Errorf("rule %s: %w", str(old["name"]), err)
+			role := "EventRule Admin"
+			if a.Enabled {
+				role = "EventRule Automate"
+			}
+			return activationRefusal(c, fmt.Errorf("rule %s: %w", str(old["name"]), err), "event rule", old, role)
 		}
 	}
 	return nil
+}
+
+// activationRefusal replaces the bare 403 of a connector or rule the
+// activation's user may not change: the import made them, so having a
+// role on the rulebook gives none on them.
+func activationRefusal(c *Ctx, err error, what string, obj Obj, role string) error {
+	if !errors.Is(err, api.ErrForbidden) {
+		return err
+	}
+	return api.Detail(403, fmt.Sprintf("%s may not change %s %q, which the activation runs: that takes the %s role on it, or Organization Admin.",
+		c.User.Username, what, str(obj["name"]), role))
 }
 
 // edaActivationObject is the request's activation: 404 when it isn't

@@ -5,6 +5,7 @@ import type { Ref } from '../api/types'
 import { moveEarlier } from '../lib/relations'
 import { Icon } from './icons'
 import { tr } from '../lib/i18n'
+import { ENCRYPTED } from '../lib/settingValues'
 
 export function Field({
   label,
@@ -313,7 +314,7 @@ export function Lookup({
   error,
   help,
   optional,
-  placeholder = 'Search…',
+  placeholder = tr('Search…'),
   display = (r: Ref) => r.name,
   meta,
   full,
@@ -541,4 +542,59 @@ export function useForm<T extends Record<string, unknown>>(initial: T) {
     if (errors[k as string]) setErrors((e) => ({ ...e, [k as string]: '' }))
   }
   return { values, setValues, set, errors, setErrors }
+}
+
+/** A secret: set or not, replaced rather than edited, since the API never returns it. */
+export function SecretControl({ id, value, saved, onChange, disabled, lines }: { id: string; value: unknown; saved: unknown; onChange: (v: unknown) => void; disabled: boolean; lines?: boolean }) {
+  const [replacing, setReplacing] = useState(false)
+  useEffect(() => {
+    if (value === saved) setReplacing(false)
+  }, [value, saved])
+  const input = (onText: (t: string) => void, text: string, autoFocus = false) =>
+    lines ? (
+      <textarea id={id} className="textarea mono" rows={5} disabled={disabled} spellCheck={false} autoFocus={autoFocus} value={text} onChange={(e) => onText(e.target.value)} />
+    ) : (
+      <input id={id} className="input mono" type="password" autoComplete="new-password" disabled={disabled} autoFocus={autoFocus} value={text} onChange={(e) => onText(e.target.value)} />
+    )
+  if (saved !== ENCRYPTED) return input(onChange, String(value ?? ''))
+  if (value === '')
+    return (
+      <div className="secret">
+        <span className="set">{tr('Removed when saved')}</span>
+        <button type="button" className="link-btn" onClick={() => onChange(ENCRYPTED)}>
+          {tr('Undo')}
+        </button>
+      </div>
+    )
+  if (!replacing && value === ENCRYPTED)
+    return (
+      <div className="secret">
+        <span className="set">
+          <span className="cell" data-size="xs" data-state="ok" />
+          {tr('Set')}
+        </span>
+        <button type="button" className="btn sm" disabled={disabled} onClick={() => setReplacing(true)}>
+          {tr('Replace…')}
+        </button>
+        <button type="button" className="link-btn" disabled={disabled} onClick={() => onChange('')}>
+          {tr('Remove')}
+        </button>
+      </div>
+    )
+  // Typing the new value; emptied, the one set stays.
+  return (
+    <div className="secret-edit">
+      {input((t) => onChange(t === '' ? ENCRYPTED : t), value === ENCRYPTED ? '' : String(value ?? ''), true)}
+      <button
+        type="button"
+        className="link-btn"
+        onClick={() => {
+          setReplacing(false)
+          onChange(ENCRYPTED)
+        }}
+      >
+        {tr('Keep the one set')}
+      </button>
+    </div>
+  )
 }

@@ -5,25 +5,29 @@ import { Link, useNavigate, useParams } from 'react-router'
 import { api } from '../../api/client'
 import { useInvalidate, useList, useObject } from '../../api/hooks'
 import type { Any, Base } from '../../api/types'
-import { FormError, TextArea, TextInput, useForm } from '../../components/form'
+import { FormError, Lookup, TextArea, TextInput, useForm } from '../../components/form'
 import { Icon } from '../../components/icons'
 import { useToast } from '../../components/overlay'
 import { DataTable, Pager, useListState, type Column } from '../../components/table'
 import { Ago, Cell, Empty, ErrorNote, KV, Loading, PageHead, Panel } from '../../components/ui'
 import { asIs, tr, trn } from '../../lib/i18n'
 import {
+  mappingRows,
   nextSteps,
   objectPath,
   parseVariables,
   ruleReasons,
   shortName,
+  sourceStreamsBody,
   statusView,
   summaryText,
   variablesText,
   type ActionReport,
+  type MappingRow,
   type ReportObject,
   type RulebookReport,
   type RuleReport,
+  type RulebookSource,
   type RulesetReport,
   type SourceReport,
 } from '../../lib/rulebooks'
@@ -37,6 +41,7 @@ export interface Rulebook extends Base {
   path: string
   rulesets: string
   variables: Record<string, unknown>
+  source_streams: Record<string, number>
   revision: string
   imported: string | null
   import_error: string
@@ -137,7 +142,66 @@ export function ProjectRulebooksTab() {
   )
 }
 
-/** The form of an uploaded rulebook, or of a file's variables. */
+/** The names of the event streams with these ids, those the user can see. */
+function useStreamNames(ids: number[]): Record<number, string> {
+  const list = useList<Any>(ids.length ? 'event_streams/' : null, { id__in: [...ids].sort((a, b) => a - b).join(','), page_size: 200 })
+  return Object.fromEntries((list.data?.results ?? []).map((o) => [o.id, o.name]))
+}
+
+function SourceMappings({ rows, onChange, error }: { rows: MappingRow[]; onChange: (rows: MappingRow[]) => void; error?: string }) {
+  const known = useStreamNames(rows.flatMap((r) => (r.stream === null ? [] : [r.stream])))
+  const [picked, setPicked] = useState<Record<number, string>>({})
+  const names = { ...known, ...picked }
+  return (
+    <section className="form-section">
+      <h2>{tr('Source mappings')}</h2>
+      <p className="small muted" style={{ margin: 0 }}>
+        {tr('A source mapped to an event stream doesn’t run: its rules get the stream’s events instead, as with EDA’s source mappings.')}
+      </p>
+      {rows.length === 0 ? (
+        <span className="faint small">{tr('The rulebook has no sources.')}</span>
+      ) : (
+        <div className="form-grid">
+          {rows.map((r, i) => (
+            <Lookup
+              key={r.name}
+              label={
+                <>
+                  <span className="mono">{r.name}</span>
+                  {r.plugin && <span className="faint small"> {r.plugin}</span>}
+                </>
+              }
+              optional
+              resource="event_streams/"
+              value={r.stream === null ? null : { id: r.stream, name: names[r.stream] ?? asIs(`#${r.stream}`) }}
+              onChange={(ref) => {
+                if (ref) setPicked((p) => ({ ...p, [ref.id]: ref.name }))
+                onChange(rows.map((x, j) => (j === i ? { ...x, stream: ref?.id ?? null } : x)))
+              }}
+              help={r.stale ? tr('No longer a source of the rulebook: the mapping does nothing.') : undefined}
+            />
+          ))}
+        </div>
+      )}
+      {error && <div className="form-error">{error}</div>}
+    </section>
+  )
+}
+
+function MappedStreams({ mapped }: { mapped: Record<string, number> }) {
+  const names = useStreamNames(Object.values(mapped))
+  return (
+    <ul className="list-plain small">
+      {Object.entries(mapped).map(([source, id]) => (
+        <li key={source}>
+          <span className="mono">{source}</span> → <Link to={`/event-streams/${id}`}>{names[id] ?? asIs(`#${id}`)}</Link>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+/** The form of an uploaded rulebook, or of a file's variables and source mappings. */
 function RulebookForm({ project, rb }: { project: number; rb?: Rulebook }) {
   const nav = useNavigate()
   const invalidate = useInvalidate()
@@ -146,6 +210,9 @@ function RulebookForm({ project, rb }: { project: number; rb?: Rulebook }) {
   const [error, setError] = useState<unknown>(null)
   const [busy, setBusy] = useState(false)
   const parsed = parseVariables(v.variables)
+  const sources = useList<RulebookSource>(rb ? `/api/eda/v1/rulebooks/${rb.id}/sources/` : null, { page_size: 200 })
+  const [mappings, setMappings] = useState<MappingRow[] | null>(null)
+  const rows = mappings ?? (sources.data ? mappingRows(sources.data.results, rb?.source_streams) : null)
   const submit = async (e: FormEvent) => {
     e.preventDefault()
     if (parsed.error) return
@@ -154,6 +221,7 @@ function RulebookForm({ project, rb }: { project: number; rb?: Rulebook }) {
     try {
       const body: Record<string, unknown> = { variables: parsed.vars }
       if (!file) Object.assign(body, { name: v.name, rulesets: v.rulesets })
+      if (mappings) body.source_streams = sourceStreamsBody(mappings)
       const saved = rb ? await api.patch<Rulebook>(`rulebooks/${rb.id}/`, body) : await api.post<Rulebook>('rulebooks/', { ...body, project })
       invalidate('rulebooks', `projects/${project}/rulebooks/`, 'event_rules', 'event_streams', 'event_connectors')
       nav(`/rulebooks/${saved.id}`)
@@ -179,6 +247,7 @@ function RulebookForm({ project, rb }: { project: number; rb?: Rulebook }) {
           help={tr('As ansible-rulebook’s --vars, in YAML or JSON: vars.name in conditions, {{ name }} in the arguments of sources and actions.')}
         />
       </div>
+      {rows && <SourceMappings rows={rows} onChange={setMappings} error={errors.source_streams} />}
       <FormError error={error} />
       <div className="form-actions">
         <button className="btn primary" disabled={busy || !!parsed.error || (!file && (!v.name || !v.rulesets.trim()))}>
@@ -226,7 +295,7 @@ export function RulebookEdit() {
           { label: r.name, to: `/rulebooks/${r.id}` },
           { label: tr('Edit') },
         ]}
-        title={r.path ? tr('Variables of {name}', { name: r.name }) : tr('Edit {name}', { name: r.name })}
+        title={tr('Edit {name}', { name: r.name })}
         subtitle={r.path ? tr('The rulebook is {path} of its project: change it there, and sync the project.', { path: r.path }) : undefined}
       />
       <div className="page-body">
@@ -405,7 +474,7 @@ export function RulebookDetail() {
             )}
             {caps.edit && (
               <Link className="btn" to={`/rulebooks/${r.id}/edit`}>
-                {r.path ? tr('Variables') : tr('Edit')}
+                {tr('Edit')}
               </Link>
             )}
             {caps.delete && !r.path && (
@@ -443,6 +512,7 @@ export function RulebookDetail() {
                   [tr('Revision'), r.revision ? <span className="mono" title={r.revision}>{r.revision.slice(0, 10)}</span> : false],
                   [tr('Imported'), r.imported ? <Ago at={r.imported} /> : <span className="faint">{tr('Never')}</span>],
                   [tr('Variables'), Object.keys(r.variables ?? {}).length ? <pre className="code">{variablesText(r.variables)}</pre> : <span className="faint">{tr('None')}</span>],
+                  [tr('Source mappings'), Object.keys(r.source_streams ?? {}).length ? <MappedStreams mapped={r.source_streams} /> : <span className="faint">{tr('None')}</span>],
                 ]}
               />
             </Panel>

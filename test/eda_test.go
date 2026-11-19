@@ -557,6 +557,26 @@ func TestEDAActivations(t *testing.T) {
 	}
 	must(t, operator.post(theirURL+"disable/", nil), 204)
 
+	// An Organization Project Admin may change the rulebooks, not the
+	// connectors and rules an activation runs: the refusal names them.
+	projAdmin, projAdminID := newUser(t, a)
+	for role, id := range map[string]any{"Organization Project Admin": org, "ExecutionEnvironment Admin": de["id"]} {
+		must(t, a.post("role_user_assignments/", map[string]any{"role_definition": roleDef(t, role), "user": projAdminID, "object_id": id}), 201)
+	}
+	refused := uniq("act")
+	r := must(t, projAdmin.post(eda("activations/"), map[string]any{"name": refused, "rulebook_id": rb, "decision_environment_id": de["id"],
+		"organization_id": org}), 403)
+	if !strings.Contains(r.Raw, "may not change event connector") || !strings.Contains(r.Raw, "EventConnector Admin role") {
+		t.Errorf("create as an Organization Project Admin: %s", r.Raw)
+	}
+	if r := must(t, a.get(eda("activations/?name="+refused)), 200); r.count() != 0 {
+		t.Errorf("the refused activation was made: %s", r.Raw)
+	}
+	r = must(t, projAdmin.post(eda(fmt.Sprintf("activations/%v/enable/", mine["id"])), nil), 403)
+	if !strings.Contains(r.Raw, "may not change event connector") || !strings.Contains(r.Raw, "Organization Admin") {
+		t.Errorf("enable as an Organization Project Admin: %s", r.Raw)
+	}
+
 	// Deleting the project deletes its activations.
 	must(t, a.delete(eda(fmt.Sprintf("projects/%d/", pid))), 204)
 	waitFor(t, "the project's activations to go", func() bool { return a.get(againURL).Status == 404 })

@@ -3526,7 +3526,6 @@
   "Save and import": "Enregistrer et importer",
   "Upload and import": "Téléverser et importer",
   "The import makes event streams, connectors and rules, all disabled, and reports what doesn’t translate.": "L’import crée des flux d’événements, des connecteurs et des règles, tous désactivés, et signale ce qui ne se traduit pas.",
-  "Variables of {name}": "Variables de {name}",
   "The rulebook is {path} of its project: change it there, and sync the project.": "Le rulebook est {path} de son projet : changez-le là, puis synchronisez le projet.",
   "recorded by the rule’s decisions": "consigné par les décisions de la règle",
   "as {kind}": "comme {kind}",
@@ -4355,5 +4354,19 @@
   "{n} of {all} choices": "{n} choix sur {all}",
   "Give a default or a longest lifetime.": "Donnez une durée de vie proposée ou maximale.",
   "It stays until its owners delete it.": "Il reste jusqu’à ce que ses propriétaires le suppriment.",
-  "Empty: requesters pick any number of days.": "Vide : les demandeurs choisissent un nombre de jours libre."
+  "Empty: requesters pick any number of days.": "Vide : les demandeurs choisissent un nombre de jours libre.",
+  "The HTTP proxy git goes through, such as http://user:password@proxy.example.com:3128. Empty: the server's HTTPS_PROXY, if any.": "Le proxy HTTP par lequel passe git, par exemple http://user:password@proxy.example.com:3128. Vide : le HTTPS_PROXY du serveur, s’il y en a un.",
+  "Check the TLS certificate": "Vérifier le certificat TLS",
+  "Off: git accepts any certificate the server presents, such as a self-signed one.": "Désactivé : git accepte tout certificat que présente le serveur, même autosigné.",
+  "Set, stored encrypted": "Défini, stocké chiffré",
+  "TLS certificate": "Certificat TLS",
+  "Not verified": "Non vérifié",
+  "Headers kept": "En-têtes conservés",
+  "Request headers": "En-têtes de la requête",
+  "Headers kept in each event": "En-têtes conservés dans chaque événement",
+  "Separated by commas. Each becomes an attribute of the event, named in lowercase letters and digits: X-Request-Id gives xrequestid. Authorization, Proxy-Authorization and Cookie are never kept.": "Séparés par des virgules. Chacun devient un attribut de l’événement, nommé en lettres minuscules et chiffres : X-Request-Id donne xrequestid. Authorization, Proxy-Authorization et Cookie ne sont jamais conservés.",
+  "Source mappings": "Correspondances des sources",
+  "A source mapped to an event stream doesn’t run: its rules get the stream’s events instead, as with EDA’s source mappings.": "Une source associée à un flux d’événements ne s’exécute pas : ses règles reçoivent les événements du flux à la place, comme avec les correspondances de sources d’EDA.",
+  "The rulebook has no sources.": "Le rulebook n’a aucune source.",
+  "No longer a source of the rulebook: the mapping does nothing.": "N’est plus une source du rulebook : la correspondance n’a aucun effet."
 }

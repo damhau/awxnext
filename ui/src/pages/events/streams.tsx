@@ -26,6 +26,7 @@ type Stream = Base & {
   max_payload_bytes: number
   rate_limit: number
   mapping: Record<string, string>
+  additional_data_headers: string
   uuid: string
   receiver_url: string
   last_sequence: number
@@ -261,6 +262,7 @@ function Setup({ stream }: { stream: Stream }) {
                 [tr('Rate limit'), stream.rate_limit ? trn(stream.rate_limit, '{n} event a minute', '{n} events a minute') : tr('None')],
                 [tr('Largest request'), tr('{n} KiB', { n: Math.round(stream.max_payload_bytes / 1024) })],
                 [tr('Keeps events'), trn(stream.retention_days, '{n} day', '{n} days')],
+                [tr('Headers kept'), stream.additional_data_headers ? <span className="mono">{stream.additional_data_headers}</span> : false],
                 [tr('Rulebook'), stream.rulebook ? <Link to={`/rulebooks/${stream.rulebook}`}>{stream.summary_fields.rulebook?.name ?? asIs(`#${stream.rulebook}`)}</Link> : false],
               ]}
             />
@@ -397,6 +399,7 @@ interface StreamValues extends Record<string, unknown> {
   max_payload_kib: string
   rate_limit: string
   mapping: Record<string, string>
+  additional_data_headers: string
 }
 
 function StreamForm({ stream }: { stream?: Stream }) {
@@ -415,6 +418,7 @@ function StreamForm({ stream }: { stream?: Stream }) {
     max_payload_kib: String(Math.round((stream?.max_payload_bytes ?? 1 << 20) / 1024)),
     rate_limit: String(stream?.rate_limit ?? 6000),
     mapping: stream?.mapping ?? {},
+    additional_data_headers: stream?.additional_data_headers ?? '',
   })
   usePreselectOrg(f.values.organization, (o) => f.set('organization', o), !stream)
   const [error, setError] = useState<unknown>(null)
@@ -435,6 +439,7 @@ function StreamForm({ stream }: { stream?: Stream }) {
       max_payload_bytes: Math.round(Number(f.values.max_payload_kib) * 1024),
       rate_limit: Number(f.values.rate_limit),
       mapping: f.values.stream_type === 'generic' ? mapping : {},
+      additional_data_headers: f.values.additional_data_headers.trim(),
     }
     try {
       const saved = stream ? await api.patch<Stream>(`event_streams/${stream.id}/`, body) : await api.post<Stream>('event_streams/', body)
@@ -492,6 +497,22 @@ function StreamForm({ stream }: { stream?: Stream }) {
           {f.errors.mapping && <div className="form-error">{f.errors.mapping}</div>}
         </section>
       )}
+      <section className="form-section">
+        <h2>{tr('Request headers')}</h2>
+        <div className="form-grid">
+          <TextInput
+            label={tr('Headers kept in each event')}
+            optional
+            mono
+            full
+            value={f.values.additional_data_headers}
+            onChange={(v) => f.set('additional_data_headers', v)}
+            error={f.errors.additional_data_headers}
+            placeholder={asIs('X-Request-Id, X-GitHub-Delivery')}
+            help={tr('Separated by commas. Each becomes an attribute of the event, named in lowercase letters and digits: X-Request-Id gives xrequestid. Authorization, Proxy-Authorization and Cookie are never kept.')}
+          />
+        </div>
+      </section>
       <section className="form-section">
         <h2>{tr('Limits')}</h2>
         <div className="form-grid">

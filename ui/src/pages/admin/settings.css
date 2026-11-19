@@ -82,8 +82,6 @@
 /* Values to give somewhere else, with a copy button; secrets as set or not. */
 .settings .copyval { display: flex; align-items: center; gap: 6px; width: 100%; max-width: 460px; }
 .settings .copyval code { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; background: var(--surface-3); border: 1px solid var(--line); border-radius: var(--radius); padding: 6px 9px; }
-.settings .secret { display: flex; align-items: center; gap: 10px; }
-.settings .secret .set { display: inline-flex; align-items: center; gap: 6px; font-weight: 500; }
 
 /* Sign-in: one card per login method. */
 .settings .methods { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }

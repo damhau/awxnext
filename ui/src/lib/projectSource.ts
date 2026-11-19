@@ -1,7 +1,8 @@
 import { tr } from './i18n'
 // Where a project's content comes from, and the fields each kind of source
 // takes. AWX refuses a branch on archive projects, and a refspec or submodule
-// tracking on anything but git.
+// tracking on anything but git. Only git goes through the proxy and skips the
+// TLS check.
 
 export type ScmType = '' | 'git' | 'archive'
 
@@ -24,6 +25,8 @@ export interface SourceValues {
   scm_clean: boolean
   scm_delete_on_update: boolean
   scm_track_submodules: boolean
+  scm_proxy: string
+  scm_verify_ssl: boolean
   scm_update_on_launch: boolean
   scm_update_cache_timeout: number
   allow_override: boolean
@@ -41,6 +44,8 @@ export function sourceBody(t: ScmType, v: SourceValues): Record<string, unknown>
     scm_branch: git ? v.scm_branch : '',
     scm_refspec: git ? v.scm_refspec : '',
     scm_track_submodules: git && v.scm_track_submodules,
+    scm_proxy: git ? v.scm_proxy : '',
+    scm_verify_ssl: !git || v.scm_verify_ssl,
     allow_override: git && v.allow_override,
     credential: v.credential,
     signature_validation_credential: v.signature_validation_credential,

@@ -474,6 +474,7 @@ CloudEvent in the event log, where rules read them (roadmap M14). To create one,
 | `rate_limit` | Events per minute, on each node, 6000 by default; 0 for no limit. A minute's events may arrive at once. |
 | `test_mode` | Keep and show the events, but hide them from rules. |
 | `mapping` | For `generic` streams, JSONPaths to the event's `id`, `type`, `source`, `subject` and `time` in the body, such as `{"id": "$.alert.id"}`. |
+| `additional_data_headers` | Request headers each event keeps, separated by commas, such as `X-Request-Id`. Each becomes an attribute of the event, named in lowercase letters and digits (`event.xrequestid` in a rule). `Authorization`, `Proxy-Authorization` and `Cookie` are never kept. In the UI, it's the form's **Request headers** section. |
 
 The answer's `receiver_url` is where the sender posts: `<TOWER_URL_BASE>/api/v2/event_streams/<uuid>/post/`.
 The UUID is not a secret, the credential is. The stream's events are at
@@ -1576,6 +1577,7 @@ belongs to a project:
 | `path` | The file in the project. Empty: an uploaded rulebook. |
 | `rulesets` | The rulebook's YAML. |
 | `variables` | The rulebook's variables, as ansible-rulebook's `--vars`: `vars.name` in conditions, `{{ name }}` in the arguments of sources and actions. You can set them on a file's rulebook too. |
+| `source_streams` | The sources that an existing event stream feeds instead of their own, as EDA's source mappings: `{"<source name>": <stream ID>}`. A source without a name is `__SOURCE_n`, the rulebook's nth source. A mapped source gets no stream or connector of its own: its ruleset's rules read the stream. You can set them on a file's rulebook too, with a stream you can see. |
 | `revision`, `imported` | The project's revision the file came from; when the rulebook was last imported. |
 | `import_error` | Why the last import couldn't read the rulebook. The objects of the import before stay as they were. |
 | `report` | What became of each ruleset, source, rule and action: `translated`, `partial` or `not_translated`, the `reasons` for what isn't, the `notes` where awxnext behaves otherwise than ansible-rulebook, and the `object` each piece became. `summary` counts the rules by status. |
@@ -1587,7 +1589,8 @@ importing a rulebook takes the right to change the project. Rulebooks aren't a G
 their project's git repository already holds them.
 
 In the UI, a project's **Rulebooks** tab lists them, imports them again and uploads one; a
-rulebook's page shows its report, with a link to each object. The editor of an imported rule
+rulebook's page shows its report and source mappings, with a link to each object. Its **Edit**
+page sets the variables and maps each source to an event stream. The editor of an imported rule
 leaves its streams, conditions and action alone, and changes its description, mode, fix check
 and guardrails.
 
@@ -1737,7 +1740,8 @@ what awxnext's roles let them, and an object they can't see answers 403.
 
 A project's `proxy` (`scm_proxy` in `/api/v2/`, encrypted) is the HTTP proxy git syncs and
 checks out through, its password shown as `$encrypted$`; `verify_ssl: false` turns off git's
-certificate check. A stream's `additional_data_headers` names request headers its events
+certificate check. In the UI, a git project's form sets them as **Proxy** and **Check the TLS
+certificate**. A stream's `additional_data_headers` names request headers its events
 keep: each becomes an attribute of the event, named in lowercase letters and digits
 (`X-Request-Id` is `event.xrequestid` in a rule). `Authorization`, `Proxy-Authorization` and
 `Cookie` are never kept. EDA's senders post to `/api/eda/v1/external_event_stream/<uuid>/post/`,
@@ -1757,7 +1761,11 @@ copies. EDA-only settings (`restart_policy`, `log_level`, `restart_on_project_up
 - **Enabled.** Enabling an activation, at its creation or later, enables its connectors with the
   activation's credentials, decision environment and restart policy, and its rules in `auto`
   mode, owned by the user who enabled it: the rules then act with that user's rights, as any
-  rule ([Event rules](#event-rules)). Disabling turns both off.
+  rule ([Event rules](#event-rules)). Disabling turns both off. Since creating or enabling an
+  activation changes its connectors and rules as its user, it takes the `EventConnector Admin`
+  role on each connector and `EventRule Automate` on each rule (`EventRule Admin` to disable),
+  or `Organization Admin`. The right to change the project, which an `Organization Project
+  Admin` has, isn't enough: the `403` names the connector or rule and the role.
 - **Status.** From its connectors: `running` when they run, `starting` while one starts or
   restarts, `failed` when one failed, `stopped` when disabled. An activation whose sources are
   all streams has no connector and is `running` while enabled.

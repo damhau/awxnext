@@ -5,7 +5,7 @@ import { api, ApiError, getAll } from '../../api/client'
 import { useInvalidate, useObject } from '../../api/hooks'
 import type { FieldMeta, OptionsMeta, Ref } from '../../api/types'
 import { useSession } from '../../app/context'
-import { FormError, ImagePicker, Picker } from '../../components/form'
+import { FormError, ImagePicker, Picker, SecretControl } from '../../components/form'
 import { Icon } from '../../components/icons'
 import { useConfirm, useLeaveGuard, useToast } from '../../components/overlay'
 import { Empty, ErrorNote, Loading, PageHead, Panel } from '../../components/ui'
@@ -56,7 +56,6 @@ import {
   amountValue,
   bestUnit,
   controlKind,
-  ENCRYPTED,
   fieldValue,
   mountsOf,
   mountsValue,
@@ -919,61 +918,6 @@ function ReadOnlyValue({ value }: { value: unknown }) {
       <summary>{tr('Show')}</summary>
       <pre>{JSON.stringify(value, null, 2)}</pre>
     </details>
-  )
-}
-
-/** A secret: set or not, replaced rather than edited, since the API never returns it. */
-function SecretControl({ id, value, saved, onChange, disabled, lines }: { id: string; value: unknown; saved: unknown; onChange: (v: unknown) => void; disabled: boolean; lines?: boolean }) {
-  const [replacing, setReplacing] = useState(false)
-  useEffect(() => {
-    if (value === saved) setReplacing(false)
-  }, [value, saved])
-  const input = (onText: (t: string) => void, text: string, autoFocus = false) =>
-    lines ? (
-      <textarea id={id} className="textarea mono" rows={5} disabled={disabled} spellCheck={false} autoFocus={autoFocus} value={text} onChange={(e) => onText(e.target.value)} />
-    ) : (
-      <input id={id} className="input mono" type="password" autoComplete="new-password" disabled={disabled} autoFocus={autoFocus} value={text} onChange={(e) => onText(e.target.value)} />
-    )
-  if (saved !== ENCRYPTED) return input(onChange, String(value ?? ''))
-  if (value === '')
-    return (
-      <div className="secret">
-        <span className="set">{tr('Removed when saved')}</span>
-        <button type="button" className="link-btn" onClick={() => onChange(ENCRYPTED)}>
-          {tr('Undo')}
-        </button>
-      </div>
-    )
-  if (!replacing && value === ENCRYPTED)
-    return (
-      <div className="secret">
-        <span className="set">
-          <span className="cell" data-size="xs" data-state="ok" />
-          {tr('Set')}
-        </span>
-        <button type="button" className="btn sm" disabled={disabled} onClick={() => setReplacing(true)}>
-          {tr('Replace…')}
-        </button>
-        <button type="button" className="link-btn" disabled={disabled} onClick={() => onChange('')}>
-          {tr('Remove')}
-        </button>
-      </div>
-    )
-  // Typing the new value; emptied, the one set stays.
-  return (
-    <div className="s-list">
-      {input((t) => onChange(t === '' ? ENCRYPTED : t), value === ENCRYPTED ? '' : String(value ?? ''), true)}
-      <button
-        type="button"
-        className="link-btn"
-        onClick={() => {
-          setReplacing(false)
-          onChange(ENCRYPTED)
-        }}
-      >
-        {tr('Keep the one set')}
-      </button>
-    </div>
   )
 }
 

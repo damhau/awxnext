@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { nextSteps, objectPath, parseVariables, reportObjects, ruleReasons, shortName, statusView, summaryText, variablesText, type RulebookReport } from './rulebooks'
+import { mappingRows, nextSteps, objectPath, parseVariables, reportObjects, ruleReasons, shortName, sourceStreamsBody, statusView, summaryText, variablesText, type RulebookReport } from './rulebooks'
 
 const report: RulebookReport = {
   summary: { rules: 3, translated: 1, partial: 1, not_translated: 1 },
@@ -79,5 +79,25 @@ describe('a rulebook report', () => {
     expect(parseVariables('a: [').error).toBeTruthy()
     expect(variablesText({})).toBe('')
     expect(parseVariables(variablesText({ port: 5000 }))).toEqual({ vars: { port: 5000 } })
+  })
+})
+
+describe('source mappings', () => {
+  const sources = [
+    { name: 'hook', source_info: 'ansible.eda.webhook:\n    port: 5000\n', rulebook_hash: 'x' },
+    { name: '__SOURCE_2', source_info: 'ansible.eda.alertmanager: {}\n', rulebook_hash: 'x' },
+  ]
+  it('lists the sources in order with their streams, then the names the rulebook lost', () => {
+    expect(mappingRows(sources, { __SOURCE_2: 7, gone: 3 })).toEqual([
+      { name: 'hook', plugin: 'ansible.eda.webhook', stream: null, stale: false },
+      { name: '__SOURCE_2', plugin: 'ansible.eda.alertmanager', stream: 7, stale: false },
+      { name: 'gone', plugin: '', stream: 3, stale: true },
+    ])
+    expect(mappingRows([], null)).toEqual([])
+  })
+  it('sends only the mapped sources', () => {
+    const rows = mappingRows(sources, { hook: 4 })
+    expect(sourceStreamsBody(rows)).toEqual({ hook: 4 })
+    expect(sourceStreamsBody(rows.map((r) => ({ ...r, stream: null })))).toEqual({})
   })
 })
