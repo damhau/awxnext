@@ -33,7 +33,7 @@ be matched.
 | [M7 UI completeness](#m7-ui-completeness) | Every API feature reachable from the UI; the remaining UI goals | 17 |
 | [M8 Settings that make sense](#m8-settings-that-make-sense) | Settings laid out by task, without JSON or AWX's jargon; the settings API unchanged | 10 |
 | [M9 Security](#m9-security) | Known vulnerabilities found by CI and fixed through reviewed PRs | 5 |
-| [M10 Small fixes](#m10-small-fixes) | The importer tested on a real AWX, parity.md matching the code, the deployed image scanned, the AWS lookup tested on moto, M14-10's leftovers, a job's first lines live, M13's leftovers | 8 |
+| [M10 Small fixes](#m10-small-fixes) | The importer tested on a real AWX, parity.md matching the code, the deployed image scanned, the AWS lookup tested on moto, M14-10's leftovers, a job's first lines live, M13's leftovers, OIDC account choice, translations, the Default organization | 11 |
 | [M11 Notifications](#m11-notifications) | Email tested on a real mail server, Slack as in AWX, a Teams type, notifications when a result changes | 4 |
 | [M12 Beyond AWX](#m12-beyond-awx) | What changed before a failure, secrets kept out of job output, an MCP server, drifted hosts | 4 |
 | [M13 Collection hub](#m13-collection-hub) | A private Galaxy in awxnext: publish, approve, sign, mirror and install collections | 5 |
@@ -1486,6 +1486,14 @@ deleted. `import-awx` merges AWX's Default into it.
 **Done when:** a Go test starts a server on an empty database and finds
 "Default" with the "Ansible Galaxy" credential, a start with an organization
 creates none, and the guide says so.
+
+Closed on 2026-11-19, with its 11 tasks done, after green runs of
+`full.yml` and secubot on 0d4178b. secubot's one new finding was a false
+positive. Its triage noted that an execution environment's image starting
+with `-` would be read as a `podman run` or `docker run` option: filed as
+[#190](https://github.com/damhau/awxnext/issues/190), with no milestone.
+The permanent instance runs M10-07's pod mode, but its chart, vendored in
+k8s-argocd on 2026-11-01, has no NetworkPolicy for the docs pods yet.
 
 ---
 
