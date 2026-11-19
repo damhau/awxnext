@@ -31,9 +31,12 @@ while it is set.
 ## Install on Kubernetes with Helm
 
 ```bash
-helm install awxnext oci://ghcr.io/damhau/charts/awxnext --namespace awxnext --create-namespace
+helm install awxnext oci://ghcr.io/damhau/charts/awxnext --devel --namespace awxnext --create-namespace
 kubectl -n awxnext get secret awxnext-secrets -o jsonpath='{.data.admin-password}' | base64 -d
 ```
+
+`--devel` takes the newest chart of `main`, published with its image by each push that passes
+CI; drop it to install the latest release instead.
 
 The chart (`deploy/helm/awxnext`) runs the all-in-one image:
 

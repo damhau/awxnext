@@ -53,7 +53,14 @@ helm install awxnext oci://ghcr.io/damhau/charts/awxnext --namespace awxnext --c
 kubectl -n awxnext get secret awxnext-secrets -o jsonpath='{.data.admin-password}' | base64 -d
 ```
 
-From a checkout instead (before the first release, or to try a change), build the all-in-one
+Each push to `main` that passes CI also publishes the chart, as a pre-release of the next
+release: version `<next release>-main.<commit time>` (UTC, `YYYYMMDDHHMMSS`), such as
+`0.1.0-main.20261119110604`, whose default image is that commit's
+`awxnext-all-in-one:main-<commit time>-<commit>`. Helm skips pre-releases unless you pass
+`--devel` (the newest) or `--version`, so before the first release, add one of them to the
+command above.
+
+From a checkout instead (to try a change), build the all-in-one
 image, push it where the cluster pulls from (or `kind load docker-image`), and install the chart
 from `deploy/helm/awxnext`:
 
@@ -118,6 +125,9 @@ The images of `main` are published as `ghcr.io/damhau/awxnext-all-in-one:main-<c
 `alphabetical` strategy and `allowTags: regexp:^main-[0-9]{14}-[0-9a-f]{7}$`. When it, or
 kustomize, changes the image, `AWXNEXT_SHIM_IMAGE` keeps the chart's: copy the image into it
 with a kustomize replacement, so container group job pods get the server's own version.
+Pin the chart itself at one of `main`'s versions, as kustomize's `helmCharts` take it
+(`repo: oci://ghcr.io/damhau/charts`, `version: 0.1.0-main.<commit time>`), and move it
+when the chart changes: the Image Updater moves only the image.
 
 ### From the binary
 

@@ -89,7 +89,9 @@ jobs:
   # On main, once the tests pass: the all-in-one image, tagged
   # main-<commit time, UTC, YYYYMMDDHHMMSS>-<commit>, which sorts by date, and
   # main. Argo CD Image Updater follows the dated tags into the GitOps repo
-  # (docs/operations.md, "With Argo CD or Flux").
+  # (docs/operations.md, "With Argo CD or Flux"). Then the chart, as
+  # oci://ghcr.io/<owner>/charts/awxnext version <Chart.yaml's>-main.<commit
+  # time>, a pre-release of the next release, with that image as its default.
   image:
     needs: [go, ui]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -102,7 +104,9 @@ jobs:
       - name: tag
         id: tag
         run: |
-          echo "tag=main-$(TZ=UTC git log -1 --format=%cd --date=format-local:%Y%m%d%H%M%S)-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          stamp="$(TZ=UTC git log -1 --format=%cd --date=format-local:%Y%m%d%H%M%S)"
+          echo "stamp=$stamp" >> "$GITHUB_OUTPUT"
+          echo "tag=main-$stamp-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
           echo "built=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
@@ -127,3 +131,15 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+      - name: chart
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.tag.outputs.tag }}
+          STAMP: ${{ steps.tag.outputs.stamp }}
+        run: |
+          owner="$(echo "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')"
+          version="$(sed -n 's/^version: *//p' deploy/helm/awxnext/Chart.yaml)-main.$STAMP"
+          echo "$TOKEN" | helm registry login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          helm package deploy/helm/awxnext --version "$version" --app-version "$TAG"
+          helm push "awxnext-$version.tgz" "oci://ghcr.io/$owner/charts"

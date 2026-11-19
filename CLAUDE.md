@@ -61,7 +61,8 @@ CI and the browser:
 - **CI on push:**
   - `ci.yml` runs on every push that changes more than docs, `.gitignore` or `LICENSE`, and on
     every PR: the short suite and the UI. On main, it then publishes the all-in-one image as
-    `main-<commit time>-<commit>`. Argo CD Image Updater deploys that image to the permanent
+    `main-<commit time>-<commit>`, and the chart as `oci://ghcr.io/damhau/charts/awxnext`
+    version `<Chart.yaml's>-main.<commit time>`, with that image as its default. Argo CD Image Updater deploys that image to the permanent
     instance (the `awxnext` app in damhau/k8s-argocd), so a green push to main goes live.
   - `helm.yml` (the chart in kind) runs when the chart, the Dockerfile or the agent change;
     `compose.yml` (the image with Compose) when Compose, the Dockerfile or the job helper do.
