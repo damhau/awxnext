@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
+import type { Params } from '../../api/client'
 import type { JobEvent } from '../../api/types'
-import { addWithin, firstGap, peers, projectPath, toGrid, toLines } from './events'
+import { addWithin, fetchStart, firstGap, missingStart, peers, projectPath, toGrid, toLines, type EventPager } from './events'
 
 let counter = 0
 function ev(event: string, fields: Partial<JobEvent> & { task_uuid?: string; ignore_errors?: boolean } = {}): JobEvent {
@@ -152,5 +153,48 @@ describe('firstGap', () => {
     expect(firstGap([5, 6, 7])).toBeNull()
     expect(firstGap([3, 1, 2, 7, 9])).toBe(4)
     expect(firstGap([])).toBeNull()
+  })
+})
+
+describe('a live stream that starts after the first event', () => {
+  // Saved events, as the API filters them, and the queries it got.
+  function api(saved: JobEvent[]) {
+    const asked: Params[] = []
+    const get: EventPager = async (p) => {
+      asked.push(p)
+      const results = saved.filter((e) => e.counter > Number(p.counter__gt) && (p.counter__lt === undefined || e.counter < Number(p.counter__lt)))
+      return { count: results.length, next: null, previous: null, results }
+    }
+    return { asked, get }
+  }
+
+  it('is missing its start, which firstGap doesn’t count', () => {
+    expect(missingStart([2, 3, 4])).toBe(2)
+    expect(missingStart([4, 1, 2])).toBeNull()
+    expect(missingStart([])).toBeNull()
+    expect(firstGap([2, 3, 4])).toBeNull()
+  })
+
+  it('fetches the lines before the first one held, and only those', async () => {
+    counter = 0
+    const saved = [ev('playbook_on_start', { stdout: 'PLAY [site] ****' }), ev('playbook_on_task_start', { stdout: 'TASK [ping] ****' }), ev('runner_on_ok', { host_name: 'web1' })]
+    const store = new Map<number, JobEvent>()
+    addWithin(store, saved.slice(1), 0)
+    const { asked, get } = api(saved)
+    expect(await fetchStart(store, get, 0)).toBe(false)
+    expect(asked).toEqual([{ order_by: 'counter', counter__gt: 0, counter__lt: 2, page_size: 500 }])
+    expect(toLines([...store.values()].sort((a, b) => a.counter - b.counter))[0].text).toBe('PLAY [site] ****')
+    // Held from the start: nothing to fetch.
+    expect(await fetchStart(store, get, 0)).toBe(false)
+    expect(asked).toHaveLength(1)
+  })
+
+  it('stops at the limit and says so', async () => {
+    counter = 0
+    const saved = [ev('a'), ev('b'), ev('c')]
+    const store = new Map<number, JobEvent>()
+    addWithin(store, [saved[2]], 0)
+    expect(await fetchStart(store, api(saved).get, 2)).toBe(true)
+    expect([...store.keys()].sort()).toEqual([1, 3])
   })
 })

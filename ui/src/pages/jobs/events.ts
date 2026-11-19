@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { api, type Page } from '../../api/client'
+import { api, type Page, type Params } from '../../api/client'
 import type { JobEvent } from '../../api/types'
 import { eventGroup, useLive } from '../../api/live'
 import { stripAnsi } from '../../lib/ansi'
@@ -30,12 +30,45 @@ export function firstGap(counters: Iterable<number>): number | null {
   return null
 }
 
+/** The lowest counter held when it isn't the output's first, 1: the events before it are missing. */
+export function missingStart(counters: Iterable<number>): number | null {
+  let low = Infinity
+  for (const c of counters) low = Math.min(low, c)
+  return low !== Infinity && low > 1 ? low : null
+}
+
+/** Gets a page of a job's events. */
+export type EventPager = (params: Params) => Promise<Page<JobEvent>>
+
+/** Pages the events after a counter, and before another if given, into the store; reports whether some did not fit. */
+export async function pageEvents(store: Map<number, JobEvent>, get: EventPager, limit: number, after: number, before?: number): Promise<boolean> {
+  for (let page = 0; page < 200; page++) {
+    const r = await get({ order_by: 'counter', counter__gt: after, page_size: 500, ...(before !== undefined ? { counter__lt: before } : {}) })
+    if (addWithin(store, r.results, limit)) return true
+    if (r.results.length) after = r.results[r.results.length - 1].counter
+    if (!r.next) break
+  }
+  return false
+}
+
+/**
+ * Fetches the events before the first one held, if any are missing. The
+ * server sends events live before it saves them, so a page that opens as a
+ * job starts can find none saved yet, then join the socket after the first
+ * went out.
+ */
+export function fetchStart(store: Map<number, JobEvent>, get: EventPager, limit: number): Promise<boolean> {
+  const first = missingStart(store.keys())
+  return first === null ? Promise.resolve(false) : pageEvents(store, get, limit, 0, first)
+}
+
 /**
  * Events of a job, in counter order, kept current while it runs: stored
  * events are paged in, live ones arrive over the websocket. At most max
  * events are held (MAX_UI_JOB_EVENTS, 0: all) until loadMore raises it.
  * Events the server did not send live (MAX_WEBSOCKET_EVENT_RATE) leave gaps
- * that are fetched from the API, and so is anything missed when the job ends.
+ * that are fetched from the API, and so are the first events, when live
+ * ones start after them, and anything missed when the job ends.
  */
 export function useJobEvents(type: string, id: number, running: boolean, max = DEFAULT_MAX_EVENTS) {
   const store = useRef(new Map<number, JobEvent>())
@@ -54,26 +87,31 @@ export function useJobEvents(type: string, id: number, running: boolean, max = D
     })
   }
 
+  const pager =
+    (signal?: AbortSignal): EventPager =>
+    (params) =>
+      api.get<Page<JobEvent>>(eventsPath(type, id), params, signal)
+
   // From the first gap if there is one, else after the newest event held.
   const fetchFrom = async (signal?: AbortSignal) => {
     const gap = firstGap(store.current.keys())
     let after = gap !== null ? gap - 1 : 0
     if (gap === null) for (const c of store.current.keys()) after = Math.max(after, c)
-    for (let page = 0; page < 200; page++) {
-      const r = await api.get<Page<JobEvent>>(eventsPath(type, id), { order_by: 'counter', counter__gt: after, page_size: 500 }, signal)
-      if (addWithin(store.current, r.results, limit.current)) {
-        setTruncated(true)
-        break
-      }
-      if (r.results.length) after = r.results[r.results.length - 1].counter
-      if (!r.next) break
-    }
+    if (await pageEvents(store.current, pager(signal), limit.current, after)) setTruncated(true)
+    bump()
+  }
+  // Once while live, and again when the job ends, by when every event is saved.
+  const startFetched = useRef(false)
+  const fetchMissingStart = async () => {
+    startFetched.current = true
+    if (await fetchStart(store.current, pager(), limit.current)) setTruncated(true)
     bump()
   }
 
   useEffect(() => {
     store.current = new Map()
     limit.current = max
+    startFetched.current = false
     setLoading(true)
     setTruncated(false)
     const ctl = new AbortController()
@@ -95,7 +133,10 @@ export function useJobEvents(type: string, id: number, running: boolean, max = D
   // When the job stops, pick up anything the socket missed.
   const wasRunning = useRef(running)
   useEffect(() => {
-    if (wasRunning.current && !running) fetchFrom().catch(() => {})
+    if (wasRunning.current && !running) {
+      fetchFrom().catch(() => {})
+      if (missingStart(store.current.keys()) !== null) fetchMissingStart().catch(() => {})
+    }
     wasRunning.current = running
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [running])
@@ -112,6 +153,7 @@ export function useJobEvents(type: string, id: number, running: boolean, max = D
     if (gapTimer.current === undefined) {
       gapTimer.current = window.setTimeout(() => {
         gapTimer.current = undefined
+        if (!startFetched.current && missingStart(store.current.keys()) !== null) fetchMissingStart().catch(() => {})
         if (firstGap(store.current.keys()) !== null) fetchFrom().catch(() => {})
       }, 1000)
     }
