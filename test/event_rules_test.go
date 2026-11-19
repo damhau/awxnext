@@ -346,7 +346,7 @@ func TestEventRuleRights(t *testing.T) {
 	}
 
 	must(t, a.delete(fmt.Sprintf("role_user_assignments/%d/", asg)), 204)
-	am.alert(t, 1, testAlert{"DiskFull", "web-02", "2026-11-15T08:01:00Z", "f2"}, testAlert{"DiskFull", "web-03", "2026-11-15T08:02:00Z", "f3"})
+	am.alert(t, 2, testAlert{"DiskFull", "web-02", "2026-11-15T08:01:00Z", "f2"}, testAlert{"DiskFull", "web-03", "2026-11-15T08:02:00Z", "f3"})
 	waitRules(t, am.id)
 	if n := len(ruleJobs(t, a, rid)); n != 1 {
 		t.Errorf("%d jobs after the right was revoked", n)
