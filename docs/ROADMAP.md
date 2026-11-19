@@ -1471,6 +1471,21 @@ then find is translated.
 sentence starting with "A ", and passes with both strings, and anything else
 it finds, translated in French.
 
+### M10-11 Create the Default organization on a new install
+**Labels:** feature · **Size:** S · [#188](https://github.com/damhau/awxnext/issues/188)
+
+Asked on 2026-11-19. A new awxnext has no organization, while AWX's
+`create_preload_data` creates "Default" with demo objects. At startup, when
+no organization exists, awxnext creates "Default" with the managed "Ansible
+Galaxy" credential, as AWX does, and none of AWX's demo objects: the Demo
+Project needs github.com, and their names would collide with an AWX import's.
+As in AWX, it comes back at the next start if every organization was
+deleted. `import-awx` merges AWX's Default into it.
+
+**Done when:** a Go test starts a server on an empty database and finds
+"Default" with the "Ansible Galaxy" credential, a start with an organization
+creates none, and the guide says so.
+
 ---
 
 ## M11 Notifications
