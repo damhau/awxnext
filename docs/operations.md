@@ -3300,6 +3300,8 @@ installs the latest PostgreSQL client as it builds, so it would not be reproduci
 secubot's image scan catches a tag that brings a vulnerability into the all-in-one image, and
 `make vuln-images` into either image. Dependabot proposes the next
 lines (Go 1.27, Python 3.13...); uv is pinned to a release (`ghcr.io/astral-sh/uv:0.13.5`).
+For Python, it proposes only the lines that the image's ansible-core runs on (3.12 to 3.14 for
+ansible-core 2.20). When ansible-core moves, move that bound in `dependabot.yml` too.
 
 ### CodeQL
 

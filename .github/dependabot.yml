@@ -77,3 +77,8 @@ updates:
       # workflows' node-version.
       - dependency-name: node
         update-types: [version-update:semver-major]
+      # Python runs ansible-core, pinned in the Dockerfile: only the lines its
+      # release runs on (ansible-core 2.20: 3.12 to 3.14). Move this bound
+      # when ansible-core moves.
+      - dependency-name: python
+        versions: [">= 3.15"]
