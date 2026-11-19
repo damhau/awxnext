@@ -479,7 +479,10 @@ func TestEventRuleApproval(t *testing.T) {
 	d = pending()
 	wantOutcome(t, waitOutcome(d["sequence"]), "timed_out", "", "The approval timed out.")
 
-	// Disabling the rule cancels the approvals it waits for.
+	// Disabling the rule cancels the approvals it waits for. With the
+	// 1-second timeout left on, the race detector's slowness let the approval
+	// time out first (full.yml run 44541906148).
+	must(t, a.patch(fmt.Sprintf("event_rules/%d/", rid), map[string]any{"approval_timeout": 0}), 200)
 	am.fire(t, "h1")
 	d = pending()
 	must(t, a.patch(fmt.Sprintf("event_rules/%d/", rid), map[string]any{"enabled": false}), 200)
