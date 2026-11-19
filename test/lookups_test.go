@@ -261,12 +261,15 @@ func TestThycoticSecretServerLookup(t *testing.T) {
 	typeTest(t, a, "thycotic_tss", map[string]any{"server_url": srv.URL + "/SecretServer", "username": "app-user", "password": "x"}, md, 400)
 }
 
+// TestAWSSecretsManagerLookup runs the lookup against a fake; the moto test
+// (TestAWSSecretsManagerMoto) checks it against what AWS accepts. As in AWS,
+// an access key works in every region and each region has its own secrets.
 func TestAWSSecretsManagerLookup(t *testing.T) {
 	a := adminClient(t)
 	org := newOrg(t, a)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		auth := r.Header.Get("Authorization")
-		if !strings.HasPrefix(auth, "AWS4-HMAC-SHA256 Credential=AKIATEST/") || !strings.Contains(auth, "/eu-west-1/secretsmanager/aws4_request") {
+		if !strings.HasPrefix(auth, "AWS4-HMAC-SHA256 Credential=AKIATEST/") || !strings.Contains(auth, "/secretsmanager/aws4_request") {
 			w.Header().Set("X-Amzn-ErrorType", "UnrecognizedClientException")
 			jsonReply(w, 400, map[string]any{"__type": "UnrecognizedClientException", "message": "The security token included in the request is invalid."})
 			return
@@ -278,6 +281,9 @@ func TestAWSSecretsManagerLookup(t *testing.T) {
 		var body map[string]string
 		json.NewDecoder(r.Body).Decode(&body)
 		w.Header().Set("Content-Type", "application/x-amz-json-1.1")
+		if !strings.Contains(auth, "/eu-west-1/secretsmanager/") {
+			body["SecretId"] = ""
+		}
 		switch body["SecretId"] {
 		case "prod/db":
 			json.NewEncoder(w).Encode(map[string]any{"Name": "prod/db", "SecretString": "aws-pass"})
@@ -301,6 +307,12 @@ func TestAWSSecretsManagerLookup(t *testing.T) {
 	if got, _ := lookupValue(t, a, org, "aws_secretsmanager_credential", in, map[string]any{"region_name": "eu-west-1", "secret_name": "prod/blob"}); got != "binary-pass" {
 		t.Fatalf("binary: %q", got)
 	}
-	typeTest(t, a, "aws_secretsmanager_credential", in, map[string]any{"region_name": "eu-west-1", "secret_name": "prod/none"}, 400)
-	typeTest(t, a, "aws_secretsmanager_credential", map[string]any{"aws_access_key": "AKIAOTHER", "aws_secret_key": "secret"}, md, 400)
+	for _, md := range []map[string]any{{"region_name": "eu-west-1", "secret_name": "prod/none"}, {"region_name": "us-east-1", "secret_name": "prod/db"}} {
+		if r := typeTest(t, a, "aws_secretsmanager_credential", in, md, 400); !strings.Contains(r.Raw, "ResourceNotFoundException") {
+			t.Fatalf("%v: %s", md, r.Raw)
+		}
+	}
+	if r := typeTest(t, a, "aws_secretsmanager_credential", map[string]any{"aws_access_key": "AKIAOTHER", "aws_secret_key": "secret"}, md, 400); !strings.Contains(r.Raw, "UnrecognizedClientException") {
+		t.Fatalf("other key: %s", r.Raw)
+	}
 }

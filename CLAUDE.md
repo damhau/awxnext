@@ -49,7 +49,12 @@ Writing and running Go tests:
   (repo1.maven.org) into `~/.cache/awxnext/embedded-postgres`; later runs need no network.
 - **Running everything locally:** job tests need `ansible-runner` on the PATH; the object
   storage tests need `AWXNEXT_TEST_S3_*` and `AWXNEXT_TEST_AZURITE_BLOB_ENDPOINT` (see
-  `test/archive_storage_test.go`).
+  `test/archive_storage_test.go`). The AWS Secrets Manager lookup test needs moto, as
+  `full.yml` starts it: `docker run -d -p 5000:5000 -e INITIAL_NO_AUTH_ACTION_COUNT=0
+  motoserver/moto:5.2.5`, then `AWXNEXT_TEST_MOTO_ENDPOINT=http://127.0.0.1:5000 go test
+  ./test/ -run TestAWSSecretsManagerMoto`. The endpoint takes an IP address, not a host name:
+  the test lists it in `CREDENTIAL_LOOKUP_ALLOWED_LOCAL_ADDRESSES`. It resets moto first, so
+  it runs again on the same server.
 
 CI and the browser:
 
