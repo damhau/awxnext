@@ -35,7 +35,8 @@ var webhookFields = map[string]string{
 	"disable_ssl_verification": "boolean",
 }
 
-var messageEvents = []string{"started", "success", "error"}
+// messageEvents are the events with custom messages, beside workflow_approval.
+var messageEvents = append([]string{"started", "success", "error"}, changeEvents...)
 
 const defaultMessage = "{{ job_friendly_name }} #{{ job.id }} '{{ job.name }}' {{ job.status }}: {{ url }}"
 
@@ -267,7 +268,7 @@ func validateMessages(v any, typ string) error {
 func sampleContext() map[string]any {
 	job := map[string]any{"id": float64(42), "name": "Example", "status": "successful", "type": "job", "summary_fields": map[string]any{}}
 	return map[string]any{"job": job, "job_friendly_name": "Job", "url": "https://example.com/jobs/42", "job_metadata": `{"id": 42}`,
-		"approval_status": "approved", "approval_node_name": "Approve", "workflow_url": "https://example.com/jobs/41"}
+		"approval_status": "approved", "approval_node_name": "Approve", "workflow_url": "https://example.com/jobs/41", "median_elapsed": 12.5}
 }
 
 func registerNotifications() {
@@ -745,20 +746,16 @@ func notifyApproval(c *Ctx, approvalID int64, status string) {
 	}
 }
 
-// notifyJob sends the job's notifications for an event (started, success, error).
-func notifyJob(ctx context.Context, m *jobs.Manager, row jobs.Row, event string) {
-	c := &api.Ctx{Context: ctx, App: m.App, User: rbac.System(), Extra: map[string]any{}}
-	targets := jobNotificationTargets(ctx, m.DB(), row)
-	if len(targets) == 0 {
-		return
-	}
+// linkedNotifications are the notification templates attached to any of the
+// targets for any of the events, each once.
+func linkedNotifications(ctx context.Context, db api.DBTX, targets [][2]any, events ...string) []int64 {
 	seen := map[int64]bool{}
 	var ids []int64
 	for _, t := range targets {
-		rows, err := m.DB().Query(ctx, `SELECT notification_template_id FROM notification_template_links
-			WHERE content_type = $1 AND object_id = $2 AND event = $3 ORDER BY notification_template_id`, t[0], t[1], event)
+		rows, err := db.Query(ctx, `SELECT notification_template_id FROM notification_template_links
+			WHERE content_type = $1 AND object_id = $2 AND event = ANY($3) ORDER BY notification_template_id`, t[0], t[1], events)
 		if err != nil {
-			return
+			return nil
 		}
 		for rows.Next() {
 			var id int64
@@ -770,16 +767,30 @@ func notifyJob(ctx context.Context, m *jobs.Manager, row jobs.Row, event string)
 		}
 		rows.Close()
 	}
+	return ids
+}
+
+// notifyJob sends a job's notifications for an event. extra adds to the
+// messages' context.
+func notifyJob(ctx context.Context, m *jobs.Manager, row jobs.Row, event string, extra map[string]any) {
+	c := &api.Ctx{Context: ctx, App: m.App, User: rbac.System(), Extra: map[string]any{}}
+	ids := linkedNotifications(ctx, m.DB(), jobNotificationTargets(ctx, m.DB(), row), event)
 	if len(ids) == 0 {
 		return
 	}
 	tctx, meta := notificationContext(c, row)
+	for k, v := range extra {
+		tctx[k] = v
+	}
 	jobID := row.ID()
 	for _, ntID := range ids {
 		var typ string
 		var messages map[string]any
 		m.DB().QueryRow(ctx, "SELECT notification_type, messages FROM notification_templates WHERE id = $1", ntID).Scan(&typ, &messages)
 		subjectT, bodyT := defaultMessage, ""
+		if s, ok := changeMessages[event]; ok {
+			subjectT = s
+		}
 		if typ == "email" {
 			bodyT = emailDefaultBody
 		}
@@ -802,7 +813,12 @@ func notifyJob(ctx context.Context, m *jobs.Manager, row jobs.Row, event string)
 			body = ""
 		} else if typ == "teams" {
 			job, _ := tctx["job"].(map[string]any)
-			body = teamsJobCard(job, meta)
+			card := teamsJobCard(job, meta)
+			if median, ok := extra["median_elapsed"].(float64); ok {
+				card.color = "Warning"
+				card.facts = append(card.facts, [2]string{"Median", teamsDuration(median)})
+			}
+			body = card
 		} else if strings.TrimSpace(bodyT) != "" {
 			rendered, err := tmpl.Render(bodyT, tctx)
 			var parsed any
@@ -826,15 +842,18 @@ func notifyJob(ctx context.Context, m *jobs.Manager, row jobs.Row, event string)
 
 // JobStartedNotifications and JobFinishedNotifications are manager hooks.
 func JobStartedNotifications(ctx context.Context, m *jobs.Manager, row jobs.Row) {
-	notifyJob(ctx, m, row, "started")
+	notifyJob(ctx, m, row, "started", nil)
 }
 
+// JobFinishedNotifications sends the change events before AWX's event, so
+// that once a run's success or error notification exists, they do too.
 func JobFinishedNotifications(ctx context.Context, m *jobs.Manager, row jobs.Row) {
 	event := "error"
 	if row.Str("status") == "successful" {
 		event = "success"
 	}
-	notifyJob(ctx, m, row, event)
+	notifyChanges(ctx, m, row)
+	notifyJob(ctx, m, row, event, nil)
 }
 
 // renderEmailBody renders an email body template; a template that fails to

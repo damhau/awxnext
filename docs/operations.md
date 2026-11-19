@@ -3077,6 +3077,56 @@ from awxnext, so it creates Teams templates. The `awx.awx` collection's
 `notification_template` module checks the type against its own list, so it can't manage them:
 use the API, the UI or the CLI. A GitOps declaration would keep the URL in Git in clear.
 
+## Notify when a result changes
+
+AWX sends a template's error notifications on every failure: a template that fails each night
+sends the same message each night, and nothing says when it works again. awxnext adds three
+events of its own, which you attach as you attach AWX's:
+
+| Event | Fires on |
+| --- | --- |
+| `first_error` | A failure after a success. |
+| `recovered` | A success after a failure. |
+| `slow` | A run that takes more than twice the median time of the template's last 10 successful runs, once the template has 5. |
+
+Each event compares a run with the same template's earlier runs, whatever launched them: a
+user, a schedule, a workflow or a webhook. It fires when the result changes, not on the later
+runs that keep it. A template that fails three nights in a row sends one `first_error`, and the
+next success sends one `recovered`. A slow run sends `slow`, and a later run sends it again only
+after a run that wasn't slow. `failed` and `error` both count as a failure.
+
+- **Canceled runs don't count:** they fire none of these events, and the next run compares with
+  the run before them.
+- **A template's first run** has nothing to compare with. A run without a template, such as an
+  ad hoc command, fires none of these events.
+- **A sliced job** counts as one run: its workflow job, not its slices.
+
+To attach a notification template in the UI, open the **Notifications** tab of a job template,
+workflow, project, inventory source or organization: the **First failure**, **Recovered** and
+**Slow** columns follow AWX's events. Through the API, post `{"id": N}` to the object's
+`notification_templates_first_error/`, `notification_templates_recovered/` or
+`notification_templates_slow/`, as to `notification_templates_error/`, and
+`{"id": N, "disassociate": true}` to detach it. As for AWX's events, a project's and an
+organization's notification templates fire for the runs of the templates that use them, each
+run compared with its own template's runs.
+
+The default messages say what changed:
+
+| Event | Default message |
+| --- | --- |
+| `first_error` | `{{ job_friendly_name }} #{{ job.id }} '{{ job.name }}' {{ job.status }} after a success: {{ url }}` |
+| `recovered` | `{{ job_friendly_name }} #{{ job.id }} '{{ job.name }}' {{ job.status }} after a failure: {{ url }}` |
+| `slow` | `{{ job_friendly_name }} #{{ job.id }} '{{ job.name }}' took {{ job.elapsed }} s, more than twice its median of {{ median_elapsed }} s: {{ url }}` |
+
+Custom messages go under the same keys in `messages`, as for AWX's events, for example
+`{"slow": {"message": "{{ job.name }} is slow", "body": null}}`. The `slow` messages also have
+`median_elapsed`, the median in seconds. An email's body and a webhook's body are those of AWX's
+events. A Teams card for `slow` has an orange title, and the median after the elapsed time.
+
+AWX's clients see only AWX's events. The `awx` CLI's options and the `awx.awx` collection's
+modules name AWX's four events, and `awx export` skips the other links, so an export leaves them
+out. The links still appear in each object's `related`.
+
 ## Settings
 
 The Settings pages group AWX's settings by what they set up rather than by AWX's categories:

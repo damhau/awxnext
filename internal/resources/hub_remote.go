@@ -364,7 +364,7 @@ func registerCollectionRemotes() {
 			Filter: func(arg ArgFunc, pid int64) string { return "t.unified_job_template_id = " + arg(pid) }},
 		{Name: "schedules", Target: "schedules", ParentField: "unified_job_template",
 			Filter: func(arg ArgFunc, pid int64) string { return "t.unified_job_template_id = " + arg(pid) }},
-	}, notificationSubs("collectionremote", false)...)
+	}, notificationSubs("collectionremote", false, false)...)
 	remotes.Actions = []*api.Action{{Name: "sync", Methods: []string{"GET", "POST"}, Handler: func(c *Ctx, w http.ResponseWriter, r *http.Request, obj Obj) {
 		if r.Method == "GET" {
 			api.WriteJSON(w, 200, Obj{"can_sync": c.User.Superuser})

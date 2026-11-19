@@ -400,7 +400,7 @@ func registerJobTemplates() {
 		},
 		labelSub("unified_job_template_labels", "unified_job_template_id"),
 		orderedLinkSub("instance_groups", "instance_groups", "instance_group_links", "instance_group_id", "jobtemplate"),
-	}, notificationSubs("jobtemplate", false)...)
+	}, notificationSubs("jobtemplate", false, true)...)
 	jt.Actions = []*api.Action{
 		{Name: "launch", Methods: []string{"GET", "POST"}, Perm: "execute", Handler: handleLaunch},
 		{Name: "survey_spec", Methods: []string{"GET", "POST", "DELETE"}, Handler: handleSurveySpec},

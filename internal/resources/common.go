@@ -200,13 +200,21 @@ var notifiedResources = map[string]string{
 	"systemjobtemplate":   "system_job_templates",
 }
 
-// notificationSubs exposes notification_templates_{started,success,error[,approvals]} sublists.
+// changeEvents are awxnext's notification events, which AWX's clients don't
+// know: a run's result changing from the template's previous run, and a slow run.
+var changeEvents = []string{"first_error", "recovered", "slow"}
+
+// notificationSubs exposes notification_templates_{started,success,error[,approvals]} sublists,
+// and those of the change events.
 // Attaching a notification needs change on it too, as in AWX: whoever may
 // change a template may not attach every notification they can see.
-func notificationSubs(ct string, approvals bool) []*SubList {
+func notificationSubs(ct string, approvals, changes bool) []*SubList {
 	events := []string{"started", "success", "error"}
 	if approvals {
 		events = append(events, "approvals")
+	}
+	if changes {
+		events = append(events, changeEvents...)
 	}
 	var out []*SubList
 	for _, ev := range events {

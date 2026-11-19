@@ -260,7 +260,7 @@ func registerWorkflows() {
 		{Name: "workflow_jobs", Target: "workflow_jobs", ReadOnly: true,
 			Filter: func(arg ArgFunc, pid int64) string { return "t.unified_job_template_id = " + arg(pid) }},
 		labelSub("unified_job_template_labels", "unified_job_template_id"),
-	}, notificationSubs("workflowjobtemplate", true)...)
+	}, notificationSubs("workflowjobtemplate", true, true)...)
 	wf.Actions = []*api.Action{
 		{Name: "launch", Methods: []string{"GET", "POST"}, Perm: "execute", Handler: handleWorkflowLaunch},
 		{Name: "survey_spec", Methods: []string{"GET", "POST", "DELETE"}, Handler: handleSurveySpec},

@@ -282,7 +282,7 @@ func registerInventorySources() {
 			Filter: func(arg ArgFunc, pid int64) string {
 				return fmt.Sprintf("t.id IN (SELECT group_id FROM group_inventory_sources WHERE inventory_source_id = %s)", arg(pid))
 			}},
-	}, notificationSubs("inventorysource", false)...)
+	}, notificationSubs("inventorysource", false, true)...)
 	src.Actions = []*api.Action{
 		{Name: "update", Methods: []string{"GET", "POST"}, Handler: func(c *Ctx, w http.ResponseWriter, r *http.Request, obj Obj) {
 			err := requireInventoryPerm(c, obj["inventory"], "update")

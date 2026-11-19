@@ -84,7 +84,7 @@ func registerOrganizations() {
 					return err
 				},
 			},
-		}, notificationSubs("organization", true)...),
+		}, notificationSubs("organization", true, true)...),
 	})
 
 	api.Register(&Resource{

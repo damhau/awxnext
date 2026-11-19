@@ -67,6 +67,11 @@ describe('custom messages', () => {
       workflow_approval: { running: { message: 'Review {{ approval_node_name }}', body: null } },
     })
   })
+  it('keeps the change events under their own keys', () => {
+    const m = buildMessages('email', { first_error: { subject: '{{ job.name }} broke', body: '' }, slow: { subject: '', body: 'Usually {{ median_elapsed }} s' } })
+    expect(m).toEqual({ first_error: { message: '{{ job.name }} broke', body: null }, slow: { message: null, body: 'Usually {{ median_elapsed }} s' } })
+    expect(messageEntries(m)).toEqual({ first_error: { subject: '{{ job.name }} broke', body: '' }, slow: { subject: '', body: 'Usually {{ median_elapsed }} s' } })
+  })
   it('drops subjects for webhooks and returns null when nothing is set', () => {
     expect(buildMessages('webhook', { success: { subject: 'ignored', body: ' {"ok": true} ' } })).toEqual({ success: { message: null, body: '{"ok": true}' } })
     expect(buildMessages('webhook', { success: { subject: 'ignored', body: '' } })).toBeNull()

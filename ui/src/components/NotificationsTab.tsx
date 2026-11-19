@@ -9,27 +9,39 @@ import { DataTable, type Column } from './table'
 import { Empty } from './ui'
 import { tr } from '../lib/i18n'
 
-/** The events a notification can be attached for, as the API names its sub-lists. */
-export const notificationEvents = [
+export interface NotificationEvent {
+  key: string
+  label: string
+  /** What an awxnext event means: a change from the template's previous runs. */
+  hint?: string
+}
+
+/** The events a notification can be attached for, as the API names its sub-lists: AWX's, then awxnext's. */
+export const notificationEvents: NotificationEvent[] = [
   { key: 'started', label: tr('Start') },
   { key: 'success', label: tr('Success') },
   { key: 'error', label: tr('Failure') },
   { key: 'approvals', label: tr('Approval') },
-] as const
+  { key: 'first_error', label: tr('First failure'), hint: tr('a failure after a success') },
+  { key: 'recovered', label: tr('Recovered'), hint: tr('a success after a failure') },
+  { key: 'slow', label: tr('Slow'), hint: tr('more than twice the median time of the last 10 successful runs') },
+]
 
 type NT = Base & { notification_type: string }
 
 /**
  * The notifications that fire for an object's jobs: every notification the
  * user can see, with a switch per event. `approvals` adds the approval event
- * (workflows and organizations); `events` replaces them for objects with
- * other events, such as catalog items. Attaching needs change on the object
- * and on the notification.
+ * (workflows and organizations), and `changes` awxnext's first failure,
+ * recovered and slow; `events` replaces them for objects with other events,
+ * such as catalog items. Attaching needs change on the object and on the
+ * notification.
  */
 export function NotificationsTab({
   resource,
   id,
   approvals,
+  changes,
   editable,
   events: only,
   intro,
@@ -37,8 +49,9 @@ export function NotificationsTab({
   resource: string
   id: number
   approvals?: boolean
+  changes?: boolean
   editable: boolean
-  events?: { key: string; label: string }[]
+  events?: NotificationEvent[]
   intro?: ReactNode
 }) {
   const [q, setQ] = useState('')
@@ -46,7 +59,7 @@ export function NotificationsTab({
   const toast = useToast()
   const invalidate = useInvalidate()
   const all = useList<NT>('notification_templates/', { search: q || undefined, order_by: 'name', page_size: 100 })
-  const events = only ?? notificationEvents.filter((e) => approvals || e.key !== 'approvals')
+  const events = only ?? notificationEvents.filter((e) => (approvals || e.key !== 'approvals') && (changes || !e.hint))
   const sub = (ev: string) => `${resource}/${id}/notification_templates_${ev}/`
   const attached = useQueries({
     queries: events.map((e) => ({ queryKey: [sub(e.key), 'list', { page_size: 200 }], queryFn: () => api.get<Page<Base>>(sub(e.key), { page_size: 200 }) })),
@@ -86,7 +99,7 @@ export function NotificationsTab({
     ...events.map(
       (e): Column<NT> => ({
         key: e.key,
-        header: e.label,
+        header: e.hint ? <span title={e.hint}>{e.label}</span> : e.label,
         width: 96,
         className: 'center',
         render: (n) => {
@@ -118,6 +131,18 @@ export function NotificationsTab({
         </p>
         <input className="input" type="search" placeholder={tr('Filter notifications…')} aria-label={tr('Filter notifications')} value={q} onChange={(e) => setQ(e.target.value)} style={{ maxWidth: 260 }} />
       </div>
+      {events.some((e) => e.hint) && (
+        <p className="muted" style={{ margin: 0, fontSize: 13 }}>
+          {events
+            .filter((e) => e.hint)
+            .map((e) => (
+              <span key={e.key}>
+                <strong>{e.label}</strong>: {e.hint}.{' '}
+              </span>
+            ))}
+          {tr('Each compares a run with the template’s earlier runs, canceled runs aside, and fires when the result changes, not on the later runs that keep it.')}
+        </p>
+      )}
       <DataTable
         label={tr('Notifications')}
         rows={rows}

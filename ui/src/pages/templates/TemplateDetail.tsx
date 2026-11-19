@@ -153,7 +153,7 @@ export function TemplateDetail({ kind }: { kind: Kind }) {
         <Route path="visualizer" element={<div className="page-body"><WorkflowVisualizer templateId={tpl.id} editable={!!caps.edit && !tpl.managed_by} /></div>} />
         <Route path="survey" element={<div className="page-body"><SurveyEditor kind={kind} tpl={tpl} /></div>} />
         <Route path="access" element={<div className="page-body"><AccessTab resource={res} id={tpl.id} name={tpl.name} /></div>} />
-        <Route path="notifications" element={<div className="page-body"><NotificationsTab resource={res} id={tpl.id} approvals={kind === 'workflow'} editable={!!caps.edit && !tpl.managed_by} /></div>} />
+        <Route path="notifications" element={<div className="page-body"><NotificationsTab resource={res} id={tpl.id} approvals={kind === 'workflow'} changes editable={!!caps.edit && !tpl.managed_by} /></div>} />
         <Route path="schedules" element={<div className="page-body"><SchedulesTab template={{ id: tpl.id, type: tpl.type, name: tpl.name }} /></div>} />
         <Route path="jobs" element={<div className="page-body"><JobsTable fixed={{ unified_job_template: tpl.id }} /></div>} />
         <Route path="history/*" element={<History kind={kind} tpl={tpl} />} />

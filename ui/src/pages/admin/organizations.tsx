@@ -337,7 +337,7 @@ export function OrganizationDetail() {
           />
           <Route path="members" element={<OrgMembers org={o} />} />
           <Route path="teams" element={<OrgTeams org={o} />} />
-          <Route path="notifications" element={<NotificationsTab resource="organizations" id={o.id} approvals editable={!!o.summary_fields.user_capabilities?.edit} />} />
+          <Route path="notifications" element={<NotificationsTab resource="organizations" id={o.id} approvals changes editable={!!o.summary_fields.user_capabilities?.edit} />} />
           <Route path="access" element={<AccessTab resource="organizations" id={id} name={o.name} />} />
         </Routes>
       </div>

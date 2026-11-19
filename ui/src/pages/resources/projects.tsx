@@ -708,7 +708,7 @@ export function ProjectNotificationsTab() {
   const p = useProject()
   return (
     <div className="page-body">
-      <NotificationsTab resource="projects" id={p.id} editable={!!p.summary_fields.user_capabilities?.edit && !p.managed_by} />
+      <NotificationsTab resource="projects" id={p.id} changes editable={!!p.summary_fields.user_capabilities?.edit && !p.managed_by} />
     </div>
   )
 }

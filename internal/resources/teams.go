@@ -96,7 +96,7 @@ func teamsJobCard(job, meta map[string]any) teamsCard {
 	}
 	var elapsed string
 	if e, ok := num(job["elapsed"]); ok && str(meta["finished"]) != "" {
-		elapsed = (time.Duration(e * float64(time.Second))).Round(time.Second).String()
+		elapsed = teamsDuration(e)
 	}
 	return teamsCard{
 		color: map[string]string{"successful": "Good", "failed": "Attention", "error": "Attention", "canceled": "Warning"}[status],
@@ -121,6 +121,11 @@ func teamsApprovalCard(name, status, workflow, link string) teamsCard {
 		link:   link,
 		action: action,
 	}
+}
+
+// teamsDuration shows seconds to the second, as 1m5s.
+func teamsDuration(seconds float64) string {
+	return time.Duration(seconds * float64(time.Second)).Round(time.Second).String()
 }
 
 // teamsTime shows an API time in UTC, to the second.

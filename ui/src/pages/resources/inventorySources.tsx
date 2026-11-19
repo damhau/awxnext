@@ -233,6 +233,7 @@ export function InventorySourcesTab({ inv }: { inv: Inventory }) {
           title={tr('Notifications for {name}', { name: sources.data?.results.find((s) => s.id === notify)?.name ?? tr('source') })}
           resource="inventory_sources"
           id={notify}
+          changes
           editable={editable}
           onClose={() => {
             setNotify(null)

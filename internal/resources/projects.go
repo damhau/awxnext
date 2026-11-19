@@ -248,7 +248,7 @@ func registerProjects() {
 			Name: "project_updates", Target: "project_updates", ReadOnly: true, SkipView: true,
 			Filter: func(arg ArgFunc, pid int64) string { return "t.unified_job_template_id = " + arg(pid) },
 		},
-	}, notificationSubs("project", false)...)
+	}, notificationSubs("project", false, true)...)
 	proj.Actions = []*api.Action{
 		{Name: "update", Methods: []string{"GET", "POST"}, Handler: func(c *Ctx, w http.ResponseWriter, r *http.Request, obj Obj) {
 			ok, err := api.HasPerm(c, proj, obj, "update")

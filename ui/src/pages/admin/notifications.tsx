@@ -580,7 +580,8 @@ function NTForm({ nt }: { nt?: NT }) {
           help={
             <>
               {isEmail ? tr('Subjects and bodies') : messageOnly ? tr('Messages') : tr('Bodies')} {tr('are templates:')} <span className="mono">{tr('{{ job.name }}')}</span>, <span className="mono">{tr('{{ job.status }}')}</span>, <span className="mono">{tr('{{ url }}')}</span>,{' '}
-              <span className="mono">{tr('{{ job_metadata }}')}</span>, <span className="mono">{tr('{{ approval_node_name }}')}</span>.{' '}
+              <span className="mono">{tr('{{ job_metadata }}')}</span>, <span className="mono">{tr('{{ approval_node_name }}')}</span>,{' '}
+              <span className="mono">{tr('{{ median_elapsed }}')}</span> {tr('(slow runs)')}.{' '}
               {isEmail ? tr('Empty fields use the default subject and body.') : messageOnly ? tr('Empty events use the default message.') : tr('Empty events use the default JSON body.')}
             </>
           }

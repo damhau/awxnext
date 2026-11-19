@@ -130,7 +130,7 @@ func registerSystemJobs() {
 	sjt.SubLists = append([]*SubList{
 		{Name: "jobs", Target: "system_jobs", ReadOnly: true, SkipView: true,
 			Filter: func(arg ArgFunc, pid int64) string { return "t.unified_job_template_id = " + arg(pid) }},
-	}, notificationSubs("systemjobtemplate", false)...)
+	}, notificationSubs("systemjobtemplate", false, false)...)
 	for _, s := range sjt.SubLists {
 		if s.Associate != nil {
 			s.AttachPerm = "none"

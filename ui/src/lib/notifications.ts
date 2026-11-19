@@ -117,6 +117,9 @@ export type Messages = {
   started?: Message
   success?: Message
   error?: Message
+  first_error?: Message
+  recovered?: Message
+  slow?: Message
   workflow_approval?: { approved?: Message; denied?: Message; running?: Message; timed_out?: Message } | null
 } | null
 
@@ -130,6 +133,9 @@ export const MESSAGE_EVENTS: MessageEvent[] = [
   { key: 'started', label: tr('Job started') },
   { key: 'success', label: tr('Job succeeded') },
   { key: 'error', label: tr('Job failed') },
+  { key: 'first_error', label: tr('First failure after a success') },
+  { key: 'recovered', label: tr('Recovered after a failure') },
+  { key: 'slow', label: tr('Slow run') },
   { key: 'running', label: tr('Approval requested'), group: asIs('workflow_approval') },
   { key: 'approved', label: tr('Approval granted'), group: asIs('workflow_approval') },
   { key: 'denied', label: tr('Approval denied'), group: asIs('workflow_approval') },

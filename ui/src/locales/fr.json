@@ -4389,5 +4389,17 @@
   "The message as its title, the job’s status, template, launcher and times, and a button to the job or approval": "Le message en titre, le statut du job, son template, qui l’a lancé et ses heures, et un bouton vers le job ou l’approbation",
   "Its signature lets anyone who has it post to the channel, so it is stored encrypted.": "Sa signature permet à quiconque la possède de publier dans le canal : elle est donc stockée chiffrée.",
   "To make it, open the channel’s ⋯ menu in Teams, then Workflows, and pick “Send webhook alerts to a channel” (earlier “Post to a channel when a webhook request is received”). Copy the URL the workflow shows once saved.": "Pour la créer, ouvrez le menu ⋯ du canal dans Teams, puis Workflows, et choisissez « Send webhook alerts to a channel » (auparavant « Post to a channel when a webhook request is received »). Copiez l’URL que le workflow affiche une fois enregistré.",
-  "Each event posts a card: the message as its title, the job’s status, template, launcher and times, and a button to the job or approval.": "Chaque événement publie une carte : le message en titre, le statut du job, son template, qui l’a lancé et ses heures, et un bouton vers le job ou l’approbation."
+  "Each event posts a card: the message as its title, the job’s status, template, launcher and times, and a button to the job or approval.": "Chaque événement publie une carte : le message en titre, le statut du job, son template, qui l’a lancé et ses heures, et un bouton vers le job ou l’approbation.",
+  "First failure": "Premier échec",
+  "a failure after a success": "un échec après un succès",
+  "Recovered": "Rétabli",
+  "a success after a failure": "un succès après un échec",
+  "Slow": "Lent",
+  "more than twice the median time of the last 10 successful runs": "plus de deux fois la durée médiane des 10 dernières exécutions réussies",
+  "Each compares a run with the template’s earlier runs, canceled runs aside, and fires when the result changes, not on the later runs that keep it.": "Chacun compare une exécution aux précédentes du modèle, hors exécutions annulées, et se déclenche quand le résultat change, pas aux exécutions suivantes qui le gardent.",
+  "First failure after a success": "Premier échec après un succès",
+  "Recovered after a failure": "Rétabli après un échec",
+  "Slow run": "Exécution lente",
+  "{{ median_elapsed }}": "{{ median_elapsed }}",
+  "(slow runs)": "(exécutions lentes)"
 }
