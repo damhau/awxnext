@@ -1,12 +1,12 @@
 import { Fragment, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { Link } from 'react-router'
-import { useList } from '../../api/hooks'
 import type { Job } from '../../api/types'
-import { Ago, Cell } from '../../components/ui'
+import { Cell } from '../../components/ui'
 import { stripAnsi } from '../../lib/ansi'
 import { diffLines, hunks, taskDiffs, tooLargeToCompare, unifiedKind, type TaskDiff } from '../../lib/diff'
 import type { CellSize } from '../../lib/cells'
-import { active, jobPath, plural } from '../../lib/format'
+import { active, plural } from '../../lib/format'
+import { ChangesSummary } from './Changes'
 import { isBad, peers, projectPath, type firstFailure, type Grid, type TaskState } from './events'
 import { tr } from '../../lib/i18n'
 
@@ -148,8 +148,6 @@ function CellDetail({ grid, host, task, job, failure, onHost, onJump }: { grid: 
   const e = h.events[task]
   const t = grid.tasks[task]
   const bad = isBad(s)
-  const prev = useList<Job>(bad && job.unified_job_template ? 'unified_jobs/' : null, { unified_job_template: job.unified_job_template!, status: 'successful', id__lt: job.id, order_by: '-id', page_size: 1 })
-  const p = prev.data?.results[0]
   const secs = Number(e?.event_data?.duration)
   const path = e?.event_data?.task_path ? projectPath(String(e.event_data.task_path)) : ''
   const out = e
@@ -180,16 +178,7 @@ function CellDetail({ grid, host, task, job, failure, onHost, onJump }: { grid: 
       {bad && (
         <div className="cd-note small muted">
           {failure?.stopped && failure.task === t.name && <p>{tr('The play stopped here: no hosts were left to continue (max_fail_percentage or any_errors_fatal).')}</p>}
-          <p>
-            {tr('Last success of this template:')}{' '}
-            {p ? (
-              <>
-                <Link to={jobPath(p)}>#{p.id}</Link> <Ago at={p.finished} />
-              </>
-            ) : (
-              tr('none before this run')
-            )}
-          </p>
+          <ChangesSummary job={job} />
         </div>
       )}
       <div className="cd-links small">

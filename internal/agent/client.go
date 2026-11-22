@@ -219,8 +219,9 @@ func (cfg *Config) runUnit(ctx context.Context, client *http.Client, url string)
 		defer c()
 		return ws.Write(wctx, typ, b)
 	}
+	var digest string
 	done := func(rc int, msg string) error {
-		b, _ := json.Marshal(message{Type: "done", RC: &rc, Error: msg})
+		b, _ := json.Marshal(message{Type: "done", RC: &rc, Error: msg, ImageDigest: digest})
 		err := write(websocket.MessageText, b)
 		ws.Close(websocket.StatusNormalClosure, "")
 		return err
@@ -359,6 +360,9 @@ func (cfg *Config) runUnit(ctx context.Context, client *http.Client, url string)
 		if killed.Load() {
 			msg = "canceled"
 		}
+	}
+	if !connector && !docs {
+		digest = runnercmd.ImageDigest(ctx, rs)
 	}
 	return done(rc, msg)
 }

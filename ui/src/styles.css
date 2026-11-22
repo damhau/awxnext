@@ -746,6 +746,19 @@ table.data tr.folder-row:hover td { background: var(--hover); }
 .changes .old { color: var(--fail-deep); }
 .changes .old.strike { text-decoration: line-through; }
 .changes .new { color: var(--ok-ink); font-weight: 500; }
+.changes-summary p { margin: 0 0 4px; }
+.changes-summary .cs-head { margin-top: 8px; color: var(--ink-2); font-weight: 600; }
+.cs-lines { list-style: none; margin: 0 0 6px; padding: 0; }
+.cs-lines li a { display: flex; gap: 10px; padding: 2px 0; color: inherit; }
+.cs-lines li a:hover .cs-text { text-decoration: underline; }
+.cs-label { flex: 0 0 76px; color: var(--muted-2); }
+.cs-label::before { content: '◆'; margin-right: 6px; color: var(--accent); font-size: 9px; vertical-align: 1px; }
+.cs-text { min-width: 0; overflow-wrap: anywhere; }
+.change-block { scroll-margin-top: 16px; }
+.change-body { padding: 12px 16px 14px; display: flex; flex-direction: column; gap: 10px; }
+.change-body .changes { border: 1px solid var(--line-soft); border-radius: 2px; }
+.change-versions { list-style: none; margin: 0; padding: 0; }
+.commits td { padding: 6px 10px; vertical-align: top; }
 
 /* ---------- workflow graph ---------- */
 .wf-canvas { position: relative; overflow: auto; background: var(--surface-3); background-image: radial-gradient(var(--line) 1px, transparent 1px); background-size: 16px 16px; border: 1px solid var(--line); border-radius: var(--radius-lg); min-height: 360px; }

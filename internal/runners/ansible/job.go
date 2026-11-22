@@ -248,6 +248,7 @@ func runJob(ctx context.Context, rc *jobs.RunContext) jobs.Result {
 	if err := setImage(ctx, app, run, row); err != nil {
 		return fail(err.Error())
 	}
+	update["execution_environment_image"] = run.Image
 	timeout := time.Duration(row.Int("timeout")) * time.Second
 	if timeout == 0 {
 		timeout = time.Duration(app.Settings.Int(ctx, "DEFAULT_JOB_TIMEOUT")) * time.Second
@@ -267,6 +268,9 @@ func runJob(ctx context.Context, rc *jobs.RunContext) jobs.Result {
 	rc.Out.HideOutputs(outputs.Secrets(declared)...)
 
 	oc, err := run.Execute(ctx, app, rc.Out)
+	if oc != nil && oc.ImageDigest != "" {
+		update["execution_environment_digest"] = oc.ImageDigest
+	}
 	if oc != nil && oc.Stats != nil {
 		if serr := recordHostSummaries(ctx, app, row, oc.Stats); serr != nil {
 			rc.Out.Emit(jobs.Event{Event: "system_warning", Stdout: "Could not record host summaries: " + serr.Error()})

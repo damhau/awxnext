@@ -185,6 +185,8 @@ type Outcome struct {
 	Stats     map[string]any
 	Artifacts string // local directory holding returned artifacts
 	Args      []string
+	// ImageDigest is the digest of the image the run used, when known.
+	ImageDigest string
 }
 
 // worker is a running `ansible-runner worker` (local process, agent or job pod).
@@ -222,6 +224,11 @@ func (l *localWorker) Wait() (string, error) {
 	err := l.cmd.Wait()
 	l.cleanup()
 	return strings.TrimSpace(l.stderr.String()), err
+}
+
+// ImageDigest is the digest of the image the worker ran in, once it ended.
+func (l *localWorker) ImageDigest() string {
+	return runnercmd.ImageDigest(context.Background(), l.spec)
 }
 
 func (r *Run) spec(app *api.App) runnercmd.Spec {
@@ -368,6 +375,9 @@ func (r *Run) Execute(ctx context.Context, app *api.App, out *jobs.Output) (oc *
 		<-done
 	}
 	diag, werr := w.Wait()
+	if d, ok := w.(interface{ ImageDigest() string }); ok {
+		oc.ImageDigest = d.ImageDigest()
+	}
 	switch {
 	case errors.Is(ctx.Err(), context.DeadlineExceeded):
 		oc.Status = "timeout"

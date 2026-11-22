@@ -102,6 +102,8 @@ type fakeKube struct {
 	pods    map[string]map[string]any
 	deleted []string
 	dir     string
+	// imageID is what the pod's worker container reports it ran.
+	imageID string
 }
 
 func (k *fakeKube) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -141,7 +143,11 @@ func (k *fakeKube) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(201)
 		w.Write([]byte(`{}`))
 	case r.Method == "GET" && len(parts) == 6:
-		w.Write([]byte(`{"status": {"phase": "Running"}}`))
+		k.mu.Lock()
+		id := k.imageID
+		k.mu.Unlock()
+		json.NewEncoder(w).Encode(map[string]any{"status": map[string]any{"phase": "Running",
+			"containerStatuses": []any{map[string]any{"name": "worker", "imageID": id}}}})
 	case r.Method == "DELETE":
 		k.mu.Lock()
 		k.deleted = append(k.deleted, parts[len(parts)-1])

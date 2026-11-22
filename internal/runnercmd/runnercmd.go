@@ -5,6 +5,7 @@
 package runnercmd
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -12,8 +13,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Spec describes how to start a worker.
@@ -171,6 +174,60 @@ func (s Spec) containerRun() ([]string, func(), error) {
 		args = append(args, "--network="+s.Network)
 	}
 	return append(args, "--name", s.Name), cleanup, nil
+}
+
+// ImageDigest is the digest of s's image as the runtime holds it after a run:
+// the registry digest it was pulled by, else its image ID. It is empty when
+// the runtime runs no container or can't say.
+func ImageDigest(ctx context.Context, s Spec) string {
+	if (s.Runtime != "podman" && s.Runtime != "docker") || s.Image == "" {
+		return ""
+	}
+	if _, pinned, ok := strings.Cut(s.Image, "@"); ok {
+		return Digest(pinned)
+	}
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, s.Runtime, "image", "inspect", "--format", "{{range .RepoDigests}}{{.}} {{end}}|{{.Id}}", "--", s.Image)
+	cmd.Env = Env()
+	out, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	digests, id, _ := strings.Cut(strings.TrimSpace(string(out)), "|")
+	repo := s.Image
+	if i := strings.LastIndex(repo, ":"); i > strings.LastIndex(repo, "/") {
+		repo = repo[:i]
+	}
+	var first string
+	for _, d := range strings.Fields(digests) {
+		r, digest, ok := strings.Cut(d, "@")
+		if !ok {
+			continue
+		}
+		if r == repo || strings.HasSuffix(r, "/"+repo) {
+			return Digest(digest)
+		}
+		if first == "" {
+			first = digest
+		}
+	}
+	if first != "" {
+		return Digest(first)
+	}
+	return Digest(id)
+}
+
+var digestRe = regexp.MustCompile(`(?:sha256:)?([0-9a-f]{64})\b`)
+
+// Digest finds an image's sha256 digest in what a runtime reports, such as
+// a Kubernetes imageID (docker-pullable://repo@sha256:…) or a bare image ID.
+func Digest(s string) string {
+	m := digestRe.FindStringSubmatch(s)
+	if m == nil {
+		return ""
+	}
+	return "sha256:" + m[1]
 }
 
 // Kill stops a worker started from s.

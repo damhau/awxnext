@@ -218,7 +218,7 @@ export function History({ kind, tpl }: { kind: Kind; tpl: Template }) {
   )
 }
 
-function Row({ name, before, after, same }: { name: string; before: ReactNode; after: ReactNode; same: boolean }) {
+export function Row({ name, before, after, same }: { name: string; before: ReactNode; after: ReactNode; same: boolean }) {
   return (
     <>
       <div className="mono">{name}</div>
@@ -238,7 +238,7 @@ const refRes: Record<string, string> = {
 }
 
 /** Shows ids of related objects by name. */
-function Ref({ field, v }: { field: string; v: unknown }) {
+export function Ref({ field, v }: { field: string; v: unknown }) {
   const many = field === 'credentials' || field === 'labels' || field === 'instance_groups'
   const res = many ? field : refRes[field]
   const ids = res ? (many ? ((v as number[]) ?? []) : v ? [v as number] : []) : []

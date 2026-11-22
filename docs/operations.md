@@ -3156,6 +3156,51 @@ AWX's clients see only AWX's events. The `awx` CLI's options and the `awx.awx` c
 modules name AWX's four events, and `awx export` skips the other links, so an export leaves them
 out. The links still appear in each object's `related`.
 
+## What changed since the last good run
+
+A failed job's page answers the first question after a failure: what differs from the last
+run that worked. Under **Last success of this template**, the host × task grid's detail and the
+**Why it failed** panel list up to three changes, each linked to the job's **Changes** tab,
+which lists them all. When nothing changed, they say so. The cause is then outside awxnext,
+such as the target hosts, the network or a cloud API.
+
+The **Changes** tab shows for every finished run of a job or workflow template, successful runs
+too. It compares the run with:
+
+- **the last success:** the template's latest successful run that finished before this one,
+  ordered by when runs finished, then by ID, as [Notify when a result changes](#notify-when-a-result-changes)
+  compares;
+- **the previous run,** when the template never succeeded before;
+- **a run you choose** with **Compare with**, or `?since=<job id>` in the API.
+
+Only runs of the same template and kind count, and a slice of a sliced job compares with the
+same slice of earlier runs. A run you can't see is skipped.
+
+| Section | What it lists |
+| --- | --- |
+| Project | The revisions both runs checked out, and the commits between them: at most 50, with their total. |
+| Template, inventory and credentials | Who edited each one between the runs and when, and its fields before and after, from the version history. A template's section links to its **History** page. |
+| Launch inputs | The prompted values that differ, one extra variable at a time. A difference the template's edit explains shows with the template. |
+| Execution environment | Its edits, and the image and digest each run ran in. "Same tag, new image" means a tag such as `:latest` now names another image. |
+| Hosts | The hosts one run had and the other didn't, when both ran on hosts. |
+| Nodes | For a workflow, the nodes added, removed or running another template, and each node's two jobs, with a link to the node job's own changes. |
+
+Through the API, read `jobs/N/changes/` or `workflow_jobs/N/changes/`, with `?since=` to choose
+the run. `compared_with` names the run and its `reason`: `last_success`, `previous` or `chosen`.
+`count` is the number of changes. A template's first run has `compared_with: null`.
+
+- **Secrets:** a secret field, a credential's secret input or a survey password says only that
+  it changed. Its values stay `$encrypted$`.
+- **Rights:** an inventory, credential or project you can't read shows that it changed, without
+  its fields, its editors or its commits.
+- **Commits** come from the node's own copy of the project's repository. A node that has no copy,
+  such as a chart replica that never synced the project, or a copy without the newer revision,
+  says so; sync the project to list them. When the older revision is gone, the history was
+  rewritten by a force push. Commits are listed for git projects only.
+- **Image digests** are recorded from this version on, for jobs that run in a container: podman
+  or docker on a node, and container groups. A job run directly by ansible-runner, without a
+  container, has none. Older jobs have no digest, so their image compares by name only.
+
 ## Settings
 
 The Settings pages group AWX's settings by what they set up rather than by AWX's categories:

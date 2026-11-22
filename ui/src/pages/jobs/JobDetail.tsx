@@ -8,11 +8,12 @@ import type { HostSummary, Job } from '../../api/types'
 import { varsText } from '../../components/form'
 import { Icon } from '../../components/icons'
 import { Menu, useConfirm, useToast } from '../../components/overlay'
-import { Ago, Cell, Crumbs, Elapsed, Empty, ErrorNote, KV, Loading, Maybe, Panel, StatusBadge, Tab } from '../../components/ui'
+import { Cell, Crumbs, Elapsed, Empty, ErrorNote, KV, Loading, Maybe, Panel, StatusBadge, Tab } from '../../components/ui'
 import { absolute, active, jobApi, jobPath, plural, shortSha, templatePath, typeLabel, userName } from '../../lib/format'
 import { useRelaunch } from '../../components/RelaunchDialog'
 import { WorkflowJobGraph } from '../automation/workflow'
 import { DEFAULT_MAX_EVENTS, firstFailure, toGrid, toLines, useJobEvents } from './events'
+import { ChangesSummary, ChangesTab, hasChanges, useChanges } from './Changes'
 import { Matrix } from './Matrix'
 import { Output } from './Output'
 import { number, tr } from '../../lib/i18n'
@@ -52,6 +53,7 @@ function JobView({ type, job }: { type: string; job: Job }) {
   const running = active(job.status)
   const isWorkflow = type === 'workflow_job'
   const base = jobPath(job)
+  const changes = useChanges(job)
   const summaries = useList<HostSummary>(type === 'job' ? `jobs/${job.id}/job_host_summaries/` : null, { page_size: 200, order_by: 'host_name' }, { refetchInterval: running ? 8000 : false })
   const failedHosts = (summaries.data?.results ?? []).filter((h) => h.failed || h.dark > 0)
   const sf = job.summary_fields
@@ -213,6 +215,11 @@ function JobView({ type, job }: { type: string; job: Job }) {
             </Tab>
           )}
           {(extra || type === 'job') && <Tab to={`${base}/variables`}>{tr('Variables')}</Tab>}
+          {hasChanges(job) && (
+            <Tab to={`${base}/changes`} n={changes.data?.compared_with ? changes.data.count : undefined}>
+              {tr('Changes')}
+            </Tab>
+          )}
           {type === 'job' && <Tab to={`${base}/artifacts`}>{tr('Artifacts')}</Tab>}
           <Tab to={`${base}/details`}>{tr('Details')}</Tab>
         </nav>
@@ -221,6 +228,7 @@ function JobView({ type, job }: { type: string; job: Job }) {
         <Route index element={isWorkflow ? <div className="page-body"><WorkflowJobGraph jobId={job.id} /></div> : <OutputTab type={type} job={job} summaries={summaries.data?.results ?? []} />} />
         <Route path="hosts" element={<HostsTab job={job} rows={summaries.data?.results ?? []} />} />
         <Route path="variables" element={<VariablesTab job={job} />} />
+        <Route path="changes" element={<ChangesTab job={job} />} />
         <Route path="artifacts" element={<div className="page-body"><Panel title={tr('Artifacts')}>{job.artifacts && Object.keys(job.artifacts).length ? <pre className="code">{JSON.stringify(job.artifacts, null, 2)}</pre> : <p className="muted small" style={{ margin: 0 }}>{tr('The playbook set no artifacts (set_stats with per_host: false).')}</p>}</Panel></div>} />
         <Route path="details" element={<DetailsTab type={type} job={job} />} />
       </Routes>
@@ -292,8 +300,6 @@ function OutputTab({ type, job, summaries }: { type: string; job: Job; summaries
 }
 
 function FailurePanel({ job, failure, onJump }: { job: Job; failure: ReturnType<typeof firstFailure>; onJump: (line: number) => void }) {
-  const prev = useList<Job>(job.unified_job_template ? 'unified_jobs/' : null, { unified_job_template: job.unified_job_template!, status: 'successful', id__lt: job.id, order_by: '-id', page_size: 1 })
-  const p = prev.data?.results[0]
   return (
     <aside aria-label={tr('Failure summary')} className="panel narrow" style={{ padding: 14, flex: '1 1 300px' }}>
       <h2 style={{ marginBottom: 8 }}>{tr('Why it failed')}</h2>
@@ -315,9 +321,8 @@ function FailurePanel({ job, failure, onJump }: { job: Job; failure: ReturnType<
             )}
             <dt>{tr('Hosts')}</dt>
             <dd className="mono">{failure.hosts.slice(0, 8).join(', ') + (failure.hosts.length > 8 ? ` +${failure.hosts.length - 8}` : '')}</dd>
-            <dt>{tr('Previous run')}</dt>
-            <dd>{p ? <><Link to={jobPath(p)}>#{p.id}</Link> {tr('succeeded')} <Ago at={p.finished} /></> : tr('no earlier success')}</dd>
           </dl>
+          <ChangesSummary job={job} />
           <div className="row wrap" style={{ marginTop: 14 }}>
             <button className="btn sm" onClick={() => onJump(failure.event.start_line + 1)}>
               {tr('Show in output')}
@@ -328,10 +333,7 @@ function FailurePanel({ job, failure, onJump }: { job: Job; failure: ReturnType<
         <>
           <p style={{ margin: '0 0 10px' }}>{job.job_explanation || tr('The job failed before any task reported a failure.')}</p>
           {job.result_traceback && <pre className="code">{String(job.result_traceback).slice(-1500)}</pre>}
-          <dl className="kv small">
-            <dt>{tr('Previous run')}</dt>
-            <dd>{p ? <><Link to={jobPath(p)}>#{p.id}</Link> {tr('succeeded')} <Ago at={p.finished} /></> : tr('no earlier success')}</dd>
-          </dl>
+          <ChangesSummary job={job} />
         </>
       )}
     </aside>

@@ -273,12 +273,36 @@ type podWorker struct {
 	*unit
 	kube          *kubeClient
 	ns, pod, pull string
+	digest        string
 }
 
 func (p *podWorker) Wait() (string, error) {
 	diag, err := p.unit.Wait()
+	p.digest = podImageDigest(p.kube, p.ns, p.pod)
 	p.cleanup()
 	return diag, err
+}
+
+// ImageDigest is the digest of the image the pod's worker ran in.
+func (p *podWorker) ImageDigest() string { return p.digest }
+
+func podImageDigest(kube *kubeClient, ns, name string) string {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	var pod struct {
+		Status struct {
+			ContainerStatuses []containerStatus `json:"containerStatuses"`
+		} `json:"status"`
+	}
+	if kube.do(ctx, "GET", "/api/v1/namespaces/"+ns+"/pods/"+name, nil, &pod) != nil {
+		return ""
+	}
+	for _, cs := range pod.Status.ContainerStatuses {
+		if cs.Name == "worker" {
+			return runnercmd.Digest(cs.ImageID)
+		}
+	}
+	return ""
 }
 
 func (p *podWorker) cleanup() {
@@ -403,8 +427,9 @@ func podProblem(ctx context.Context, kube *kubeClient, ns, name string) string {
 }
 
 type containerStatus struct {
-	Name  string `json:"name"`
-	State struct {
+	Name    string `json:"name"`
+	ImageID string `json:"imageID"`
+	State   struct {
 		Waiting *struct {
 			Reason  string `json:"reason"`
 			Message string `json:"message"`

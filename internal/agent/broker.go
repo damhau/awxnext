@@ -27,6 +27,7 @@ import (
 	"github.com/coder/websocket"
 	"github.com/damhau/awxnext/internal/api"
 	"github.com/damhau/awxnext/internal/capacity"
+	"github.com/damhau/awxnext/internal/runnercmd"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -71,6 +72,8 @@ type message struct {
 	Spec  *WorkSpec `json:"spec,omitempty"`
 	RC    *int      `json:"rc,omitempty"`
 	Error string    `json:"error,omitempty"`
+	// ImageDigest, with done, is the digest of the image a job ran in.
+	ImageDigest string `json:"image_digest,omitempty"`
 	// registration
 	Hostname string  `json:"hostname,omitempty"`
 	Version  string  `json:"version,omitempty"`
@@ -418,6 +421,7 @@ type unit struct {
 	diag            string
 	err             error
 	rc              int
+	digest          string
 	cancelOnce      sync.Once
 	cancel          chan struct{}
 }
@@ -456,6 +460,13 @@ func (u *unit) Kill() {
 			}
 		}()
 	})
+}
+
+// ImageDigest is the digest of the image the worker ran in, as its agent
+// reported it once Wait returned: empty when it ran in no container.
+func (u *unit) ImageDigest() string {
+	<-u.done
+	return u.digest
 }
 
 // ExitCode is the worker's exit code once Wait returned: -1 when it did
@@ -544,6 +555,7 @@ func (u *unit) stream(ctx context.Context, ws *websocket.Conn) {
 		if rc < 0 && m.Error != "" {
 			ferr = errors.New(m.Error)
 		}
+		u.digest = runnercmd.Digest(m.ImageDigest)
 		u.finish(rc, m.Error, ferr)
 		ws.Close(websocket.StatusNormalClosure, "")
 		return

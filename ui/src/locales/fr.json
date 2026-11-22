@@ -1508,8 +1508,6 @@
   "Why it failed": "Pourquoi elle a échoué",
   ", and the play stopped: no hosts were left to continue (max_fail_percentage or any_errors_fatal).": ", et le play s’est arrêté : il ne restait aucun hôte pour continuer (max_fail_percentage ou any_errors_fatal).",
   "Task": "Tâche",
-  "Previous run": "Exécution précédente",
-  "no earlier success": "aucun succès antérieur",
   "Show in output": "Afficher dans la sortie",
   "The job failed before any task reported a failure.": "La tâche a échoué avant qu’une tâche du playbook ne signale un échec.",
   "No host results yet": "Aucun résultat d’hôte pour l’instant",
@@ -4402,5 +4400,93 @@
   "Slow run": "Exécution lente",
   "{{ median_elapsed }}": "{{ median_elapsed }}",
   "(slow runs)": "(exécutions lentes)",
-  "-----BEGIN RSA PRIVATE KEY-----": "-----BEGIN RSA PRIVATE KEY-----"
+  "-----BEGIN RSA PRIVATE KEY-----": "-----BEGIN RSA PRIVATE KEY-----",
+  "changed (you cannot see how)": "modifié (vous ne pouvez pas voir comment)",
+  "edited": "modifié",
+  "{name} and {n} others": {
+    "one": "{name} et {n} autre",
+    "other": "{name} et {n} autres"
+  },
+  "another project: {before} → {after}": "un autre projet : {before} → {after}",
+  "{n} commits": {
+    "one": "{n} commit",
+    "other": "{n} commits"
+  },
+  ", history rewritten": ", historique réécrit",
+  "the older revision is gone": "l’ancienne révision n’existe plus",
+  "same tag, new image": "même tag, nouvelle image",
+  "(none)": "(aucun)",
+  "{n} hosts added": {
+    "one": "{n} hôte ajouté",
+    "other": "{n} hôtes ajoutés"
+  },
+  "{n} hosts removed": {
+    "one": "{n} hôte retiré",
+    "other": "{n} hôtes retirés"
+  },
+  "{n} nodes added": {
+    "one": "{n} nœud ajouté",
+    "other": "{n} nœuds ajoutés"
+  },
+  "{n} nodes removed": {
+    "one": "{n} nœud retiré",
+    "other": "{n} nœuds retirés"
+  },
+  "{n} nodes run another template": {
+    "one": "{n} nœud lance un autre modèle",
+    "other": "{n} nœuds lancent un autre modèle"
+  },
+  "Nodes": "Nœuds",
+  "Nothing changed since #{id}: same workflow, nodes and inputs.": "Rien n’a changé depuis #{id} : même flux de travail, mêmes nœuds et mêmes entrées.",
+  "Nothing changed since #{id}: same template, inventory, project revision, image and inputs.": "Rien n’a changé depuis #{id} : même modèle, même inventaire, même révision du projet, même image et mêmes entrées.",
+  "Compared with #{id}, the last success,": "Comparé à #{id}, le dernier succès,",
+  "Compared with #{id}, the previous run,": "Comparé à #{id}, l’exécution précédente,",
+  "Compared with #{id}, the previous run (no earlier success),": "Comparé à #{id}, l’exécution précédente (aucun succès avant),",
+  "Compared with #{id}, a run you chose,": "Comparé à #{id}, une exécution choisie,",
+  "{shown} of {total} commits, the newest first": "{shown} commits sur {total}, les plus récents d’abord",
+  "The older revision is gone from the repository: its history was rewritten (a force push).": "L’ancienne révision n’existe plus dans le dépôt : son historique a été réécrit (un force push).",
+  "This node’s copy of the repository lacks the newer revision: sync the project to list the commits.": "La copie du dépôt sur ce nœud n’a pas la nouvelle révision : synchronisez le projet pour lister les commits.",
+  "This node has no copy of the repository: sync the project to list the commits.": "Ce nœud n’a pas de copie du dépôt : synchronisez le projet pour lister les commits.",
+  "The commits are listed only for git projects.": "Les commits ne sont listés que pour les projets git.",
+  "What changed since #{id}": "Ce qui a changé depuis #{id}",
+  "What changed since #{id}, the previous run": "Ce qui a changé depuis #{id}, l’exécution précédente",
+  "See all {n} changes →": {
+    "one": "Voir le changement →",
+    "other": "Voir les {n} changements →"
+  },
+  "{n} changes": {
+    "one": "{n} changement",
+    "other": "{n} changements"
+  },
+  "Compare with": "Comparer avec",
+  "The last success, #{id}": "Le dernier succès, #{id}",
+  "The previous run, #{id}": "L’exécution précédente, #{id}",
+  "Run number": "Numéro d’exécution",
+  "Run #": "Exécution n°",
+  "Nothing to compare with": "Rien à comparer",
+  "This is the first finished run of its template.": "C’est la première exécution terminée de son modèle.",
+  "Nothing changed": "Rien n’a changé",
+  "The cause is likely outside awxnext: the target hosts, the network or a cloud API.": "La cause est sans doute hors d’awxnext : les hôtes cibles, le réseau ou une API cloud.",
+  "The earlier run used another project:": "L’exécution précédente utilisait un autre projet :",
+  "You cannot read this project: only its revisions are shown.": "Vous ne pouvez pas lire ce projet : seules ses révisions sont affichées.",
+  "The newer revision does not descend from the older one: the commits listed are those only the newer one has.": "La nouvelle révision ne descend pas de l’ancienne : les commits listés sont ceux que seule la nouvelle contient.",
+  "Commits": "Commits",
+  "the system": "le système",
+  "View in History →": "Voir dans l’historique →",
+  "It changed between the runs. You cannot read it, so the change is not shown.": "Il a changé entre les exécutions. Vous ne pouvez pas le lire, le changement n’est donc pas affiché.",
+  "{field} diff": "Différences de {field}",
+  "Edited and set back: the fields are the same as in the earlier run.": "Modifié puis rétabli : les champs sont les mêmes que lors de l’exécution précédente.",
+  "Launch inputs": "Entrées du lancement",
+  "input": "entrée",
+  "secret, changed": "secret, modifié",
+  "image": "image",
+  "digest": "digest",
+  "unknown": "inconnu",
+  " and {n} more": " et {n} de plus",
+  "{before} → {after} hosts": "{before} → {after} hôtes",
+  "another template": "un autre modèle",
+  "(no template)": "(aucun modèle)",
+  "was {name}": "était {name}",
+  "Its changes →": "Ses changements →",
+  "Difference": "Différence"
 }
