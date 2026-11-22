@@ -158,16 +158,16 @@ func sendTeams(ctx context.Context, app *api.App, cfg map[string]any, body []byt
 		if errors.As(err, &ue) {
 			err = ue.Err
 		}
-		return fmt.Errorf("Teams notification failed: %v", err)
+		return retryNetwork(fmt.Errorf("Teams notification failed: %w", err))
 	}
 	defer resp.Body.Close()
 	b, _ := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		msg := redactQuery(teamsError(b, resp.Header.Get("Content-Type")), req.URL)
 		if msg == "" {
-			return fmt.Errorf("Teams answered %s", resp.Status)
+			return retryStatus(fmt.Errorf("Teams answered %s", resp.Status), resp)
 		}
-		return fmt.Errorf("Teams answered %s: %s", resp.Status, msg)
+		return retryStatus(fmt.Errorf("Teams answered %s: %s", resp.Status, msg), resp)
 	}
 	return nil
 }

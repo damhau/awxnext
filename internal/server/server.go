@@ -158,7 +158,7 @@ func StartJobs(ctx context.Context, app *api.App) (*jobs.Manager, error) {
 	system.Register()
 	resources.RegisterJobTypes()
 	m := jobs.New(app)
-	m.TickHooks = append(m.TickHooks, resources.ScheduleTick, resources.WorkflowTick, resources.InstanceTick, resources.ConnectorTick, resources.ChoiceSourceTick, resources.CatalogTick)
+	m.TickHooks = append(m.TickHooks, resources.ScheduleTick, resources.WorkflowTick, resources.InstanceTick, resources.ConnectorTick, resources.ChoiceSourceTick, resources.CatalogTick, resources.NotificationTick)
 	m.MaintainHooks = append(m.MaintainHooks, resources.MaintainEventStreams, resources.MaintainHub)
 	m.Rejoin = func(ctx context.Context, node string) error { return resources.Rejoin(ctx, app, node) }
 	m.StartedHooks = append(m.StartedHooks, resources.JobStartedNotifications, resources.WebhookStatusStarted, resources.CatalogJobStarted)

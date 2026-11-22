@@ -232,10 +232,11 @@ func TestTeamsNotificationSend(t *testing.T) {
 
 	for path, want := range map[string]string{"/proxy": "Teams answered 502 Bad Gateway", "/throttled": "Teams answered 429 Too Many Requests: Rate limit is exceeded. Try again in 1 seconds."} {
 		nt = newTeamsTemplate(t, a, org, teams.url(path), nil)
-		if n := sendTest(t, a, nt); n["status"] != "failed" || n["error"] != want {
+		// A 5xx and a 429 may pass: the first try and three retries.
+		if n := sendTest(t, a, nt); n["status"] != "failed" || n["error"] != want || n["attempts"] != float64(4) {
 			t.Errorf("%s: %v", path, n)
 		}
-		teams.take(t, 1)
+		teams.take(t, 4)
 	}
 
 	// An unreachable workflow fails without the URL in the error.

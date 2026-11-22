@@ -24,7 +24,8 @@ func hookEvents(reqs []recordedRequest, request any) ([]string, []map[string]any
 
 // Another catalog, such as ServiceNow, requests an item through the API,
 // follows the request to ready and reads the deployment's outputs; the
-// item's request webhooks hear of each change of state, once.
+// item's request webhooks hear of each change of state, once and in order,
+// a retried one before the later ones.
 func TestCatalogRequestHooks(t *testing.T) {
 	requireAnsible(t)
 	f := newApprovalFixture(t)
@@ -59,7 +60,11 @@ func TestCatalogRequestHooks(t *testing.T) {
 		t.Fatalf("the item's request webhooks: %v", l)
 	}
 
-	// A request that waits for approval, then runs and is ready.
+	// A request that waits for approval, then runs and is ready; the
+	// webhook refuses its approval once.
+	rec.mu.Lock()
+	rec.refuse = func(body map[string]any) bool { return body["event"] == "approved" && rec.refused == 0 }
+	rec.mu.Unlock()
 	req := must(t, f.requester.post(fmt.Sprintf("catalog_items/%d/request/", item), map[string]any{
 		"answers": map[string]any{"name": "shop", "size": "large"}, "reason": "load test"}), 201).Body
 	if req["status"] != "awaiting_approval" {
@@ -77,8 +82,11 @@ func TestCatalogRequestHooks(t *testing.T) {
 		return slices.Contains(e, "ready")
 	})
 	events, _ := hookEvents(rec.wait(t, 1), req["id"])
-	if !slices.Equal(events, []string{"waiting", "approved", "running", "ready"}) {
-		t.Errorf("the request's webhooks: %v", events)
+	rec.mu.Lock()
+	refused := rec.refused
+	rec.mu.Unlock()
+	if !slices.Equal(events, []string{"waiting", "approved", "running", "ready"}) || refused != 1 {
+		t.Errorf("the request's webhooks: %v, %d refused", events, refused)
 	}
 
 	// The deployment's outputs, through the API and in the webhook, with

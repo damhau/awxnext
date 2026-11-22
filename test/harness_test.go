@@ -25,6 +25,7 @@ import (
 	"github.com/damhau/awxnext/internal/credplugins"
 	"github.com/damhau/awxnext/internal/jobs"
 	"github.com/damhau/awxnext/internal/pgtest"
+	"github.com/damhau/awxnext/internal/resources"
 	"github.com/damhau/awxnext/internal/server"
 	"github.com/jackc/pgx/v5"
 )
@@ -68,6 +69,9 @@ func run(m *testing.M) int {
 	if err != nil {
 		panic(err)
 	}
+	// A notification that may still be sent retries within a second, not a
+	// minute.
+	resources.SetNotificationRetryDelays([]time.Duration{20 * time.Millisecond, 20 * time.Millisecond, 20 * time.Millisecond})
 	// The fake secret stores of the lookup tests listen on loopback.
 	if err := app.Settings.Set(ctx, credplugins.LocalAddressesSetting, []any{"127.0.0.1", "::1"}); err != nil {
 		panic(err)

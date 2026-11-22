@@ -7,7 +7,7 @@ import type { Base, Ref } from '../../api/types'
 import { useOrg, usePreselectOrg } from '../../app/context'
 import { AccessTab } from '../../components/access/Access'
 import { useCopy } from '../../components/CopyDialog'
-import { notificationEvents } from '../../components/NotificationsTab'
+import { FailingMark, FailingNote, notificationEvents } from '../../components/NotificationsTab'
 import { Check, ChipsControl, Field, FormError, Lookup, SelectField, TextArea, TextInput, useForm } from '../../components/form'
 import { Icon } from '../../components/icons'
 import { Menu, useToast } from '../../components/overlay'
@@ -67,7 +67,7 @@ function destination(n: NT): string {
   return `${cfg.http_method ?? 'POST'} ${cfg.url ?? ''}`
 }
 
-type Notification = Base & { status: string; error: string; notifications_sent: number; subject: string; notification_type: string }
+type Notification = Base & { status: string; error: string; notifications_sent: number; subject: string; notification_type: string; attempts?: number; event?: string }
 
 function LastDelivery({ nt }: { nt: NT }) {
   const last = (nt.summary_fields.recent_notifications as { status: string; created: string; error: string }[] | undefined)?.[0]
@@ -78,6 +78,11 @@ function LastDelivery({ nt }: { nt: NT }) {
       <Cell state={ok ? 'ok' : last.status === 'pending' ? 'pending' : 'failed'} />
       <span>
         {ok ? tr('Delivered') : last.status === 'pending' ? tr('Sending') : tr('Failed')} <span className="faint small"><Ago at={last.created} /></span>
+        {nt.summary_fields.failing && (
+          <div>
+            <FailingMark failing={nt.summary_fields.failing} />
+          </div>
+        )}
       </span>
     </span>
   )
@@ -229,7 +234,8 @@ export function NotificationDetail() {
             index
             element={
               <div className="split">
-                <div className="wide">
+                <div className="wide stack">
+                  <FailingNote failing={n.summary_fields.failing} deliveries={`${base}/deliveries`} />
                   <Panel title={isEmail ? tr('Email') : isSlack ? tr('Slack') : isTeams ? tr('Microsoft Teams') : tr('Webhook')}>
                     <KV
                       items={isTeams ? [
@@ -242,6 +248,7 @@ export function NotificationDetail() {
                         [tr('Channels'), <span className="chips">{(cfg.channels ?? []).map((c) => <span key={c} className="chip">{c}</span>)}</span>],
                         [tr('Token'), cfg.token ? tr('Set') : <span className="fail-text">{tr('Not set')}</span>],
                         [tr('Color'), cfg.hex_color ? <SlackColor color={cfg.hex_color} /> : <span className="faint">{tr('None')}</span>],
+                        [tr('Failures'), cfg.thread_failures ? tr('One thread per channel, from the first failure to the run that recovers') : tr('Each in the channel')],
                         [tr('Messages'), custom ? tr('Custom') : tr('Default messages')],
                         [tr('Organization'), <Link to={`/organizations/${n.organization}`}>{n.summary_fields.organization?.name}</Link>],
                         [tr('Changed'), <Ago at={n.modified} />],
@@ -275,7 +282,15 @@ export function NotificationDetail() {
             }
           />
           <Route path="edit" element={<NTForm nt={n} />} />
-          <Route path="deliveries" element={<Deliveries id={id} />} />
+          <Route
+            path="deliveries"
+            element={
+              <div className="stack">
+                <FailingNote failing={n.summary_fields.failing} />
+                <Deliveries id={id} canResend={!!n.summary_fields.user_capabilities?.edit} />
+              </div>
+            }
+          />
           <Route path="access" element={<AccessTab resource="notification_templates" id={id} name={n.name} />} />
         </Routes>
       </div>
@@ -293,8 +308,32 @@ function SlackColor({ color }: { color: string }) {
   )
 }
 
-function Deliveries({ id }: { id: number }) {
+/** A delivery's result, with its tries when it took more than one. */
+function deliveryResult(d: Notification): string {
+  const tries = d.attempts ?? 0
+  if (d.status === 'successful') return tries > 1 ? tr('Delivered after {n} tries', { n: tries }) : tr('Delivered')
+  if (d.status === 'pending') return tries > 0 && d.error ? tr('Retrying after try {n}', { n: tries }) : tr('Sending')
+  return tries > 1 ? tr('Failed after {n} tries', { n: tries }) : tr('Failed')
+}
+
+function Deliveries({ id, canResend }: { id: number; canResend: boolean }) {
   const list = useList<Notification>(`notification_templates/${id}/notifications/`, { order_by: '-id', page_size: 50 }, { refetchInterval: 10_000 })
+  const toast = useToast()
+  const invalidate = useInvalidate()
+  const [busy, setBusy] = useState<number>()
+  const resend = async (d: Notification) => {
+    setBusy(d.id)
+    try {
+      await api.post(`notifications/${d.id}/resend/`)
+      toast(tr('Sent again. The new delivery appears at the top.'))
+      await invalidate(`notification_templates/${id}/notifications/`)
+      window.setTimeout(() => invalidate('notification_templates'), 1500)
+    } catch (e) {
+      toast((e as Error).message, 'error')
+    } finally {
+      setBusy(undefined)
+    }
+  }
   return (
     <DataTable
       label={tr('Deliveries')}
@@ -309,13 +348,33 @@ function Deliveries({ id }: { id: number }) {
           render: (d) => (
             <span className="status">
               <Cell state={d.status === 'successful' ? 'ok' : d.status === 'pending' ? 'pending' : 'failed'} />
-              {d.status === 'successful' ? tr('Delivered') : d.status === 'pending' ? tr('Sending') : tr('Failed')}
+              {deliveryResult(d)}
             </span>
           ),
         },
-        { key: 'subj', header: tr('Subject'), render: (d) => <span className="ellipsis" style={{ display: 'block', maxWidth: 520 }}>{d.subject || '—'}</span> },
+        {
+          key: 'subj',
+          header: tr('Subject'),
+          render: (d) => (
+            <>
+              <span className="ellipsis" style={{ display: 'block', maxWidth: 520 }}>{d.subject || '—'}</span>
+              {d.event && <div className="cell-sub">{notificationEvents.find((e) => e.key === d.event)?.label ?? d.event}</div>}
+            </>
+          ),
+        },
         { key: 'err', header: tr('Error'), render: (d) => (d.error ? <span className="small fail-text">{d.error}</span> : <span className="faint">—</span>) },
         { key: 't', header: tr('When'), className: 'small nowrap', render: (d) => <Ago at={d.created} /> },
+        {
+          key: 'x',
+          header: <span className="sr-only">{tr('Actions')}</span>,
+          className: 'end',
+          render: (d) =>
+            canResend && d.status === 'failed' ? (
+              <button className="btn sm" disabled={busy === d.id} onClick={() => resend(d)}>
+                {tr('Resend')}
+              </button>
+            ) : null,
+        },
       ]}
     />
   )
@@ -518,6 +577,12 @@ function NTForm({ nt }: { nt?: NT }) {
               <ChipsControl id="slack-channels" lines value={sl.channels} onChange={(v) => setSlack({ channels: v as string[] })} disabled={false} placeholder={asIs('#ops')} />
             </Field>
           </div>
+          <Check
+            label={tr('One thread per failure')}
+            checked={sl.threads}
+            onChange={(v) => setSlack({ threads: v })}
+            help={tr('The first failure of a template after a success starts a thread in each channel. Its later failures and the run that recovers reply in it, and the first message is edited to say which run recovered. Successes go to the channel. A channel given with a thread keeps it.')}
+          />
         </section>
       ) : isTeams ? (
         <section className="form-section">
@@ -581,7 +646,10 @@ function NTForm({ nt }: { nt?: NT }) {
             <>
               {isEmail ? tr('Subjects and bodies') : messageOnly ? tr('Messages') : tr('Bodies')} {tr('are templates:')} <span className="mono">{tr('{{ job.name }}')}</span>, <span className="mono">{tr('{{ job.status }}')}</span>, <span className="mono">{tr('{{ url }}')}</span>,{' '}
               <span className="mono">{tr('{{ job_metadata }}')}</span>, <span className="mono">{tr('{{ approval_node_name }}')}</span>,{' '}
-              <span className="mono">{tr('{{ median_elapsed }}')}</span> {tr('(slow runs)')}.{' '}
+              <span className="mono">{tr('{{ median_elapsed }}')}</span> {tr('(slow runs)')},{' '}
+              <span className="mono">{asIs('{{ failure.task }}')}</span>, <span className="mono">{asIs('{{ failure.play }}')}</span>, <span className="mono">{asIs('{{ failure.hosts }}')}</span>,{' '}
+              <span className="mono">{asIs('{{ failure.host_count }}')}</span>, <span className="mono">{asIs('{{ failure.message }}')}</span>, <span className="mono">{asIs('{{ failure.path }}')}</span>{' '}
+              {tr('(the first failed task, empty when none failed)')}.{' '}
               {isEmail ? tr('Empty fields use the default subject and body.') : messageOnly ? tr('Empty events use the default message.') : tr('Empty events use the default JSON body.')}
             </>
           }

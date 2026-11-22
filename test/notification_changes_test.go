@@ -20,7 +20,7 @@ func changeEventsOf(t *testing.T, a *client, job resp, nt int64) []string {
 		for _, n := range a.get(fmt.Sprintf("jobs/%d/notifications/?notification_template=%d", job.id(), nt)).results() {
 			s := fmt.Sprint(n["subject"])
 			switch {
-			case strings.Contains(s, " after a success: "):
+			case strings.Contains(s, " after a success"):
 				events = append(events, "first_error")
 			case strings.Contains(s, " after a failure: "):
 				events = append(events, "recovered")

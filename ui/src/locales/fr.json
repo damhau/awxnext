@@ -4488,5 +4488,21 @@
   "(no template)": "(aucun modèle)",
   "was {name}": "était {name}",
   "Its changes →": "Ses changements →",
-  "Difference": "Différence"
+  "Difference": "Différence",
+  "Failing: {n} sends in a row": "En échec : {n} envois de suite",
+  "Failing.": "En échec.",
+  "Its last {n} sends failed, the first": "Ses {n} derniers envois ont échoué, le premier",
+  "The next successful send clears this.": "Le prochain envoi réussi lève cette alerte.",
+  "See the deliveries": "Voir les envois",
+  "Failures": "Échecs",
+  "One thread per channel, from the first failure to the run that recovers": "Un fil par canal, du premier échec à l’exécution qui rétablit",
+  "Each in the channel": "Chacun dans le canal",
+  "Delivered after {n} tries": "Envoyé après {n} essais",
+  "Retrying after try {n}": "Nouvel essai après l’essai {n}",
+  "Failed after {n} tries": "En échec après {n} essais",
+  "Sent again. The new delivery appears at the top.": "Envoyé à nouveau. Le nouvel envoi apparaît en haut.",
+  "Resend": "Renvoyer",
+  "One thread per failure": "Un fil par échec",
+  "The first failure of a template after a success starts a thread in each channel. Its later failures and the run that recovers reply in it, and the first message is edited to say which run recovered. Successes go to the channel. A channel given with a thread keeps it.": "Le premier échec d’un modèle après un succès ouvre un fil dans chaque canal. Ses échecs suivants et l’exécution qui rétablit y répondent, et le premier message est modifié pour dire quelle exécution a rétabli. Les succès vont dans le canal. Un canal donné avec un fil garde le sien.",
+  "(the first failed task, empty when none failed)": "(la première tâche en échec, vides si aucune n’a échoué)"
 }

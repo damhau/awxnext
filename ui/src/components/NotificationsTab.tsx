@@ -6,8 +6,39 @@ import { useInvalidate, useList } from '../api/hooks'
 import type { Base } from '../api/types'
 import { Dialog, useToast } from './overlay'
 import { DataTable, type Column } from './table'
-import { Empty } from './ui'
+import { Ago, Empty } from './ui'
 import { tr } from '../lib/i18n'
+
+/** summary_fields.failing of a notification template: its sends that failed since its last success, once there are 3. */
+export interface Failing {
+  failures: number
+  error: string
+  since: string
+}
+
+/** A notification template's failing mark, with its last error on hover, or nothing. */
+export function FailingMark({ failing }: { failing?: Failing | null }) {
+  if (!failing) return null
+  return (
+    <span className="chip fail-text" title={failing.error}>
+      {tr('Failing: {n} sends in a row', { n: failing.failures })}
+    </span>
+  )
+}
+
+/** Why a notification template is failing: how long, and its last error. */
+export function FailingNote({ failing, deliveries }: { failing?: Failing | null; deliveries?: string }) {
+  if (!failing) return null
+  return (
+    <div className="notice warn" role="status">
+      <strong>{tr('Failing.')}</strong> {tr('Its last {n} sends failed, the first', { n: failing.failures })} <Ago at={failing.since} />.{' '}
+      {tr('The next successful send clears this.')} {deliveries && <Link to={deliveries}>{tr('See the deliveries')}</Link>}
+      <div className="small mono" style={{ marginTop: 6, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
+        {failing.error}
+      </div>
+    </div>
+  )
+}
 
 export interface NotificationEvent {
   key: string
@@ -91,7 +122,7 @@ export function NotificationsTab({
             {n.name}
           </Link>
           <div className="cell-sub">
-            {n.notification_type} · {n.summary_fields.organization?.name ?? tr('no organization')}
+            {n.notification_type} · {n.summary_fields.organization?.name ?? tr('no organization')} <FailingMark failing={n.summary_fields.failing} />
           </div>
         </>
       ),

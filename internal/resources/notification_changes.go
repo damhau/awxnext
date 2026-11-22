@@ -13,9 +13,10 @@ import (
 
 // changeMessages are the default messages of the change events.
 var changeMessages = map[string]string{
-	"first_error": "{{ job_friendly_name }} #{{ job.id }} '{{ job.name }}' {{ job.status }} after a success: {{ url }}",
-	"recovered":   "{{ job_friendly_name }} #{{ job.id }} '{{ job.name }}' {{ job.status }} after a failure: {{ url }}",
-	"slow":        "{{ job_friendly_name }} #{{ job.id }} '{{ job.name }}' took {{ job.elapsed }} s, more than twice its median of {{ median_elapsed }} s: {{ url }}",
+	"first_error": "{{ job_friendly_name }} #{{ job.id }} '{{ job.name }}' {{ job.status }} after a success{% if failure.task %}, at task '{{ failure.task }}' " +
+		"on {{ failure.host_count }} {% if failure.host_count == 1 %}host{% else %}hosts{% endif %}{% endif %}: {{ url }}",
+	"recovered": "{{ job_friendly_name }} #{{ job.id }} '{{ job.name }}' {{ job.status }} after a failure: {{ url }}",
+	"slow":      "{{ job_friendly_name }} #{{ job.id }} '{{ job.name }}' took {{ job.elapsed }} s, more than twice its median of {{ median_elapsed }} s: {{ url }}",
 }
 
 // A run is slow when it takes more than slowFactor times the median of the

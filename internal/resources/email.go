@@ -128,18 +128,18 @@ func sendEmail(ctx context.Context, app *api.App, cfg map[string]any, subject, b
 		conn, err = dialer.DialContext(ctx, "tcp", addr)
 	}
 	if err != nil {
-		return fmt.Errorf("Error sending notification email: %v", err)
+		return fmt.Errorf("Error sending notification email: %w", err)
 	}
 	deadline, _ := ctx.Deadline()
 	conn.SetDeadline(deadline)
 	c, err := smtp.NewClient(conn, host)
 	if err != nil {
 		conn.Close()
-		return fmt.Errorf("Error sending notification email: %v", err)
+		return fmt.Errorf("Error sending notification email: %w", err)
 	}
 	defer c.Close()
 	if err := smtpSend(c, app, cfg, tlsConfig, subject, body); err != nil {
-		return fmt.Errorf("Error sending notification email: %v", err)
+		return fmt.Errorf("Error sending notification email: %w", err)
 	}
 	return nil
 }

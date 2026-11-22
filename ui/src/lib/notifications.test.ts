@@ -27,6 +27,13 @@ describe('Slack settings', () => {
     expect(slackConfig(slackValues(cfg))).toEqual(cfg)
     expect(slackConfig({ ...slackValues(cfg), color: ' ' })).toEqual({ token: '$encrypted$', channels: cfg.channels })
   })
+  it('sends thread_failures only when failures are threaded', () => {
+    const cfg = { token: '$encrypted$', channels: ['#ops'], thread_failures: true }
+    expect(slackValues(cfg).threads).toBe(true)
+    expect(slackConfig(slackValues(cfg))).toEqual(cfg)
+    expect(slackConfig({ ...slackValues(cfg), threads: false })).toEqual({ token: '$encrypted$', channels: ['#ops'] })
+    expect(slackValues({}).threads).toBe(false)
+  })
   it('accepts the colors Slack shows', () => {
     expect(['#36a64f', '#F00', ' #abc '].every(isSlackColor)).toBe(true)
     expect(['36a64f', '#36a64', '#ggg', 'red', ''].some(isSlackColor)).toBe(false)

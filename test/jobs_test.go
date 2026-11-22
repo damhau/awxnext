@@ -116,13 +116,19 @@ func newJobFixture(t *testing.T) *jobFixture {
 // ansible-runner: enough to test what a launch accepts.
 func newLaunchFixture(t *testing.T) *jobFixture {
 	t.Helper()
-	a := adminClient(t)
-	allowFileURLs(t, a)
-	f := &jobFixture{a: a, org: newOrg(t, a), hosts: []string{"h1", "h2", "h3"}}
-	f.repo = gitRepo(t, map[string]string{
+	return newRepoFixture(t, map[string]string{
 		"site.yml": sitePlaybook, "fail.yml": failPlaybook, "slow.yml": slowPlaybook, "facts.yml": factsPlaybook, "env.yml": envPlaybook,
 		"pause.yml": pausePlaybook, "unfixed.yml": unfixedPlaybook,
 	})
+}
+
+// newRepoFixture is newLaunchFixture with a project of these files.
+func newRepoFixture(t *testing.T, files map[string]string) *jobFixture {
+	t.Helper()
+	a := adminClient(t)
+	allowFileURLs(t, a)
+	f := &jobFixture{a: a, org: newOrg(t, a), hosts: []string{"h1", "h2", "h3"}}
+	f.repo = gitRepo(t, files)
 	f.project = must(t, a.post("projects/", map[string]any{"name": uniq("proj"), "organization": f.org, "scm_type": "git", "scm_url": f.repo, "allow_override": true}), 201).id()
 	f.waitProject(t)
 	f.inv = must(t, a.post("inventories/", map[string]any{"name": uniq("inv"), "organization": f.org,

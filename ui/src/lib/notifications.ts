@@ -76,22 +76,28 @@ export interface SlackConfig {
   token?: string
   channels?: string[]
   hex_color?: string
+  thread_failures?: boolean
 }
 
 export interface SlackValues {
   token: string
   channels: string[]
   color: string
+  threads: boolean
 }
 
 export function slackValues(cfg: SlackConfig): SlackValues {
-  return { token: cfg.token ?? '', channels: cfg.channels ?? [], color: cfg.hex_color ?? '' }
+  return { token: cfg.token ?? '', channels: cfg.channels ?? [], color: cfg.hex_color ?? '', threads: cfg.thread_failures === true }
 }
 
-/** The notification_configuration a Slack form sends; hex_color only when set, as AWX stores it. */
+/**
+ * The notification_configuration a Slack form sends; hex_color and
+ * thread_failures only when set, so that AWX's own clients see AWX's fields.
+ */
 export function slackConfig(v: SlackValues): SlackConfig {
   const cfg: SlackConfig = { token: v.token, channels: v.channels }
   if (v.color.trim()) cfg.hex_color = v.color.trim()
+  if (v.threads) cfg.thread_failures = true
   return cfg
 }
 

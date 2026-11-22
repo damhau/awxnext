@@ -6,7 +6,6 @@ package resources
 // records each change (migration 0051); the leader sends them here.
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -121,14 +120,7 @@ func sendRequestEvents(c *Ctx) {
 		}
 		return
 	}
-	if len(sent) > 0 {
-		app := c.App
-		go func() {
-			for _, id := range sent {
-				deliver(context.Background(), app, id)
-			}
-		}()
-	}
+	deliverInOrder(c.App, sent)
 }
 
 // requestChangeNotifications makes the notifications of one change, or
@@ -244,11 +236,5 @@ func hookExpiring(c *Ctx, d, item Obj, hours int64) {
 	_, _, body := requestHookBody(c, "expiring", req, str(req["status"]), time.Now())
 	body["hours_left"] = hours
 	subject := fmt.Sprintf("%s expires in %d hours", str(d["name"]), hours)
-	app := c.App
-	ids := notifyTemplates(c, nts, subject, subject+"\n\n"+deploymentURL(app, d["id"])+"\n", body)
-	go func() {
-		for _, id := range ids {
-			deliver(context.Background(), app, id)
-		}
-	}()
+	deliverInOrder(c.App, notifyTemplates(c, nts, subject, subject+"\n\n"+deploymentURL(c.App, d["id"])+"\n", body))
 }

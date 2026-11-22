@@ -16,6 +16,10 @@ type hookRecorder struct {
 	mu   sync.Mutex
 	reqs []recordedRequest
 	fail bool
+	// refuse, when it holds for a body, answers 503 with Retry-After: 1
+	// and leaves the request out of reqs.
+	refuse  func(body map[string]any) bool
+	refused int
 }
 
 type recordedRequest struct {
@@ -31,6 +35,13 @@ func newHookServer(t *testing.T) (*hookRecorder, *httptest.Server) {
 		json.Unmarshal(b, &body)
 		u, p, _ := r.BasicAuth()
 		rec.mu.Lock()
+		if rec.refuse != nil && rec.refuse(body) {
+			rec.refused++
+			rec.mu.Unlock()
+			w.Header().Set("Retry-After", "1")
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
 		rec.reqs = append(rec.reqs, recordedRequest{Method: r.Method, Auth: u + ":" + p, Header: r.Header.Get("X-Custom"), Body: body})
 		fail := rec.fail
 		rec.mu.Unlock()

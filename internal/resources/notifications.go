@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"maps"
 	"math"
 	"net/http"
 	"net/url"
@@ -268,7 +267,9 @@ func validateMessages(v any, typ string) error {
 func sampleContext() map[string]any {
 	job := map[string]any{"id": float64(42), "name": "Example", "status": "successful", "type": "job", "summary_fields": map[string]any{}}
 	return map[string]any{"job": job, "job_friendly_name": "Job", "url": "https://example.com/jobs/42", "job_metadata": `{"id": 42}`,
-		"approval_status": "approved", "approval_node_name": "Approve", "workflow_url": "https://example.com/jobs/41", "median_elapsed": 12.5}
+		"approval_status": "approved", "approval_node_name": "Approve", "workflow_url": "https://example.com/jobs/41", "median_elapsed": 12.5,
+		"failure": map[string]any{"task": "Install packages", "play": "Web servers", "hosts": "web-01, web-02", "host_count": float64(2),
+			"message": "No package matching 'httpd' is available", "path": "site.yml:12"}}
 }
 
 func registerNotifications() {
@@ -348,6 +349,11 @@ func registerNotifications() {
 				}
 				rows.Close()
 				o["summary_fields"].(Obj)["recent_notifications"] = recent
+				failing, err := failingSummary(c, o["id"])
+				if err != nil {
+					return err
+				}
+				o["summary_fields"].(Obj)["failing"] = failing
 			}
 			return nil
 		},
@@ -434,6 +440,8 @@ func registerNotifications() {
 			{Name: "recipients", Type: api.TText, ReadOnly: true},
 			{Name: "subject", Type: api.TText, ReadOnly: true},
 			{Name: "body", Type: api.TJSON, ReadOnly: true},
+			{Name: "event", Type: api.TText, ReadOnly: true, Help: "The job event this notification was sent for (awxnext): started, success, error, first_error, recovered or slow."},
+			{Name: "attempts", Type: api.TInt, ReadOnly: true, Help: "How many times awxnext tried to send it (awxnext)."},
 		},
 		View: func(c *Ctx, arg ArgFunc) string {
 			if c.User.Superuser || c.User.Auditor {
@@ -442,6 +450,27 @@ func registerNotifications() {
 			return "t.notification_template_id IN (SELECT t.id FROM notification_templates t WHERE " + viewOf(c, notifView, arg) + ")"
 		},
 	})
+	// resend (awxnext): a failed notification, sent again as a new one by
+	// those who may change its template.
+	notifications := api.Lookup("notifications")
+	notifications.Actions = append(notifications.Actions, &api.Action{Name: "resend", Methods: []string{"POST"}, Handler: func(c *Ctx, w http.ResponseWriter, r *http.Request, obj Obj) {
+		if err := api.RequirePermID(c, "id", "notification_templates", obj["notification_template"], "change"); err != nil {
+			api.WriteError(w, err)
+			return
+		}
+		if str(obj["status"]) != "failed" {
+			api.WriteJSON(w, 400, Obj{"detail": "Only a failed notification can be sent again."})
+			return
+		}
+		id, _ := api.ID(obj["id"])
+		nid, err := resendNotification(c, c.App.DB, id)
+		if err != nil {
+			api.WriteError(w, err)
+			return
+		}
+		go deliver(context.Background(), c.App, nid)
+		api.WriteJSON(w, 202, Obj{"notification": nid})
+	}})
 
 	// Attaching a template to an object needs change on both.
 	for _, res := range api.Resources() {
@@ -457,6 +486,11 @@ func registerNotifications() {
 
 // createNotification records a pending notification.
 func createNotification(ctx context.Context, db api.DBTX, ntID int64, jobID *int64, subject string, body any) (int64, error) {
+	return createJobNotification(ctx, db, ntID, jobID, "", subject, body)
+}
+
+// createJobNotification records a pending notification of a job's event.
+func createJobNotification(ctx context.Context, db api.DBTX, ntID int64, jobID *int64, event, subject string, body any) (int64, error) {
 	var typ string
 	var cfg map[string]any
 	if err := db.QueryRow(ctx, "SELECT notification_type, notification_configuration FROM notification_templates WHERE id = $1", ntID).Scan(&typ, &cfg); err != nil {
@@ -474,45 +508,9 @@ func createNotification(ctx context.Context, db api.DBTX, ntID int64, jobID *int
 	}
 	b, _ := json.Marshal(body)
 	var id int64
-	err := db.QueryRow(ctx, `INSERT INTO notifications (notification_template_id, unified_job_id, notification_type, recipients, subject, body)
-		VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`, ntID, jobID, typ, recipients, subject, string(b)).Scan(&id)
+	err := db.QueryRow(ctx, `INSERT INTO notifications (notification_template_id, unified_job_id, notification_type, recipients, subject, body, event)
+		VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`, ntID, jobID, typ, recipients, subject, string(b), event).Scan(&id)
 	return id, err
-}
-
-// deliver sends a notification and records the outcome.
-func deliver(ctx context.Context, app *api.App, id int64) {
-	var typ, subject string
-	var cfg map[string]any
-	var body json.RawMessage
-	var addresses []string
-	err := app.DB.QueryRow(ctx, `SELECT n.notification_type, t.notification_configuration, n.subject, n.body, n.addresses FROM notifications n
-		JOIN notification_templates t ON t.id = n.notification_template_id WHERE n.id = $1`, id).Scan(&typ, &cfg, &subject, &body, &addresses)
-	if err == nil {
-		if typ == "email" {
-			if len(addresses) > 0 {
-				cfg = maps.Clone(cfg)
-				cfg["recipients"] = toAnyList(addresses)
-			}
-			var text string
-			if json.Unmarshal(body, &text) != nil {
-				text = string(body)
-			}
-			err = sendEmail(ctx, app, cfg, subject, text)
-		} else if typ == "slack" {
-			err = sendSlack(ctx, app, cfg, subject)
-		} else if typ == "teams" {
-			err = sendTeams(ctx, app, cfg, body)
-		} else {
-			err = sendWebhook(ctx, app, cfg, body)
-		}
-	}
-	status, errText, sent := "successful", "", 1
-	if err != nil {
-		status, errText, sent = "failed", err.Error(), 0
-		slog.Warn("notification failed", "notification", id, "err", err)
-	}
-	app.DB.Exec(context.Background(), "UPDATE notifications SET status = $2, error = $3, notifications_sent = $4, modified = now() WHERE id = $1",
-		id, status, errText, sent)
 }
 
 func sendWebhook(ctx context.Context, app *api.App, cfg map[string]any, body []byte) error {
@@ -548,12 +546,12 @@ func sendWebhook(ctx context.Context, app *api.App, cfg map[string]any, body []b
 	}
 	resp, err := (&http.Client{Transport: transport}).Do(req)
 	if err != nil {
-		return fmt.Errorf("Error sending notification webhook: %v", err)
+		return retryNetwork(fmt.Errorf("Error sending notification webhook: %w", err))
 	}
 	defer resp.Body.Close()
 	io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<20))
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("Error sending notification webhook: %s", resp.Status)
+		return retryStatus(fmt.Errorf("Error sending notification webhook: %s", resp.Status), resp)
 	}
 	return nil
 }
@@ -773,12 +771,22 @@ func linkedNotifications(ctx context.Context, db api.DBTX, targets [][2]any, eve
 // notifyJob sends a job's notifications for an event. extra adds to the
 // messages' context.
 func notifyJob(ctx context.Context, m *jobs.Manager, row jobs.Row, event string, extra map[string]any) {
-	c := &api.Ctx{Context: ctx, App: m.App, User: rbac.System(), Extra: map[string]any{}}
-	ids := linkedNotifications(ctx, m.DB(), jobNotificationTargets(ctx, m.DB(), row), event)
+	sendJobNotifications(ctx, m, row, event, extra, linkedNotifications(ctx, m.DB(), jobNotificationTargets(ctx, m.DB(), row), event))
+}
+
+// sendJobNotifications sends a job's event with these notification
+// templates.
+func sendJobNotifications(ctx context.Context, m *jobs.Manager, row jobs.Row, event string, extra map[string]any, ids []int64) {
 	if len(ids) == 0 {
 		return
 	}
+	c := &api.Ctx{Context: ctx, App: m.App, User: rbac.System(), Extra: map[string]any{}}
 	tctx, meta := notificationContext(c, row)
+	failure := emptyFailure()
+	if event != "started" {
+		failure = jobFailure(ctx, m.DB(), row)
+	}
+	tctx["failure"] = failure
 	for k, v := range extra {
 		tctx[k] = v
 	}
@@ -814,6 +822,7 @@ func notifyJob(ctx context.Context, m *jobs.Manager, row jobs.Row, event string,
 		} else if typ == "teams" {
 			job, _ := tctx["job"].(map[string]any)
 			card := teamsJobCard(job, meta)
+			card.facts = append(card.facts, failureFacts(failure)...)
 			if median, ok := extra["median_elapsed"].(float64); ok {
 				card.color = "Warning"
 				card.facts = append(card.facts, [2]string{"Median", teamsDuration(median)})
@@ -831,7 +840,7 @@ func notifyJob(ctx context.Context, m *jobs.Manager, row jobs.Row, event string,
 				body = parsed
 			}
 		}
-		nid, err := createNotification(ctx, m.DB(), ntID, &jobID, subject, body)
+		nid, err := createJobNotification(ctx, m.DB(), ntID, &jobID, event, subject, body)
 		if err != nil {
 			slog.Error("creating notification", "template", ntID, "err", err)
 			continue
@@ -854,6 +863,7 @@ func JobFinishedNotifications(ctx context.Context, m *jobs.Manager, row jobs.Row
 	}
 	notifyChanges(ctx, m, row)
 	notifyJob(ctx, m, row, event, nil)
+	closeSlackThreads(ctx, m, row)
 }
 
 // renderEmailBody renders an email body template; a template that fails to

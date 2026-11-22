@@ -2967,11 +2967,14 @@ The webhook gets a JSON body:
 | `request` | The request: `id`, `url` (its page in the portal), `kind`, `status` at that time, `catalog_item`, `item_name`, `requester` and `team` by name, `reason`, `explanation`, `lifetime_days`, `created` and `deployment` (its id). |
 | `deployment` | Empty unless the request is about a deployment: its `id`, `name`, `url`, `status`, `expires_at`, `catalog_item`, `item_name`, `owner`, `team`, `outputs` and `connection` as it is now, secrets masked. |
 
-A request's events go out in order, each once, within a few seconds of the change: awxnext
-records each change with the change itself, and its leader sends them. An email template linked
-the same way gets the event as text, with a link to the request. A failed delivery isn't retried:
-it shows as a failed notification in `/api/v2/notifications/`, and the other catalog catches up by
-reading the request.
+A request's events go out in order, within a few seconds of the change: awxnext records each
+change with the change itself, and its leader sends them. An email template linked the same way
+gets the event as text, with a link to the request. A delivery that fails for a reason that may
+pass, such as a 503, is retried ([Delivery and retries](#delivery-and-retries)) and holds back
+the template's later events until it is sent or fails, so that they stay in order. A retry after
+a timeout may send an event twice: the request's `id`, the `event` and the `time` identify it. A
+delivery that fails for good shows as a failed notification in `/api/v2/notifications/`, and the
+other catalog catches up by reading the request.
 
 For example, to make a PostgreSQL database a ServiceNow catalog item, with awxnext's item 4 asking
 for `name` and `size`:
@@ -3061,10 +3064,37 @@ A Slack message is the template's message (the subject of an email): AWX's defau
 custom `messages`, which have no body. Each channel gets its own `chat.postMessage`. A channel
 Slack refuses fails the notification with Slack's error, such as `channel_not_found` or
 `invalid_auth`, under the template's **Deliveries**. Unlike AWX, which stops at that channel, the
-other channels still get the message.
+other channels still get the message. A channel Slack throttles (`ratelimited`) is retried
+([Delivery and retries](#delivery-and-retries)), without posting again to the channels that got
+the message.
 
 awxnext calls `https://slack.com/api/` directly: behind an egress proxy, set `HTTPS_PROXY` for the
 server, or let the server reach `slack.com` on port 443.
+
+### One thread per failure
+
+A template that keeps failing posts the same message each time. To keep its failures in one
+thread per channel, set `thread_failures` (in the UI, **One thread per failure**):
+
+```json
+"notification_configuration": {"token": "xoxb-...", "channels": ["#ops", "#dev"], "thread_failures": true}
+```
+
+- **The first failure** of a template after a success posts to each channel, which starts a
+  thread there.
+- **The template's later failures** reply in that thread, as do its `first_error` and `slow`
+  notifications.
+- **The run that recovers** replies in the thread, and awxnext edits the thread's first message
+  to add `Recovered by Job #N: <url>` (`chat.update`, which the `chat:write` scope allows). The
+  next failure starts a new thread.
+- **Successes** go to the channel, outside any thread.
+
+Each template has its own threads: a job template, a workflow, a project or an inventory source,
+per notification template and channel. A recovery ends the thread even when the notification
+template isn't attached for successes: it then replies with the `recovered` message. A sliced
+job counts as one run, and approvals aren't threaded. A channel given as `#name, <ts>` keeps its
+own thread. Email and Teams aren't threaded. AWX has no such option: its clients don't show
+`thread_failures`.
 
 ## Teams notifications
 
@@ -3096,10 +3126,14 @@ the workflow. Its button opens **Approvals** while the approval waits, and the w
 it is decided; a portal request's approval opens in the portal. Teams reads basic Markdown in
 the card's text.
 
+A failed job's card also names the failed task, its play, the hosts it failed on, the error and
+the task's file and line ([Why it failed, in the message](#why-it-failed-in-the-message)).
+
 An answer other than 2xx fails the notification with Teams' status and message, such as
 `Teams answered 404 Not Found: WorkflowNotFound: ...`, under the template's **Deliveries**. A
-workflow that was turned off or deleted answers this way. awxnext doesn't post again. Teams
-takes cards of up to 28 KB, and throttles a workflow that gets more than 4 posts a second.
+workflow that was turned off or deleted answers this way. A 429 or 5xx answer is retried
+([Delivery and retries](#delivery-and-retries)). Teams takes cards of up to 28 KB, and throttles a
+workflow that gets more than 4 posts a second.
 
 AWX's clients see one more `notification_type` choice, `teams`. The `awx` CLI reads the choices
 from awxnext, so it creates Teams templates. The `awx.awx` collection's
@@ -3143,7 +3177,7 @@ The default messages say what changed:
 
 | Event | Default message |
 | --- | --- |
-| `first_error` | `{{ job_friendly_name }} #{{ job.id }} '{{ job.name }}' {{ job.status }} after a success: {{ url }}` |
+| `first_error` | `{{ job_friendly_name }} #{{ job.id }} '{{ job.name }}' {{ job.status }} after a success{% if failure.task %}, at task '{{ failure.task }}' on {{ failure.host_count }} {% if failure.host_count == 1 %}host{% else %}hosts{% endif %}{% endif %}: {{ url }}` |
 | `recovered` | `{{ job_friendly_name }} #{{ job.id }} '{{ job.name }}' {{ job.status }} after a failure: {{ url }}` |
 | `slow` | `{{ job_friendly_name }} #{{ job.id }} '{{ job.name }}' took {{ job.elapsed }} s, more than twice its median of {{ median_elapsed }} s: {{ url }}` |
 
@@ -3155,6 +3189,83 @@ events. A Teams card for `slow` has an orange title, and the median after the el
 AWX's clients see only AWX's events. The `awx` CLI's options and the `awx.awx` collection's
 modules name AWX's four events, and `awx export` skips the other links, so an export leaves them
 out. The links still appear in each object's `related`.
+
+## Why it failed, in the message
+
+A failed job's notifications can say which task failed, on which hosts and why, so that the
+message is enough to start. Messages have a `failure` object:
+
+| Variable | What it holds |
+| --- | --- |
+| `failure.task` | The name of the first task that failed. |
+| `failure.play` | Its play. |
+| `failure.hosts` | The hosts that task failed on, in the order they failed, separated by commas: 10 at most, then `and N more`. |
+| `failure.host_count` | How many hosts it failed on. |
+| `failure.message` | The first host's error: the module's `msg`, or else its `stderr`, its `reason` or its output, cut to 600 characters. |
+| `failure.path` | The task's file and line in the project, such as `roles/web/tasks/main.yml:12`. |
+
+The failed task is the one the job's page shows under **Why it failed**: the first task that
+failed or found a host unreachable, ignored errors aside. awxnext reads it from the job's stored
+events, so the message masks secrets as the job's output does: survey passwords and credential
+secrets show as `$encrypted$`. When no task failed, the values are empty and
+`failure.host_count` is 0: a job that succeeded, a playbook that doesn't parse, or a workflow
+job, whose failures are its nodes'. To leave the part out then, test `{% if failure.task %}`.
+
+For example, a Slack template's custom `error` message:
+
+```json
+{"error": {"message": "{{ job.name }} failed{% if failure.task %} at '{{ failure.task }}' on {{ failure.hosts }}: {{ failure.message }}{% endif %} {{ url }}", "body": null}}
+```
+
+sends `deploy-web failed at 'Install packages' on web2, web3: No package nginx-2 available.
+https://awxnext.example.com/jobs/412`.
+
+Where it shows without a custom message:
+
+- **`first_error`'s default message** names the task and the number of hosts:
+  `Job #412 'deploy-web' failed after a success, at task 'Install packages' on 2 hosts: <url>`.
+- **A Teams card** for a failed job adds **Failed task**, **Play**, **Failed on**, **Error** and
+  **Task path** under its facts.
+- **AWX's events** keep AWX's default messages, and emails and webhooks keep AWX's bodies: add
+  the variables to their custom messages.
+
+## Delivery and retries
+
+awxnext retries a notification that failed for a reason that may pass:
+
+- a network error, such as a refused connection or a timeout, but not a certificate that isn't
+  trusted or a host name that doesn't exist;
+- an HTTP 429 or 5xx answer from a webhook, Slack or Teams, after `Retry-After` when the answer
+  has one, up to 5 minutes;
+- Slack's `ratelimited`, `service_unavailable`, `request_timeout` and `internal_error`;
+- an SMTP server's 4xx answer.
+
+It tries 3 more times, after 5, 15 and 40 seconds. Another error, such as a 401, a 404 or Slack's
+`channel_not_found`, fails the notification at once. A retry after a timeout may send a
+notification twice, when the receiver got it but its answer didn't arrive.
+
+While it retries, the notification stays `pending`, with the last error in `error`, and
+`attempts` (awxnext's) counts its tries. The template's **Deliveries** shows **Retrying after try
+N**, then **Delivered after N tries** or **Failed after N tries**. Each notification also has
+`event` (awxnext's): the event that sent it, such as `error` or `first_error`, empty for a test or
+an approval. When a server stops while it sends a notification, the leader sends it a minute
+later; one still pending after a day fails with `Not sent: the server stopped while sending it.`
+
+To send a failed notification again, use **Resend** in the template's **Deliveries**, or:
+
+```sh
+curl -X POST https://awxnext.example.com/api/v2/notifications/41/resend/ -H "Authorization: Bearer $TOKEN"
+```
+
+This needs change on the notification template. It sends a new notification with the same
+subject and body and answers `202` with its id, `{"notification": 57}`; a notification that
+didn't fail answers `400`. A Slack notification sent again skips the channels that got it.
+
+A notification template whose last 3 sends failed is marked failing, with the last error: in the
+**Notifications** list, on its page, and in the **Notifications** tabs where you attach it.
+Through the API, its `summary_fields.failing` holds `failures`, the number of failed sends since
+the last success, `error`, the last one's, and `since`, when the first of them was made; it is
+`null` otherwise. The next successful send clears it.
 
 ## What changed since the last good run
 
