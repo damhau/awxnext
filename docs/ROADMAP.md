@@ -1581,8 +1581,8 @@ in job output, an assistant can use awxnext over MCP with its user's rights,
 hosts that drift from their playbooks are listed, and a failure's
 notification says what failed, is retried until it is delivered, and keeps a
 failure in one Slack thread, and reports show how templates, runs and hosts
-did over weeks and months, and launch policies refuse the launches they
-should. M12-05 was added on 2026-11-19, M12-06 to M12-08 on 2026-11-22,
+did over weeks and months, launch policies refuse the launches they
+should, and projects clone with a GitHub App's tokens. M12-05 was added on 2026-11-19, M12-06 to M12-08 on 2026-11-22,
 when M12-03 was also raised to the level of AAP's MCP server.
 
 ### M12-01 What changed since the last good run
