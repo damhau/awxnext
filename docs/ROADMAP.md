@@ -1667,12 +1667,13 @@ keeps to one Slack thread that says when it recovered.
 
 The Now page covers 24 hours and AWX's job graph counts runs per day.
 `/api/v2/reports/` and a Reports page cover a period (7, 30, 90 days or
-dates), filtered by organization, template, inventory, project and launch
-type, counting only what the user can read: templates worst first (success
+dates), filtered by organization, template, inventory, project, label and
+launch type, counting only what the user can read: totals as in AAP's
+automation dashboard (runs, hours of automation, host runs, top projects), templates worst first (success
 rate and its change, median and 95th percentile duration, flips, last
 failure), trends per day or week, hosts automated per organization and
 month and the hosts failing most, and runs by user, team and launch type,
-each exportable as CSV. A short row per run and a row per host per day
+each exportable as CSV, with saved reports. A short row per run and a row per host per day
 outlive `cleanup_jobs`, kept 400 days by default. No "time saved" estimate.
 The cost is measured with `cmd/awxbench`.
 
@@ -1688,8 +1689,8 @@ RBAC decides who may launch; nothing checks the launch itself. AAP checks
 launches against Rego policies on an OPA server of its own. awxnext's
 `/api/v2/launch_policies/` are CEL conditions, type-checked as event rules
 are, attached to organizations, inventories and templates, or global. A
-condition sees the template, inventory, limit, extra vars (passwords
-`$encrypted$`), branch, job type, verbosity, image, credentials, user and
+condition sees the template, project, playbook, inventory, limit, extra
+vars (passwords `$encrypted$`), branch, labels, job type, verbosity, image, credentials, user and
 teams, how it was launched, and `now` with a time-window helper. Every
 launch path is checked, project and inventory updates aside: a launch with
 a caller gets a 400 with the policy's message and no job, one without (a
