@@ -1586,7 +1586,7 @@ should, and projects clone with a GitHub App's tokens. M12-05 was added on 2026-
 when M12-03 was also raised to the level of AAP's MCP server.
 
 ### M12-01 What changed since the last good run
-**Labels:** feature, jobs, ui · **Size:** M · [#148](https://github.com/damhau/awxnext/issues/148)
+**Labels:** feature, jobs, ui · **Size:** L · [#148](https://github.com/damhau/awxnext/issues/148)
 
 A failed job's summary (the host × task grid's detail of the failed cell,
 or the "Why it failed" panel when there is no grid) names the template's
@@ -1596,9 +1596,15 @@ credentials and execution environment from their version history; the
 project's commits between the two revisions; a different image digest
 (recorded with each job from now on); different launch inputs; hosts added or
 removed. Secrets stay `$encrypted$`, and rights on each object apply.
+The failure summary shows at most three lines and "See all N changes",
+which opens a Changes tab on the job page (a tab, not a modal: it has a
+URL and room for diffs). The tab lists each change with its diff or
+commits, and compares with the last success by default, the previous run
+when there was none, or any run chosen with `?since=`.
 
-**Done when:** a test changes each of these between two runs and each is
-listed, an unchanged rerun lists nothing, and no secret appears.
+**Done when:** a test changes each of these between two runs and the
+endpoint, the summary and the tab list each one, an unchanged rerun lists
+nothing, and no secret appears.
 
 ### M12-02 Keep credential secrets out of job output
 **Labels:** security, jobs · **Size:** M · [#149](https://github.com/damhau/awxnext/issues/149)
