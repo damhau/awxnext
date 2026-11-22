@@ -35,7 +35,7 @@ be matched.
 | [M9 Security](#m9-security) | Known vulnerabilities found by CI and fixed through reviewed PRs | 5 |
 | [M10 Small fixes](#m10-small-fixes) | The importer tested on a real AWX, parity.md matching the code, the deployed image scanned, the AWS lookup tested on moto, M14-10's leftovers, a job's first lines live, M13's leftovers, OIDC account choice, translations, the Default organization | 11 |
 | [M11 Notifications](#m11-notifications) | Email tested on a real mail server, Slack as in AWX, a Teams type, notifications when a result changes | 4 |
-| [M12 Beyond AWX](#m12-beyond-awx) | What changed before a failure, secrets kept out of job output, an MCP server, drifted hosts, failure notifications that say why and get through, reports over time, launch policies | 7 |
+| [M12 Beyond AWX](#m12-beyond-awx) | What changed before a failure, secrets kept out of job output, an MCP server, drifted hosts, failure notifications that say why and get through, reports over time, launch policies, GitHub App tokens | 8 |
 | [M13 Collection hub](#m13-collection-hub) | A private Galaxy in awxnext: publish, approve, sign, mirror and install collections | 5 |
 | [M14 Event-driven automation](#m14-event-driven-automation) | Event streams into a durable log, rules evaluated by awxnext with guardrails, connectors, rulebooks imported | 10 |
 | [M15 Self-service portal](#m15-self-service-portal) | A portal of its own: requestable items with forms fed by APIs and jobs, approvals by rule, quotas, and deployments that expire | 10 |
@@ -1582,7 +1582,8 @@ hosts that drift from their playbooks are listed, and a failure's
 notification says what failed, is retried until it is delivered, and keeps a
 failure in one Slack thread, and reports show how templates, runs and hosts
 did over weeks and months, and launch policies refuse the launches they
-should. M12-05 was added on 2026-11-19, M12-06 and M12-07 on 2026-11-22.
+should. M12-05 was added on 2026-11-19, M12-06 to M12-08 on 2026-11-22,
+when M12-03 was also raised to the level of AAP's MCP server.
 
 ### M12-01 What changed since the last good run
 **Labels:** feature, jobs, ui · **Size:** M · [#148](https://github.com/damhau/awxnext/issues/148)
@@ -1614,18 +1615,32 @@ line. Values under 4 characters are left alone. The cost is measured with
 is stored, published, sent or archived, the benchmark is in
 [benchmarks.md](benchmarks.md), and the docs say what isn't masked.
 
-### M12-03 An MCP server for assistants
-**Labels:** feature, api, auth · **Size:** M · [#150](https://github.com/damhau/awxnext/issues/150)
+### M12-03 An MCP server for assistants, at AAP's level
+**Labels:** feature, api, auth · **Size:** L · [#150](https://github.com/damhau/awxnext/issues/150)
 
-`/api/mcp/` (Streamable HTTP, the official Go SDK), signed in with a personal
-access token or an OIDC bearer token, with its owner's rights. Tools by task:
-find objects, a job's status, failure and output, what changed (M12-01), a
-template's prompts, launch and relaunch on failed hosts, approve or deny, a
-host's recent results. Read-scope tokens get only the reading tools; the
-others carry MCP's `destructiveHint`. A setting turns it off.
+AAP's MCP server is generally available since June 2026 (2.6 and later).
+awxnext's is part of the server: `/api/mcp/` with every tool,
+`/api/mcp/<toolset>/` with one toolset (AAP's names: `job_management`,
+`inventory_management`, `system_monitoring`, `user_management`,
+`security_compliance`, `platform_configuration`, `content_discovery`, and
+awxnext's `event_automation` and `self_service`), and `/api/mcp/discover/`
+loading toolsets on demand (the official Go SDK, Streamable HTTP). Tools are
+generated from the API's resources (list, get, create, update, delete,
+through the API's own handlers) beside task tools: launch with prompts, a
+job's failure and output, relaunch on failed hosts, approvals, host facts,
+health, roles, credential tests, the hub's collections, event rules and
+catalog requests. As in AAP, writes are off until
+`MCP_ALLOW_WRITE_OPERATIONS` allows them, and each call has the token's
+user's rights; read tokens get only reading tools. Sign-in by personal
+access token, OIDC bearer token, or OAuth through the OIDC provider named
+in Protected Resource Metadata (RFC 9728). Secrets come back `$encrypted$`,
+job output masked by M12-02.
 
-**Done when:** a Go test calls each tool through an MCP client, a read token
-cannot launch or approve, and the docs show the setup for Claude Code.
+**Done when:** a Go test lists each toolset's tools, loads toolsets through
+`discover` and calls the task tools and each resource's generated tools;
+writes stay hidden until allowed and from read tokens; OAuth works against
+a fake provider; and the docs show the set-up for Claude Code and say what
+data reaches the model.
 
 ### M12-04 Host history and drift
 **Labels:** feature, jobs, inventory, ui · **Size:** L · [#151](https://github.com/damhau/awxnext/issues/151)
@@ -1704,6 +1719,21 @@ path in `enforce` mode and only record in `shadow`; a refused API launch
 creates no job and a refused scheduled one fails naming the policy; the
 launch page warns, a backtest lists past refusals, and the docs give
 examples.
+
+### M12-08 GitHub App installation token lookup
+**Labels:** feature, credentials, projects · **Size:** S · [#197](https://github.com/damhau/awxnext/issues/197)
+
+AAP has it and AWX 24.6.1 doesn't: AAP's "GitHub App Installation Access
+Token Lookup" (`github_app_lookup`, with `github_api_url`,
+`app_or_client_id`, `install_id` and `private_rsa_key`). It signs a JWT with
+the app's key and returns an installation token, fresh at each run, which a
+Source Control credential (`x-access-token`) uses to clone. Like the other
+lookups, it refuses local and metadata addresses and keeps the key and token
+out of errors and output.
+
+**Done when:** against a fake GitHub, the lookup returns the token and
+readable errors, a project clones with it, the credential test works, and
+the docs show the set-up.
 
 ---
 
