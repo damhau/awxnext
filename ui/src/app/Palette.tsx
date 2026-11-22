@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router'
 import { api, type Page } from '../api/client'
 import type { Base, Job, OptionsMeta, Template } from '../api/types'
 import { Icon } from '../components/icons'
+import { useDebounced } from '../components/ui'
 import { ago, jobPath, statusKind, statusLabel, templatePath, typeLabel } from '../lib/format'
 import { load, save } from '../lib/storage'
 import { useOrg, useSession } from './context'
@@ -300,13 +301,4 @@ export function Palette({ onClose, onAbout, onShortcuts }: { onClose: () => void
     </div>,
     document.body,
   )
-}
-
-function useDebounced<T>(v: T, ms: number): T {
-  const [d, setD] = useState(v)
-  useEffect(() => {
-    const t = window.setTimeout(() => setD(v), ms)
-    return () => window.clearTimeout(t)
-  }, [v, ms])
-  return d
 }

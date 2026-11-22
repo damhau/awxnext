@@ -14,6 +14,7 @@ import { Ago, Avatar, Empty, ErrorNote, KV, Loading, PageHead, Panel, Tab } from
 import { userName } from '../../lib/format'
 import { ListPage, useDelete } from './common'
 import { NotificationsTab } from '../../components/NotificationsTab'
+import { LaunchPoliciesTab } from '../../components/LaunchPolicies'
 import { tr, trn } from '../../lib/i18n'
 
 type Org = Base & { max_hosts: number; default_environment: number | null; portal_title: string; portal_logo: string }
@@ -270,6 +271,7 @@ export function OrganizationDetail() {
               {tr('Teams')}
             </Tab>
             <Tab to={`${base}/notifications`}>{tr('Notifications')}</Tab>
+            <Tab to={`${base}/policies`}>{tr('Policies')}</Tab>
             <Tab to={`${base}/access`}>{tr('Access')}</Tab>
           </>
         }
@@ -338,6 +340,7 @@ export function OrganizationDetail() {
           <Route path="members" element={<OrgMembers org={o} />} />
           <Route path="teams" element={<OrgTeams org={o} />} />
           <Route path="notifications" element={<NotificationsTab resource="organizations" id={o.id} approvals changes editable={!!o.summary_fields.user_capabilities?.edit} />} />
+          <Route path="policies" element={<LaunchPoliciesTab resource="organizations" id={o.id} org={o.id} editable={!!o.summary_fields.user_capabilities?.edit} />} />
           <Route path="access" element={<AccessTab resource="organizations" id={id} name={o.name} />} />
         </Routes>
       </div>

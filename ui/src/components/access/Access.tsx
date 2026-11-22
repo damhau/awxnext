@@ -62,6 +62,7 @@ const typeLabels: Record<string, string> = {
   collectionnamespace: tr('Collection namespace'),
   catalogitem: tr('Catalog item'),
   choicesource: tr('Choice source'),
+  launchpolicy: tr('Launch policy'),
 }
 
 export function typeName(ct: string | null | undefined): string {
@@ -104,6 +105,8 @@ export function objectPath(ct: string | null | undefined, id: number | string): 
       return `/event-connectors/${id}`
     case 'collectionnamespace':
       return `/collection-namespaces/${id}`
+    case 'launchpolicy':
+      return `/launch-policies/${id}`
   }
   return null
 }
@@ -128,6 +131,7 @@ export const grantable: { resource: string; ct: string; label: string; plural: s
   { resource: 'collection_namespaces', ct: 'collectionnamespace', label: tr('Collection namespace'), plural: tr('Collection namespaces') },
   { resource: 'catalog_items', ct: 'catalogitem', label: tr('Catalog item'), plural: tr('Catalog items') },
   { resource: 'choice_sources', ct: 'choicesource', label: tr('Choice source'), plural: tr('Choice sources') },
+  { resource: 'launch_policies', ct: 'launchpolicy', label: tr('Launch policy'), plural: tr('Launch policies') },
 ]
 
 export interface RoleDef {

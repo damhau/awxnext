@@ -207,8 +207,8 @@ func gatePreview(c *Ctx, g *gate) (Obj, error) {
 }
 
 // handleRequestPreview answers what a request would do, without sending
-// it: the approvals it would wait for, or why it would be refused, and the
-// quota of the team it is for.
+// it: the approvals it would wait for, or why it would be refused, the
+// quota of the team it is for, and what the launch policies would decide.
 func handleRequestPreview(c *Ctx, w http.ResponseWriter, r *http.Request, item Obj) {
 	ci, err := loadCatalogItem(c, item)
 	if err != nil {
@@ -226,7 +226,11 @@ func handleRequestPreview(c *Ctx, w http.ResponseWriter, r *http.Request, item O
 		api.WriteError(w, err)
 		return
 	}
-	out := Obj{"approvals": []Obj{}, "refused": nil, "quota": nil}
+	out := Obj{"approvals": []Obj{}, "refused": nil, "quota": nil, "launch_policies": []any{}}
+	if v, err := checkTemplateLaunch(c, ci.tplRes, ci.template, Obj{}, &LaunchOverrides{Survey: &SurveyAnswers{Vars: p.launch.Vars, Passwords: p.launch.Passwords},
+		ExtraJob: map[string]any{"catalog_item_name": ci.item["name"]}}); err == nil {
+		out["launch_policies"] = verdictJSON(v)["launch_policies"]
+	}
 	gates, err := requestGates(c, ci, p.env, c.User.UserID, now)
 	if err == nil {
 		var g *gate

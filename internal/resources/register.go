@@ -25,6 +25,7 @@ func init() {
 	registerEventStreams()
 	registerEventRules()
 	registerMaintenanceWindows()
+	registerLaunchPolicies()
 	registerEventConnectors()
 	registerRulebooks()
 	registerCollectionNamespaces()

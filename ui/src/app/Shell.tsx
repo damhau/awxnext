@@ -148,6 +148,7 @@ function useNav(): { label: string; items: NavItem[] }[] {
         { to: '/roles', label: tr('Roles'), icon: 'key' },
         { to: '/host-metrics', label: tr('Host metrics'), icon: 'host', superuser: true },
         { to: '/notifications', label: tr('Notifications'), icon: 'bell' },
+        { to: '/launch-policies', label: tr('Launch policies'), icon: 'policy' },
         { to: '/gitops', label: tr('GitOps'), icon: 'git' },
         { to: '/management-jobs', label: tr('Management jobs'), icon: 'terminal', superuser: true },
         { to: '/activity', label: tr('Activity'), icon: 'history' },

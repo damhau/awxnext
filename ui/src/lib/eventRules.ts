@@ -62,9 +62,8 @@ const METHODS: Record<string, string[]> = {
   map: ['exists(k, ', 'all(k, ', 'size()'],
 }
 
-const ROOTS: Completion[] = [
-  { label: asIs('event'), detail: 'object', insert: 'event', from: 0 },
-  { label: asIs('events'), detail: 'list', insert: 'events', from: 0 },
+/** CEL's functions, completed at the start of a word. */
+export const CEL_FUNCTIONS: Completion[] = [
   { label: asIs('has('), detail: 'macro', insert: 'has(', from: 0 },
   { label: asIs('size('), detail: 'function', insert: 'size(', from: 0 },
   { label: asIs('string('), detail: 'function', insert: 'string(', from: 0 },
@@ -73,9 +72,26 @@ const ROOTS: Completion[] = [
   { label: asIs('duration('), detail: 'function', insert: 'duration(', from: 0 },
 ]
 
+const ROOTS: Completion[] = [
+  { label: asIs('event'), detail: 'object', insert: 'event', from: 0 },
+  { label: asIs('events'), detail: 'list', insert: 'events', from: 0 },
+  ...CEL_FUNCTIONS,
+]
+
 /** The path written just before `end`: event.data["a-b"].list[0]. Null when
  * it doesn't start at event or events. */
 export function pathBefore(text: string, end: number): string[] | null {
+  const segs = segmentsBefore(text, end)
+  if (!segs) return null
+  const root = segs.shift()
+  if (root === 'event') return segs
+  if (root === 'events' && segs[0] === '[]') return segs.slice(1)
+  return null
+}
+
+/** The segments of the path written just before `end`, its root first; an
+ * index is "[]". */
+export function segmentsBefore(text: string, end: number): string[] | null {
   const segs: string[] = []
   let i = end
   for (;;) {
@@ -97,10 +113,7 @@ export function pathBefore(text: string, end: number): string[] | null {
     if (text[i - 1] !== '.') break
     i--
   }
-  const root = segs.shift()
-  if (root === 'event') return segs
-  if (root === 'events' && segs[0] === '[]') return segs.slice(1)
-  return null
+  return segs
 }
 
 /** The schema node at a path, or null when the schema doesn't know it. */
@@ -132,6 +145,18 @@ export function inString(text: string): boolean {
  * dot, a value's methods, or, at the start of a name, event and the main
  * functions. */
 export function completionsAt(schema: StreamSchema | null, text: string, cursor: number): Completion[] {
+  return celCompletions(text, cursor, ROOTS, (segs) => {
+    if (!schema) return null
+    const root = segs[0]
+    const path = root === 'event' ? segs.slice(1) : root === 'events' && segs[1] === '[]' ? segs.slice(2) : null
+    return path ? nodeAt(schema.event, path) : null
+  })
+}
+
+/** The completions of the word at the cursor: a root or a function at the
+ * start of a path, the fields and methods of the node `resolve` finds for
+ * the path before a dot. */
+export function celCompletions(text: string, cursor: number, roots: Completion[], resolve: (segments: string[]) => SchemaNode | null): Completion[] {
   const before = text.slice(0, cursor)
   if (inString(before)) return []
   const word = before.match(/[A-Za-z_][A-Za-z0-9_]*$/)?.[0] ?? ''
@@ -141,12 +166,11 @@ export function completionsAt(schema: StreamSchema | null, text: string, cursor:
   const prefix = word.toLowerCase()
   if (!dot) {
     if (!word || /[A-Za-z0-9_\]]$/.test(before.slice(0, start))) return []
-    return ROOTS.filter((c) => c.label.startsWith(prefix) && c.label !== word).map((c) => ({ ...c, from: start }))
+    return roots.filter((c) => c.label.startsWith(prefix) && c.label !== word).map((c) => ({ ...c, from: start }))
   }
-  if (!schema) return []
-  const path = pathBefore(text, start - 1)
-  if (!path) return []
-  const node = nodeAt(schema.event, path)
+  const segs = segmentsBefore(text, start - 1)
+  if (!segs) return []
+  const node = resolve(segs)
   if (!node) return []
   const out: Completion[] = []
   for (const [name, f] of Object.entries(node.fields ?? {}).sort(([a], [b]) => a.localeCompare(b))) {

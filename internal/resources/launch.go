@@ -465,7 +465,17 @@ type LaunchOverrides struct {
 	UserID int64
 	// RequestID is the portal request a workflow's node runs for.
 	RequestID int64
+	// PolicyCheck, when set, receives what the launch policies decide, and
+	// the launch stops there with errLaunchChecked. Missing survey answers
+	// and passwords don't stop it before.
+	PolicyCheck **policyVerdict
+	// Unattended launches have no caller to answer a refusal to.
+	Unattended bool
+	// Workflow is the workflow job that launches this one as a node.
+	Workflow int64
 }
+
+func (ov *LaunchOverrides) checking() bool { return ov != nil && ov.PolicyCheck != nil }
 
 // surveyContext is what a launch's survey is applied with.
 func (ov *LaunchOverrides) surveyContext(c *Ctx, tpl Obj, inv int64) SurveyContext {
@@ -628,7 +638,7 @@ func LaunchJobTemplate(c *Ctx, jt Obj, body Obj, launchType string, ov *LaunchOv
 	} else if boolv(jt["survey_enabled"]) && len(spec) > 0 {
 		invID, _ := api.ID(inv)
 		sv, pw, errs := ApplySurvey(c, spec, launchVars, ov.surveyContext(c, jt, invID))
-		if len(errs) > 0 {
+		if len(errs) > 0 && !ov.checking() {
 			return 0, nil, &api.Error{Status: 400, Body: Obj{"variables_needed_to_start": errs}}
 		}
 		for k, v := range sv {
@@ -697,7 +707,7 @@ func LaunchJobTemplate(c *Ctx, jt Obj, body Obj, launchType string, ov *LaunchOv
 			missing = append(missing, k)
 		}
 	}
-	if len(missing) > 0 {
+	if len(missing) > 0 && !ov.checking() {
 		return 0, nil, &api.Error{Status: 400, Body: Obj{"passwords_needed_to_start": missing}}
 	}
 	if err := fe.Err(); err != nil {
@@ -770,6 +780,16 @@ func LaunchJobTemplate(c *Ctx, jt Obj, body Obj, launchType string, ov *LaunchOv
 		values["created_by_id"] = c.User.UserID
 		values["modified_by_id"] = c.User.UserID
 	}
+	var branchGiven string
+	if b, ok := accepted["scm_branch"].(string); ok {
+		branchGiven = b
+	}
+	verdict, err := gateLaunch(c, &launchFacts{typ: "job", cols: values, templateCT: "jobtemplate", credentials: creds,
+		labels: launchLabels(c, id, accepted["labels"]), groups: idsOf(accepted["instance_groups"]), branch: branchGiven,
+		user: launchUser(c, values, ov), workflow: launchWorkflow(ov)}, ov)
+	if err != nil {
+		return 0, nil, err
+	}
 	createJob := func(c *Ctx, values map[string]any) (int64, error) {
 		jobID, err := jobs.Create(c, c.DB(), values)
 		if err != nil {
@@ -801,7 +821,7 @@ func LaunchJobTemplate(c *Ctx, jt Obj, body Obj, launchType string, ov *LaunchOv
 	}
 	// A sliced template launches a workflow job running one job per slice of the inventory.
 	slices := 1
-	if ov == nil || ov.ExtraJob["job_slice_number"] == nil {
+	if (ov == nil || ov.ExtraJob["job_slice_number"] == nil) && len(verdict.refusals()) == 0 {
 		slices = sliceCount(c, values["job_slice_count"], inv)
 	}
 	var jobID int64
@@ -816,6 +836,9 @@ func LaunchJobTemplate(c *Ctx, jt Obj, body Obj, launchType string, ov *LaunchOv
 			jobID, err = createJob(c, values)
 		}
 		if err != nil {
+			return err
+		}
+		if err := recordDecisions(c, c.DB(), verdict, jobID); err != nil {
 			return err
 		}
 		jobs.Wake(c, c.DB())

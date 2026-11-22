@@ -24,6 +24,7 @@ import {
   type Preview,
 } from '../../lib/portal'
 import { holderName, quotaSlots } from '../../lib/quotas'
+import { refusalLines } from '../../lib/launchPolicies'
 import { SurveyFields, useSettled, useSurveyChoices, validateSurvey, type Question } from '../templates/SurveyEditor'
 import { visibleQuestions } from '../templates/surveyLogic'
 import { Cell, ItemIcon } from './parts'
@@ -153,7 +154,8 @@ export function RequestForm() {
   const it = item.data
   const p = preview.data
   const gated = !!p && p.approvals.length > 0
-  const refused = p?.refused?.detail
+  const policyRefusals = refusalLines(p?.launch_policies)
+  const refused = p?.refused?.detail ?? (policyRefusals.length ? policyRefusals.join(' ') : undefined)
   const freeze = it.summary_fields.freeze
   const owner = it.summary_fields.owner_team?.name ?? it.summary_fields.organization?.name ?? ''
 
@@ -286,7 +288,11 @@ export function RequestForm() {
           ) : refused ? (
             <div className="portal-sum-block fail" role="alert">
               <span className="portal-strong">{tr('It would be refused')}</span>
-              <span>{refused}</span>
+              {p.refused?.detail || !policyRefusals.length ? (
+                <span>{refused}</span>
+              ) : (
+                policyRefusals.map((l) => <span key={l}>{tr('A launch policy refuses it: {why}', { why: l })}</span>)
+              )}
             </div>
           ) : p.approvals.length === 0 ? (
             <div className="portal-sum-block ok">

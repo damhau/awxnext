@@ -10,6 +10,7 @@ import { Icon } from '../../components/icons'
 import { Menu, useConfirm, useToast } from '../../components/overlay'
 import { Cell, Crumbs, Elapsed, Empty, ErrorNote, KV, Loading, Maybe, Panel, StatusBadge, Tab } from '../../components/ui'
 import { absolute, active, jobApi, jobPath, plural, shortSha, templatePath, typeLabel, userName } from '../../lib/format'
+import { JobPolicyDecisions } from '../../components/LaunchPolicies'
 import { useRelaunch } from '../../components/RelaunchDialog'
 import { WorkflowJobGraph } from '../automation/workflow'
 import { DEFAULT_MAX_EVENTS, firstFailure, toGrid, toLines, useJobEvents } from './events'
@@ -442,6 +443,7 @@ function DetailsTab({ type, job }: { type: string; job: Job }) {
           </Panel>
         )}
       </div>
+      {['job', 'workflow_job', 'ad_hoc_command'].includes(type) && <JobPolicyDecisions path={`${jobApi(type, job.id)}launch_policy_decisions/`} />}
       {job.result_traceback && (
         <Panel title={tr('Traceback')}>
           <pre className="code">{job.result_traceback}</pre>

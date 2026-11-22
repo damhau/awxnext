@@ -121,6 +121,9 @@ type Manager struct {
 	// after it reached a final status (notifications, workflows).
 	StartedHooks  []func(ctx context.Context, m *Manager, job Row)
 	FinishedHooks []func(ctx context.Context, m *Manager, job Row)
+	// Refusal, before a job's first dispatch, says why it must fail without
+	// running (a launch policy refused it), or "".
+	Refusal func(ctx context.Context, m *Manager, job Row) string
 	// Rejoin registers a node again, measured, in its groups: a node another
 	// one marked lost whose heartbeats resume, or one deleted as lost.
 	Rejoin func(ctx context.Context, node string) error

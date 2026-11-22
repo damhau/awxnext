@@ -3,13 +3,15 @@ import { Field } from '../../components/form'
 import { completionsAt, offsetAt, parseCelErrors, type Completion, type StreamSchema } from '../../lib/eventRules'
 import { tr } from '../../lib/i18n'
 
-/** A CEL expression: completion from the rule's streams' schema, and the
- * check's errors under it, each pointing at its place in the text. */
+/** A CEL expression: completion from the rule's streams' schema, or from
+ * `complete`, and the check's errors under it, each pointing at its place
+ * in the text. */
 export function CelInput({
   label,
   value,
   onChange,
   schema,
+  complete,
   error,
   help,
   optional,
@@ -22,6 +24,7 @@ export function CelInput({
   value: string
   onChange: (v: string) => void
   schema: StreamSchema | null
+  complete?: (text: string, cursor: number) => Completion[]
   error?: string
   help?: ReactNode
   optional?: boolean
@@ -36,7 +39,7 @@ export function CelInput({
   const [items, setItems] = useState<Completion[]>([])
   const [hi, setHi] = useState(0)
   const refresh = (el: HTMLTextAreaElement) => {
-    const next = el.selectionStart === el.selectionEnd ? completionsAt(schema, el.value, el.selectionStart) : []
+    const next = el.selectionStart === el.selectionEnd ? (complete ?? ((t: string, at: number) => completionsAt(schema, t, at)))(el.value, el.selectionStart) : []
     setItems(next.slice(0, 50))
     setHi(0)
   }

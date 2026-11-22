@@ -98,6 +98,7 @@ func DeleteRow(ctx context.Context, db DBTX, res *Resource, id int64) error {
 		"DELETE FROM object_roles WHERE content_type = $1 AND object_id = $2",
 		"DELETE FROM instance_group_links WHERE content_type = $1 AND object_id = $2",
 		"DELETE FROM notification_template_links WHERE content_type = $1 AND object_id = $2",
+		"DELETE FROM launch_policy_links WHERE content_type = $1 AND object_id = $2",
 	} {
 		if _, err := db.Exec(ctx, sql, res.ContentType, id); err != nil {
 			return err

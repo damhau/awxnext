@@ -31,6 +31,10 @@ const m_management = lazyModule(() => import('./management'))
 const ManagementDetail = m_management('ManagementDetail')
 const ManagementList = m_management('ManagementList')
 const m_notifications = lazyModule(() => import('./notifications'))
+const m_launchPolicies = lazyModule(() => import('./launchPolicies'))
+const LaunchPolicyDetail = m_launchPolicies('LaunchPolicyDetail')
+const LaunchPolicyList = m_launchPolicies('LaunchPolicyList')
+const LaunchPolicyNew = m_launchPolicies('LaunchPolicyNew')
 const NotificationDetail = m_notifications('NotificationDetail')
 const NotificationList = m_notifications('NotificationList')
 const NotificationNew = m_notifications('NotificationNew')
@@ -74,6 +78,9 @@ export function adminRoutes() {
       <Route path="notifications" element={<NotificationList />} />
       <Route path="notifications/new" element={<NotificationNew />} />
       <Route path="notifications/:id/*" element={<NotificationDetail />} />
+      <Route path="launch-policies" element={<LaunchPolicyList />} />
+      <Route path="launch-policies/new" element={<LaunchPolicyNew />} />
+      <Route path="launch-policies/:id/*" element={<LaunchPolicyDetail />} />
       <Route path="gitops" element={<GitOpsList />} />
       <Route path="gitops/new" element={<GitOpsNew />} />
       <Route path="gitops/:id/*" element={<GitOpsDetail />} />

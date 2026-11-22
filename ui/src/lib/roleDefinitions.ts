@@ -38,6 +38,7 @@ export function modelLabel(model: string, many = false): string {
     collectionnamespace: [tr('Collection namespace'), tr('Collection namespaces')],
     catalogitem: [tr('Catalog item'), tr('Catalog items')],
     choicesource: [tr('Choice source'), tr('Choice sources')],
+    launchpolicy: [tr('Launch policy'), tr('Launch policies')],
   }
   const n = names[m]
   return n ? n[many ? 1 : 0] : m

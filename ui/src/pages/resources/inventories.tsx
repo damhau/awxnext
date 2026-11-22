@@ -7,6 +7,7 @@ import { useLive } from '../../api/live'
 import type { Base, Ref } from '../../api/types'
 import { useOrg, usePreselectOrg } from '../../app/context'
 import { AccessTab } from '../../components/access/Access'
+import { LaunchPoliciesTab } from '../../components/LaunchPolicies'
 import { useCopy } from '../../components/CopyDialog'
 import { BulkBar, BulkDelete, useBulk, useSelection } from '../../components/BulkBar'
 import { Check, FormError, Lookup, MultiLookup, SelectField, TextInput, VarsEditor, useForm } from '../../components/form'
@@ -481,6 +482,7 @@ export function InventoryDetail() {
               </Tab>
             )}
             <Tab to={`${base}/jobs`}>{tr('Jobs')}</Tab>
+            <Tab to={`${base}/policies`}>{tr('Policies')}</Tab>
             <Tab to={`${base}/access`}>{tr('Access')}</Tab>
           </>
         }
@@ -599,6 +601,14 @@ export function InventoryAccessTab({ inv }: { inv: Inventory }) {
   return (
     <div className="page-body">
       <AccessTab resource="inventories" id={inv.id} name={inv.name} />
+    </div>
+  )
+}
+
+export function InventoryPoliciesTab({ inv }: { inv: Inventory }) {
+  return (
+    <div className="page-body">
+      <LaunchPoliciesTab resource="inventories" id={inv.id} org={inv.organization} editable={!!inv.summary_fields.user_capabilities?.edit && !inv.managed_by} />
     </div>
   )
 }

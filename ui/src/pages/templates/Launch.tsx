@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { isValidElement, useMemo, useState, type ReactNode } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { api } from '../../api/client'
@@ -7,13 +7,15 @@ import type { Base, Job, Ref, Template } from '../../api/types'
 import { useOrg } from '../../app/context'
 import { Check, FormError, Lookup, MultiLookup, parseVars, VarsEditor, varsError, varsText } from '../../components/form'
 import { Icon } from '../../components/icons'
-import { Empty, Loading, Panel, Status } from '../../components/ui'
+import { Empty, Loading, Panel, Status, useDebounced } from '../../components/ui'
 import { ago, duration, jobPath, plural, shortSha, statusKind } from '../../lib/format'
 import { usePref } from '../../lib/prefs'
 import { SurveyFields, useSurveyChoices, validateSurvey, type Survey } from './SurveyEditor'
 import { visibleQuestions } from './surveyLogic'
 import { resOf, type Kind } from './TemplateDetail'
 import { passwordLabel } from '../../lib/jobs'
+import type { CheckDecision } from '../../lib/launchPolicies'
+import { PolicyWarning } from '../../components/LaunchPolicies'
 import { asIs, tr } from '../../lib/i18n'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -235,11 +237,7 @@ function LaunchForm({ kind, tpl, info, survey, operator }: { kind: Kind; tpl: Te
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [invVars.data, fields.extra_vars, answers, questions, tpl.extra_vars, inventory])
 
-  const launch = async () => {
-    setTouched(true)
-    if (blocking) return
-    setBusy(true)
-    setError(null)
+  const payloadOf = () => {
     const payload: Record<string, any> = {}
     const extra: Record<string, unknown> = asks('variables') ? parseVars(fields.extra_vars) : {}
     for (const q of shownQuestions) {
@@ -256,7 +254,23 @@ function LaunchForm({ kind, tpl, info, survey, operator }: { kind: Kind; tpl: Te
     if (asks('tags')) payload.job_tags = fields.job_tags
     if (asks('skip_tags')) payload.skip_tags = fields.skip_tags
     if (asks('start_at_task')) payload.start_at_task = fields.start_at_task
-    Object.assign(payload, passwords)
+    return payload
+  }
+  const checkBody = useDebounced(JSON.stringify(payloadOf()), 500)
+  const check = useQuery({
+    queryKey: [`${res}/${tpl.id}/launch_check/`, checkBody],
+    queryFn: () => api.post<{ launch_policies: CheckDecision[]; refused: boolean }>(`${res}/${tpl.id}/launch_check/`, JSON.parse(checkBody)),
+    placeholderData: keepPreviousData,
+    retry: false,
+  })
+  const policyRefused = !!check.data?.refused
+
+  const launch = async () => {
+    setTouched(true)
+    if (blocking) return
+    setBusy(true)
+    setError(null)
+    const payload = { ...payloadOf(), ...passwords }
     try {
       const r = await api.post<{ id: number; type?: string; job?: number; workflow_job?: number }>(`${res}/${tpl.id}/launch/`, payload)
       invalidate('unified_jobs', 'unified_job_templates')
@@ -456,6 +470,11 @@ function LaunchForm({ kind, tpl, info, survey, operator }: { kind: Kind; tpl: Te
                 </>
               )}
             </dl>
+            {check.data && (
+              <div style={{ marginTop: 14 }}>
+                <PolicyWarning decisions={check.data.launch_policies} />
+              </div>
+            )}
           </Panel>
 
           {kind === 'job' && (
@@ -508,6 +527,7 @@ function LaunchForm({ kind, tpl, info, survey, operator }: { kind: Kind; tpl: Te
                 {missing.length ? tr('Provide {list} to launch.', { list: missing.join(', ') }) : varsErr ? tr('Fix the extra variables to launch.') : tr('Answer {count} to launch.', { count: plural(Object.keys(surveyErrors).length, 'question') })}
               </span>
             )}
+            {policyRefused && <span className="small fail-text" style={{ textAlign: 'center' }}>{tr('A launch policy refuses this launch: see What will happen.')}</span>}
             {statusKind(last?.status) === 'run' && !tpl.allow_simultaneous && <span className="small muted" style={{ textAlign: 'center' }}>{tr('A run is in progress; this one waits until it finishes.')}</span>}
           </div>
         </aside>
@@ -515,4 +535,3 @@ function LaunchForm({ kind, tpl, info, survey, operator }: { kind: Kind; tpl: Te
     </main>
   )
 }
-

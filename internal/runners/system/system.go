@@ -322,7 +322,37 @@ func (t *task) cleanupEventStreams(ctx context.Context) error {
 	t.out.Line(fmt.Sprintf("Expired throttle keys %s: %d", t.action(), dec.Keys))
 	t.out.Line(fmt.Sprintf("Pattern windows a day past their deadline %s: %d", t.action(), dec.Patterns))
 	t.out.Line(fmt.Sprintf("Settled checks of fixes %s: %d", t.action(), dec.Checks))
-	return err
+	if err != nil {
+		return err
+	}
+	return t.cleanupLaunchDecisions(ctx, keep)
+}
+
+// cleanupLaunchDecisions removes the launch policies' decisions older than
+// keep days, or with 0, those whose job is gone.
+func (t *task) cleanupLaunchDecisions(ctx context.Context, keep int) error {
+	where := "created < $1"
+	args := []any{time.Now().AddDate(0, 0, -keep)}
+	if keep <= 0 {
+		t.out.Line("Cleaning up launch policy decisions whose job is gone" + dry(t.dryRun))
+		where, args = "unified_job_id IS NULL OR NOT EXISTS (SELECT 1 FROM unified_jobs j WHERE j.id = unified_job_id)", nil
+	} else {
+		t.out.Line(fmt.Sprintf("Cleaning up launch policy decisions older than %d days%s", keep, dry(t.dryRun)))
+	}
+	var n int64
+	if t.dryRun {
+		if err := t.db.QueryRow(ctx, "SELECT count(*) FROM launch_policy_decisions WHERE "+where, args...).Scan(&n); err != nil {
+			return err
+		}
+	} else {
+		tag, err := t.db.Exec(ctx, "DELETE FROM launch_policy_decisions WHERE "+where, args...)
+		if err != nil {
+			return err
+		}
+		n = tag.RowsAffected()
+	}
+	t.out.Line(fmt.Sprintf("Launch policy decisions %s: %d", t.action(), n))
+	return nil
 }
 
 // cleanupHostHistory removes the hosts' task results older than

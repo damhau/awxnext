@@ -149,6 +149,8 @@ func ctLabel(ct string) string {
 		return "Event Rule"
 	case "maintenancewindow":
 		return "Maintenance Window"
+	case "launchpolicy":
+		return "Launch Policy"
 	case "eventconnector":
 		return "Event Connector"
 	case "collectionnamespace":

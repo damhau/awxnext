@@ -3445,6 +3445,176 @@ and the upgrade to this version fills it from the jobs already there. It outlive
 cut short. [benchmarks.md](benchmarks.md#reports) measures the reports on a history of a
 million runs.
 
+## Launch policies
+
+Roles decide who may launch a template; a launch policy checks the launch itself. A policy is a
+CEL condition over the launch: when it is true, the policy refuses the launch, with its message.
+AAP checks launches against Rego policies on an OPA server; awxnext evaluates its policies
+itself. **Launch policies**, under **Admin**, lists them; through the API, they are
+`launch_policies/`, awxnext's.
+
+### Where a policy applies
+
+- **Attached:** a policy of an organization checks the launches of what it is attached to:
+  organizations, inventories, and job and workflow templates, each with a **Policies** tab
+  (`organizations/N/launch_policies/`, `inventories/N/`, `job_templates/N/` and
+  `workflow_job_templates/N/`, with `{"id": P}` and `{"id": P, "disassociate": true}`). Attached
+  to an organization, it checks the launches of the organization's templates and those on its
+  inventories. Attaching takes the right to change the object, as for notifications, and the
+  right to change the policy.
+- **Global:** a policy without an organization checks every launch. Only superusers create,
+  change and delete global policies, which aren't attached. A policy moved to no organization
+  loses its attachments.
+- A launch is checked against the global policies and those attached to its template, to its
+  inventory, and to the organization of either, each once.
+
+There is no bypass: a superuser's launches are checked too, and a condition that should spare
+someone says so, as the on-call exception below does.
+
+### What a launch goes through
+
+Every launch is checked: a job template's launch and relaunch, an ad hoc command, a workflow and
+each of its nodes, a schedule, a webhook, a provisioning callback, a bulk launch (through its
+workflow's nodes), a portal request and an event rule's action. A sliced job is checked once,
+before its slices are made. Project updates, inventory updates and management jobs aren't.
+
+- **A launch with a caller**, through the API or a page, is refused with a 400 that gives each
+  refusing policy's message, and no job is made:
+
+  ```json
+  {"detail": "Refused by launch policy \"Prod change window\": Production changes run Monday to Thursday, 20:00 to 06:00 Zurich time.",
+   "launch_policies": [{"id": 3, "name": "Prod change window", "message": "Production changes run…", "error": ""}]}
+  ```
+
+  A portal request approved later, when its launch is refused, says "Approved, but…" with the
+  reason.
+- **A launch without a caller**, by a schedule, a webhook, a callback, a workflow or an event
+  rule, makes a job that fails at once, before it runs, with an explanation naming the policy.
+  It sends the template's failure notifications. A workflow whose node is refused follows the
+  node's failure path.
+
+### Modes
+
+- **`shadow`**, the default: the policy records the launches it would refuse, as **Would have
+  refused**, and lets them go. Start each policy in shadow mode, read its decisions, then
+  switch it to `enforce`.
+- **`enforce`**: the policy refuses the launches its condition matches.
+
+A condition that fails, such as one that reads an extra variable the launch doesn't have,
+refuses the launch in `enforce` mode, and the decision records the error. Write
+`has(launch.extra_vars.version)` before reading a variable that may be missing.
+
+### What a condition reads
+
+A condition reads `launch` and `now`. Every field of `launch` is there, empty when it doesn't
+apply: `""` for a text, `0` for an id or a number, `[]` for a list. The editor completes them
+(Ctrl+Space), and `GET launch_policies/fields/` lists them with their types.
+
+| Field | What it is |
+| --- | --- |
+| `launch.type` | `job`, `workflow_job` or `ad_hoc_command`. |
+| `launch.template` | `id`, `name`, `type`, `organization` (its name), `labels` and `branch`. |
+| `launch.project` | `id`, `name`, `url`, `branch` and `revision`. |
+| `launch.playbook`, `launch.limit`, `launch.job_type`, `launch.verbosity`, `launch.diff_mode`, `launch.forks` | As the job has them. |
+| `launch.inventory` | `id`, `name`, `organization`, `labels` and `hosts`, its number of hosts. |
+| `launch.labels` | The job's labels. |
+| `launch.image` | The execution environment's image. An ad hoc command that names no environment has `""`. |
+| `launch.credentials` | Each credential's `name`, `type` (as `Machine`) and `kind` (as `ssh` or `cloud`). |
+| `launch.instance_groups` | The instance groups asked for, by name. |
+| `launch.workflow` | The workflow job that launches this one as a node: `id` and `name`. |
+| `launch.extra_vars` | The extra variables after the survey, with passwords as `$encrypted$`. |
+| `launch.branch` | The branch given at launch, `""` when none was. |
+| `launch.user` | Who launched it: `id`, `username`, `teams` (their names) and `superuser`. A schedule's or a webhook's launch has id `0`; a workflow's nodes have the workflow's user. |
+| `launch.launch_type` | `manual`, `relaunch`, `callback`, `scheduled`, `workflow`, `webhook`... |
+| `launch.schedule`, `launch.webhook`, `launch.event_rule` | The schedule's name, the webhook's service (as `github`) or the event rule's name. |
+| `launch.request` | The portal request: `id` and `item`, the catalog item's name. |
+| `launch.module` | An ad hoc command's `name` and `args`. |
+| `now` | When the launch is checked. |
+
+`window(now, spec, zone)` is true when `now` falls in the window: days, then a time range, as
+in `"Mon-Thu 20:00-06:00"`, `"Sat,Sun"` (whole days), `"22:00-06:00"` (every day), or several of
+them separated by `;`. A range that ends before it starts runs past midnight, into the next day.
+The zone is an IANA name, UTC when left out.
+
+The condition is type-checked when saved: a field that doesn't exist, or a condition that isn't
+true or false, is refused with its line and column. `POST launch_policies/check/`
+`{"condition": "..."}` checks one without saving it.
+
+### Examples
+
+A change window for production, with an exception for the on-call team:
+
+```
+launch.inventory.name == "prod"
+  && !window(now, "Mon-Thu 20:00-06:00", "Europe/Zurich")
+  && !("oncall" in launch.user.teams)
+```
+
+A limit on inventories of more than 100 hosts:
+
+```
+launch.inventory.hosts > 100 && launch.limit == ""
+```
+
+No branch override on production:
+
+```
+launch.inventory.name == "prod" && launch.branch != ""
+```
+
+No verbosity of 3 or more on production, where it can print secrets:
+
+```
+launch.inventory.name == "prod" && launch.verbosity >= 3
+```
+
+Only images from the company registry:
+
+```
+launch.image != "" && !launch.image.startsWith("registry.example.com/")
+```
+
+A new policy's editor starts from any of them.
+
+### Before launching
+
+- **The launch page** asks the policies as the answers change, and its **What will happen**
+  panel says which policies refuse the launch and why, and which in shadow mode would.
+- **The portal's** request page says that a launch policy refuses the request, with its message,
+  and won't send it.
+- **`POST job_templates/N/launch_check/`** and **`workflow_job_templates/N/launch_check/`**,
+  with the body of a launch, return each policy's decision, `{"launch_policies": [...],
+  "refused": true}`, and record nothing. They take the right to launch the template, and
+  leave out missing survey answers and passwords.
+
+### Decisions
+
+Each check records one decision per policy: `allowed`, `refused`, or `would_refuse` in shadow
+mode, with the message, the condition's error, the job, the template, the inventory, the user
+and the launch type. A launch refused at its caller has no job. The policy's **Decisions** tab
+(`launch_policies/N/decisions/`) and the job's **Details** tab
+(`jobs/N/launch_policy_decisions/`, `workflow_jobs/N/` and `ad_hoc_commands/N/`) list them. A
+decision is visible to those who may read the policy or the job, and stays when the policy is
+deleted.
+
+The decisions are kept as long as event rules' decisions: `EVENT_RULE_DECISION_RETENTION_DAYS`
+days, deleted by the management job **Cleanup Event Streams** (`cleanup_event_streams`). With
+`0`, they are kept as long as their jobs.
+
+### Backtest
+
+A backtest runs a condition over the launches of the past days, 7 by default and up to 365,
+and lists the ones it would have refused: the policy's **Backtest** tab, and the editor before
+saving. Through the API: `POST launch_policies/N/backtest/` `{"days": 30}`, with a `condition`
+to try another one, or `POST launch_policies/backtest/` with a `condition` and an
+`organization`.
+
+- It reads the latest 2,000 launches you may read as jobs: a saved policy's, through what it is
+  attached to; a global one's, all of them; a draft's, its organization's.
+- A launch is rebuilt from its job. The user's teams, the inventories' hosts and the templates'
+  labels are today's, not the launch's.
+- A sliced launch counts once. The backtest refuses nothing and records nothing.
+
 ## Settings
 
 The Settings pages group AWX's settings by what they set up rather than by AWX's categories:

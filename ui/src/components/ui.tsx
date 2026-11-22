@@ -107,6 +107,16 @@ export function useTick(ms: number) {
   }, [ms])
 }
 
+/** v, once it has stopped changing for ms. */
+export function useDebounced<T>(v: T, ms: number): T {
+  const [d, setD] = useState(v)
+  useEffect(() => {
+    const t = window.setTimeout(() => setD(v), ms)
+    return () => window.clearTimeout(t)
+  }, [v, ms])
+  return d
+}
+
 /** The logo is a run: three hosts by three tasks, one change, two live cells. */
 export function BrandMark() {
   const cells = ['live', '', '', '', 'changed', '', '', '', 'live']

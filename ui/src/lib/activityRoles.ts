@@ -19,6 +19,7 @@ const objectTypes: Record<string, string> = {
   collectionnamespace: 'collection namespace',
   catalogitem: 'catalog item',
   choicesource: 'choice source',
+  launchpolicy: 'launch policy',
 }
 
 /** "Execute role on job template Deploy" from a role's summary, '' without a role field. */

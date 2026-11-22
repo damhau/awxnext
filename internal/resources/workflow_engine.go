@@ -864,7 +864,7 @@ func launchNode(c *Ctx, wf jobs.Row, n *wfNode, node Obj, extra map[string]any) 
 		if err := nodeLabelsAndGroups(c, trusted, wf.ID(), n.id, tpl); err != nil {
 			return 0, err
 		}
-		ov := &LaunchOverrides{Trusted: trusted, UserID: wf.Int("created_by_id"), RequestID: wf.Int("catalog_request_id")}
+		ov := &LaunchOverrides{Trusted: trusted, UserID: wf.Int("created_by_id"), RequestID: wf.Int("catalog_request_id"), Workflow: wf.ID()}
 		if aa := n.artifacts; aa["job_slice"] != nil {
 			ov.ExtraJob = map[string]any{"job_slice_number": aa["job_slice"]}
 		}
@@ -885,7 +885,7 @@ func launchNode(c *Ctx, wf jobs.Row, n *wfNode, node Obj, extra map[string]any) 
 			return 0, err
 		}
 		id, _, err := LaunchWorkflowJobTemplate(c, tpl, Obj{"extra_vars": extra}, "workflow",
-			&LaunchOverrides{Trusted: trusted, UserID: wf.Int("created_by_id"), RequestID: wf.Int("catalog_request_id")})
+			&LaunchOverrides{Trusted: trusted, UserID: wf.Int("created_by_id"), RequestID: wf.Int("catalog_request_id"), Workflow: wf.ID()})
 		return id, err
 	case "system_job_template":
 		// Only the node's own days and dry_run: management jobs take no other variables.

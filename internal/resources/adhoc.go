@@ -154,9 +154,14 @@ func registerAdHocCommands() {
 		data["launch_type"] = "manual"
 		data["start_args"] = string(sa)
 		data["execution_environment"] = resolveEE(c, data["execution_environment"], Obj{"organization": org})
-		return nil
+		return gateAdHoc(c, data)
 	}
 	res.AfterCreate = func(c *Ctx, obj Obj) error {
+		if v, ok := c.Extra[adHocVerdict].(*policyVerdict); ok {
+			if err := recordDecisions(c, c.DB(), v, mustID(obj["id"])); err != nil {
+				return err
+			}
+		}
 		jobs.Wake(c, c.DB())
 		return nil
 	}

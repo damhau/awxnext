@@ -128,6 +128,12 @@ func (m *Manager) dispatchOne(ctx context.Context, row Row) (bool, error) {
 	}
 	id := row.ID()
 	if !row.Bool("dependencies_processed") {
+		if m.Refusal != nil {
+			if why := m.Refusal(ctx, m, row); why != "" {
+				m.finish(ctx, row, Result{Status: "failed", Explanation: why})
+				return false, nil
+			}
+		}
 		depStart := time.Now()
 		if sp.Dependencies != nil {
 			deps, err := sp.Dependencies(ctx, m, row)

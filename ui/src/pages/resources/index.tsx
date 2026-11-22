@@ -29,6 +29,7 @@ const InventoryDetail = m_inventories('InventoryDetail')
 const InventoryDetailsTab = m_inventories('InventoryDetailsTab')
 const InventoryForm = m_inventories('InventoryForm')
 const InventoryJobsTab = m_inventories('InventoryJobsTab')
+const InventoryPoliciesTab = m_inventories('InventoryPoliciesTab')
 const InventoryList = m_inventories('InventoryList')
 const InventorySourceRedirect = m_inventories('InventorySourceRedirect')
 const m_inventoryGroups = lazyModule(() => import('./inventoryGroups'))
@@ -72,6 +73,7 @@ export function resourceRoutes() {
         <Route path="sources" element={<InvTab tab={InventorySourcesTab} />} />
         <Route path="sources/:sourceId/schedules" element={<InvTab tab={InventorySourceSchedulesTab} />} />
         <Route path="jobs" element={<InvTab tab={InventoryJobsTab} />} />
+        <Route path="policies" element={<InvTab tab={InventoryPoliciesTab} />} />
         <Route path="access" element={<InvTab tab={InventoryAccessTab} />} />
       </Route>
       <Route path="inventory-sources/:id" element={<InventorySourceRedirect />} />

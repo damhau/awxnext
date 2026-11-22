@@ -29,6 +29,7 @@ func Install(app *api.App) {
 	installScheduleRoutes(app)
 	installWebhookRoutes(app)
 	installEventStreamRoutes(app)
+	installLaunchPolicyRoutes(app)
 	installEDA(app)
 	installHub(app)
 	installCallbackRoutes(app)

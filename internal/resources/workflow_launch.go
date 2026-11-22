@@ -79,7 +79,7 @@ func LaunchWorkflowJobTemplate(c *Ctx, wf Obj, body Obj, launchType string, ov *
 	} else if boolv(wf["survey_enabled"]) && len(spec) > 0 {
 		invID, _ := api.ID(inv)
 		sv, pw, errs := ApplySurvey(c, spec, launchVars, ov.surveyContext(c, wf, invID))
-		if len(errs) > 0 {
+		if len(errs) > 0 && !ov.checking() {
 			return 0, nil, &api.Error{Status: 400, Body: Obj{"variables_needed_to_start": errs}}
 		}
 		for k, v := range sv {
@@ -146,8 +146,18 @@ func LaunchWorkflowJobTemplate(c *Ctx, wf Obj, body Obj, launchType string, ov *
 		values["created_by_id"] = c.User.UserID
 		values["modified_by_id"] = c.User.UserID
 	}
+	var branchGiven string
+	if b, ok := accepted["scm_branch"].(string); ok {
+		branchGiven = b
+	}
+	verdict, err := gateLaunch(c, &launchFacts{typ: "workflow_job", cols: values, templateCT: "workflowjobtemplate",
+		labels: launchLabels(c, id, accepted["labels"]), groups: idsOf(accepted["instance_groups"]), branch: branchGiven,
+		user: launchUser(c, values, ov), workflow: launchWorkflow(ov)}, ov)
+	if err != nil {
+		return 0, nil, err
+	}
 	var wfJobID int64
-	err := c.WithTx(func(c *Ctx) error {
+	err = c.WithTx(func(c *Ctx) error {
 		var err error
 		if wfJobID, err = jobs.Create(c, c.DB(), values); err != nil {
 			return err
@@ -166,6 +176,9 @@ func LaunchWorkflowJobTemplate(c *Ctx, wf Obj, body Obj, launchType string, ov *
 			}
 		}
 		if err := jobLaunched(c, "workflow_jobs", wfJobID); err != nil {
+			return err
+		}
+		if err := recordDecisions(c, c.DB(), verdict, wfJobID); err != nil {
 			return err
 		}
 		jobs.Wake(c, c.DB())

@@ -1,6 +1,7 @@
 // The self-service portal (roadmap M15-08): what its pages work out from
 // the catalog's API, for requesters.
 import { tr, trn } from './i18n'
+import type { CheckDecision } from './launchPolicies'
 
 export interface Brand {
   organization: number
@@ -63,6 +64,8 @@ export interface GatePreview {
 export interface Preview {
   approvals: GatePreview[]
   refused: { detail: string } | null
+  /** What the launch policies would decide of the request's launch. */
+  launch_policies?: CheckDecision[]
   quota: QuotaHolder | null
 }
 
