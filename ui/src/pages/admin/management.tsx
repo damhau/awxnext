@@ -19,7 +19,7 @@ type SJT = Template & { job_type: string }
 const usesDays = (t: string) => ['cleanup_jobs', 'cleanup_activitystream', 'cleanup_host_metrics'].includes(t)
 
 const explain: Record<string, string> = {
-  cleanup_jobs: tr('Deletes jobs, their output and events older than the retention period.'),
+  cleanup_jobs: tr('Deletes jobs, their output and events older than the retention period, and the report history older than REPORT_HISTORY_DAYS.'),
   cleanup_activitystream: tr('Deletes activity stream entries older than the retention period.'),
   cleanup_sessions: tr('Removes expired browser sessions.'),
   cleanup_tokens: tr('Removes expired API tokens.'),

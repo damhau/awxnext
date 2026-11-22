@@ -87,6 +87,7 @@ function useNav(): { label: string; items: NavItem[] }[] {
         { to: '/jobs', label: tr('Jobs'), icon: 'jobs' },
         { to: '/schedules', label: tr('Schedules'), icon: 'calendar' },
         { to: '/approvals', label: tr('Approvals'), icon: 'approve', count: approvals.data?.count || undefined },
+        { to: '/reports', label: tr('Reports'), icon: 'chart' },
       ],
     },
     {

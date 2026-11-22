@@ -181,6 +181,7 @@ clients and imports keep working.
 | `CHOICE_SOURCE_ALLOWED_LOCAL_ADDRESSES` | list | `[]` | Choice sources refuse loopback (127.0.0.0/8, ::1), link-local (169.254.0.0/16, fe80::/10) and unspecified addresses, and cloud metadata services, even for a listed host: they are awxnext's own host. Allow some here, one per entry: an address (127.0.0.1), a network (127.0.0.0/8), or an address and port (127.0.0.1:8080). |
 | `JOB_EVENTS_HOT_DAYS` | integer | `14` | Days job events stay in the database before they are served from the compressed archive. |
 | `HOST_HISTORY_DAYS` | integer | `30` | Days each host's task results are kept for its history on the host's page, cleaned by the Cleanup Host History management job. They outlive job events. Drift a check-mode run found stays until a run clears it. 0: no history is kept, and drift isn't tracked. |
+| `REPORT_HISTORY_DAYS` | integer | `400` | Days the reports keep each finished job and each host's daily results, cleaned by the Cleanup Job Details management job. They outlive the jobs: a report over a longer period is cut short. |
 | `JOB_EVENTS_ARCHIVE_STORAGE` | choice | `"database"` | Where new job event archives are kept. Archives already made stay readable where they are. |
 | `JOB_EVENTS_ARCHIVE_BUCKET` | string | `""` | The S3 bucket or the Azure Blob Storage container of the archives. It must exist. |
 | `JOB_EVENTS_ARCHIVE_PREFIX` | string | `"job-events/"` | Prepended to the archives' keys, followed by the install's INSTALL_UUID, so installs can share a bucket. |
@@ -695,6 +696,7 @@ clients and imports keep working.
 | `CHOICE_SOURCE_ALLOWED_LOCAL_ADDRESSES` | list | `[]` | Choice sources refuse loopback (127.0.0.0/8, ::1), link-local (169.254.0.0/16, fe80::/10) and unspecified addresses, and cloud metadata services, even for a listed host: they are awxnext's own host. Allow some here, one per entry: an address (127.0.0.1), a network (127.0.0.0/8), or an address and port (127.0.0.1:8080). |
 | `JOB_EVENTS_HOT_DAYS` | integer | `14` | Days job events stay in the database before they are served from the compressed archive. |
 | `HOST_HISTORY_DAYS` | integer | `30` | Days each host's task results are kept for its history on the host's page, cleaned by the Cleanup Host History management job. They outlive job events. Drift a check-mode run found stays until a run clears it. 0: no history is kept, and drift isn't tracked. |
+| `REPORT_HISTORY_DAYS` | integer | `400` | Days the reports keep each finished job and each host's daily results, cleaned by the Cleanup Job Details management job. They outlive the jobs: a report over a longer period is cut short. |
 | `JOB_EVENTS_ARCHIVE_STORAGE` | choice | `"database"` | Where new job event archives are kept. Archives already made stay readable where they are. |
 | `JOB_EVENTS_ARCHIVE_BUCKET` | string | `""` | The S3 bucket or the Azure Blob Storage container of the archives. It must exist. |
 | `JOB_EVENTS_ARCHIVE_PREFIX` | string | `"job-events/"` | Prepended to the archives' keys, followed by the install's INSTALL_UUID, so installs can share a bucket. |

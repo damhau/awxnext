@@ -795,6 +795,11 @@ export const settingsPages: SettingsPage[] = [
             unit: tr('days'),
             none: [0, tr('Not kept')],
           }),
+          row('REPORT_HISTORY_DAYS', {
+            label: tr('Report history'),
+            help: tr('Each finished job and each host\'s daily results are kept this long for Reports, even after the job is deleted. Cleanup Job Details removes older ones.'),
+            unit: tr('days'),
+          }),
         ],
       },
     ],

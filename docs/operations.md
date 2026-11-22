@@ -3367,6 +3367,84 @@ drift isn't tracked, and the cleanup deletes every result.
 - Deleting a job, as **Cleanup Job Details** does, deletes its results. Deleting a host or a
   template deletes its drift.
 
+## Reports
+
+The **Reports** page, under **Automation**, shows how the runs of job templates did over a
+period: totals, each template's success rate and durations, trends, the hosts automated and
+failing, and who launches what. Through the API, read `reports/`, awxnext's: `reports/totals/`,
+`reports/templates/`, `reports/trends/`, `reports/hosts/` and `reports/launches/`.
+
+### Period and filters
+
+- **Period:** 7, 30 or 90 days up to today (`period=`, 30 by default), or **Dates** (`from=` and
+  `to=`, `YYYY-MM-DD`, both included, `to` today by default), at most 3,650 days. Days are UTC
+  days.
+- **Filters:** organization, template, inventory, project and label (`organization=`,
+  `template=`, `inventory=`, `project=` and `label=`, each an ID), and the launch type
+  (`launch_type=`). Without an organization in its URL, the page starts from the organization
+  chosen in the top bar.
+- Each report returns its `period`: its days, the previous period of the same length that the
+  templates compare with (`previous_from` and `previous_to`), the first day of the history
+  (`kept_since`) and `cut_short`.
+
+### What each report counts
+
+The reports count the runs of job templates that finished: successful, failed (`failed` or
+`error`) and canceled. A workflow's runs count through its nodes' jobs. A canceled run counts
+as a run, but not in success rates, durations or flips. A success rate is the successful runs
+divided by the successful and failed ones.
+
+| Report | What it shows |
+| --- | --- |
+| Totals | Runs, success rate, hours of automation (the runs' total duration), host runs (a host in a run) and hosts, and the 5 projects with the most runs. |
+| Templates | Each template's runs and success rate, the rate's change against the previous period, the median and 95th percentile duration, flips (runs whose result, success or failure, differs from the run before), and the last failure. Worst first: the lowest success rate, then the most failures. `order_by=` sorts by `name`, `runs`, `failed`, `success_rate`, `success_rate_change`, `median_duration`, `p95_duration`, `flips` or `last_failure`, with `-` to reverse, and rows without a value come last. A deleted template keeps its name. |
+| Trends | Runs, the failure rate and the median duration, per day or per week from Monday: per day for periods of up to 31 days, per week otherwise, or as `interval=day` or `week` says. The page charts the median duration once you choose a template. |
+| Hosts | The hosts automated per organization and month, and the 50 hosts that failed most: runs in which the host failed a task or couldn't be reached. |
+| Launches | Runs by user, by team and by launch type. A team counts the runs its members launched, so a user in two teams counts in both. Runs that no user launched, such as a schedule's, count under no user. |
+
+Each table links to what's behind it: a template's jobs, a run, a host, or a user's or launch
+type's jobs.
+
+A launch type is AWX's `launch_type` (`manual`, `relaunch`, `callback`, `scheduled`,
+`dependency`, `workflow`, `webhook`, `sync` or `scm`), except two of awxnext's: `portal` for the
+runs of a portal request and `event_rule` for those of an event rule.
+
+### Who sees what
+
+A report counts only the runs you may read as jobs:
+
+- The runs of the job templates you may read, through a role on the template or on its
+  organization, also after the template is deleted.
+- The runs you launched, except a portal request's: its requester follows the request, not its
+  jobs.
+
+Superusers and system auditors see every run. The rights apply as long as the history keeps a
+run, after its job is deleted too.
+
+### CSV and saved reports
+
+**CSV**, on each table, downloads the rows the API returns. The columns are the API's fields,
+with `last_failure.job` and `last_failure.finished` for a template's last failure, in RFC 4180
+with CRLF line ends. A text that starts with `=`, `+`, `-`, `@`, a tab or a carriage return gets
+a leading `'`, so that a spreadsheet doesn't run it as a formula. The file is named
+`awxnext-<report>-<from>-to-<to>.csv`.
+
+**+ Save report** keeps the period, the filters and the interval as a chip above the report. The
+chips are kept with your account, in every browser you sign in to.
+
+### Report history
+
+The reports read a history of their own, not the jobs: a short row per finished run, and a row
+per host, day and kind of run. Jobs fill it as they finish and their host summaries are stored,
+and the upgrade to this version fills it from the jobs already there. It outlives the jobs that
+**Cleanup Job Details** deletes.
+
+`REPORT_HISTORY_DAYS`, 400 by default in the job settings, is how long the history is kept.
+**Cleanup Job Details** (`cleanup_jobs`) also deletes the history older than that, whatever its
+`days`, and with `dry_run` counts it. A period that starts before the history says that it's
+cut short. [benchmarks.md](benchmarks.md#reports) measures the reports on a history of a
+million runs.
+
 ## Settings
 
 The Settings pages group AWX's settings by what they set up rather than by AWX's categories:

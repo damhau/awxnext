@@ -154,3 +154,69 @@ AWXBENCH_PASSWORD=... ./awxbench masking --url https://awxnext.example.com --eve
 ```
 
 `--secrets` sets the number of secret fields. Against AWX, both jobs do the same work.
+
+## Reports
+
+The reports are awxnext's alone ([Reports](operations.md#reports)). `awxbench reports` writes a
+large history straight into the report tables, since running a million jobs would measure the
+job runner instead: 1,000,000 runs of 500 templates over 400 days, in two organizations, and
+6,000,000 host days, 5,000 hosts that 3 templates each run every day. Then it requests each
+report over 30, 90 and 400 days, 10 times each, as three readers:
+
+- the admin, filtered on one organization;
+- the admin, over both organizations;
+- a user with the Organization Execute role on one organization, who reads half the history
+  through the jobs' rights.
+
+### Results
+
+2026-11-22, the Compose stack of `compat/` (awxnext and PostgreSQL 16 with its default settings,
+one node) on an AMD Ryzen 9 7950X under WSL 2, with awxbench in the awxnext container. Times are
+p50 / p95, in ms:
+
+| Report | Days | Admin, one organization | Admin, both | Organization role |
+|---|---|---|---|---|
+| Totals | 30 | 104 / 134 | 115 / 121 | 143 / 184 |
+| Totals | 90 | 226 / 235 | 245 / 251 | 328 / 335 |
+| Totals | 400 | 371 / 392 | 482 / 520 | 731 / 761 |
+| Templates | 30 | 90 / 98 | 164 / 169 | 123 / 130 |
+| Templates | 90 | 263 / 281 | 509 / 530 | 343 / 373 |
+| Templates | 400 | 1,111 / 1,204 | 1,979 / 2,029 | 1,094 / 1,153 |
+| Trends | 30 | 25 / 27 | 40 / 41 | 44 / 52 |
+| Trends | 90 | 75 / 83 | 132 / 134 | 104 / 106 |
+| Trends | 400 | 356 / 369 | 590 / 616 | 309 / 315 |
+| Hosts | 30 | 310 / 337 | 397 / 447 | 230 / 245 |
+| Hosts | 90 | 680 / 705 | 923 / 940 | 513 / 554 |
+| Hosts | 400 | 2,063 / 2,260 | 2,842 / 4,114 | 2,052 / 2,229 |
+| Launches | 30 | 37 / 42 | 44 / 45 | 62 / 64 |
+| Launches | 90 | 98 / 119 | 95 / 102 | 128 / 132 |
+| Launches | 400 | 166 / 232 | 205 / 227 | 285 / 302 |
+
+Over 30 and 90 days every report answers in under a second. Over 400 days, the hosts report reads
+all 6,000,000 host days and takes 2 to 3 s, and templates, with its medians and percentiles over
+a million runs, 1 to 2 s.
+
+Three choices made these numbers, each measured against the first version:
+
+- **Rights once per key.** Checked on each row, the jobs' rights took 18.5 s for the hosts report
+  over 90 days with the organization role. A report now checks them once per template,
+  organization and launcher of its days (`report_keys`, 625 keys here), then joins the rows to
+  the keys that passed: 0.5 s.
+- **Aggregate before joining.** Counting distinct hosts in two steps, and summing a host's days
+  before looking up its inventory, took the hosts per month over 30 days from 965 to 133 ms. An
+  index on the day lets a short period skip the rest of the table.
+- **A plan for each request.** Each report runs in a read-only transaction with
+  `plan_cache_mode = force_custom_plan` and `work_mem` at 32 MB. After a few runs, PostgreSQL
+  had switched to a generic plan that read 6,000,000 rows without parallel workers and sorted
+  them on disk: 8.1 s instead of 0.9 s.
+
+To run it against a test install, with its database:
+
+```sh
+AWXBENCH_PASSWORD=... ./awxbench reports --url https://awxnext.example.com --database-url postgres://...
+./awxbench reports --database-url postgres://... --clean
+```
+
+`--runs`, `--days`, `--templates`, `--hosts` and `--host-templates` size the history, and
+`--requests` sets the requests per report. The seeded rows show in the install's reports until
+`--clean` deletes them; their two organizations and their user stay.

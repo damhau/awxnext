@@ -205,6 +205,7 @@
     "PROJECT_UPDATE_VVV": {"category": "jobs", "no_effect": true},
     "PROXY_IP_ALLOWED_LIST": {"category": "system"},
     "REMOTE_HOST_HEADERS": {"category": "system"},
+    "REPORT_HISTORY_DAYS": {"category": "jobs"},
     "SCHEDULE_MAX_JOBS": {"category": "jobs"},
     "SESSIONS_PER_USER": {"category": "authentication"},
     "SESSION_COOKIE_AGE": {"category": "authentication"},

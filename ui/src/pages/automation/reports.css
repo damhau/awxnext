@@ -1,0 +1,72 @@
+.report-filters { display: flex; flex-wrap: wrap; gap: 12px 16px; align-items: flex-end; }
+.report-filters .field { min-width: 170px; flex: 0 1 200px; margin: 0; }
+.report-filters fieldset { border: 0; padding: 0; margin: 0; }
+.report-filters legend { font-size: 12px; font-weight: 600; color: var(--ink-3); margin-bottom: 6px; padding: 0; }
+
+.reports .stale { opacity: 0.55; transition: opacity 0.15s; }
+
+.report-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; min-height: 104px; }
+.report-tile { display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-lg); min-width: 0; }
+.report-tile-label { font-size: 12px; color: var(--muted); }
+.report-tile-value { font-size: 28px; font-weight: 600; color: var(--ink); line-height: 1.15; }
+.report-top { list-style: none; margin: 2px 0 0; padding: 0; display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
+.report-top li { display: flex; gap: 8px; justify-content: space-between; min-width: 0; }
+
+.report-change { color: var(--muted); }
+.report-change.down { color: var(--fail-ink); }
+
+.report-pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 16px; align-items: start; }
+.report-triple { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 16px; align-items: start; }
+
+.segmented.sm label { padding: 3px 10px; font-size: 12px; }
+
+/* The status colors, but a canceled run's gray steps darker in dark mode:
+   the dark --cancel is too close to the dark --ok for a stacked column. */
+.report-chart { --chart-ok: var(--ok); --chart-fail: var(--fail); --chart-cancel: var(--cancel); --chart-ink: var(--ink-3); }
+:root[data-theme='dark'] .report-chart { --chart-cancel: #5e5b54; }
+
+.chart-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); gap: 20px 28px; }
+.chart { margin: 0; min-width: 0; }
+.chart figcaption { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline; margin-bottom: 6px; }
+.chart-title { font-size: 13px; font-weight: 600; color: var(--ink); }
+.chart-legend { display: inline-flex; flex-wrap: wrap; gap: 12px; font-size: 12px; color: var(--muted); }
+.chart-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.swatch { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+.swatch.ok { background: var(--chart-ok); }
+.swatch.fail { background: var(--chart-fail); }
+.swatch.cancel { background: var(--chart-cancel); }
+.chart-box { position: relative; width: 100%; }
+.chart-box svg { display: block; overflow: visible; }
+.chart-box svg:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
+.chart-axis text { font-size: 11px; fill: var(--muted); font-variant-numeric: tabular-nums; }
+.chart-axis line.grid { stroke: var(--line-soft); stroke-width: 1; }
+.chart-axis line.baseline { stroke: var(--line-strong); stroke-width: 1; }
+.chart .bar.ok { fill: var(--chart-ok); }
+.chart .bar.fail { fill: var(--chart-fail); }
+.chart .bar.cancel { fill: var(--chart-cancel); }
+.chart g.on .bar { filter: brightness(1.12); }
+.chart .hit { fill: transparent; }
+.chart .line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.chart .line.fail { stroke: var(--chart-fail); }
+.chart .line.ink { stroke: var(--chart-ink); }
+.chart .dot { stroke: var(--surface); stroke-width: 2; }
+.chart .dot.fail { fill: var(--chart-fail); }
+.chart .dot.ink { fill: var(--chart-ink); }
+.chart .crosshair { stroke: var(--line-strong); stroke-width: 1; }
+.chart-end { font-size: 11px; fill: var(--ink-3); font-weight: 600; }
+.chart-hint { align-self: center; margin: 0; }
+
+.chart-tip {
+  position: absolute; top: 0; transform: translateX(-50%); pointer-events: none; z-index: 2;
+  min-width: 150px; padding: 8px 10px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow-pop);
+  font-size: 12px; color: var(--muted);
+}
+.chart-tip-head { font-weight: 600; color: var(--ink); margin-bottom: 4px; }
+.chart-tip-row { display: flex; align-items: center; gap: 6px; }
+.chart-tip-row strong { color: var(--ink); font-variant-numeric: tabular-nums; min-width: 2.5em; }
+.chart-key { width: 12px; height: 2px; border-radius: 1px; display: inline-block; }
+.chart-key.ok { background: var(--chart-ok); }
+.chart-key.fail { background: var(--chart-fail); }
+.chart-key.cancel { background: var(--chart-cancel); }
+.chart-key.ink { background: var(--chart-ink); }
+.chart-tip-row:not(:has(.chart-key)) { padding-left: 18px; }

@@ -56,6 +56,7 @@ const paths: Record<string, string> = {
   plug: 'M6 1.5v3M10 1.5v3M4.5 4.5h7v3a3.5 3.5 0 0 1-7 0zM8 11v3.5',
   gauge: 'M2.5 11.5a5.5 5.5 0 0 1 11 0M8 11.5l2.5-3.5M2.5 13.5h11',
   drift: 'M2 12.5h12M2 8.5h4.5l3-5H14',
+  chart: 'M2.5 2.5v11h11M5.5 11V8M8.5 11V5M11.5 11V7',
 }
 
 export type IconName = keyof typeof paths

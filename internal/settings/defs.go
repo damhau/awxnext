@@ -30,7 +30,7 @@ func init() {
 			Help: "awxnext fetches the keys of an OIDC event stream's issuer itself, from the address its credential gives, and refuses loopback (127.0.0.0/8, ::1), link-local (169.254.0.0/16, fe80::/10) and unspecified addresses, and cloud metadata services: they are awxnext's own host. Allow some here, one per entry: an address (127.0.0.1), a network (127.0.0.0/8), or an address and port (127.0.0.1:8443)."},
 		{Key: "EVENT_RULE_DECISION_RETENTION_DAYS", Category: "system", Type: "integer", Default: 90, Validate: atLeastZero, Label: "Days event rule decisions are kept",
 			Help: "Days the cleanup_event_streams management job keeps the decisions of event rules that matched: launched, throttled, held back, and the rest. Each is kept as long as its event at least. A decision whose filter didn't match is kept only as long as its event. 0: as long as their events."},
-		{Key: "EVENT_RULE_SUCCESS_RATE_DAYS", Category: "system", Type: "integer", Default: 30, Validate: successDays, Label: "Days of an event rule's success rate",
+		{Key: "EVENT_RULE_SUCCESS_RATE_DAYS", Category: "system", Type: "integer", Default: 30, Validate: oneToTenYearsOfDays, Label: "Days of an event rule's success rate",
 			Help: "The days over which an event rule's success rate counts its checked fixes: the share of those that settled in that time that fixed their key. From 1 to 3650."},
 		{Key: "HUB_STORAGE", Category: "system", Type: "choice", Default: "database", Label: "Collection Hub Storage",
 			Choices: [][]any{{"database", "Database"}, {"s3", "Amazon S3 or S3-compatible"}, {"azure_blob", "Azure Blob Storage"}},
@@ -106,6 +106,8 @@ func init() {
 		{Key: "JOB_EVENTS_HOT_DAYS", Category: "jobs", Type: "integer", Default: 14, Help: "Days job events stay in the database before they are served from the compressed archive."},
 		{Key: "HOST_HISTORY_DAYS", Category: "jobs", Type: "integer", Default: 30, Validate: atLeastZero, Label: "Days of host task history",
 			Help: "Days each host's task results are kept for its history on the host's page, cleaned by the Cleanup Host History management job. They outlive job events. Drift a check-mode run found stays until a run clears it. 0: no history is kept, and drift isn't tracked."},
+		{Key: "REPORT_HISTORY_DAYS", Category: "jobs", Type: "integer", Default: 400, Validate: oneToTenYearsOfDays, Label: "Days of report history",
+			Help: "Days the reports keep each finished job and each host's daily results, cleaned by the Cleanup Job Details management job. They outlive the jobs: a report over a longer period is cut short."},
 		{Key: "JOB_EVENTS_ARCHIVE_STORAGE", Category: "jobs", Type: "choice", Default: "database", Label: "Job Event Archive Storage",
 			Choices: [][]any{{"database", "Database"}, {"s3", "Amazon S3 or S3-compatible"}, {"azure_blob", "Azure Blob Storage"}},
 			Help:    "Where new job event archives are kept. Archives already made stay readable where they are."},
@@ -205,7 +207,7 @@ func stringList(v any) []string {
 	return out
 }
 
-func successDays(v any) error {
+func oneToTenYearsOfDays(v any) error {
 	if n, err := strconv.ParseFloat(fmt.Sprint(v), 64); err == nil && (n < 1 || n > 3650) {
 		return errors.New("Ensure this value is between 1 and 3650.")
 	}

@@ -121,7 +121,7 @@ func (t *task) cleanupJobs(ctx context.Context) error {
 		for _, typ := range order {
 			t.out.Line(fmt.Sprintf("%s: %d %s", typ, counts[typ], t.action()))
 		}
-		return nil
+		return t.cleanupReportHistory(ctx)
 	}
 	total := int64(0)
 	for {
@@ -164,6 +164,38 @@ func (t *task) cleanupJobs(ctx context.Context) error {
 		t.out.Line(fmt.Sprintf("%s: %d deleted", typ, counts[typ]))
 	}
 	t.out.Line(fmt.Sprintf("Total: %d jobs deleted", total))
+	return t.cleanupReportHistory(ctx)
+}
+
+// cleanupReportHistory deletes the reports' copies of runs and host results
+// older than REPORT_HISTORY_DAYS, whatever days the job was given: they
+// outlive the jobs.
+func (t *task) cleanupReportHistory(ctx context.Context) error {
+	keep := t.settings.Int(ctx, "REPORT_HISTORY_DAYS")
+	if keep < 1 {
+		keep = 1
+	}
+	cutoff := time.Now().AddDate(0, 0, -int(keep))
+	t.out.Line(fmt.Sprintf("Cleaning up report history older than %d days%s", keep, dry(t.dryRun)))
+	for _, q := range []struct{ what, table, where string }{
+		{"Report runs", "report_runs", "finished < $1"},
+		{"Report host days", "report_host_days", "day < ($1 AT TIME ZONE 'UTC')::date"},
+		{"Report rights keys", "report_keys", "day < ($1 AT TIME ZONE 'UTC')::date"},
+	} {
+		var n int64
+		if t.dryRun {
+			if err := t.db.QueryRow(ctx, "SELECT count(*) FROM "+q.table+" WHERE "+q.where, cutoff).Scan(&n); err != nil {
+				return err
+			}
+		} else {
+			tag, err := t.db.Exec(ctx, "DELETE FROM "+q.table+" WHERE "+q.where, cutoff)
+			if err != nil {
+				return err
+			}
+			n = tag.RowsAffected()
+		}
+		t.out.Line(fmt.Sprintf("%s %s: %d", q.what, t.action(), n))
+	}
 	return nil
 }
 

@@ -34,13 +34,15 @@ func main() {
 		rulesRun(os.Args[2:])
 	case "masking":
 		maskingRun(os.Args[2:])
+	case "reports":
+		reportsRun(os.Args[2:])
 	default:
 		usage()
 	}
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: awxbench run --url URL --user U --password P [--out FILE] | awxbench table NAME=FILE... | awxbench rules --url URL [--events N] | awxbench masking --url URL [--events N] [--secrets N]")
+	fmt.Fprintln(os.Stderr, "usage: awxbench run --url URL --user U --password P [--out FILE] | awxbench table NAME=FILE... | awxbench rules --url URL [--events N] | awxbench masking --url URL [--events N] [--secrets N] | awxbench reports --url URL --database-url DSN [--runs N] [--clean]")
 	os.Exit(2)
 }
 
@@ -161,6 +163,48 @@ func maskingRun(args []string) {
 		fmt.Fprintf(os.Stderr, time.Now().Format("15:04:05 ")+format+"\n", a...)
 	}
 	r, err := bench.Masking(context.Background(), t, o, *secrets)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "awxbench:", err)
+		os.Exit(1)
+	}
+	b, _ := json.MarshalIndent(r, "", "  ")
+	fmt.Println(string(b))
+}
+
+// reportsRun measures awxnext's reports over a large report history.
+func reportsRun(args []string) {
+	fs := flag.NewFlagSet("reports", flag.ExitOnError)
+	var t bench.Target
+	o := bench.ReportsOptions{}
+	fs.StringVar(&t.URL, "url", "", "awxnext's base URL")
+	fs.StringVar(&t.User, "user", "admin", "user")
+	fs.StringVar(&t.Password, "password", os.Getenv("AWXBENCH_PASSWORD"), "password (or AWXBENCH_PASSWORD)")
+	fs.BoolVar(&t.Insecure, "insecure", false, "skip TLS verification")
+	fs.StringVar(&o.DatabaseURL, "database-url", os.Getenv("AWXNEXT_DATABASE_URL"), "awxnext's PostgreSQL, where the history is seeded (or AWXNEXT_DATABASE_URL)")
+	fs.IntVar(&o.Runs, "runs", 1000000, "runs seeded")
+	fs.IntVar(&o.Days, "days", 400, "days they cover")
+	fs.IntVar(&o.Templates, "templates", 500, "templates they are of")
+	fs.IntVar(&o.Hosts, "hosts", 5000, "hosts seeded")
+	fs.IntVar(&o.HostTemplates, "host-templates", 3, "templates that run on each host every day")
+	fs.IntVar(&o.Requests, "requests", 10, "requests per report, period and user")
+	clean := fs.Bool("clean", false, "delete what an earlier run seeded, and stop")
+	fs.Parse(args)
+	if o.DatabaseURL == "" || (t.URL == "" && !*clean) {
+		usage()
+	}
+	if *clean {
+		n, err := bench.CleanReports(context.Background(), o.DatabaseURL)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "awxbench:", err)
+			os.Exit(1)
+		}
+		fmt.Printf("deleted %d rows\n", n)
+		return
+	}
+	o.Log = func(format string, a ...any) {
+		fmt.Fprintf(os.Stderr, time.Now().Format("15:04:05 ")+format+"\n", a...)
+	}
+	r, err := bench.Reports(context.Background(), t, o)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "awxbench:", err)
 		os.Exit(1)
