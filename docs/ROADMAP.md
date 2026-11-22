@@ -35,7 +35,7 @@ be matched.
 | [M9 Security](#m9-security) | Known vulnerabilities found by CI and fixed through reviewed PRs | 5 |
 | [M10 Small fixes](#m10-small-fixes) | The importer tested on a real AWX, parity.md matching the code, the deployed image scanned, the AWS lookup tested on moto, M14-10's leftovers, a job's first lines live, M13's leftovers, OIDC account choice, translations, the Default organization | 11 |
 | [M11 Notifications](#m11-notifications) | Email tested on a real mail server, Slack as in AWX, a Teams type, notifications when a result changes | 4 |
-| [M12 Beyond AWX](#m12-beyond-awx) | What changed before a failure, secrets kept out of job output, an MCP server, drifted hosts, failure notifications that say why and get through, reports over time | 6 |
+| [M12 Beyond AWX](#m12-beyond-awx) | What changed before a failure, secrets kept out of job output, an MCP server, drifted hosts, failure notifications that say why and get through, reports over time, launch policies | 7 |
 | [M13 Collection hub](#m13-collection-hub) | A private Galaxy in awxnext: publish, approve, sign, mirror and install collections | 5 |
 | [M14 Event-driven automation](#m14-event-driven-automation) | Event streams into a durable log, rules evaluated by awxnext with guardrails, connectors, rulebooks imported | 10 |
 | [M15 Self-service portal](#m15-self-service-portal) | A portal of its own: requestable items with forms fed by APIs and jobs, approvals by rule, quotas, and deployments that expire | 10 |
@@ -1581,8 +1581,8 @@ in job output, an assistant can use awxnext over MCP with its user's rights,
 hosts that drift from their playbooks are listed, and a failure's
 notification says what failed, is retried until it is delivered, and keeps a
 failure in one Slack thread, and reports show how templates, runs and hosts
-did over weeks and months. M12-05 was added on 2026-11-19, M12-06 on
-2026-11-22.
+did over weeks and months, and launch policies refuse the launches they
+should. M12-05 was added on 2026-11-19, M12-06 and M12-07 on 2026-11-22.
 
 ### M12-01 What changed since the last good run
 **Labels:** feature, jobs, ui · **Size:** M · [#148](https://github.com/damhau/awxnext/issues/148)
@@ -1680,6 +1680,29 @@ The cost is measured with `cmd/awxbench`.
 only to users who may read them, the numbers stay after `cleanup_jobs`, the
 page and its CSV match the API, and the benchmark is in
 [benchmarks.md](benchmarks.md).
+
+### M12-07 Launch policies
+**Labels:** feature, jobs, rbac, ui · **Size:** L · [#196](https://github.com/damhau/awxnext/issues/196)
+
+RBAC decides who may launch; nothing checks the launch itself. AAP checks
+launches against Rego policies on an OPA server of its own. awxnext's
+`/api/v2/launch_policies/` are CEL conditions, type-checked as event rules
+are, attached to organizations, inventories and templates, or global. A
+condition sees the template, inventory, limit, extra vars (passwords
+`$encrypted$`), branch, job type, verbosity, image, credentials, user and
+teams, how it was launched, and `now` with a time-window helper. Every
+launch path is checked, project and inventory updates aside: a launch with
+a caller gets a 400 with the policy's message and no job, one without (a
+schedule, a webhook, a workflow node, an event rule) a job that fails
+naming the policy. New policies start in `shadow` mode, decisions are
+recorded, a backtest lists the past launches a condition would have
+refused, and the launch page warns before Launch.
+
+**Done when:** a test's policies refuse the launches they should on each
+path in `enforce` mode and only record in `shadow`; a refused API launch
+creates no job and a refused scheduled one fails naming the policy; the
+launch page warns, a backtest lists past refusals, and the docs give
+examples.
 
 ---
 
