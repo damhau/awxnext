@@ -35,7 +35,7 @@ be matched.
 | [M9 Security](#m9-security) | Known vulnerabilities found by CI and fixed through reviewed PRs | 5 |
 | [M10 Small fixes](#m10-small-fixes) | The importer tested on a real AWX, parity.md matching the code, the deployed image scanned, the AWS lookup tested on moto, M14-10's leftovers, a job's first lines live, M13's leftovers, OIDC account choice, translations, the Default organization | 11 |
 | [M11 Notifications](#m11-notifications) | Email tested on a real mail server, Slack as in AWX, a Teams type, notifications when a result changes | 4 |
-| [M12 Beyond AWX](#m12-beyond-awx) | What changed before a failure, secrets kept out of job output, an MCP server, drifted hosts, failure notifications that say why and get through | 5 |
+| [M12 Beyond AWX](#m12-beyond-awx) | What changed before a failure, secrets kept out of job output, an MCP server, drifted hosts, failure notifications that say why and get through, reports over time | 6 |
 | [M13 Collection hub](#m13-collection-hub) | A private Galaxy in awxnext: publish, approve, sign, mirror and install collections | 5 |
 | [M14 Event-driven automation](#m14-event-driven-automation) | Event streams into a durable log, rules evaluated by awxnext with guardrails, connectors, rulebooks imported | 10 |
 | [M15 Self-service portal](#m15-self-service-portal) | A portal of its own: requestable items with forms fed by APIs and jobs, approvals by rule, quotas, and deployments that expire | 10 |
@@ -1580,7 +1580,9 @@ job says what changed since the last success, credential secrets don't appear
 in job output, an assistant can use awxnext over MCP with its user's rights,
 hosts that drift from their playbooks are listed, and a failure's
 notification says what failed, is retried until it is delivered, and keeps a
-failure in one Slack thread. M12-05 was added on 2026-11-19.
+failure in one Slack thread, and reports show how templates, runs and hosts
+did over weeks and months. M12-05 was added on 2026-11-19, M12-06 on
+2026-11-22.
 
 ### M12-01 What changed since the last good run
 **Labels:** feature, jobs, ui · **Size:** M · [#148](https://github.com/damhau/awxnext/issues/148)
@@ -1659,6 +1661,25 @@ say which run recovered.
 against fake servers, retryable errors are retried, others aren't, Resend
 works and 3 failures mark the template failing; with threads on, a failure
 keeps to one Slack thread that says when it recovered.
+
+### M12-06 Reports on templates, runs and hosts over time
+**Labels:** feature, jobs, api, ui · **Size:** L · [#195](https://github.com/damhau/awxnext/issues/195)
+
+The Now page covers 24 hours and AWX's job graph counts runs per day.
+`/api/v2/reports/` and a Reports page cover a period (7, 30, 90 days or
+dates), filtered by organization, template, inventory, project and launch
+type, counting only what the user can read: templates worst first (success
+rate and its change, median and 95th percentile duration, flips, last
+failure), trends per day or week, hosts automated per organization and
+month and the hosts failing most, and runs by user, team and launch type,
+each exportable as CSV. A short row per run and a row per host per day
+outlive `cleanup_jobs`, kept 400 days by default. No "time saved" estimate.
+The cost is measured with `cmd/awxbench`.
+
+**Done when:** made-up runs give the expected numbers for each filter and
+only to users who may read them, the numbers stay after `cleanup_jobs`, the
+page and its CSV match the API, and the benchmark is in
+[benchmarks.md](benchmarks.md).
 
 ---
 
