@@ -1742,6 +1742,11 @@ out of errors and output.
 readable errors, a project clones with it, the credential test works, and
 the docs show the set-up.
 
+Closed on 2026-11-22, with its 8 tasks done, after green runs of `full.yml`
+and secubot on 57dfa30. secubot selected no new finding. M12-03's
+`/api/mcp/discover/` keeps sessions, so with several replicas it needs
+session affinity on `Mcp-Session-Id`; the toolset URLs don't.
+
 ---
 
 ## M13 Collection hub
