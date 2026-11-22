@@ -1,7 +1,8 @@
 // Package credplugins resolves credential input sources from external secret
 // stores: HashiCorp Vault (KV v1/v2, SSH signing), Azure Key Vault, CyberArk
 // (Central Credential Provider, Conjur), Centrify Vault, Thycotic (DevOps
-// Secrets Vault, Secret Server) and AWS Secrets Manager.
+// Secrets Vault, Secret Server), AWS Secrets Manager, and GitHub App
+// installation tokens.
 package credplugins
 
 import (
@@ -50,6 +51,8 @@ func Lookup(ctx context.Context, p Policy, namespace string, inputs, metadata ma
 		return thycoticTSS(ctx, p, inputs, metadata)
 	case "aws_secretsmanager_credential":
 		return awsSecret(ctx, p, inputs, metadata)
+	case "github_app_lookup":
+		return githubAppToken(ctx, p, inputs)
 	}
 	return "", fmt.Errorf("unsupported credential plugin %q", namespace)
 }

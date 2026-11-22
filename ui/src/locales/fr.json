@@ -1639,7 +1639,7 @@
   "This type has no inputs.": "Ce type n’a aucune entrée.",
   "Create credential": "Créer l’identifiant",
   "Required:": "Requis :",
-  "Resolve this value from HashiCorp Vault or Azure Key Vault at run time": "Résoudre cette valeur depuis HashiCorp Vault ou Azure Key Vault à l’exécution",
+  "Resolve this value from a secret lookup at run time": "Obtenir cette valeur d’une recherche de secret à l’exécution",
   "lookup": "recherche",
   "Asked when a job launches": "Demandé au lancement d’une tâche",
   "Set a value instead": "Définir une valeur à la place",
@@ -1653,7 +1653,7 @@
   "Use this lookup": "Utiliser cette recherche",
   "The value is fetched each time a job uses this credential; it is never stored here.": "La valeur est récupérée chaque fois qu’une tâche utilise cet identifiant ; elle n’est jamais stockée ici.",
   "Secret store credential": "Identifiant du coffre de secrets",
-  "A HashiCorp Vault or Azure Key Vault credential.": "Un identifiant HashiCorp Vault ou Azure Key Vault.",
+  "A secret lookup credential, such as HashiCorp Vault, Azure Key Vault or a GitHub App.": "Un identifiant de recherche de secret, comme HashiCorp Vault, Azure Key Vault ou une GitHub App.",
   "Connected; the lookup returned a value.": "Connecté ; la recherche a renvoyé une valeur.",
   "Try a lookup": "Essayer une recherche",
   "Checks the connection with the values above, without saving.": "Vérifie la connexion avec les valeurs ci-dessus, sans enregistrer.",
@@ -4401,5 +4401,6 @@
   "Recovered after a failure": "Rétabli après un échec",
   "Slow run": "Exécution lente",
   "{{ median_elapsed }}": "{{ median_elapsed }}",
-  "(slow runs)": "(exécutions lentes)"
+  "(slow runs)": "(exécutions lentes)",
+  "-----BEGIN RSA PRIVATE KEY-----": "-----BEGIN RSA PRIVATE KEY-----"
 }

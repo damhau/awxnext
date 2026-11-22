@@ -303,8 +303,8 @@ awxnext keys import keys.json          # wrap them with the master key configure
 ## Secret lookups
 
 Credentials of an external type (HashiCorp Vault, Azure Key Vault, CyberArk, Conjur, Centrify,
-Thycotic, AWS Secrets Manager) fetch secrets from the address the credential gives, when a job
-starts and when someone tests them. Anyone who may create a credential chooses that address, so
+Thycotic, AWS Secrets Manager, GitHub App) fetch secrets from the address the credential gives, when
+a job starts and when someone tests them. Anyone who may create a credential chooses that address, so
 two things are refused unless a superuser allows them, on the Jobs settings page under "Secret
 lookups" (roadmap M9-06):
 
@@ -333,6 +333,35 @@ operator configures, is not affected.
 
 Testing a credential type with values not saved yet (`POST /api/v2/credential_types/N/test/`) is
 for superusers, as in AWX; anyone who may use a credential tests it at `credentials/N/test/`.
+
+### GitHub App tokens for private repositories
+
+A project that clones from GitHub with a personal access token depends on one person's account,
+and on a token that rarely expires. A GitHub App instead gets a token for each use, limited to
+the repositories the app is installed on, that expires after an hour. The "GitHub App
+Installation Access Token Lookup" type (`github_app_lookup`) is AAP's, with the same inputs;
+AWX 24.6 doesn't have it.
+
+1. In GitHub, create a GitHub App under the organization's **Settings > Developer settings >
+   GitHub Apps**, with read-only access to **Contents** (and **Metadata**, which GitHub adds),
+   and no webhook. Note its **App ID** or **Client ID**.
+2. On the app's page, generate a private key. GitHub downloads it as a `.pem` file.
+3. Install the app on the organization, for the repositories awxnext clones. The installation's
+   URL ends with its ID: `https://github.com/organizations/<org>/settings/installations/59980338`.
+4. In awxnext, create a credential of the type **GitHub App Installation Access Token Lookup**
+   with the App ID or Client ID, the installation ID and the `.pem` file's contents. For GitHub
+   Enterprise Server, set **GitHub API endpoint URL** to `https://<host>/api/v3`; for GitHub
+   Enterprise Cloud with data residency, to `https://api.<subdomain>.ghe.com`. **Test** asks
+   GitHub for a token.
+5. Create a **Source Control** credential with the username `x-access-token`. Next to its
+   password, select **lookup** and choose the lookup credential. Leave the lookup's description empty, or
+   say what the token is for: the lookup doesn't use it.
+6. Use the Source Control credential on the project, with the repository's HTTPS URL
+   (`https://github.com/<org>/<repo>.git`).
+
+Each project update gets a new token, which is hidden in its output like the credential's other
+secrets. The same lookup can fill another credential's token field, for example a GitHub
+Personal Access Token credential used by a webhook or a collection.
 
 ## Secrets in job output
 

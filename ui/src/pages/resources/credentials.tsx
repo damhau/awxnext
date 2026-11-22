@@ -404,7 +404,7 @@ function InputControl({
         {!required && <span className="opt"> {tr('· optional')}</span>}
       </span>
       {onLink && !link && (
-        <button type="button" className="link-btn small" style={{ fontWeight: 400, marginLeft: 'auto' }} onClick={onLink} title={tr('Resolve this value from HashiCorp Vault or Azure Key Vault at run time')}>
+        <button type="button" className="link-btn small" style={{ fontWeight: 400, marginLeft: 'auto' }} onClick={onLink} title={tr('Resolve this value from a secret lookup at run time')}>
           <Icon name="link" size={12} /> {tr('lookup')}
         </button>
       )}
@@ -483,7 +483,7 @@ function InputControl({
         rows={field.format === 'ssh_private_key' || field.secret ? 6 : 4}
         spellCheck={false}
         value={String(value ?? '')}
-        placeholder={field.format === 'ssh_private_key' ? tr('-----BEGIN OPENSSH PRIVATE KEY-----') : undefined}
+        placeholder={field.format !== 'ssh_private_key' ? undefined : field.id === 'private_rsa_key' ? tr('-----BEGIN RSA PRIVATE KEY-----') : tr('-----BEGIN OPENSSH PRIVATE KEY-----')}
         onChange={(e) => onChange(e.target.value)}
         aria-invalid={!!error}
         style={field.secret ? ({ WebkitTextSecurity: value ? 'disc' : undefined } as React.CSSProperties) : undefined}
@@ -522,7 +522,7 @@ function describeMeta(m: Record<string, unknown>): string {
   return [path, key].filter(Boolean).join(' : ')
 }
 
-/** Links an input to a secret lookup credential (HashiCorp Vault, Azure Key Vault). */
+/** Links an input to a secret lookup credential. */
 function LinkDialog({ field, current, onClose, onSave }: { field: InputField; current?: Link_; onClose: () => void; onSave: (l: Link_) => void }) {
   const [source, setSource] = useState<Ref | null>(current?.source ?? null)
   const [meta, setMeta] = useState<Record<string, unknown>>(current?.metadata ?? {})
@@ -575,7 +575,7 @@ function LinkDialog({ field, current, onClose, onSave }: { field: InputField; cu
           setSource(x)
           setTest(null)
         }}
-        help={tr('A HashiCorp Vault or Azure Key Vault credential.')}
+        help={tr('A secret lookup credential, such as HashiCorp Vault, Azure Key Vault or a GitHub App.')}
       />
       {source && srcType.isPending && <Loading rows={2} />}
       {md.length > 0 && (
