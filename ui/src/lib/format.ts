@@ -14,6 +14,7 @@ const dateTime = () => cached('dateTime', (l) => new Intl.DateTimeFormat(l, { da
 const dateMedium = () => cached('date', (l) => new Intl.DateTimeFormat(l, { dateStyle: 'medium' }))
 const timeOnly = () => cached('time', (l) => new Intl.DateTimeFormat(l, { hour: '2-digit', minute: '2-digit' }))
 const weekday = () => cached('weekday', (l) => new Intl.DateTimeFormat(l, { weekday: 'short', hour: '2-digit', minute: '2-digit' }))
+const dayNameFormat = () => cached('dayName', (l) => new Intl.DateTimeFormat(l, { weekday: 'short' }))
 
 export function parseDate(s: string | null | undefined): Date | null {
   if (!s) return null
@@ -61,6 +62,22 @@ export function upcoming(s: string | null | undefined, now = Date.now()): string
   if (diff >= 0 && diff < 86400_000 && new Date(now).getDate() === d.getDate()) return tr('today {time}', { time: timeOnly().format(d) })
   if (diff >= 0 && diff < 6 * 86400_000) return weekday().format(d)
   return dateTime().format(d)
+}
+
+/** "Sat 14:00", in the chosen locale. */
+export function weekdayTime(s: string | number): string {
+  const d = new Date(s)
+  return isNaN(d.getTime()) ? '—' : weekday().format(d)
+}
+
+/** "14:00", in the chosen locale. */
+export function clockTime(t: number): string {
+  return timeOnly().format(new Date(t))
+}
+
+/** "Sat", in the chosen locale. */
+export function dayName(t: number): string {
+  return dayNameFormat().format(new Date(t))
 }
 
 /** "6m 42s", "1h 02m", "48s". */

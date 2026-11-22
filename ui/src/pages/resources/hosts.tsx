@@ -13,6 +13,8 @@ import { absolute, plural } from '../../lib/format'
 import { compile, type KeyTable } from '../../lib/query'
 import { FilterBox, Provenance, useDelete } from './common'
 import { AdHocDialog, HostDialog, type Host } from './inventoryHosts'
+import { HostFlagPills, MatrixNotes, TaskHistory } from './hostHistory'
+import type { HostHistory } from '../../lib/hostHistory'
 import { tr } from '../../lib/i18n'
 
 const keys: KeyTable = {
@@ -126,6 +128,7 @@ export function HostDetail() {
   const host = useObject<Host>(`hosts/${id}/`)
   const summaries = useList<Summary>(`hosts/${id}/job_host_summaries/`, { order_by: '-id', page_size: 15 })
   const facts = useQuery({ queryKey: [`hosts/${id}/ansible_facts/`], queryFn: () => api.get<Record<string, unknown>>(`hosts/${id}/ansible_facts/`) })
+  const history = useQuery({ queryKey: [`hosts/${id}/task_history/`], queryFn: () => api.get<HostHistory>(`hosts/${id}/task_history/`) })
   const [dialog, setDialog] = useState<null | 'edit' | 'adhoc'>(null)
   const invalidate = useInvalidate()
   const toast = useToast()
@@ -177,7 +180,12 @@ export function HostDetail() {
       <PageHead
         crumbs={[{ label: tr('Inventories'), to: '/inventories' }, ...(inv ? [{ label: inv.name, to: `/inventories/${inv.id}/hosts` }] : []), { label: h.name }]}
         title={<span className="mono" style={{ fontSize: 19 }}>{h.name}</span>}
-        badge={h.enabled ? undefined : <span className="badge">{tr('Disabled')}</span>}
+        badge={
+          <>
+            {!h.enabled && <span className="badge">{tr('Disabled')}</span>}
+            <HostFlagPills host={h.name} history={history.data} />
+          </>
+        }
         subtitle={h.description || undefined}
         actions={
           <>
@@ -204,9 +212,11 @@ export function HostDetail() {
           </>
         }
       />
-      <div className="page-body">
+      <div className="page-body stack" style={{ gap: 16 }}>
+        <TaskHistory history={history.data} loading={history.isPending} error={history.error} />
         <div className="split">
           <div className="wide stack" style={{ gap: 16 }}>
+            <MatrixNotes history={history.data} />
             <Panel title={tr('Recent jobs on this host')} pad={false} className="flush">
               <DataTable
                 label={tr('Job results')}

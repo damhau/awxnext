@@ -665,6 +665,28 @@ table.data tr.folder-row:hover td { background: var(--hover); }
 .fleet-name { display: flex; align-items: baseline; gap: 6px; min-width: 0; padding-right: 8px; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .fleet-name b { flex: 0 0 auto; max-width: 100%; font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
 .fleet-name .mono { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 11px; color: var(--muted-2); }
+/* Host history: a host's tasks x 4-hour blocks, grouped by template. */
+.hist { overflow-x: auto; display: flex; flex-direction: column; gap: 3px; padding: 4px; margin: -4px; }
+.hist-row { display: grid; grid-template-columns: minmax(170px, 250px) repeat(30, minmax(12px, 1fr)) minmax(120px, 180px); gap: 3px; align-items: center; min-width: 880px; padding: 2px 0; border-radius: 4px; }
+.hist-row.tint { background: color-mix(in srgb, var(--changed-soft) 55%, transparent); }
+.hist-days { font-size: 10.5px; color: var(--muted-2); height: 16px; padding: 0; }
+.hist-days span { white-space: nowrap; overflow: visible; }
+.hist-template { font-size: 11px; color: var(--muted); margin: 10px 0 2px; letter-spacing: 0.02em; }
+.hist-template:first-of-type { margin-top: 2px; }
+.hist-template a { color: inherit; }
+.hist-name { font-size: 13px; padding-left: 8px; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.hist-flag { text-align: right; padding-right: 6px; }
+.cell.check-mode {
+  outline: 1px dashed var(--ink-3); outline-offset: -1px;
+  background-image: repeating-linear-gradient(135deg, rgb(255 255 255 / 0.4) 0 2px, transparent 2px 6px);
+}
+.flag { display: inline-block; font-weight: 600; font-size: 11.5px; padding: 3px 8px; border-radius: 999px; white-space: nowrap; line-height: 1.3; }
+a.flag:hover { text-decoration: none; filter: brightness(0.97); }
+.flag.fail { background: var(--fail-soft); color: var(--fail-deep); }
+.flag.warn { background: var(--changed-soft); color: var(--changed-ink); }
+.notes { display: flex; flex-direction: column; gap: 12px; font-size: 13px; line-height: 1.5; }
+.notes > div { display: flex; gap: 10px; align-items: flex-start; }
+.notes > div > .cell { margin-top: 4px; flex: none; }
 /* Needs attention: one failed run per card. */
 .attention { display: flex; gap: 14px; align-items: center; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--radius); color: var(--ink); min-width: 0; }
 .attention:hover { border-color: var(--ink); text-decoration: none; }

@@ -103,6 +103,7 @@ function useNav(): { label: string; items: NavItem[] }[] {
       items: [
         { to: '/inventories', label: tr('Inventories'), icon: 'inventory' },
         { to: '/hosts', label: tr('Hosts'), icon: 'host' },
+        { to: '/drift', label: tr('Drift'), icon: 'drift' },
         { to: '/projects', label: tr('Projects'), icon: 'project' },
         { to: '/credentials', label: tr('Credentials'), icon: 'key' },
         { to: '/choice-sources', label: tr('Choice sources'), icon: 'menu' },

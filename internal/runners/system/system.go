@@ -1,6 +1,6 @@
 // Package system runs management jobs (cleanup of old jobs, activity
-// stream entries, sessions, tokens, host metrics and event streams' events)
-// in-process.
+// stream entries, sessions, tokens, host metrics, event streams' events and
+// host task history) in-process.
 package system
 
 import (
@@ -75,6 +75,8 @@ func run(ctx context.Context, rc *jobs.RunContext) jobs.Result {
 		fn = t.hostMetricSummaryMonthly
 	case "cleanup_event_streams":
 		fn = t.cleanupEventStreams
+	case "cleanup_host_history":
+		fn = t.cleanupHostHistory
 	default:
 		return jobs.Result{Status: "error", Explanation: "Unknown management job type " + row.Str("job_type")}
 	}
@@ -289,6 +291,32 @@ func (t *task) cleanupEventStreams(ctx context.Context) error {
 	t.out.Line(fmt.Sprintf("Pattern windows a day past their deadline %s: %d", t.action(), dec.Patterns))
 	t.out.Line(fmt.Sprintf("Settled checks of fixes %s: %d", t.action(), dec.Checks))
 	return err
+}
+
+// cleanupHostHistory removes the hosts' task results older than
+// HOST_HISTORY_DAYS: days takes no part. Open drift stays.
+func (t *task) cleanupHostHistory(ctx context.Context) error {
+	keep := t.settings.Int(ctx, "HOST_HISTORY_DAYS")
+	if keep <= 0 {
+		t.out.Line("Cleaning up all host task results: the host history is off" + dry(t.dryRun))
+	} else {
+		t.out.Line(fmt.Sprintf("Cleaning up host task results older than %d days%s", keep, dry(t.dryRun)))
+	}
+	cutoff := time.Now().AddDate(0, 0, -max(keep, 0))
+	var n int64
+	if t.dryRun {
+		if err := t.db.QueryRow(ctx, "SELECT count(*) FROM host_task_results WHERE created < $1", cutoff).Scan(&n); err != nil {
+			return err
+		}
+	} else {
+		tag, err := t.db.Exec(ctx, "DELETE FROM host_task_results WHERE created < $1", cutoff)
+		if err != nil {
+			return err
+		}
+		n = tag.RowsAffected()
+	}
+	t.out.Line(fmt.Sprintf("Host task results %s: %d", t.action(), n))
+	return nil
 }
 
 func (t *task) dropAction() string {

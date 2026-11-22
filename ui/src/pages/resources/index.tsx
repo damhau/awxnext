@@ -18,6 +18,8 @@ const CredentialForm = m_credentials('CredentialForm')
 const CredentialList = m_credentials('CredentialList')
 const m_executionEnvironments = lazyModule(() => import('./executionEnvironments'))
 const ExecutionEnvironmentList = m_executionEnvironments('ExecutionEnvironmentList')
+const m_drift = lazyModule(() => import('./drift'))
+const DriftList = m_drift('DriftList')
 const m_hosts = lazyModule(() => import('./hosts'))
 const HostDetail = m_hosts('HostDetail')
 const HostList = m_hosts('HostList')
@@ -75,6 +77,7 @@ export function resourceRoutes() {
       <Route path="inventory-sources/:id" element={<InventorySourceRedirect />} />
       <Route path="hosts" element={<HostList />} />
       <Route path="hosts/:id" element={<HostDetail />} />
+      <Route path="drift" element={<DriftList />} />
       <Route path="projects" element={<ProjectList />} />
       <Route path="projects/new" element={<ProjectForm />} />
       <Route path="projects/:id/edit" element={<ProjectForm />} />

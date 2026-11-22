@@ -18,6 +18,7 @@ func init() {
 	registerSystemJobs()
 	registerWorkflows()
 	registerJobChanges()
+	registerHostHistory()
 	registerSchedules()
 	registerNotifications()
 	registerWebhooks()

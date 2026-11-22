@@ -448,6 +448,9 @@ func (m *Manager) run(parent context.Context, id int64) {
 		})
 	out.Kind = row.Str("type")
 	out.RateLimit = m.App.Settings.Int(ctx, "JOB_EVENT_MAX_RATE")
+	if row.Str("type") == "job" && row.Int("unified_job_template_id") != 0 && m.App.Settings.Int(ctx, "HOST_HISTORY_DAYS") > 0 {
+		out.History = &HostHistory{Template: row.Int("unified_job_template_id"), Check: row.Str("job_type") == "check"}
+	}
 	var res Result
 	func() {
 		defer func() {

@@ -46,7 +46,10 @@ type Output struct {
 	// RateLimit is how many events a second the job stores (0: no limit):
 	// beyond it, consecutive verbose events are folded into one, so a noisy
 	// job cannot starve the others. Set before the first Emit.
-	RateLimit  int
+	RateLimit int
+	// History, when set before the first Emit, keeps the job's task results
+	// on hosts.
+	History    *HostHistory
 	db         *pgxpool.Pool
 	jobID      int64
 	jobCreated time.Time
@@ -262,6 +265,9 @@ func (o *Output) flush() {
 	metrics.Sub.Observe("callback_receiver_batch_events_insert_db", float64(len(batch)))
 	metrics.Sub.Set("callback_receiver_event_processing_avg_seconds", secs/float64(len(batch)))
 	o.logEvents(ctx, batch)
+	if o.History != nil {
+		o.recordHistory(ctx, batch)
+	}
 	o.db.Exec(ctx, "UPDATE unified_jobs SET emitted_events = $2 WHERE id = $1", o.jobID, total)
 	if o.onFlush != nil {
 		maxCounter := 0

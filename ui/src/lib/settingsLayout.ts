@@ -789,6 +789,12 @@ export const settingsPages: SettingsPage[] = [
           row('JOB_EVENTS_ARCHIVE_REGION', { label: tr('Archive region') }),
           row('JOB_EVENTS_ARCHIVE_PREFIX', { label: tr('Archive key prefix') }),
           row('JOB_EVENTS_ARCHIVE_CREDENTIAL', { label: tr('Archive credential'), control: 'storage-credential' }),
+          row('HOST_HISTORY_DAYS', {
+            label: tr('Host task history'),
+            help: tr('Each host\'s task results are kept this long for its history and flags, after their job\'s events are archived. Cleanup Host History removes older ones.'),
+            unit: tr('days'),
+            none: [0, tr('Not kept')],
+          }),
         ],
       },
     ],

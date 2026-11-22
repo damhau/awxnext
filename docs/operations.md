@@ -3312,6 +3312,61 @@ the run. `compared_with` names the run and its `reason`: `last_success`, `previo
   or docker on a node, and container groups. A job run directly by ansible-runner, without a
   container, has none. Older jobs have no digest, so their image compares by name only.
 
+## Host history and drift
+
+A host's page shows under **Task history** every task that touched the host in the last 5 days,
+grouped by template, one column per 4 hours, oldest on the left. Each cell is the task's worst
+result in those hours, ranked as on the job page's matrix: unreachable, failed, changed, ok,
+skipped. A dashed cell is a check-mode run. Click a cell to open its run.
+
+The column on the right flags a row, and **What the matrix is telling you** explains each flag,
+with the run to open:
+
+| Flag | When |
+| --- | --- |
+| changes every run | The task reported changed on every run in the window, 3 at least, check-mode runs aside. It probably isn't idempotent: it writes a timestamp, or runs a command without `changed_when`. |
+| new failure | Its latest result failed, or the host was unreachable, after a success. The host's title then says **Failing since #N**, the first of those failed runs. |
+| drift *when* | It changed in a run between two ok runs, check-mode runs aside, with nothing changed between the ok run and that one: the same project revision, the same extra variables, and no edit to the template. Someone changed the host outside Ansible, and the run put it back. Inventory and host variables aren't compared. |
+| drifted | A check-mode run found that it would change the host. |
+
+Skipped results don't count. Rows that fail or change on every run are tinted. Through the API,
+read `hosts/N/task_history/`, awxnext's, with `?days=` for a longer window, up to the retention.
+It returns each template's tasks with their results and flags, from the jobs you can see.
+
+### Find drift with check mode
+
+To find drift, run a template in check mode (job type **Check**) with diff mode. When a
+check-mode run reports a task changed on a host, the host is drifted for that task, with the
+diff the task returned. With a schedule, the template becomes a drift report.
+
+The **Drift** page, under **Resources**, lists the drifted tasks of the hosts in the inventories
+you can read: since when, the run that found each one and the latest that still did, and the
+diff. Through the API, read `host_drift/`, awxnext's, filtered as other lists, such as
+`?inventory=` or `?host__name__icontains=`.
+
+A drift stays until a later run of the same template, in check mode or not, reports the task
+unchanged on the host:
+
+- A run that puts the host back reports changed, so the drift stays. The next run, which finds
+  nothing to change, clears it.
+- A drift belongs to its template and task. Another template's runs don't clear it.
+- A diff larger than 256 KiB isn't kept: the run's output has it. A diff is masked as the job's
+  output is, and a `no_log` task has none.
+
+### Retention
+
+Each host's task results are stored as the job's events are, in a table of their own, so they
+outlive job events (`JOB_EVENTS_HOT_DAYS`). `HOST_HISTORY_DAYS`, 30 by default in the job
+settings, is how long they're kept. The management job **Cleanup Host History**
+(`cleanup_host_history`, daily by default) deletes older ones, and with `dry_run` counts them.
+`days` takes no part, and open drift stays. `0` turns the history off: no results are stored,
+drift isn't tracked, and the cleanup deletes every result.
+
+- Results come from jobs of job templates, not from ad hoc commands. A task that ran more than
+  once on a host in a job keeps its worst result.
+- Deleting a job, as **Cleanup Job Details** does, deletes its results. Deleting a host or a
+  template deletes its drift.
+
 ## Settings
 
 The Settings pages group AWX's settings by what they set up rather than by AWX's categories:

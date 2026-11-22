@@ -1660,8 +1660,8 @@ check-mode run that would change a host also marks it drifted, with the diff,
 until a run leaves it unchanged. A Drift page lists drifted hosts.
 
 **Done when:** a test's runs raise each flag, a check-mode run marks drift
-and an unchanged run clears it, and the Host screen and the Drift page show
-them.
+and an unchanged run clears it, the Host screen and the Drift page show
+them, and the retention is a setting, cleaned by a management job.
 
 ### M12-05 Failure notifications: why it failed, retries, Slack threads
 **Labels:** feature, notifications, ui · **Size:** L · [#194](https://github.com/damhau/awxnext/issues/194)

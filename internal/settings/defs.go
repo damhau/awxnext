@@ -104,6 +104,8 @@ func init() {
 		{Key: "CHOICE_SOURCE_ALLOWED_LOCAL_ADDRESSES", Category: "jobs", Type: "list", Default: []any{}, Validate: localAddresses, Label: "Local addresses choice sources may reach",
 			Help: "Choice sources refuse loopback (127.0.0.0/8, ::1), link-local (169.254.0.0/16, fe80::/10) and unspecified addresses, and cloud metadata services, even for a listed host: they are awxnext's own host. Allow some here, one per entry: an address (127.0.0.1), a network (127.0.0.0/8), or an address and port (127.0.0.1:8080)."},
 		{Key: "JOB_EVENTS_HOT_DAYS", Category: "jobs", Type: "integer", Default: 14, Help: "Days job events stay in the database before they are served from the compressed archive."},
+		{Key: "HOST_HISTORY_DAYS", Category: "jobs", Type: "integer", Default: 30, Validate: atLeastZero, Label: "Days of host task history",
+			Help: "Days each host's task results are kept for its history on the host's page, cleaned by the Cleanup Host History management job. They outlive job events. Drift a check-mode run found stays until a run clears it. 0: no history is kept, and drift isn't tracked."},
 		{Key: "JOB_EVENTS_ARCHIVE_STORAGE", Category: "jobs", Type: "choice", Default: "database", Label: "Job Event Archive Storage",
 			Choices: [][]any{{"database", "Database"}, {"s3", "Amazon S3 or S3-compatible"}, {"azure_blob", "Azure Blob Storage"}},
 			Help:    "Where new job event archives are kept. Archives already made stay readable where they are."},

@@ -25,6 +25,7 @@ const explain: Record<string, string> = {
   cleanup_tokens: tr('Removes expired API tokens.'),
   cleanup_host_metrics: tr('Removes soft-deleted host metrics older than the retention period.'),
   cleanup_event_streams: tr('Removes the events each event stream keeps no longer, by the stream\'s own retention, and the rule decisions on them.'),
+  cleanup_host_history: tr('Removes host task results older than the host history retention (HOST_HISTORY_DAYS). Open drift stays.'),
 }
 
 function LaunchDialog({ t, onClose }: { t: SJT; onClose: () => void }) {
