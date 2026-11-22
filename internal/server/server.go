@@ -22,6 +22,7 @@ import (
 	"github.com/damhau/awxnext/internal/jobs"
 	"github.com/damhau/awxnext/internal/kms"
 	"github.com/damhau/awxnext/internal/logship"
+	"github.com/damhau/awxnext/internal/mcpserver"
 	"github.com/damhau/awxnext/internal/metrics"
 	"github.com/damhau/awxnext/internal/resources"
 	"github.com/damhau/awxnext/internal/runners/ansible"
@@ -131,6 +132,7 @@ func Handler(app *api.App) http.Handler {
 		return resources.Jobs.Hub
 	})
 	r := app.Router()
+	mcpserver.Mount(app, r)
 	r.NotFound(uiHandler(app.Cfg.UIDir).ServeHTTP)
 	return r
 }

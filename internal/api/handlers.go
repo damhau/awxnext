@@ -2,6 +2,7 @@ package api
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -228,7 +229,36 @@ func SetAuthenticator(f Authenticator) { authenticate = f }
 // Authenticate resolves the principal of a request as /api/v2/ does, for
 // anonymous routes that also take other credentials.
 func Authenticate(r *http.Request, w http.ResponseWriter) (*Principal, error) {
+	return principalOf(r, w)
+}
+
+type principalKey struct{}
+
+// WithPrincipal authenticates the requests made with ctx as p, without
+// credentials: the server's requests to its own API on a principal's behalf
+// (the MCP server's tools). Only the server can put it in a request.
+func WithPrincipal(ctx context.Context, p *Principal) context.Context {
+	return context.WithValue(ctx, principalKey{}, p)
+}
+
+func principalOf(r *http.Request, w http.ResponseWriter) (*Principal, error) {
+	if p, ok := r.Context().Value(principalKey{}).(*Principal); ok && p != nil {
+		return p, nil
+	}
 	return authenticate(r, w)
+}
+
+type viaKey struct{}
+
+// WithVia marks the changes made with ctx in the activity stream ("mcp").
+func WithVia(ctx context.Context, via string) context.Context {
+	return context.WithValue(ctx, viaKey{}, via)
+}
+
+// Via is how the changes made with ctx came: "" through the API itself.
+func Via(ctx context.Context) string {
+	v, _ := ctx.Value(viaKey{}).(string)
+	return v
 }
 
 func (a *App) newCtx(r *http.Request, p *Principal) *Ctx {
@@ -248,7 +278,7 @@ func (a *App) newCtx(r *http.Request, p *Principal) *Ctx {
 
 func (a *App) wrap(h func(c *Ctx, w http.ResponseWriter, r *http.Request)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		p, err := authenticate(r, w)
+		p, err := principalOf(r, w)
 		if err != nil {
 			writeError(w, err)
 			return
@@ -268,7 +298,7 @@ func (a *App) wrap(h func(c *Ctx, w http.ResponseWriter, r *http.Request)) http.
 
 func (a *App) wrapPublic(h func(c *Ctx, w http.ResponseWriter, r *http.Request)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		p, _ := authenticate(r, w)
+		p, _ := principalOf(r, w)
 		h(a.newCtx(r, p), w, r)
 	}
 }

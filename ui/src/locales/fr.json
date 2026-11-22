@@ -4718,5 +4718,18 @@
   "Policies": "Politiques",
   "A launch policy refuses it: {why}": "Une politique de lancement la refuse : {why}",
   "A launch policy refuses this launch: see What will happen.": "Une politique de lancement refuse ce lancement : voir Ce qui va se passer.",
-  "The condition runs on the launches you can see of the past days, up to 365, rebuilt from their jobs, with the user’s teams and the inventories’ hosts as they are today. It refuses nothing and records nothing.": "La condition s’exécute sur les lancements des jours passés que vous pouvez voir, jusqu’à 365, reconstruits à partir de leurs tâches, avec les équipes de l’utilisateur et les hôtes des inventaires tels qu’ils sont aujourd’hui. Elle ne refuse rien et ne note rien."
+  "The condition runs on the launches you can see of the past days, up to 365, rebuilt from their jobs, with the user’s teams and the inventories’ hosts as they are today. It refuses nothing and records nothing.": "La condition s’exécute sur les lancements des jours passés que vous pouvez voir, jusqu’à 365, reconstruits à partir de leurs tâches, avec les équipes de l’utilisateur et les hôtes des inventaires tels qu’ils sont aujourd’hui. Elle ne refuse rien et ne note rien.",
+  "Assistants (MCP)": "Assistants (MCP)",
+  "Assistants such as Claude Code call awxnext's tools at /api/mcp/, with a user's token and that user's rights. What the tools read reaches the assistant's model: host names and addresses, variables, extra vars and job output. Secrets come back as $encrypted$.": "Les assistants comme Claude Code appellent les outils d’awxnext sur /api/mcp/, avec le jeton d’un utilisateur et les droits de cet utilisateur. Ce que lisent les outils parvient au modèle de l’assistant : noms et adresses des hôtes, variables, extra vars et sortie des tâches. Les secrets reviennent en $encrypted$.",
+  "Serve the MCP server": "Servir le serveur MCP",
+  "Let assistants make changes": "Laisser les assistants faire des modifications",
+  "Off: assistants only get the tools that read. On: they also get those that launch, cancel, approve, create, change and delete, for tokens with the write scope.": "Désactivé : les assistants n’ont que les outils qui lisent. Activé : ils ont aussi ceux qui lancent, annulent, approuvent, créent, modifient et suppriment, pour les jetons de portée écriture.",
+  "An assistant can then change what its user may change, without asking them first unless the assistant asks.": "Un assistant peut alors modifier ce que son utilisateur peut modifier, sans le lui demander d’abord, à moins que l’assistant ne le demande.",
+  "Items per page of the list tools": "Éléments par page des outils de liste",
+  "A model reads every item it gets: a small page keeps its context for the task.": "Un modèle lit chaque élément qu’il reçoit : une petite page garde son contexte pour la tâche.",
+  "The MCP server is off: an administrator turns it on in Settings, System.": "Le serveur MCP est désactivé : un administrateur l’active dans Paramètres, Système.",
+  "Assistants such as Claude Code call awxnext's tools with a token, as you. What they read reaches the assistant's model: host names, variables, extra vars and job output.": "Les assistants comme Claude Code appellent les outils d’awxnext avec un jeton, en votre nom. Ce qu’ils lisent parvient au modèle de l’assistant : noms des hôtes, variables, extra vars et sortie des tâches.",
+  "With a write token, they may also launch, approve and change what you may.": "Avec un jeton d’écriture, ils peuvent aussi lancer, approuver et modifier ce que vous pouvez.",
+  "They only read: an administrator lets them make changes in Settings, System.": "Ils ne font que lire : un administrateur leur permet de faire des modifications dans Paramètres, Système.",
+  "To use it in Claude Code:": "Pour l’utiliser dans Claude Code :"
 }

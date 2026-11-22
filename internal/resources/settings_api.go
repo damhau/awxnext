@@ -132,7 +132,7 @@ func installSettings(app *api.App) {
 		}
 		// Turning the activity stream off is itself recorded.
 		if len(changes) > 0 && (streamWasOn || c.App.Settings.Bool(c, "ACTIVITY_STREAM_ENABLED")) {
-			if _, err := c.DB().Exec(c, `INSERT INTO activity_stream (actor_id, operation, object1, changes, summary) VALUES ($1, 'update', 'setting', $2, '{}')`, c.User.UserID, changes); err == nil {
+			if _, err := c.DB().Exec(c, `INSERT INTO activity_stream (actor_id, operation, object1, changes, summary, via) VALUES ($1, 'update', 'setting', $2, '{}', $3)`, c.User.UserID, changes, api.Via(c)); err == nil {
 				api.ActivityLog(c, "update", "setting", "", "", c.User.Username, changes, Obj{})
 			}
 		}

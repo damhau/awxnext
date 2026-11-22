@@ -31,7 +31,8 @@ func newFakeIdP(t *testing.T) *fakeIdP {
 	key, _ := rsa.GenerateKey(rand.Reader, 2048)
 	p := &fakeIdP{key: key, codes: map[string]map[string]any{}}
 	mux := http.NewServeMux()
-	mux.HandleFunc("/.well-known/openid-configuration", func(w http.ResponseWriter, r *http.Request) {
+	metadata := func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]any{
 			"issuer":                                p.srv.URL,
 			"authorization_endpoint":                p.srv.URL + "/authorize",
@@ -39,8 +40,12 @@ func newFakeIdP(t *testing.T) *fakeIdP {
 			"userinfo_endpoint":                     p.srv.URL + "/userinfo",
 			"jwks_uri":                              p.srv.URL + "/jwks",
 			"id_token_signing_alg_values_supported": []string{"RS256"},
+			"code_challenge_methods_supported":      []string{"S256"},
 		})
-	})
+	}
+	mux.HandleFunc("/.well-known/openid-configuration", metadata)
+	// As Keycloak does: MCP clients read RFC 8414's first.
+	mux.HandleFunc("/.well-known/oauth-authorization-server", metadata)
 	mux.HandleFunc("/jwks", func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(jose.JSONWebKeySet{Keys: []jose.JSONWebKey{{Key: &key.PublicKey, KeyID: "k1", Algorithm: "RS256", Use: "sig"}}})
 	})
@@ -72,7 +77,13 @@ func newFakeIdP(t *testing.T) *fakeIdP {
 			return
 		}
 		delete(c, "_challenge")
-		json.NewEncoder(w).Encode(map[string]any{"access_token": "opaque", "token_type": "Bearer", "expires_in": 300, "id_token": p.sign(t, c, "awx-client")})
+		// A token asked for a resource (RFC 8707), as MCP clients do, is a
+		// JWT for it.
+		access := "opaque"
+		if res := r.PostForm.Get("resource"); res != "" {
+			access = p.sign(t, c, res)
+		}
+		json.NewEncoder(w).Encode(map[string]any{"access_token": access, "token_type": "Bearer", "expires_in": 300, "id_token": p.sign(t, c, "awx-client")})
 	})
 	p.srv = httptest.NewServer(mux)
 	t.Cleanup(p.srv.Close)

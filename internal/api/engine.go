@@ -1277,9 +1277,9 @@ func Activity(c *Ctx, op string, res *Resource, obj Obj, changes Obj, res2 *Reso
 	if res.Name == "organizations" {
 		org = &id
 	}
-	_, err := c.DB().Exec(c, `INSERT INTO activity_stream (actor_id, operation, object1, object1_id, object2, object2_id, object_relationship_type, changes, summary, organization_id)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-		actor, op, res.Type, id, o2, o2id, relationship, changes, summary, org)
+	_, err := c.DB().Exec(c, `INSERT INTO activity_stream (actor_id, operation, object1, object1_id, object2, object2_id, object_relationship_type, changes, summary, organization_id, via)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+		actor, op, res.Type, id, o2, o2id, relationship, changes, summary, org, Via(c))
 	if err == nil {
 		var name any
 		if actor != nil {

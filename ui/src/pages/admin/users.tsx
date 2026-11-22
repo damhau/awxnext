@@ -13,7 +13,8 @@ import { DataTable } from '../../components/table'
 import { Ago, Avatar, Empty, ErrorNote, KV, Loading, PageHead, Panel, Tab } from '../../components/ui'
 import { absolute, userName } from '../../lib/format'
 import { checkPassword, describeRules, passwordRules } from '../../lib/passwordPolicy'
-import { ListPage, OneTimeSecret, useDelete } from './common'
+import { claudeMcpAdd, mcpURL } from '../../lib/mcp'
+import { CopyButton, ListPage, OneTimeSecret, useDelete } from './common'
 import { BulkDelete } from '../../components/BulkBar'
 import { tr } from '../../lib/i18n'
 
@@ -402,6 +403,45 @@ function UserTeams({ user }: { user: User }) {
 
 type Token = Base & { scope: string; expires: string; token: string; user: number }
 
+type McpSettings = { MCP_ENABLED?: boolean; MCP_ALLOW_WRITE_OPERATIONS?: boolean }
+
+/** A command or URL to copy. */
+function CopyLine({ text }: { text: string }) {
+  return (
+    <div className="row">
+      <pre className="code grow" style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+        {text}
+      </pre>
+      <CopyButton text={text} />
+    </div>
+  )
+}
+
+/** Where assistants reach awxnext's MCP server with a token, and what they
+ * may do there. */
+function McpPanel({ settings }: { settings: McpSettings }) {
+  const url = mcpURL(window.location.origin)
+  if (settings.MCP_ENABLED === false) {
+    return (
+      <Panel title={tr('Assistants (MCP)')}>
+        <span className="small faint">{tr('The MCP server is off: an administrator turns it on in Settings, System.')}</span>
+      </Panel>
+    )
+  }
+  return (
+    <Panel title={tr('Assistants (MCP)')}>
+      <div className="stack" style={{ gap: 8 }}>
+        <span className="small faint">
+          {tr('Assistants such as Claude Code call awxnext\'s tools with a token, as you. What they read reaches the assistant\'s model: host names, variables, extra vars and job output.')}{' '}
+          {settings.MCP_ALLOW_WRITE_OPERATIONS ? tr('With a write token, they may also launch, approve and change what you may.') : tr('They only read: an administrator lets them make changes in Settings, System.')}
+        </span>
+        <CopyLine text={url} />
+        <CopyLine text={claudeMcpAdd(url)} />
+      </div>
+    </Panel>
+  )
+}
+
 function Tokens({ user, self }: { user: User; self: boolean }) {
   const tokens = useList<Token>(`users/${user.id}/personal_tokens/`, { order_by: '-created', page_size: 50 })
   const [creating, setCreating] = useState(false)
@@ -411,6 +451,7 @@ function Tokens({ user, self }: { user: User; self: boolean }) {
   const [error, setError] = useState<unknown>(null)
   const invalidate = useInvalidate()
   const del = useDelete()
+  const mcp = useObject<McpSettings>(self ? 'settings/system/' : null)
   const create = async () => {
     setError(null)
     try {
@@ -433,6 +474,7 @@ function Tokens({ user, self }: { user: User; self: boolean }) {
           </button>
         )}
       </div>
+      {self && mcp.data && <McpPanel settings={mcp.data} />}
       <DataTable
         label={tr('Tokens')}
         rows={tokens.data?.results}
@@ -487,7 +529,15 @@ function Tokens({ user, self }: { user: User; self: boolean }) {
           }
         >
           {created ? (
-            <OneTimeSecret value={created.token} note={tr('Copy the token now. It is shown only once; afterwards only its description is visible.')} />
+            <>
+              <OneTimeSecret value={created.token} note={tr('Copy the token now. It is shown only once; afterwards only its description is visible.')} />
+              {mcp.data && mcp.data.MCP_ENABLED !== false && (
+                <div className="stack" style={{ gap: 8, marginTop: 12 }}>
+                  <span className="small faint">{tr('To use it in Claude Code:')}</span>
+                  <CopyLine text={claudeMcpAdd(mcpURL(window.location.origin), created.token)} />
+                </div>
+              )}
+            </>
           ) : (
             <>
               <TextInput label={tr('Description')} value={desc} onChange={setDesc} placeholder={tr('e.g. GitLab CI deploy pipeline')} autoFocus />

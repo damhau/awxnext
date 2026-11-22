@@ -27,8 +27,10 @@ require (
 	github.com/go-jose/go-jose/v4 v4.1.9
 	github.com/go-ldap/ldap/v3 v3.4.15
 	github.com/google/go-containerregistry v0.22.1
+	github.com/google/jsonschema-go v0.4.3
 	github.com/jackc/pgx/v5 v5.13.0
 	github.com/jimlambrt/gldap v0.1.14
+	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/nikolalohinski/gonja/v2 v2.9.1
 	github.com/teambition/rrule-go v1.8.2
 	github.com/ulikunitz/xz v0.5.17
@@ -101,9 +103,12 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/rogpeppe/go-internal v1.16.0 // indirect
 	github.com/russellhaering/goxmldsig v1.6.1 // indirect
+	github.com/segmentio/asm v1.1.3 // indirect
+	github.com/segmentio/encoding v0.5.4 // indirect
 	github.com/sirupsen/logrus v1.9.4 // indirect
 	github.com/stretchr/testify v1.12.1 // indirect
 	github.com/xi2/xz v0.0.0-20171230120015-48954b6210f8 // indirect
+	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
 	github.com/zeebo/xxh3 v1.1.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.47.0 // indirect

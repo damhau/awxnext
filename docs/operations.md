@@ -3615,6 +3615,175 @@ to try another one, or `POST launch_policies/backtest/` with a `condition` and a
   labels are today's, not the launch's.
 - A sliced launch counts once. The backtest refuses nothing and records nothing.
 
+## Assistants (MCP)
+
+awxnext serves its tools to assistants such as Claude Code over the Model Context Protocol
+(Streamable HTTP), at `/api/mcp/`. Each tool calls the API's own handlers with the token's
+user: the API's validation and rights apply, and a tool sees and changes only what that user
+may. The tools are of two kinds:
+
+- **Generated tools**, for each resource of a toolset: `list_<resources>` (with the API's
+  filters, a search, an order and pages of `MCP_PAGE_SIZE`, 25 by default), `get_<resource>`,
+  and `create_`, `update_` and `delete_<resource>` where the API allows them. Their input
+  schemas come from the resource's fields, with their types, choices and limits.
+- **Task tools**, for what takes several calls or reads awkwardly through the API: what a
+  launch asks, launching with prompts, why a job failed, its output around the failure, what
+  changed since the last good run, relaunching on the failed hosts, deciding approvals, a
+  host's details, facts and history, system health, recent failures, reports, a user's roles,
+  credential tests, backtests, settings, an image's contents, a collection's versions, an event
+  rule's mode, and catalog requests.
+
+Answers leave out the `related` URLs, which would fill the model's context; an API error comes
+back as the tool's error, with the API's answer.
+
+### URLs and toolsets
+
+| URL | Tools |
+|---|---|
+| `/api/mcp/` | Every toolset's |
+| `/api/mcp/job_management/` | Templates, jobs, workflows, approvals, schedules, projects, labels |
+| `/api/mcp/inventory_management/` | Inventories, hosts, groups, sources, drift, host metrics |
+| `/api/mcp/system_monitoring/` | Instances, running jobs and failures, reports, activity stream, notifications |
+| `/api/mcp/user_management/` | Users, teams, organizations, roles and their assignments |
+| `/api/mcp/security_compliance/` | Credentials, credential types and tests, launch policies |
+| `/api/mcp/platform_configuration/` | Settings, execution environments, instance groups, maintenance windows, folders |
+| `/api/mcp/content_discovery/` | The collection hub |
+| `/api/mcp/event_automation/` | Event streams, event rules and their decisions, connectors, rulebooks |
+| `/api/mcp/self_service/` | The catalog, requests, deployments, approvals waiting for the user |
+| `/api/mcp/discover/` | `list_toolsets` and `load_toolset`, which loads a toolset's tools on demand |
+
+The first seven are the names of AAP's MCP server. A model does better with the tools of the task
+at hand than with all of them (about 400 with writes on): add a toolset's URL rather than
+`/api/mcp/`, or use `discover`, whose session starts with two tools and gets a toolset's when
+the model loads it (the client hears `notifications/tools/list_changed`).
+
+`discover` keeps a session per client, closed after 30 minutes without a request. With several
+API replicas, its requests must reach the same replica: give the ingress session affinity on
+the `Mcp-Session-Id` header, or use the toolset URLs, which keep nothing between requests.
+
+### Claude Code
+
+Create a personal access token on your user's **Tokens** tab, which shows the URL and the
+command; the dialog of a new token shows the command with the token in it:
+
+```sh
+claude mcp add --transport http awxnext https://awx.example.com/api/mcp/ \
+  --header "Authorization: Bearer <token>"
+```
+
+Add `--scope user` to use it in every project. For one toolset, add its URL under another name:
+
+```sh
+claude mcp add --transport http awxnext-jobs https://awx.example.com/api/mcp/job_management/ \
+  --header "Authorization: Bearer <token>"
+```
+
+**With OAuth**, there is no token to keep: leave out `--header`, then run `/mcp` in Claude Code
+(or `claude mcp login awxnext`) and sign in in the browser. A request without a token gets a
+`401` with `WWW-Authenticate: Bearer resource_metadata="…"`, whose Protected Resource Metadata
+(RFC 9728, at `/.well-known/oauth-protected-resource/api/mcp/…`) names the OIDC provider as
+the authorization server. It needs:
+
+- the [OIDC login](configuration.md) set up, with `OIDC_ALLOW_BEARER` on (the default);
+- `TOWER_URL_BASE` set to awxnext's public URL, the one the clients use: the metadata names
+  the resource by it, and clients check it exactly;
+- a client at the provider for the assistant. Pre-register one, with the redirect URI
+  `http://localhost:8080/callback`, and pass it: `claude mcp add --transport http
+  --client-id <client id> --callback-port 8080 awxnext https://awx.example.com/api/mcp/`
+  (add `--client-secret` for a confidential client). Or let the client register itself, if
+  the provider allows dynamic client registration;
+- the provider's access token as a JWT with an audience awxnext accepts: the MCP URL, which
+  the client sends as `resource` (RFC 8707), or one of `OIDC_AUDIENCES` (in Keycloak, an
+  audience mapper on the client). A token for the MCP URL (any audience under
+  `<TOWER_URL_BASE>/api/mcp/`) works only on the MCP server, not on the rest of the API.
+
+The user signs in with the OIDC login's rules: a new user is created and mapped as at the login
+page.
+
+### Claude Desktop, VS Code and Cursor
+
+**Claude Desktop**: Settings, Connectors, **Add custom connector**, with the URL, signs in with
+OAuth as above (its advanced settings take a pre-registered client's ID). Custom connectors
+connect from Anthropic's cloud, so awxnext must be reachable from the internet. Otherwise, or
+with a token, run the server locally through `mcp-remote`, in `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "awxnext": {
+      "command": "npx",
+      "args": ["-y", "mcp-remote@0.16.7", "https://awx.example.com/api/mcp/", "--header", "Authorization:${AWXNEXT_AUTH}"],
+      "env": { "AWXNEXT_AUTH": "Bearer <token>" }
+    }
+  }
+}
+```
+
+**VS Code**, in `.vscode/mcp.json`, asking for the token once:
+
+```json
+{
+  "inputs": [{ "type": "promptString", "id": "awxnext-token", "description": "awxnext token", "password": true }],
+  "servers": {
+    "awxnext": {
+      "type": "http",
+      "url": "https://awx.example.com/api/mcp/",
+      "headers": { "Authorization": "Bearer ${input:awxnext-token}" }
+    }
+  }
+}
+```
+
+**Cursor**, in `~/.cursor/mcp.json` or a project's `.cursor/mcp.json`, with the token in the
+environment:
+
+```json
+{
+  "mcpServers": {
+    "awxnext": {
+      "url": "https://awx.example.com/api/mcp/",
+      "headers": { "Authorization": "Bearer ${env:AWXNEXT_TOKEN}" }
+    }
+  }
+}
+```
+
+### Rights
+
+- **Writes are off** until a superuser turns on `MCP_ALLOW_WRITE_OPERATIONS` (Settings, System,
+  Assistants): until then, the tools that change anything aren't listed, and calling one fails.
+  The tools that read are marked `readOnlyHint`; those that delete, cancel, revoke, deny,
+  launch or overwrite are marked `destructiveHint`, so a client can ask before calling them.
+- **A read token** (scope `read`) never gets the tools that change anything. Nor does it get
+  `test_credential` and the backtests, which change nothing but are `POST`s, which a read token
+  can't make.
+- **A user's rights** apply to every call: a list holds what they may read, and a change they
+  may not make fails with the API's `403`.
+- **The activity stream** marks the changes made through the tools: their `via` is `mcp`
+  (`activity_stream/?via=mcp`), and empty through the API and the UI.
+- `MCP_ENABLED` off answers `404` at every MCP URL and its metadata.
+
+Every request needs a bearer token: a personal access token or an OIDC provider's JWT. Session
+cookies and basic authentication are refused, so a web page can't call the tools in a signed-in
+user's name.
+
+### What reaches the model
+
+What a tool returns goes to the assistant's model, and to its provider, under the provider's
+terms. That is what the user may read through the API: names and descriptions, host names and
+their addresses, inventory, group and host variables, facts, extra variables and survey
+answers, job output and events, users' names and email addresses, settings, and the activity
+stream's changes.
+
+- Secrets come back `$encrypted$`: credential inputs, secret settings, survey passwords.
+- Job output and events have the secrets awxnext handed the job masked ([Secrets in job
+  output](#secrets-in-job-output)), not a password a playbook reads elsewhere and prints.
+- A secret kept in variables (an inventory's, a template's extra vars) isn't one to awxnext:
+  it reaches the model as it is.
+
+To keep data away from the model, give the assistant a user who sees only what it needs, a read
+token, and a toolset's URL.
+
 ## Settings
 
 The Settings pages group AWX's settings by what they set up rather than by AWX's categories:

@@ -30,6 +30,12 @@ func init() {
 			Help: "awxnext fetches the keys of an OIDC event stream's issuer itself, from the address its credential gives, and refuses loopback (127.0.0.0/8, ::1), link-local (169.254.0.0/16, fe80::/10) and unspecified addresses, and cloud metadata services: they are awxnext's own host. Allow some here, one per entry: an address (127.0.0.1), a network (127.0.0.0/8), or an address and port (127.0.0.1:8443)."},
 		{Key: "EVENT_RULE_DECISION_RETENTION_DAYS", Category: "system", Type: "integer", Default: 90, Validate: atLeastZero, Label: "Days event rule and launch policy decisions are kept",
 			Help: "Days the cleanup_event_streams management job keeps the decisions of event rules that matched: launched, throttled, held back, and the rest. Each is kept as long as its event at least. A decision whose filter didn't match is kept only as long as its event. 0: as long as their events. Launch policies' decisions are kept as many days; 0: as long as their jobs."},
+		{Key: "MCP_ENABLED", Category: "system", Type: "boolean", Default: true, Public: true, Label: "Serve the MCP server",
+			Help: "Assistants that speak MCP (Claude Code, Claude Desktop, VS Code, Cursor) reach awxnext's tools at /api/mcp/, with a personal access token or an OIDC bearer token, and act with its user's rights. Off: /api/mcp/ answers 404."},
+		{Key: "MCP_ALLOW_WRITE_OPERATIONS", Category: "system", Type: "boolean", Default: false, Public: true, Label: "Let assistants make changes",
+			Help: "On: the MCP server also lists the tools that launch, change and delete, to the users whose token may write, and they act with the user's rights. Off: assistants only read, whatever the user's rights."},
+		{Key: "MCP_PAGE_SIZE", Category: "system", Type: "integer", Default: 25, Validate: oneTo200, Label: "Items per page of MCP list tools",
+			Help: "How many objects an MCP list tool returns when the assistant doesn't ask for a page size. From 1 to 200."},
 		{Key: "EVENT_RULE_SUCCESS_RATE_DAYS", Category: "system", Type: "integer", Default: 30, Validate: oneToTenYearsOfDays, Label: "Days of an event rule's success rate",
 			Help: "The days over which an event rule's success rate counts its checked fixes: the share of those that settled in that time that fixed their key. From 1 to 3650."},
 		{Key: "HUB_STORAGE", Category: "system", Type: "choice", Default: "database", Label: "Collection Hub Storage",
@@ -210,6 +216,13 @@ func stringList(v any) []string {
 func oneToTenYearsOfDays(v any) error {
 	if n, err := strconv.ParseFloat(fmt.Sprint(v), 64); err == nil && (n < 1 || n > 3650) {
 		return errors.New("Ensure this value is between 1 and 3650.")
+	}
+	return nil
+}
+
+func oneTo200(v any) error {
+	if n, err := strconv.ParseFloat(fmt.Sprint(v), 64); err == nil && (n < 1 || n > 200) {
+		return errors.New("Ensure this value is between 1 and 200.")
 	}
 	return nil
 }

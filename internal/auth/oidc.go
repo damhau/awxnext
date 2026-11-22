@@ -259,9 +259,32 @@ func (o *OIDC) complete(c *api.Ctx, w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, st.Next, http.StatusFound)
 }
 
+type audienceKey struct{}
+
+// WithAudiencePrefix makes the bearer JWTs of the requests made with ctx
+// valid too when their audience is under prefix, a URL ending in /: the
+// MCP server's, which OAuth clients ask tokens for (RFC 8707). A token
+// issued for the MCP server is then good on the MCP server alone.
+func WithAudiencePrefix(ctx context.Context, prefix string) context.Context {
+	return context.WithValue(ctx, audienceKey{}, prefix)
+}
+
+// BearerIssuer is the OIDC provider whose bearer tokens awxnext accepts,
+// and the scopes it asks: "" when there is none, or OIDC_ALLOW_BEARER is off.
+func BearerIssuer(ctx context.Context, app *api.App) (string, []string) {
+	o := NewOIDC(app)
+	if !o.Enabled(ctx) || !app.Settings.Bool(ctx, "OIDC_ALLOW_BEARER") {
+		return "", nil
+	}
+	var scopes []string
+	app.Settings.Decode(ctx, "OIDC_SCOPES", &scopes)
+	return strings.TrimSuffix(strings.TrimSuffix(app.Settings.String(ctx, "SOCIAL_AUTH_OIDC_OIDC_ENDPOINT"), "/.well-known/openid-configuration"), "/"), scopes
+}
+
 // AuthenticateJWT validates a provider-issued bearer token.
 func (o *OIDC) AuthenticateJWT(ctx context.Context, token string) (*rbac.Principal, error) {
-	key := hashToken(token)
+	extra, _ := ctx.Value(audienceKey{}).(string)
+	key := hashToken(extra + "\x00" + token)
 	if v, ok := o.cache.Load(key); ok {
 		cp := v.(cachedPrincipal)
 		if time.Now().Before(cp.expires) {
@@ -295,6 +318,9 @@ func (o *OIDC) AuthenticateJWT(ctx context.Context, token string) (*rbac.Princip
 			if a == want {
 				audOK = true
 			}
+		}
+		if extra != "" && strings.HasPrefix(strings.TrimSuffix(a, "/")+"/", extra) {
+			audOK = true
 		}
 	}
 	if !audOK {

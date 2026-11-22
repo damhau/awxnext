@@ -316,6 +316,20 @@ export const settingsPages: SettingsPage[] = [
           }),
         ],
       },
+      {
+        id: 'mcp',
+        title: tr('Assistants (MCP)'),
+        intro: tr('Assistants such as Claude Code call awxnext\'s tools at /api/mcp/, with a user\'s token and that user\'s rights. What the tools read reaches the assistant\'s model: host names and addresses, variables, extra vars and job output. Secrets come back as $encrypted$.'),
+        rows: [
+          row('MCP_ENABLED', { label: tr('Serve the MCP server') }),
+          row('MCP_ALLOW_WRITE_OPERATIONS', {
+            label: tr('Let assistants make changes'),
+            help: tr('Off: assistants only get the tools that read. On: they also get those that launch, cancel, approve, create, change and delete, for tokens with the write scope.'),
+            consequence: tr('An assistant can then change what its user may change, without asking them first unless the assistant asks.'),
+          }),
+          row('MCP_PAGE_SIZE', { label: tr('Items per page of the list tools'), help: tr('A model reads every item it gets: a small page keeps its context for the task.') }),
+        ],
+      },
       { id: 'named-url', title: tr('Named URLs'), rows: [row('NAMED_URL_FORMATS', { label: tr('Named URL formats') }), row('NAMED_URL_GRAPH_NODES', { label: tr('Named URL graph') })] },
     ],
   },

@@ -33,6 +33,7 @@ func registerActivity() {
 			{Name: "actor", Type: api.TFK, Ref: "users", ReadOnly: true, Hidden: true},
 			{Name: "summary", Type: api.TJSON, ReadOnly: true, Hidden: true},
 			{Name: "organization", Type: api.TFK, Ref: "organizations", ReadOnly: true, Hidden: true},
+			{Name: "via", Type: api.TString, ReadOnly: true, Help: "How the change was made: \"mcp\" through the tools of the MCP server, empty through the API or the UI."},
 		},
 		View: func(c *Ctx, arg ArgFunc) string {
 			if c.User.Superuser || c.User.Auditor {
