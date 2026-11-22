@@ -596,3 +596,57 @@ suppressions:
   expires: '2026-12-19'
   created: '2026-11-19'
   source: triage
+- id: 46fb06ac862b
+  reason: 'secubot triage: false positive (high confidence, single pass). The flagged
+    line is not in an HTTP request handler. It is in NotificationTick (internal/resources/notification_delivery.go:325),
+    a leader-only tick hook. It is registered at internal/server/server.go:161 and
+    run by Manager.Tick from the dispatcher loop (internal/jobs/manager.go:306-311).
+    The `ctx` it gets is the dispatcher''s context, not a request context. Whether
+    a client is still connected has n'
+  expires: '2026-12-22'
+  created: '2026-11-22'
+  source: triage
+- id: 4bac854bb2de
+  reason: 'secubot triage: false positive (high confidence, single pass). Line 24
+    of internal/credplugins/github_app.go is `const githubTokenDocs = "https://docs.github.com/rest/apps/apps#create-an-installation-access-token-for-an-app"`.
+    This is a link to public GitHub documentation, not a secret. gosec G101 flagged
+    it only because the identifier contains "Token". The real credentials (the app
+    ID, the installation ID and the private RSA key) come in at runtime from the '
+  expires: '2026-12-22'
+  created: '2026-11-22'
+  source: triage
+- id: '547460846976'
+  reason: 'secubot triage: false positive (high confidence, single pass). The flagged
+    call is reached in production: runnercmd.ImageDigest is called from the local
+    worker (internal/runners/ansible/exec.go:231, via exec.go:378-379) and from the
+    remote agent (internal/agent/client.go:365) after a job runs. Even so, it cannot
+    be used for command or argument injection:
+
+    - The binary name (s.Runtime) can only be the literal "podman" or "docker". Line
+    183 returns early for any'
+  expires: '2026-12-22'
+  created: '2026-11-22'
+  source: triage
+- id: cb97b5ba46ab
+  reason: 'secubot triage: false positive (high confidence, single pass). This is
+    not exploitable. The only value concatenated into the SQL string is the variable
+    `table`. It comes from a hard-coded slice literal, `[]string{"report_host_days",
+    "report_keys"}` (internal/bench/reports.go:162), so no outside input can reach
+    the query text. The values that do vary, `benchTemplateBase` and `benchJobBase`,
+    are passed separately as the `$1` and `$2` bind parameters (line 163).'
+  expires: '2026-12-22'
+  created: '2026-11-22'
+  source: triage
+- id: fdf5597636e8
+  reason: 'secubot triage: false positive (high confidence, single pass). The flagged
+    line (internal/jobs/history.go:146) does narrow `int32(r.counter)` from a Go `int`.
+    The value comes from Event.Counter (internal/jobs/events.go:20). That is either
+    set from `o.counter++` or taken from the runner''s event, adjusted by `o.shifted`
+    (events.go:132-137). The code runs in production: Output.flush calls recordHistory
+    (events.go:268-270) whenever History is set.
+
+
+    The cast still'
+  expires: '2026-12-22'
+  created: '2026-11-22'
+  source: triage
