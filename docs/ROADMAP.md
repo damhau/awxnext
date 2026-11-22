@@ -1588,9 +1588,10 @@ when M12-03 was also raised to the level of AAP's MCP server.
 ### M12-01 What changed since the last good run
 **Labels:** feature, jobs, ui · **Size:** M · [#148](https://github.com/damhau/awxnext/issues/148)
 
-The "Why it failed" panel links to the template's previous successful run
-but doesn't say what differs. `jobs/N/changes/` (and `workflow_jobs/N/`,
-awxnext's own) and the panel list: edits to the template, inventory,
+A failed job's summary (the host × task grid's detail of the failed cell,
+or the "Why it failed" panel when there is no grid) names the template's
+last success but doesn't say what differs. `jobs/N/changes/` (and
+`workflow_jobs/N/`, awxnext's own) and both summaries list: edits to the template, inventory,
 credentials and execution environment from their version history; the
 project's commits between the two revisions; a different image digest
 (recorded with each job from now on); different launch inputs; hosts added or
