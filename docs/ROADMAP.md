@@ -38,7 +38,8 @@ be matched.
 | [M12 Beyond AWX](#m12-beyond-awx) | What changed before a failure, secrets kept out of job output, an MCP server, drifted hosts, failure notifications that say why and get through, reports over time, launch policies, GitHub App tokens | 8 |
 | [M13 Collection hub](#m13-collection-hub) | A private Galaxy in awxnext: publish, approve, sign, mirror and install collections | 5 |
 | [M14 Event-driven automation](#m14-event-driven-automation) | Event streams into a durable log, rules evaluated by awxnext with guardrails, connectors, rulebooks imported | 10 |
-| [M15 Self-service portal](#m15-self-service-portal) | A portal of its own: requestable items with forms fed by APIs and jobs, approvals by rule, quotas, and deployments that expire | 10 |
+| [M15 Self-service portal](#m15-self-service-portal) | A portal of its own: requestable items with forms fed by APIs and jobs, approvals by rule, quotas, and deployments that expire | 11 |
+| [M16 Hardening](#m16-hardening) | The code review's fixes: secrets out of job records and filters, ciphertexts bound to their place, user, attach, copy and move checks, filter visibility, the chart's token, refspecs, an engine that enforces them | 12 |
 
 ---
 
@@ -2232,6 +2233,170 @@ has the Portal section; and `tsc` and Vitest pass.
 
 ---
 
+## M16 Hardening
+
+Fixes from a code review of `b1912ed` on 2026-11-22 (Decision 22). The
+generic resource engine leaves security checks to per-resource hooks, so
+each check must be remembered on every resource and on every surface:
+output, filters, the activity stream, history, attach, copy and moves. Most
+of the review's serious findings are one hook or one surface forgotten.
+M16-01 to M16-10 fix each finding with a regression test, M16-11 makes the
+engine refuse a resource that forgets, and M16-12 reviews the commits that
+came after `b1912ed`. **Exit:** the review's critical and high findings, and
+the medium ones that share their fix (SEC-08, SEC-09), are fixed and tested;
+the engine enforces sensitive fields, child permissions and the move check;
+and the later commits are reviewed the same way.
+
+### M16-01 Keep secrets out of stored job environments and their filters
+**Labels:** security, jobs, api · **Size:** S · [#200](https://github.com/damhau/awxnext/issues/200)
+
+A job's environment, with what credential injectors add, is stored raw in
+`unified_jobs.job_env`. Reads hide it, but a JSON-path filter on it
+compares the stored value, so anyone who can view a job can find a secret
+with repeated filters (SEC-01, critical). AWX marks `job_env`
+`prevent_search`. `job_env` is no longer filterable or orderable at any
+hop, jobs store the redacted environment, and a migration redacts the rows
+already stored.
+
+**Done when:** a filter or an ordering on `job_env` returns a 400, a job
+with a cloud credential stores no secret, and the migration redacts a row
+written raw.
+
+### M16-02 Accept a ciphertext only where it is stored
+**Labels:** security, credentials, notifications · **Size:** M · [#201](https://github.com/damhau/awxnext/issues/201)
+
+`Encrypt` passes an existing ciphertext through, the runner decrypts any
+encrypted value in extra vars, and notification configurations have no
+`Redact`, so their ciphertexts reach the activity stream. A user can move a
+secret they may only see encrypted into a credential or launch they control
+(SEC-03, high, first part). A secret field accepts a ciphertext only when it
+equals the stored value, the runner decrypts only password survey answers,
+and notification configurations, schedule and node `extra_data` get
+`Redact`.
+
+**Done when:** a ciphertext from another object is refused, an encrypted
+value in extra vars reaches the job as sent, and the activity stream shows
+`$encrypted$` for those fields.
+
+### M16-03 Bind each ciphertext to its table, column and row
+**Labels:** security, credentials · **Size:** M · [#202](https://github.com/damhau/awxnext/issues/202)
+
+A ciphertext's AAD is its key id only, so it decrypts anywhere (SEC-03,
+second part). The AAD binds the value's table, column and row; old values
+decrypt until `awxnext keys rewrap` converts them.
+
+**Done when:** a moved ciphertext fails to decrypt with a readable error,
+old values are rewrapped, and copy, backup, rotation and key export still
+work.
+
+### M16-04 Manage a user only with authority over all their roles
+**Labels:** security, rbac · **Size:** S · [#203](https://github.com/damhau/awxnext/issues/203)
+
+An organization admin can add any user to their organization and then
+manage them, so they can reset the password of another organization's admin
+or a system auditor (SEC-02, high). As AWX's `UserAccess.can_admin`, every
+role of the target must be under the requester's authority, never for
+auditors or global roles. A password change ends the other sessions
+(SEC-22).
+
+**Done when:** an organization admin can't manage a user who belongs to
+another organization, or an auditor, and a password change ends the user's
+other sessions.
+
+### M16-05 Check the child when attaching
+**Labels:** security, rbac, api · **Size:** M · [#204](https://github.com/damhau/awxnext/issues/204)
+
+`attach` loads the child with no visibility check, and only some sublists
+check the child, so `change` on an inventory, template or organization
+attaches any instance group or another organization's Galaxy credential
+(SEC-08, medium). Attach needs view on the child, and `use` for instance
+groups and Galaxy credentials, as AWX's `can_attach`.
+
+**Done when:** an object the user can't see attaches like a missing one, and
+instance groups and Galaxy credentials need `use`.
+
+### M16-06 Copy with the checks of create and attach
+**Labels:** security, rbac, api · **Size:** M · [#205](https://github.com/damhau/awxnext/issues/205)
+
+`POST …/copy/` needs only view on the source, and the job template copy adds
+credentials and instance groups with raw SQL, so a reader gets a template
+that launches with credentials they can't use (SEC-07, high). `POST`
+requires what `GET` reports, relations go through the attach checks, and
+what can't be copied is listed in `*_unable_to_copy`.
+
+**Done when:** a reader can't copy, and a copy leaves out and lists what the
+user can't use.
+
+### M16-07 Always check a move to another organization or folder
+**Labels:** security, rbac · **Size:** S · [#206](https://github.com/damhau/awxnext/issues/206)
+
+A resource with `CanChange` skips the engine's move check, so credential and
+workflow template admins can move objects into any organization (SEC-09,
+medium). The check always runs, revert included.
+
+**Done when:** a move without `add` in the target is refused by `PATCH`,
+`PUT` and revert.
+
+### M16-08 Filters and ordering respect visibility and no-search fields
+**Labels:** security, api · **Size:** M · [#207](https://github.com/damhau/awxnext/issues/207)
+
+Relation hops in filters skip the target's visibility, and AWX's
+`prevent_search` fields are filterable, so a template reader can probe an
+inventory's variables (SEC-06, high). A `NoSearch` flag is enforced at every
+hop of filters, search and ordering, each hop ANDs in the target's view
+predicate, and hops are capped.
+
+**Done when:** a no-search field returns a 400 at any hop, a filter through
+an object the user can't view matches nothing, and the compat suites pass.
+
+### M16-09 Don't give jobs the chart's Kubernetes token
+**Labels:** security, deploy · **Size:** M · [#208](https://github.com/damhau/awxnext/issues/208)
+
+On the default chart, jobs run in the control container next to a service
+account token that can create pods, and so can reach the release's secret:
+the master key and the database URL (SEC-04, high). The permanent instance
+uses these defaults. Job users in the chart, container groups by default, or
+the token only with container groups: the owner chooses when the task
+starts.
+
+**Done when:** on the default chart in kind, a job can't use a service
+account token, container groups still work, and the docs name what remains.
+
+### M16-10 Accept only refspecs in `scm_refspec`
+**Labels:** security, projects · **Size:** S · [#209](https://github.com/damhau/awxnext/issues/209)
+
+`scm_refspec` reaches `git fetch` unchecked, so a project admin can pass
+fetch options to a git running in the server process. No command execution
+was found, so it is filed as medium (SEC-05; the review said high). Tokens
+must be refspecs, `--end-of-options` goes before the remote, and the file
+protocol is off unless `PROJECT_ALLOW_FILE_URLS` is on. #190 is the same
+rule for execution environment images.
+
+**Done when:** a token starting with `-` is refused on save and at sync, and
+valid refspecs still fetch.
+
+### M16-11 Make the engine enforce sensitive fields and child permissions
+**Labels:** security, api · **Size:** L · [#210](https://github.com/damhau/awxnext/issues/210)
+
+One `Sensitive` field attribute that output, the activity stream, history,
+filters, ordering and search all honour, and registry tests that fail when
+a field that can hold `$encrypted$` isn't sensitive, a sublist declares no
+child permission, or a move check can be bypassed (ARCH-01).
+
+**Done when:** the registry tests pass on every resource and fail on a test
+resource that forgets each rule, and M16-01 to M16-08 hold through them.
+
+### M16-12 Review the commits after `b1912ed`
+**Labels:** security, api · **Size:** M · [#211](https://github.com/damhau/awxnext/issues/211)
+
+The review stopped at M12-08. #148, #194, #151, #195, #196 and #150 (the MCP
+server) are reviewed the same way, security first.
+
+**Done when:** the findings are in the issue, each fixed or filed, and any
+critical or high one is fixed before M16 closes.
+
+---
+
 ## Proposed out of scope
 
 These stay out unless you want any of them back:
@@ -2459,6 +2624,15 @@ Taken on 2026-11-18:
     and M15-08, and M15-02, M15-03, M15-06, M15-09 and M15-10 (#180 to
     #184) are added.
 
+22. A code review of `b1912ed` on 2026-11-22 found 1 critical and 6 high
+    security findings, most of them a check that one resource or one
+    surface of the generic engine forgets. They become M16, with the medium
+    findings that share their fix, as public issues, as M9-06 was (#120).
+    SEC-05 is filed as medium: git reads the options injected through
+    `scm_refspec`, but no command execution was found. The report
+    (`docs/code-review-2026-11-22.md`) isn't committed while the critical
+    and high findings are open.
+
 ## On GitHub
 
 Created on 2026-10-27 on `damhau/awxnext`: the type, area and size labels,
@@ -2476,5 +2650,6 @@ after M9. M10-04 (#129) and M11 (#130 to #132) were added on 2026-11-08
 added. M15 was redesigned on 2026-11-18 (Decision 21): #163 to #167 were
 rewritten, and M15-02, M15-03, M15-06, M15-09 and M15-10 (#180 to #184)
 added. M15-11 (#185) was added on 2026-11-18, before M15 closed, for the
-portal's admin pages. This file stays the index;
+portal's admin pages. M16 (#200 to #211) was added on 2026-11-24 from a
+code review (Decision 22). This file stays the index;
 when a task changes, change its issue too.
